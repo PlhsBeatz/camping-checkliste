@@ -3,27 +3,26 @@ const withPWA = require('next-pwa')({
   dest: 'public',
   register: true,
   skipWaiting: true,
-  disable: process.env.NODE_ENV === 'development',
-  // Verbesserte PWA-Konfiguration für Next.js 15
+  // PWA vorerst DEAKTIVIEREN, auch in Production, um Cache-Probleme zu lösen
+  disable: true, 
   sw: 'sw.js',
   reloadOnOnline: true,
   scope: '/',
 });
 
 const nextConfig = {
-  // React Strict Mode für Entwicklung
+  // React Strict Mode
   reactStrictMode: true,
   
-  // Image-Optimierung
+  // WICHTIG FÜR CLOUDFLARE PAGES:
+  // Wir deaktivieren die Next.js Bildoptimierung, da sie auf Pages 
+  // ohne spezielle Worker-Konfiguration zu Abstürzen führt.
   images: {
-    formats: ['image/avif', 'image/webp'],
-    deviceSizes: [640, 750, 828, 1080, 1200, 1920, 2048, 3840],
-    imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
+    unoptimized: true, 
   },
   
   // Experimental Features für Next.js 15
   experimental: {
-    // Optimierte Package Imports
     optimizePackageImports: [
       '@radix-ui/react-icons',
       'lucide-react',
