@@ -45,7 +45,7 @@ export default function Home() {
       }
     }
     fetchVacations()
-  }, [])
+  }, [selectedVacationId])
 
   // Fetch Packing Items for selected vacation
   useEffect(() => {

@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import {
   getDB,
   getEquipmentItems,
-  getEquipmentItem,
   createEquipmentItem,
   updateEquipmentItem,
   deleteEquipmentItem,
