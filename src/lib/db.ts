@@ -1,49 +1,55 @@
 /**
  * Datenbank-Adapter für Cloudflare D1
  * Dieser Adapter bietet Funktionen für die Interaktion mit der D1-Datenbank
+ * unter Verwendung der deutschen Tabellennamen aus dem ursprünglichen Schema.
  */
+
+import { D1Database } from '@cloudflare/workers-types'
 
 export interface Vacation {
   id: string
-  title: string
-  destination: string
-  startDate: string
-  endDate: string
-  travelers: string
-  createdAt: string
+  titel: string
+  startdatum: string
+  enddatum: string
+  reiseziel_name: string
+  created_at: string
 }
 
 export interface PackingItem {
   id: string
-  vacationId: string
-  name: string
-  quantity: number
-  isPacked: boolean
-  category: string
-  mainCategory: string
+  packliste_id: string
+  gegenstand_id: string
+  anzahl: number
+  gepackt: boolean
+  was: string // Gejoint aus ausruestungsgegenstaende
+  kategorie: string // Gejoint
+  hauptkategorie: string // Gejoint
   details?: string
-  weight?: number
-  createdAt: string
+  einzelgewicht?: number
+  created_at: string
 }
 
 export interface EquipmentItem {
   id: string
-  title: string
-  category: string
-  mainCategory: string
-  weight: number
-  defaultQuantity: number
+  was: string
+  kategorie_id: string
+  kategorie_titel?: string
+  hauptkategorie_titel?: string
+  einzelgewicht: number
+  standard_anzahl: number
   status: string
   details: string
-  links: string
-  createdAt: string
+  created_at: string
+}
+
+interface CloudflareEnv {
+  DB: D1Database
 }
 
 /**
  * Hilfsfunktion zum Abrufen der D1-Datenbank aus dem Kontext
- * Diese wird von Cloudflare Pages automatisch bereitgestellt
  */
-export function getDB(env: any) {
+export function getDB(env: CloudflareEnv): D1Database {
   if (!env.DB) {
     throw new Error('D1 Database binding not found. Make sure DB is bound in wrangler.toml')
   }
@@ -51,70 +57,30 @@ export function getDB(env: any) {
 }
 
 /**
- * Initialisiert die Datenbank mit dem Schema
+ * Initialisiert die Datenbank mit dem Schema (falls nicht vorhanden)
+ * Hinweis: In Cloudflare Pages sollte dies idealerweise über Wrangler Migrations geschehen.
  */
-export async function initializeDatabase(db: any) {
+export async function initializeDatabase(db: D1Database): Promise<void> {
   try {
-    // Prüfen, ob die Tabellen bereits existieren
+    // Wir prüfen nur auf eine Tabelle, um zu sehen, ob das Schema existiert
     const tables = await db.prepare(
-      "SELECT name FROM sqlite_master WHERE type='table' AND name='vacations'"
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='urlaube'"
     ).all()
 
     if (tables.results.length === 0) {
-      // Tabellen erstellen
-      await db.exec(`
-        CREATE TABLE IF NOT EXISTS vacations (
-          id TEXT PRIMARY KEY,
-          title TEXT NOT NULL,
-          destination TEXT NOT NULL,
-          startDate TEXT NOT NULL,
-          endDate TEXT NOT NULL,
-          travelers TEXT NOT NULL,
-          createdAt TEXT DEFAULT CURRENT_TIMESTAMP
-        );
-
-        CREATE TABLE IF NOT EXISTS packing_items (
-          id TEXT PRIMARY KEY,
-          vacationId TEXT NOT NULL,
-          name TEXT NOT NULL,
-          quantity INTEGER DEFAULT 1,
-          isPacked INTEGER DEFAULT 0,
-          category TEXT NOT NULL,
-          mainCategory TEXT NOT NULL,
-          details TEXT,
-          weight REAL,
-          createdAt TEXT DEFAULT CURRENT_TIMESTAMP,
-          FOREIGN KEY (vacationId) REFERENCES vacations(id)
-        );
-
-        CREATE TABLE IF NOT EXISTS equipment_items (
-          id TEXT PRIMARY KEY,
-          title TEXT NOT NULL,
-          category TEXT NOT NULL,
-          mainCategory TEXT NOT NULL,
-          weight REAL NOT NULL,
-          defaultQuantity INTEGER DEFAULT 1,
-          status TEXT,
-          details TEXT,
-          links TEXT,
-          createdAt TEXT DEFAULT CURRENT_TIMESTAMP
-        );
-
-        CREATE INDEX idx_packing_vacation ON packing_items(vacationId);
-        CREATE INDEX idx_equipment_category ON equipment_items(mainCategory);
-      `)
+      console.log('Database tables not found. Please run wrangler d1 execute with migrations/0001_initial.sql')
     }
   } catch (error) {
-    console.error('Database initialization error:', error)
+    console.error('Database check error:', error)
   }
 }
 
 /**
  * Abrufen aller Urlaubsreisen
  */
-export async function getVacations(db: any): Promise<Vacation[]> {
+export async function getVacations(db: D1Database): Promise<Vacation[]> {
   try {
-    const result = await db.prepare('SELECT * FROM vacations ORDER BY startDate DESC').all()
+    const result = await db.prepare('SELECT * FROM urlaube ORDER BY startdatum DESC').all<Vacation>()
     return result.results || []
   } catch (error) {
     console.error('Error fetching vacations:', error)
@@ -125,9 +91,9 @@ export async function getVacations(db: any): Promise<Vacation[]> {
 /**
  * Abrufen einer einzelnen Urlaubsreise
  */
-export async function getVacation(db: any, id: string): Promise<Vacation | null> {
+export async function getVacation(db: D1Database, id: string): Promise<Vacation | null> {
   try {
-    const result = await db.prepare('SELECT * FROM vacations WHERE id = ?').bind(id).first()
+    const result = await db.prepare('SELECT * FROM urlaube WHERE id = ?').bind(id).first<Vacation>()
     return result || null
   } catch (error) {
     console.error('Error fetching vacation:', error)
@@ -139,17 +105,21 @@ export async function getVacation(db: any, id: string): Promise<Vacation | null>
  * Erstellen einer neuen Urlaubsreise
  */
 export async function createVacation(
-  db: any,
-  vacation: Omit<Vacation, 'id' | 'createdAt'>
+  db: D1Database,
+  vacation: { titel: string; startdatum: string; enddatum: string; reiseziel_name: string }
 ): Promise<Vacation | null> {
   try {
     const id = crypto.randomUUID()
     await db
       .prepare(
-        'INSERT INTO vacations (id, title, destination, startDate, endDate, travelers) VALUES (?, ?, ?, ?, ?, ?)'
+        'INSERT INTO urlaube (id, titel, startdatum, enddatum, reiseziel_name) VALUES (?, ?, ?, ?, ?)'
       )
-      .bind(id, vacation.title, vacation.destination, vacation.startDate, vacation.endDate, vacation.travelers)
+      .bind(id, vacation.titel, vacation.startdatum, vacation.enddatum, vacation.reiseziel_name)
       .run()
+
+    // Auch eine Packliste für diesen Urlaub erstellen
+    const packlisteId = crypto.randomUUID()
+    await db.prepare('INSERT INTO packlisten (id, urlaub_id) VALUES (?, ?)').bind(packlisteId, id).run()
 
     return getVacation(db, id)
   } catch (error) {
@@ -161,13 +131,30 @@ export async function createVacation(
 /**
  * Abrufen aller Packartikel für eine Urlaubsreise
  */
-export async function getPackingItems(db: any, vacationId: string): Promise<PackingItem[]> {
+export async function getPackingItems(db: D1Database, vacationId: string): Promise<PackingItem[]> {
   try {
-    const result = await db
-      .prepare('SELECT * FROM packing_items WHERE vacationId = ? ORDER BY mainCategory, category')
-      .bind(vacationId)
-      .all()
-    return result.results || []
+    // Wir müssen über die packlisten Tabelle gehen
+    const query = `
+      SELECT 
+        pe.id, pe.packliste_id, pe.gegenstand_id, pe.anzahl, pe.gepackt, pe.bemerkung as details,
+        ag.was, ag.einzelgewicht,
+        k.titel as kategorie,
+        hk.titel as hauptkategorie
+      FROM packlisten_eintraege pe
+      JOIN packlisten p ON pe.packliste_id = p.id
+      JOIN ausruestungsgegenstaende ag ON pe.gegenstand_id = ag.id
+      JOIN kategorien k ON ag.kategorie_id = k.id
+      JOIN hauptkategorien hk ON k.hauptkategorie_id = hk.id
+      WHERE p.urlaub_id = ?
+      ORDER BY hk.reihenfolge, k.reihenfolge, ag.was
+    `
+    const result = await db.prepare(query).bind(vacationId).all<any>()
+    
+    // Konvertiere 0/1 zu boolean für gepackt
+    return (result.results || []).map((item: any) => ({
+      ...item,
+      gepackt: !!item.gepackt
+    }))
   } catch (error) {
     console.error('Error fetching packing items:', error)
     return []
@@ -175,67 +162,30 @@ export async function getPackingItems(db: any, vacationId: string): Promise<Pack
 }
 
 /**
- * Erstellen eines neuen Packartikels
- */
-export async function createPackingItem(
-  db: any,
-  item: Omit<PackingItem, 'id' | 'createdAt'>
-): Promise<PackingItem | null> {
-  try {
-    const id = crypto.randomUUID()
-    await db
-      .prepare(
-        'INSERT INTO packing_items (id, vacationId, name, quantity, isPacked, category, mainCategory, details, weight) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
-      )
-      .bind(
-        id,
-        item.vacationId,
-        item.name,
-        item.quantity,
-        item.isPacked ? 1 : 0,
-        item.category,
-        item.mainCategory,
-        item.details || null,
-        item.weight || null
-      )
-      .run()
-
-    return db.prepare('SELECT * FROM packing_items WHERE id = ?').bind(id).first()
-  } catch (error) {
-    console.error('Error creating packing item:', error)
-    return null
-  }
-}
-
-/**
  * Aktualisieren eines Packartikels
  */
 export async function updatePackingItem(
-  db: any,
+  db: D1Database,
   id: string,
-  updates: Partial<PackingItem>
+  updates: { gepackt?: boolean; anzahl?: number }
 ): Promise<boolean> {
   try {
     const fields = []
-    const values = []
+    const values: (string | number)[] = []
 
-    if (updates.isPacked !== undefined) {
-      fields.push('isPacked = ?')
-      values.push(updates.isPacked ? 1 : 0)
+    if (updates.gepackt !== undefined) {
+      fields.push('gepackt = ?')
+      values.push(updates.gepackt ? 1 : 0)
     }
-    if (updates.quantity !== undefined) {
-      fields.push('quantity = ?')
-      values.push(updates.quantity)
-    }
-    if (updates.name !== undefined) {
-      fields.push('name = ?')
-      values.push(updates.name)
+    if (updates.anzahl !== undefined) {
+      fields.push('anzahl = ?')
+      values.push(updates.anzahl)
     }
 
     if (fields.length === 0) return true
 
     values.push(id)
-    const query = `UPDATE packing_items SET ${fields.join(', ')} WHERE id = ?`
+    const query = `UPDATE packlisten_eintraege SET ${fields.join(', ')}, updated_at = datetime('now') WHERE id = ?`
     await db.prepare(query).bind(...values).run()
     return true
   } catch (error) {
@@ -245,60 +195,24 @@ export async function updatePackingItem(
 }
 
 /**
- * Löschen eines Packartikels
- */
-export async function deletePackingItem(db: any, id: string): Promise<boolean> {
-  try {
-    await db.prepare('DELETE FROM packing_items WHERE id = ?').bind(id).run()
-    return true
-  } catch (error) {
-    console.error('Error deleting packing item:', error)
-    return false
-  }
-}
-
-/**
  * Abrufen aller Ausrüstungsgegenstände
  */
-export async function getEquipmentItems(db: any): Promise<EquipmentItem[]> {
+export async function getEquipmentItems(db: D1Database): Promise<EquipmentItem[]> {
   try {
-    const result = await db.prepare('SELECT * FROM equipment_items ORDER BY mainCategory, category').all()
+    const query = `
+      SELECT 
+        ag.*, 
+        k.titel as kategorie_titel,
+        hk.titel as hauptkategorie_titel
+      FROM ausruestungsgegenstaende ag
+      JOIN kategorien k ON ag.kategorie_id = k.id
+      JOIN hauptkategorien hk ON k.hauptkategorie_id = hk.id
+      ORDER BY hk.reihenfolge, k.reihenfolge, ag.was
+    `
+    const result = await db.prepare(query).all<EquipmentItem>()
     return result.results || []
   } catch (error) {
     console.error('Error fetching equipment items:', error)
     return []
-  }
-}
-
-/**
- * Erstellen eines neuen Ausrüstungsgegenstands
- */
-export async function createEquipmentItem(
-  db: any,
-  item: Omit<EquipmentItem, 'id' | 'createdAt'>
-): Promise<EquipmentItem | null> {
-  try {
-    const id = crypto.randomUUID()
-    await db
-      .prepare(
-        'INSERT INTO equipment_items (id, title, category, mainCategory, weight, defaultQuantity, status, details, links) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
-      )
-      .bind(
-        id,
-        item.title,
-        item.category,
-        item.mainCategory,
-        item.weight,
-        item.defaultQuantity,
-        item.status,
-        item.details,
-        item.links
-      )
-      .run()
-
-    return db.prepare('SELECT * FROM equipment_items WHERE id = ?').bind(id).first()
-  } catch (error) {
-    console.error('Error creating equipment item:', error)
-    return null
   }
 }

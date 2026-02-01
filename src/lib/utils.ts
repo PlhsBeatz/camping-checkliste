@@ -47,7 +47,7 @@ export function calculateTotalWeight(
 /**
  * Groups items by a specific property
  */
-export function groupBy<T, K extends keyof any>(
+export function groupBy<T, K extends PropertyKey>(
   items: T[],
   getKey: (item: T) => K
 ): Record<K, T[]> {
@@ -64,7 +64,7 @@ export function groupBy<T, K extends keyof any>(
 /**
  * Debounces a function call
  */
-export function debounce<T extends (...args: Parameters<T>) => ReturnType<T>>(
+export function debounce<T extends (...args: any[]) => any>(
   func: T,
   wait: number
 ): (...args: Parameters<T>) => void {

@@ -1,41 +1,31 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getVacations, createVacation, initializeDatabase } from '@/lib/db'
+import { getDB, getVacations, createVacation } from '@/lib/db'
 
-export async function GET(request: NextRequest) {
+export const runtime = 'edge'
+
+export async function GET() {
   try {
     const env = process.env as any
-    const db = env.DB
-
-    if (!db) {
-      return NextResponse.json({ error: 'Database not configured' }, { status: 500 })
-    }
-
-    await initializeDatabase(db)
+    const db = getDB(env)
     const vacations = await getVacations(db)
-
     return NextResponse.json({ success: true, data: vacations })
-  } catch (error) {
-    console.error('API Error:', error)
-    return NextResponse.json({ error: 'Failed to fetch vacations' }, { status: 500 })
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error)
+    return NextResponse.json({ error: message }, { status: 500 })
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
     const env = process.env as any
-    const db = env.DB
-
-    if (!db) {
-      return NextResponse.json({ error: 'Database not configured' }, { status: 500 })
-    }
-
+    const db = getDB(env)
     const body = await request.json()
+
     const vacation = await createVacation(db, {
-      title: body.title,
-      destination: body.destination,
-      startDate: body.startDate,
-      endDate: body.endDate,
-      travelers: body.travelers,
+      titel: body.titel || body.title,
+      startdatum: body.startdatum || body.startDate,
+      enddatum: body.enddatum || body.endDate,
+      reiseziel_name: body.reiseziel_name || body.destination
     })
 
     if (!vacation) {
@@ -43,8 +33,8 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json({ success: true, data: vacation }, { status: 201 })
-  } catch (error) {
-    console.error('API Error:', error)
-    return NextResponse.json({ error: 'Failed to create vacation' }, { status: 500 })
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error)
+    return NextResponse.json({ error: message }, { status: 500 })
   }
 }

@@ -1,41 +1,40 @@
-'use client'
-
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useMemo } from "react";
+import { PackingItem as DBPackingItem } from "@/lib/db";
 
 interface PackingItemProps {
   id: string;
-  name: string;
-  quantity: number;
-  isPacked: boolean;
+  was: string;
+  anzahl: number;
+  gepackt: boolean;
   onToggle: (id: string) => void;
   details?: string;
 }
 
-const PackingItem: React.FC<PackingItemProps> = ({ 
-  id, 
-  name, 
-  quantity, 
-  isPacked, 
+const PackingItem: React.FC<PackingItemProps> = ({
+  id,
+  was,
+  anzahl,
+  gepackt,
   onToggle,
   details
 }) => {
   return (
-    <div className={`flex items-center space-x-3 p-3 border-b transition-colors ${isPacked ? 'bg-muted/50' : 'hover:bg-muted/30'}`}>
-      <Checkbox 
-        id={`item-${id}`} 
-        checked={isPacked}
+    <div className={`flex items-center space-x-3 p-3 border-b transition-colors ${gepackt ? 'bg-muted/50' : 'hover:bg-muted/30'}`}>
+      <Checkbox
+        id={`item-${id}`}
+        checked={gepackt}
         onCheckedChange={() => onToggle(id)}
         className="mt-0.5"
       />
       <div className="flex-grow min-w-0">
-        <label 
+        <label
           htmlFor={`item-${id}`}
-          className={`text-sm font-medium leading-none cursor-pointer block ${isPacked ? 'line-through text-muted-foreground' : ''}`}
+          className={`text-sm font-medium leading-none cursor-pointer block ${gepackt ? 'line-through text-muted-foreground' : ''}`}
         >
-          {name} {quantity > 1 ? `(${quantity}x)` : ''}
+          {was} {anzahl > 1 ? `(${anzahl}x)` : ''}
         </label>
         {details && <p className="text-xs text-muted-foreground mt-1">{details}</p>}
       </div>
@@ -44,50 +43,42 @@ const PackingItem: React.FC<PackingItemProps> = ({
 };
 
 interface PackingListProps {
-  items: {
-    id: string;
-    name: string;
-    quantity: number;
-    isPacked: boolean;
-    category: string;
-    mainCategory: string;
-    details?: string;
-  }[];
+  items: DBPackingItem[];
   onToggleItem: (id: string) => void;
   hidePackedItems?: boolean;
 }
 
-export const PackingList: React.FC<PackingListProps> = ({ 
-  items, 
+export const PackingList: React.FC<PackingListProps> = ({
+  items,
   onToggleItem,
   hidePackedItems = false
 }) => {
   // Memoize the grouped items to avoid unnecessary recalculations
   const itemsByMainCategory = useMemo(() => {
-    const grouped: Record<string, Record<string, typeof items>> = {};
-    
+    const grouped: Record<string, Record<string, DBPackingItem[]>> = {};
+
     items.forEach(item => {
-      if (hidePackedItems && item.isPacked) return;
-      
-      if (!grouped[item.mainCategory]) {
-        grouped[item.mainCategory] = {};
+      if (hidePackedItems && item.gepackt) return;
+
+      if (!grouped[item.hauptkategorie]) {
+        grouped[item.hauptkategorie] = {};
       }
-      
-      const mainCat = grouped[item.mainCategory];
-      if (mainCat && !mainCat[item.category]) {
-        mainCat[item.category] = [];
+
+      const mainCat = grouped[item.hauptkategorie];
+      if (mainCat && !mainCat[item.kategorie]) {
+        mainCat[item.kategorie] = [];
       }
-      
+
       if (mainCat) {
-        mainCat[item.category]?.push(item);
+        mainCat[item.kategorie]?.push(item);
       }
     });
-    
+
     return grouped;
   }, [items, hidePackedItems]);
 
   const mainCategories = Object.keys(itemsByMainCategory);
-  const packedCount = items.filter(item => item.isPacked).length;
+  const packedCount = items.filter(item => item.gepackt).length;
   const totalCount = items.length;
 
   return (
@@ -100,7 +91,7 @@ export const PackingList: React.FC<PackingListProps> = ({
             <span className="text-muted-foreground">{packedCount}/{totalCount} ({Math.round((packedCount / totalCount) * 100)}%)</span>
           </div>
           <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
-            <div 
+            <div
               className="bg-primary h-full transition-all duration-300 rounded-full"
               style={{ width: `${(packedCount / totalCount) * 100}%` }}
             />
@@ -133,9 +124,9 @@ export const PackingList: React.FC<PackingListProps> = ({
                     <PackingItem
                       key={item.id}
                       id={item.id}
-                      name={item.name}
-                      quantity={item.quantity}
-                      isPacked={item.isPacked}
+                      was={item.was}
+                      anzahl={item.anzahl}
+                      gepackt={item.gepackt}
                       onToggle={onToggleItem}
                       details={item.details}
                     />

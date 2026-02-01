@@ -6,341 +6,242 @@ import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { PackingList } from '@/components/packing-list'
 import { EquipmentList } from '@/components/equipment-list'
-import { Plus, Package, MapPin, Users, Loader2 } from 'lucide-react'
+import { Plus, Package, MapPin, Users } from 'lucide-react'
 import { useState, useEffect } from 'react'
-import { Input } from '@/components/ui/input'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
-
-interface Vacation {
-  id: string
-  title: string
-  destination: string
-  startDate: string
-  endDate: string
-  travelers: string
-}
-
-interface PackingItem {
-  id: string
-  vacationId: string
-  name: string
-  quantity: number
-  isPacked: boolean
-  category: string
-  mainCategory: string
-  details?: string
-  weight?: number
-}
+import { Vacation, PackingItem, EquipmentItem } from '@/lib/db'
 
 export default function Home() {
   const [vacations, setVacations] = useState<Vacation[]>([])
   const [packingItems, setPackingItems] = useState<PackingItem[]>([])
-  const [selectedVacation, setSelectedVacation] = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [isCreatingVacation, setIsCreatingVacation] = useState(false)
-  const [newVacationTitle, setNewVacationTitle] = useState('')
-  const [newVacationDestination, setNewVacationDestination] = useState('')
-  const [newVacationStartDate, setNewVacationStartDate] = useState('')
-  const [newVacationEndDate, setNewVacationEndDate] = useState('')
+  const [equipmentItems, setEquipmentItems] = useState<EquipmentItem[]>([])
+  const [selectedVacationId, setSelectedVacationId] = useState<string | null>(null)
+  const [packedItems, setPackedItems] = useState<Set<string>>(new Set())
 
-  // Laden der Urlaubsreisen beim Komponenten-Mount
+  // Fetch Vacations
   useEffect(() => {
-    loadVacations()
-  }, [])
-
-  // Laden der Packartikel, wenn eine Urlaubsreise ausgewählt wird
-  useEffect(() => {
-    if (selectedVacation) {
-      loadPackingItems(selectedVacation)
+    const fetchVacations = async () => {
+      try {
+        const res = await fetch('/api/vacations')
+        const data = await res.json()
+        if (data.success) {
+          setVacations(data.data)
+          if (data.data.length > 0 && !selectedVacationId) {
+            setSelectedVacationId(data.data[0].id) // Select the first vacation by default
+          }
+        }
+      } catch (error) {
+        console.error('Failed to fetch vacations:', error)
+      }
     }
-  }, [selectedVacation])
+    fetchVacations()
+  }, [selectedVacationId])
 
-  const loadVacations = async () => {
-    try {
-      setLoading(true)
-      const response = await fetch('/api/vacations')
-      const data = await response.json()
-
-      if (data.success) {
-        setVacations(data.data)
-        if (data.data.length > 0) {
-          setSelectedVacation(data.data[0].id)
+  // Fetch Packing Items for selected vacation
+  useEffect(() => {
+    const fetchPackingItems = async () => {
+      if (selectedVacationId) {
+        try {
+          const res = await fetch(`/api/packing-items?vacationId=${selectedVacationId}`)
+          const data = await res.json()
+          if (data.success) {
+            setPackingItems(data.data)
+            // Initialize packedItems set based on fetched data
+            const initialPacked = new Set<string>()
+            data.data.forEach((item: PackingItem) => {
+              if (item.gepackt) {
+                initialPacked.add(item.id)
+              }
+            })
+            setPackedItems(initialPacked)
+          }
+        } catch (error) {
+          console.error('Failed to fetch packing items:', error)
         }
       }
-    } catch (error) {
-      console.error('Error loading vacations:', error)
-    } finally {
-      setLoading(false)
     }
-  }
+    fetchPackingItems()
+  }, [selectedVacationId])
 
-  const loadPackingItems = async (vacationId: string) => {
-    try {
-      const response = await fetch(`/api/packing-items?vacationId=${vacationId}`)
-      const data = await response.json()
-
-      if (data.success) {
-        setPackingItems(data.data)
+  // Fetch Equipment Items
+  useEffect(() => {
+    const fetchEquipmentItems = async () => {
+      try {
+        const res = await fetch('/api/equipment-items')
+        const data = await res.json()
+        if (data.success) {
+          setEquipmentItems(data.data)
+        }
+      } catch (error) {
+        console.error('Failed to fetch equipment items:', error)
       }
-    } catch (error) {
-      console.error('Error loading packing items:', error)
     }
-  }
-
-  const handleCreateVacation = async () => {
-    if (!newVacationTitle || !newVacationDestination || !newVacationStartDate || !newVacationEndDate) {
-      alert('Bitte füllen Sie alle Felder aus')
-      return
-    }
-
-    try {
-      setIsCreatingVacation(true)
-      const response = await fetch('/api/vacations', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: newVacationTitle,
-          destination: newVacationDestination,
-          startDate: newVacationStartDate,
-          endDate: newVacationEndDate,
-          travelers: 'Familie',
-        }),
-      })
-
-      const data = await response.json()
-
-      if (data.success) {
-        setNewVacationTitle('')
-        setNewVacationDestination('')
-        setNewVacationStartDate('')
-        setNewVacationEndDate('')
-        await loadVacations()
-      }
-    } catch (error) {
-      console.error('Error creating vacation:', error)
-      alert('Fehler beim Erstellen der Urlaubsreise')
-    } finally {
-      setIsCreatingVacation(false)
-    }
-  }
+    fetchEquipmentItems()
+  }, [])
 
   const handleToggleItem = async (id: string) => {
-    const item = packingItems.find((i) => i.id === id)
-    if (!item) return
+    const isCurrentlyPacked = packedItems.has(id)
+    const newPacked = new Set(packedItems)
 
+    if (isCurrentlyPacked) {
+      newPacked.delete(id)
+    } else {
+      newPacked.add(id)
+    }
+    setPackedItems(newPacked)
+
+    // Update backend
     try {
-      const response = await fetch('/api/packing-items', {
+      await fetch('/api/packing-items', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id,
-          isPacked: !item.isPacked,
-        }),
+        body: JSON.stringify({ id, gepackt: !isCurrentlyPacked }),
       })
-
-      const data = await response.json()
-
-      if (data.success) {
-        setPackingItems((items) =>
-          items.map((i) => (i.id === id ? { ...i, isPacked: !i.isPacked } : i))
-        )
-      }
     } catch (error) {
-      console.error('Error updating item:', error)
+      console.error('Failed to update packing item:', error)
+      // Revert UI state if API call fails
+      setPackedItems(packedItems)
     }
   }
 
-  const handleAddItem = async () => {
-    if (!selectedVacation) return
-
-    const newItem = {
-      vacationId: selectedVacation,
-      name: 'Neuer Artikel',
-      quantity: 1,
-      isPacked: false,
-      category: 'Sonstiges',
-      mainCategory: 'Campingausrüstung',
-      details: '',
-    }
-
-    try {
-      const response = await fetch('/api/packing-items', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newItem),
-      })
-
-      const data = await response.json()
-
-      if (data.success) {
-        setPackingItems([...packingItems, data.data])
-      }
-    } catch (error) {
-      console.error('Error adding item:', error)
-    }
-  }
-
-  const packedCount = packingItems.filter((item) => item.isPacked).length
-  const totalCount = packingItems.length
-
-  if (loading) {
-    return (
-      <Layout>
-        <div className="flex items-center justify-center min-h-screen">
-          <Loader2 className="w-8 h-8 animate-spin" />
-        </div>
-      </Layout>
-    )
-  }
+  const currentVacation = vacations.find(v => v.id === selectedVacationId)
+  const totalItems = packingItems.length
+  const packedCount = packedItems.size
+  const packingPercentage = totalItems > 0 ? Math.round((packedCount / totalItems) * 100) : 0
 
   return (
     <Layout>
-      <div className="space-y-6">
+      <div className="space-y-8">
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Camping Packliste</h1>
-            <p className="text-muted-foreground mt-2">Organisieren Sie Ihre Campingausrüstung und Packlisten</p>
+            <h1 className="text-3xl font-bold tracking-tight">Camping Packlisten</h1>
+            <p className="text-muted-foreground mt-2">Organisieren Sie Ihre Campingausrüstung intelligent</p>
           </div>
-          <Dialog>
-            <DialogTrigger asChild>
-              <Button>
-                <Plus className="w-4 h-4 mr-2" />
-                Neue Reise
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Neue Urlaubsreise erstellen</DialogTitle>
-                <DialogDescription>Fügen Sie eine neue Campingreise hinzu</DialogDescription>
-              </DialogHeader>
-              <div className="space-y-4">
-                <div>
-                  <label className="text-sm font-medium">Titel</label>
-                  <Input
-                    value={newVacationTitle}
-                    onChange={(e) => setNewVacationTitle(e.target.value)}
-                    placeholder="z.B. Sommerurlaub 2025"
-                  />
-                </div>
-                <div>
-                  <label className="text-sm font-medium">Ziel</label>
-                  <Input
-                    value={newVacationDestination}
-                    onChange={(e) => setNewVacationDestination(e.target.value)}
-                    placeholder="z.B. Schwarzwald"
-                  />
-                </div>
-                <div>
-                  <label className="text-sm font-medium">Startdatum</label>
-                  <Input
-                    type="date"
-                    value={newVacationStartDate}
-                    onChange={(e) => setNewVacationStartDate(e.target.value)}
-                  />
-                </div>
-                <div>
-                  <label className="text-sm font-medium">Enddatum</label>
-                  <Input
-                    type="date"
-                    value={newVacationEndDate}
-                    onChange={(e) => setNewVacationEndDate(e.target.value)}
-                  />
-                </div>
-                <Button onClick={handleCreateVacation} disabled={isCreatingVacation} className="w-full">
-                  {isCreatingVacation ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
-                  Erstellen
-                </Button>
-              </div>
-            </DialogContent>
-          </Dialog>
+          <Button size="lg">
+            <Plus className="h-4 w-4 mr-2" />
+            Neuer Urlaub
+          </Button>
         </div>
 
-        {/* Vacations Tabs */}
-        {vacations.length > 0 ? (
-          <Tabs value={selectedVacation || ''} onValueChange={setSelectedVacation} className="w-full">
-            <TabsList className="grid grid-flow-col auto-cols-fr mb-4 overflow-x-auto w-full">
-              {vacations.map((vacation) => (
-                <TabsTrigger key={vacation.id} value={vacation.id} className="text-xs sm:text-sm">
-                  {vacation.title}
-                </TabsTrigger>
-              ))}
-            </TabsList>
+        {/* Quick Stats */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Aktive Urlaube</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{vacations.length}</div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Ausrüstung</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{equipmentItems.length}</div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Gepackt</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{packedCount}/{totalItems}</div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Fortschritt</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{packingPercentage}%</div>
+            </CardContent>
+          </Card>
+        </div>
 
-            {vacations.map((vacation) => (
-              <TabsContent key={vacation.id} value={vacation.id} className="space-y-4">
-                {/* Vacation Info */}
-                <Card>
+        {/* Main Content */}
+        <Tabs defaultValue="packing" className="w-full">
+          <TabsList className="grid w-full grid-cols-3">
+            <TabsTrigger value="packing">
+              <Package className="h-4 w-4 mr-2" />
+              <span className="hidden sm:inline">Packliste</span>
+            </TabsTrigger>
+            <TabsTrigger value="equipment">
+              <MapPin className="h-4 w-4 mr-2" />
+              <span className="hidden sm:inline">Ausrüstung</span>
+            </TabsTrigger>
+            <TabsTrigger value="vacations">
+              <Users className="h-4 w-4 mr-2" />
+              <span className="hidden sm:inline">Urlaube</span>
+            </TabsTrigger>
+          </TabsList>
+
+          {/* Packing Tab */}
+          <TabsContent value="packing" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Packliste: {currentVacation?.titel}</CardTitle>
+                <CardDescription>
+                  {currentVacation?.reiseziel_name} • {currentVacation?.startdatum} bis {currentVacation?.enddatum}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <PackingList
+                  items={packingItems}
+                  onToggleItem={handleToggleItem}
+                  hidePackedItems={false}
+                />
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Equipment Tab */}
+          <TabsContent value="equipment" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Ausrüstungsverwaltung</CardTitle>
+                <CardDescription>
+                  Verwalten Sie Ihre Camping-Ausrüstungsgegenstände
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <EquipmentList
+                  items={equipmentItems}
+                  onEditItem={(id) => console.log('Edit:', id)}
+                  onAddItem={() => console.log('Add new item')}
+                />
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Vacations Tab */}
+          <TabsContent value="vacations" className="space-y-4">
+            <div className="grid gap-4">
+              {vacations.map((vacation) => (
+                <Card
+                  key={vacation.id}
+                  className="cursor-pointer hover:shadow-md transition-shadow"
+                  onClick={() => setSelectedVacationId(vacation.id)}
+                >
                   <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <MapPin className="w-5 h-5" />
-                      {vacation.destination}
-                    </CardTitle>
+                    <CardTitle>{vacation.titel}</CardTitle>
                     <CardDescription>
-                      {new Date(vacation.startDate).toLocaleDateString('de-DE')} -{' '}
-                      {new Date(vacation.endDate).toLocaleDateString('de-DE')}
+                      <div className="space-y-1 mt-2">
+                        <p>📍 {vacation.reiseziel_name}</p>
+                        <p>📅 {vacation.startdatum} bis {vacation.enddatum}</p>
+                      </div>
                     </CardDescription>
                   </CardHeader>
-                </Card>
-
-                {/* Packing Progress */}
-                {totalCount > 0 && (
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-base">Packfortschritt</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-2">
-                        <div className="flex justify-between text-sm">
-                          <span>{packedCount} von {totalCount} Artikeln gepackt</span>
-                          <span className="font-medium">{Math.round((packedCount / totalCount) * 100)}%</span>
-                        </div>
-                        <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
-                          <div
-                            className="bg-primary h-full transition-all duration-300 rounded-full"
-                            style={{ width: `${(packedCount / totalCount) * 100}%` }}
-                          />
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                )}
-
-                {/* Packing List */}
-                <Card>
-                  <CardHeader>
-                    <div className="flex items-center justify-between">
-                      <CardTitle className="flex items-center gap-2">
-                        <Package className="w-5 h-5" />
-                        Packliste
-                      </CardTitle>
-                      <Button size="sm" onClick={handleAddItem}>
-                        <Plus className="w-4 h-4 mr-1" />
-                        Artikel hinzufügen
-                      </Button>
-                    </div>
-                  </CardHeader>
                   <CardContent>
-                    {packingItems.length > 0 ? (
-                      <PackingList items={packingItems} onToggleItem={handleToggleItem} />
-                    ) : (
-                      <p className="text-center text-muted-foreground py-8">
-                        Noch keine Artikel in dieser Packliste. Fügen Sie einen hinzu!
-                      </p>
-                    )}
+                    <Button variant="outline" size="sm">
+                      Öffnen
+                    </Button>
                   </CardContent>
                 </Card>
-              </TabsContent>
-            ))}
-          </Tabs>
-        ) : (
-          <Card>
-            <CardHeader>
-              <CardTitle>Keine Urlaubsreisen vorhanden</CardTitle>
-              <CardDescription>Erstellen Sie eine neue Reise, um zu beginnen</CardDescription>
-            </CardHeader>
-          </Card>
-        )}
+              ))}
+            </div>
+          </TabsContent>
+        </Tabs>
       </div>
     </Layout>
   )

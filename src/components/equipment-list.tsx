@@ -1,22 +1,21 @@
-'use client'
-
 import { useState, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { ExternalLink } from 'lucide-react';
+import { EquipmentItem as DBEquipmentItem } from '@/lib/db';
 
 interface EquipmentItemProps {
   id: string;
-  title: string;
-  category: string;
-  mainCategory: string;
-  weight?: number;
-  defaultQuantity: number;
-  status: 'Normal' | 'Ausgemustert' | 'Fest Installiert' | 'Immer gepackt';
+  was: string;
+  kategorie_titel: string;
+  hauptkategorie_titel: string;
+  einzelgewicht?: number;
+  standard_anzahl: number;
+  status: string; // Should match DB status values
   details?: string;
-  links?: string[];
+  // links?: string[]; // Links are not in the DB schema for EquipmentItem directly
   onEdit: (id: string) => void;
 }
 
@@ -35,14 +34,14 @@ const getStatusVariant = (status: string): "default" | "secondary" | "destructiv
 
 export const EquipmentItem: React.FC<EquipmentItemProps> = ({
   id,
-  title,
-  category,
-  mainCategory,
-  weight,
-  defaultQuantity,
+  was,
+  kategorie_titel,
+  hauptkategorie_titel,
+  einzelgewicht,
+  standard_anzahl,
   status,
   details,
-  links,
+  // links,
   onEdit
 }) => {
   return (
@@ -50,9 +49,9 @@ export const EquipmentItem: React.FC<EquipmentItemProps> = ({
       <CardHeader className="pb-3">
         <div className="flex justify-between items-start gap-4">
           <div className="flex-grow min-w-0">
-            <CardTitle className="text-base">{title}</CardTitle>
+            <CardTitle className="text-base">{was}</CardTitle>
             <CardDescription className="text-xs">
-              {mainCategory} / {category}
+              {hauptkategorie_titel} / {kategorie_titel}
             </CardDescription>
           </div>
           <Badge variant={getStatusVariant(status)} className="shrink-0">
@@ -62,15 +61,15 @@ export const EquipmentItem: React.FC<EquipmentItemProps> = ({
       </CardHeader>
       <CardContent className="pb-3 space-y-3">
         <div className="grid grid-cols-2 gap-3 text-sm">
-          {weight !== undefined && (
+          {einzelgewicht !== undefined && (
             <div className="space-y-1">
               <p className="text-xs font-medium text-muted-foreground">Gewicht</p>
-              <p className="font-semibold">{weight} kg</p>
+              <p className="font-semibold">{einzelgewicht} kg</p>
             </div>
           )}
           <div className="space-y-1">
             <p className="text-xs font-medium text-muted-foreground">Standard-Anzahl</p>
-            <p className="font-semibold">{defaultQuantity}</p>
+            <p className="font-semibold">{standard_anzahl}</p>
           </div>
         </div>
         
@@ -81,7 +80,8 @@ export const EquipmentItem: React.FC<EquipmentItemProps> = ({
           </div>
         )}
         
-        {links && links.length > 0 && (
+        {/* Links are not directly part of the DBEquipmentItem, so commenting out for now */}
+        {/* {links && links.length > 0 && (
           <div className="space-y-2 pt-2 border-t">
             <p className="text-xs font-medium text-muted-foreground">Links</p>
             <div className="space-y-1">
@@ -99,7 +99,7 @@ export const EquipmentItem: React.FC<EquipmentItemProps> = ({
               ))}
             </div>
           </div>
-        )}
+        )} */}
       </CardContent>
       <CardFooter className="pt-0">
         <Button variant="outline" size="sm" onClick={() => onEdit(id)}>
@@ -111,7 +111,7 @@ export const EquipmentItem: React.FC<EquipmentItemProps> = ({
 };
 
 interface EquipmentListProps {
-  items: EquipmentItemProps[];
+  items: DBEquipmentItem[];
   onEditItem: (id: string) => void;
   onAddItem: () => void;
   filterStatus?: string;
@@ -132,7 +132,7 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
   const filteredItems = useMemo(() => {
     return items.filter(item => {
       // Apply search filter
-      if (searchTerm && !item.title.toLowerCase().includes(searchTerm.toLowerCase())) {
+      if (searchTerm && !item.was.toLowerCase().includes(searchTerm.toLowerCase())) {
         return false;
       }
       
@@ -142,11 +142,11 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
       }
       
       // Apply category filters
-      if (filterCategory && item.category !== filterCategory) {
+      if (filterCategory && item.kategorie_titel !== filterCategory) {
         return false;
       }
       
-      if (filterMainCategory && item.mainCategory !== filterMainCategory) {
+      if (filterMainCategory && item.hauptkategorie_titel !== filterMainCategory) {
         return false;
       }
       
@@ -154,7 +154,7 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
     });
   }, [items, searchTerm, filterStatus, filterCategory, filterMainCategory]);
 
-  const totalWeight = filteredItems.reduce((sum, item) => sum + (item.weight || 0), 0);
+  const totalWeight = filteredItems.reduce((sum, item) => sum + (item.einzelgewicht || 0), 0);
 
   return (
     <div className="space-y-4">
@@ -187,7 +187,14 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
         {filteredItems.map(item => (
           <EquipmentItem
             key={item.id}
-            {...item}
+            id={item.id}
+            was={item.was}
+            kategorie_titel={item.kategorie_titel}
+            hauptkategorie_titel={item.hauptkategorie_titel}
+            einzelgewicht={item.einzelgewicht}
+            standard_anzahl={item.standard_anzahl}
+            status={item.status}
+            details={item.details}
             onEdit={onEditItem}
           />
         ))}

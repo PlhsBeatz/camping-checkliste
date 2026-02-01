@@ -1,53 +1,33 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getEquipmentItems, createEquipmentItem, initializeDatabase } from '@/lib/db'
+import { getDB, getEquipmentItems } from '@/lib/db'
 
-export async function GET(request: NextRequest) {
+export const runtime = 'edge'
+
+export async function GET() {
   try {
     const env = process.env as any
-    const db = env.DB
-
-    if (!db) {
-      return NextResponse.json({ error: 'Database not configured' }, { status: 500 })
-    }
-
-    await initializeDatabase(db)
+    const db = getDB(env)
     const items = await getEquipmentItems(db)
-
     return NextResponse.json({ success: true, data: items })
-  } catch (error) {
-    console.error('API Error:', error)
-    return NextResponse.json({ error: 'Failed to fetch equipment items' }, { status: 500 })
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error)
+    return NextResponse.json({ error: message }, { status: 500 })
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
     const env = process.env as any
-    const db = env.DB
-
-    if (!db) {
-      return NextResponse.json({ error: 'Database not configured' }, { status: 500 })
-    }
-
+    const db = getDB(env)
     const body = await request.json()
-    const item = await createEquipmentItem(db, {
-      title: body.title,
-      category: body.category,
-      mainCategory: body.mainCategory,
-      weight: body.weight,
-      defaultQuantity: body.defaultQuantity || 1,
-      status: body.status,
-      details: body.details,
-      links: body.links,
-    })
-
-    if (!item) {
-      return NextResponse.json({ error: 'Failed to create equipment item' }, { status: 400 })
-    }
-
-    return NextResponse.json({ success: true, data: item }, { status: 201 })
-  } catch (error) {
-    console.error('API Error:', error)
-    return NextResponse.json({ error: 'Failed to create equipment item' }, { status: 500 })
+    
+    // Note: createEquipmentItem is not yet implemented in db.ts
+    // This is a placeholder for future implementation
+    console.log('Create equipment item requested:', body)
+    
+    return NextResponse.json({ error: 'Not implemented' }, { status: 501 })
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error)
+    return NextResponse.json({ error: message }, { status: 500 })
   }
 }
