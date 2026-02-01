@@ -6,9 +6,12 @@ import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { PackingList } from '@/components/packing-list'
 import { EquipmentList } from '@/components/equipment-list'
-import { Plus, Package, MapPin, Users } from 'lucide-react'
+import { Plus, Package, MapPin, Users, Trash2 } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { Vacation, PackingItem, EquipmentItem } from '@/lib/db'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 
 export default function Home() {
   const [vacations, setVacations] = useState<Vacation[]>([])
@@ -16,6 +19,14 @@ export default function Home() {
   const [equipmentItems, setEquipmentItems] = useState<EquipmentItem[]>([])
   const [selectedVacationId, setSelectedVacationId] = useState<string | null>(null)
   const [packedItems, setPackedItems] = useState<Set<string>>(new Set())
+  const [isLoading, setIsLoading] = useState(false)
+  const [showNewVacationDialog, setShowNewVacationDialog] = useState(false)
+  const [newVacationForm, setNewVacationForm] = useState({
+    titel: '',
+    startdatum: '',
+    enddatum: '',
+    reiseziel_name: ''
+  })
 
   // Fetch Vacations
   useEffect(() => {
@@ -26,7 +37,7 @@ export default function Home() {
         if (data.success) {
           setVacations(data.data)
           if (data.data.length > 0 && !selectedVacationId) {
-            setSelectedVacationId(data.data[0].id) // Select the first vacation by default
+            setSelectedVacationId(data.data[0].id)
           }
         }
       } catch (error) {
@@ -34,7 +45,7 @@ export default function Home() {
       }
     }
     fetchVacations()
-  }, [selectedVacationId])
+  }, [])
 
   // Fetch Packing Items for selected vacation
   useEffect(() => {
@@ -45,7 +56,6 @@ export default function Home() {
           const data = await res.json()
           if (data.success) {
             setPackingItems(data.data)
-            // Initialize packedItems set based on fetched data
             const initialPacked = new Set<string>()
             data.data.forEach((item: PackingItem) => {
               if (item.gepackt) {
@@ -89,17 +99,83 @@ export default function Home() {
     }
     setPackedItems(newPacked)
 
-    // Update backend
     try {
-      await fetch('/api/packing-items', {
+      const res = await fetch('/api/packing-items', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id, gepackt: !isCurrentlyPacked }),
       })
+      const data = await res.json()
+      if (!data.success) {
+        console.error('Failed to update packing item:', data.error)
+        setPackedItems(packedItems)
+      }
     } catch (error) {
       console.error('Failed to update packing item:', error)
-      // Revert UI state if API call fails
       setPackedItems(packedItems)
+    }
+  }
+
+  const handleCreateVacation = async () => {
+    if (!newVacationForm.titel || !newVacationForm.startdatum || !newVacationForm.enddatum) {
+      alert('Bitte füllen Sie alle erforderlichen Felder aus')
+      return
+    }
+
+    setIsLoading(true)
+    try {
+      const res = await fetch('/api/vacations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newVacationForm)
+      })
+      const data = await res.json()
+      if (data.success) {
+        setVacations([...vacations, data.data])
+        setSelectedVacationId(data.data.id)
+        setShowNewVacationDialog(false)
+        setNewVacationForm({
+          titel: '',
+          startdatum: '',
+          enddatum: '',
+          reiseziel_name: ''
+        })
+      } else {
+        alert('Fehler beim Erstellen des Urlaubs: ' + data.error)
+      }
+    } catch (error) {
+      console.error('Failed to create vacation:', error)
+      alert('Fehler beim Erstellen des Urlaubs')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleDeleteVacation = async (vacationId: string) => {
+    if (!confirm('Sind Sie sicher, dass Sie diesen Urlaub löschen möchten?')) {
+      return
+    }
+
+    setIsLoading(true)
+    try {
+      const res = await fetch(`/api/vacations?id=${vacationId}`, {
+        method: 'DELETE'
+      })
+      const data = await res.json()
+      if (data.success) {
+        setVacations(vacations.filter(v => v.id !== vacationId))
+        if (selectedVacationId === vacationId) {
+          const remaining = vacations.filter(v => v.id !== vacationId)
+          setSelectedVacationId(remaining.length > 0 ? remaining[0].id : null)
+        }
+      } else {
+        alert('Fehler beim Löschen des Urlaubs: ' + data.error)
+      }
+    } catch (error) {
+      console.error('Failed to delete vacation:', error)
+      alert('Fehler beim Löschen des Urlaubs')
+    } finally {
+      setIsLoading(false)
     }
   }
 
@@ -117,10 +193,65 @@ export default function Home() {
             <h1 className="text-3xl font-bold tracking-tight">Camping Packlisten</h1>
             <p className="text-muted-foreground mt-2">Organisieren Sie Ihre Campingausrüstung intelligent</p>
           </div>
-          <Button size="lg">
-            <Plus className="h-4 w-4 mr-2" />
-            Neuer Urlaub
-          </Button>
+          <Dialog open={showNewVacationDialog} onOpenChange={setShowNewVacationDialog}>
+            <DialogTrigger asChild>
+              <Button size="lg">
+                <Plus className="h-4 w-4 mr-2" />
+                Neuer Urlaub
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Neuen Urlaub erstellen</DialogTitle>
+                <DialogDescription>
+                  Geben Sie die Details für Ihren neuen Urlaub ein
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div>
+                  <Label htmlFor="titel">Titel</Label>
+                  <Input
+                    id="titel"
+                    placeholder="z.B. Sommerurlaub 2024"
+                    value={newVacationForm.titel}
+                    onChange={(e) => setNewVacationForm({ ...newVacationForm, titel: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="reiseziel">Reiseziel</Label>
+                  <Input
+                    id="reiseziel"
+                    placeholder="z.B. Schwarzwald"
+                    value={newVacationForm.reiseziel_name}
+                    onChange={(e) => setNewVacationForm({ ...newVacationForm, reiseziel_name: e.target.value })}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="startdatum">Startdatum</Label>
+                    <Input
+                      id="startdatum"
+                      type="date"
+                      value={newVacationForm.startdatum}
+                      onChange={(e) => setNewVacationForm({ ...newVacationForm, startdatum: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="enddatum">Enddatum</Label>
+                    <Input
+                      id="enddatum"
+                      type="date"
+                      value={newVacationForm.enddatum}
+                      onChange={(e) => setNewVacationForm({ ...newVacationForm, enddatum: e.target.value })}
+                    />
+                  </div>
+                </div>
+                <Button onClick={handleCreateVacation} disabled={isLoading} className="w-full">
+                  {isLoading ? 'Wird erstellt...' : 'Urlaub erstellen'}
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
         </div>
 
         {/* Quick Stats */}
@@ -180,17 +311,27 @@ export default function Home() {
           <TabsContent value="packing" className="space-y-4">
             <Card>
               <CardHeader>
-                <CardTitle>Packliste: {currentVacation?.titel}</CardTitle>
+                <CardTitle>Packliste: {currentVacation?.titel || 'Keine Auswahl'}</CardTitle>
                 <CardDescription>
-                  {currentVacation?.reiseziel_name} • {currentVacation?.startdatum} bis {currentVacation?.enddatum}
+                  {currentVacation ? (
+                    <>
+                      {currentVacation.reiseziel_name} • {currentVacation.startdatum} bis {currentVacation.enddatum}
+                    </>
+                  ) : (
+                    'Wählen Sie einen Urlaub aus, um die Packliste zu sehen'
+                  )}
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <PackingList
-                  items={packingItems}
-                  onToggleItem={handleToggleItem}
-                  hidePackedItems={false}
-                />
+                {currentVacation ? (
+                  <PackingList
+                    items={packingItems}
+                    onToggleItem={handleToggleItem}
+                    hidePackedItems={false}
+                  />
+                ) : (
+                  <p className="text-muted-foreground">Keine Urlaube vorhanden</p>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -217,28 +358,51 @@ export default function Home() {
           {/* Vacations Tab */}
           <TabsContent value="vacations" className="space-y-4">
             <div className="grid gap-4">
-              {vacations.map((vacation) => (
-                <Card
-                  key={vacation.id}
-                  className="cursor-pointer hover:shadow-md transition-shadow"
-                  onClick={() => setSelectedVacationId(vacation.id)}
-                >
-                  <CardHeader>
-                    <CardTitle>{vacation.titel}</CardTitle>
-                    <CardDescription>
-                      <div className="space-y-1 mt-2">
-                        <p>📍 {vacation.reiseziel_name}</p>
-                        <p>📅 {vacation.startdatum} bis {vacation.enddatum}</p>
-                      </div>
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <Button variant="outline" size="sm">
-                      Öffnen
-                    </Button>
+              {vacations.length === 0 ? (
+                <Card>
+                  <CardContent className="pt-6">
+                    <p className="text-muted-foreground text-center">Keine Urlaube vorhanden. Erstellen Sie einen neuen Urlaub!</p>
                   </CardContent>
                 </Card>
-              ))}
+              ) : (
+                vacations.map((vacation) => (
+                  <Card
+                    key={vacation.id}
+                    className="cursor-pointer hover:shadow-md transition-shadow"
+                    onClick={() => setSelectedVacationId(vacation.id)}
+                  >
+                    <CardHeader>
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1">
+                          <CardTitle>{vacation.titel}</CardTitle>
+                          <CardDescription>
+                            <div className="space-y-1 mt-2">
+                              <p>📍 {vacation.reiseziel_name}</p>
+                              <p>📅 {vacation.startdatum} bis {vacation.enddatum}</p>
+                            </div>
+                          </CardDescription>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleDeleteVacation(vacation.id)
+                          }}
+                          disabled={isLoading}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <Button variant="outline" size="sm">
+                        Öffnen
+                      </Button>
+                    </CardContent>
+                  </Card>
+                ))
+              )}
             </div>
           </TabsContent>
         </Tabs>

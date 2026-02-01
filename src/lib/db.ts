@@ -129,6 +129,72 @@ export async function createVacation(
 }
 
 /**
+ * Aktualisieren einer Urlaubsreise
+ */
+export async function updateVacation(
+  db: D1Database,
+  id: string,
+  updates: { titel?: string; startdatum?: string; enddatum?: string; reiseziel_name?: string }
+): Promise<Vacation | null> {
+  try {
+    const fields: string[] = []
+    const values: (string | number)[] = []
+
+    if (updates.titel !== undefined) {
+      fields.push('titel = ?')
+      values.push(updates.titel)
+    }
+    if (updates.startdatum !== undefined) {
+      fields.push('startdatum = ?')
+      values.push(updates.startdatum)
+    }
+    if (updates.enddatum !== undefined) {
+      fields.push('enddatum = ?')
+      values.push(updates.enddatum)
+    }
+    if (updates.reiseziel_name !== undefined) {
+      fields.push('reiseziel_name = ?')
+      values.push(updates.reiseziel_name)
+    }
+
+    if (fields.length === 0) return getVacation(db, id)
+
+    values.push(id)
+    const query = `UPDATE urlaube SET ${fields.join(', ')} WHERE id = ?`
+    await db.prepare(query).bind(...values).run()
+
+    return getVacation(db, id)
+  } catch (error) {
+    console.error('Error updating vacation:', error)
+    return null
+  }
+}
+
+/**
+ * Löschen einer Urlaubsreise
+ */
+export async function deleteVacation(db: D1Database, id: string): Promise<boolean> {
+  try {
+    // Zuerst alle Packlisten-Einträge löschen
+    const packlisten = await db.prepare('SELECT id FROM packlisten WHERE urlaub_id = ?').bind(id).all()
+    for (const packliste of packlisten.results || []) {
+      await db.prepare('DELETE FROM packlisten_eintraege WHERE packliste_id = ?').bind(packliste.id).run()
+    }
+
+    // Dann die Packlisten löschen
+    await db.prepare('DELETE FROM packlisten WHERE urlaub_id = ?').bind(id).run()
+
+    // Schließlich den Urlaub löschen
+    await db.prepare('DELETE FROM urlaube WHERE id = ?').bind(id).run()
+
+    return true
+  } catch (error) {
+    console.error('Error deleting vacation:', error)
+    return false
+  }
+}
+
+/**
  * Abrufen aller Packartikel für eine Urlaubsreise
  */
 export async function getPackingItems(db: D1Database, vacationId: string): Promise<PackingItem[]> {
@@ -139,7 +205,8 @@ export async function getPackingItems(db: D1Database, vacationId: string): Promi
         pe.id, pe.packliste_id, pe.gegenstand_id, pe.anzahl, pe.gepackt, pe.bemerkung as details,
         ag.was, ag.einzelgewicht,
         k.titel as kategorie,
-        hk.titel as hauptkategorie
+        hk.titel as hauptkategorie,
+        pe.created_at
       FROM packlisten_eintraege pe
       JOIN packlisten p ON pe.packliste_id = p.id
       JOIN ausruestungsgegenstaende ag ON pe.gegenstand_id = ag.id
@@ -179,7 +246,7 @@ export async function updatePackingItem(
   updates: { gepackt?: boolean; anzahl?: number }
 ): Promise<boolean> {
   try {
-    const fields = []
+    const fields: string[] = []
     const values: (string | number)[] = []
 
     if (updates.gepackt !== undefined) {
@@ -223,5 +290,143 @@ export async function getEquipmentItems(db: D1Database): Promise<EquipmentItem[]
   } catch (error) {
     console.error('Error fetching equipment items:', error)
     return []
+  }
+}
+
+/**
+ * Abrufen eines einzelnen Ausrüstungsgegenstands
+ */
+export async function getEquipmentItem(db: D1Database, id: string): Promise<EquipmentItem | null> {
+  try {
+    const query = `
+      SELECT 
+        ag.*, 
+        k.titel as kategorie_titel,
+        hk.titel as hauptkategorie_titel
+      FROM ausruestungsgegenstaende ag
+      JOIN kategorien k ON ag.kategorie_id = k.id
+      JOIN hauptkategorien hk ON k.hauptkategorie_id = hk.id
+      WHERE ag.id = ?
+    `
+    const result = await db.prepare(query).bind(id).first<EquipmentItem>()
+    return result || null
+  } catch (error) {
+    console.error('Error fetching equipment item:', error)
+    return null
+  }
+}
+
+/**
+ * Erstellen eines neuen Ausrüstungsgegenstands
+ */
+export async function createEquipmentItem(
+  db: D1Database,
+  item: {
+    was: string
+    kategorie_id: string
+    einzelgewicht?: number
+    standard_anzahl?: number
+    status?: string
+    details?: string
+  }
+): Promise<EquipmentItem | null> {
+  try {
+    const id = crypto.randomUUID()
+    await db
+      .prepare(
+        `INSERT INTO ausruestungsgegenstaende 
+         (id, was, kategorie_id, einzelgewicht, standard_anzahl, status, details) 
+         VALUES (?, ?, ?, ?, ?, ?, ?)`
+      )
+      .bind(
+        id,
+        item.was,
+        item.kategorie_id,
+        item.einzelgewicht || 0,
+        item.standard_anzahl || 1,
+        item.status || 'Verfügbar',
+        item.details || ''
+      )
+      .run()
+
+    return getEquipmentItem(db, id)
+  } catch (error) {
+    console.error('Error creating equipment item:', error)
+    return null
+  }
+}
+
+/**
+ * Aktualisieren eines Ausrüstungsgegenstands
+ */
+export async function updateEquipmentItem(
+  db: D1Database,
+  id: string,
+  updates: {
+    was?: string
+    kategorie_id?: string
+    einzelgewicht?: number
+    standard_anzahl?: number
+    status?: string
+    details?: string
+  }
+): Promise<EquipmentItem | null> {
+  try {
+    const fields: string[] = []
+    const values: (string | number)[] = []
+
+    if (updates.was !== undefined) {
+      fields.push('was = ?')
+      values.push(updates.was)
+    }
+    if (updates.kategorie_id !== undefined) {
+      fields.push('kategorie_id = ?')
+      values.push(updates.kategorie_id)
+    }
+    if (updates.einzelgewicht !== undefined) {
+      fields.push('einzelgewicht = ?')
+      values.push(updates.einzelgewicht)
+    }
+    if (updates.standard_anzahl !== undefined) {
+      fields.push('standard_anzahl = ?')
+      values.push(updates.standard_anzahl)
+    }
+    if (updates.status !== undefined) {
+      fields.push('status = ?')
+      values.push(updates.status)
+    }
+    if (updates.details !== undefined) {
+      fields.push('details = ?')
+      values.push(updates.details)
+    }
+
+    if (fields.length === 0) return getEquipmentItem(db, id)
+
+    values.push(id)
+    const query = `UPDATE ausruestungsgegenstaende SET ${fields.join(', ')} WHERE id = ?`
+    await db.prepare(query).bind(...values).run()
+
+    return getEquipmentItem(db, id)
+  } catch (error) {
+    console.error('Error updating equipment item:', error)
+    return null
+  }
+}
+
+/**
+ * Löschen eines Ausrüstungsgegenstands
+ */
+export async function deleteEquipmentItem(db: D1Database, id: string): Promise<boolean> {
+  try {
+    // Zuerst alle Packlisten-Einträge für diesen Gegenstand löschen
+    await db.prepare('DELETE FROM packlisten_eintraege WHERE gegenstand_id = ?').bind(id).run()
+
+    // Dann den Gegenstand selbst löschen
+    await db.prepare('DELETE FROM ausruestungsgegenstaende WHERE id = ?').bind(id).run()
+
+    return true
+  } catch (error) {
+    console.error('Error deleting equipment item:', error)
+    return false
   }
 }
