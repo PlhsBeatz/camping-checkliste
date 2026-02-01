@@ -3,7 +3,6 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { ExternalLink } from 'lucide-react';
 import { EquipmentItem as DBEquipmentItem } from '@/lib/db';
 
 interface EquipmentItemProps {
@@ -15,7 +14,6 @@ interface EquipmentItemProps {
   standard_anzahl: number;
   status: string; // Should match DB status values
   details?: string;
-  // links?: string[]; // Links are not in the DB schema for EquipmentItem directly
   onEdit: (id: string) => void;
 }
 
@@ -41,7 +39,6 @@ export const EquipmentItem: React.FC<EquipmentItemProps> = ({
   standard_anzahl,
   status,
   details,
-  // links,
   onEdit
 }) => {
   return (
@@ -79,27 +76,6 @@ export const EquipmentItem: React.FC<EquipmentItemProps> = ({
             <p className="text-sm">{details}</p>
           </div>
         )}
-        
-        {/* Links are not directly part of the DBEquipmentItem, so commenting out for now */}
-        {/* {links && links.length > 0 && (
-          <div className="space-y-2 pt-2 border-t">
-            <p className="text-xs font-medium text-muted-foreground">Links</p>
-            <div className="space-y-1">
-              {links.map((link, index) => (
-                <a 
-                  key={index}
-                  href={link} 
-                  target="_blank" 
-                  rel="noopener noreferrer" 
-                  className="text-xs text-primary hover:underline flex items-center gap-1 truncate"
-                >
-                  <ExternalLink className="h-3 w-3 shrink-0" />
-                  <span className="truncate">{new URL(link).hostname}</span>
-                </a>
-              ))}
-            </div>
-          </div>
-        )} */}
       </CardContent>
       <CardFooter className="pt-0">
         <Button variant="outline" size="sm" onClick={() => onEdit(id)}>
@@ -189,8 +165,8 @@ export const EquipmentList: React.FC<EquipmentListProps> = ({
             key={item.id}
             id={item.id}
             was={item.was}
-            kategorie_titel={item.kategorie_titel}
-            hauptkategorie_titel={item.hauptkategorie_titel}
+            kategorie_titel={item.kategorie_titel || ''}
+            hauptkategorie_titel={item.hauptkategorie_titel || ''}
             einzelgewicht={item.einzelgewicht}
             standard_anzahl={item.standard_anzahl}
             status={item.status}

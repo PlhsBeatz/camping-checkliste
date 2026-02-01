@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getDB, getEquipmentItems } from '@/lib/db'
+import { getDB, getEquipmentItems, CloudflareEnv } from '@/lib/db'
 
 export const runtime = 'edge'
 
 export async function GET() {
   try {
-    const env = process.env as any
+    const env = process.env as unknown as CloudflareEnv
     const db = getDB(env)
     const items = await getEquipmentItems(db)
     return NextResponse.json({ success: true, data: items })
@@ -17,8 +17,8 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    const env = process.env as any
-    const db = getDB(env)
+    const env = process.env as unknown as CloudflareEnv
+    const _db = getDB(env)
     const body = await request.json()
     
     // Note: createEquipmentItem is not yet implemented in db.ts

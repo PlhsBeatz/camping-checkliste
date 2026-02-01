@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getDB, getVacations, createVacation } from '@/lib/db'
+import { getDB, getVacations, createVacation, CloudflareEnv } from '@/lib/db'
 
 export const runtime = 'edge'
 
 export async function GET() {
   try {
-    const env = process.env as any
+    const env = process.env as unknown as CloudflareEnv
     const db = getDB(env)
     const vacations = await getVacations(db)
     return NextResponse.json({ success: true, data: vacations })
@@ -17,7 +17,7 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    const env = process.env as any
+    const env = process.env as unknown as CloudflareEnv
     const db = getDB(env)
     const body = await request.json()
 

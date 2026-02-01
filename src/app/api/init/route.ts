@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server'
-import { getDB, initializeDatabase } from '@/lib/db'
+import { getDB, initializeDatabase, CloudflareEnv } from '@/lib/db'
 
 export const runtime = 'edge'
 
 export async function POST() {
   try {
-    const env = process.env as any
+    const env = process.env as unknown as CloudflareEnv
     const db = getDB(env)
     await initializeDatabase(db)
     return NextResponse.json({ success: true, message: 'Database initialization check completed.' })

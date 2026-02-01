@@ -42,7 +42,7 @@ export interface EquipmentItem {
   created_at: string
 }
 
-interface CloudflareEnv {
+export interface CloudflareEnv {
   DB: D1Database
 }
 
@@ -148,12 +148,21 @@ export async function getPackingItems(db: D1Database, vacationId: string): Promi
       WHERE p.urlaub_id = ?
       ORDER BY hk.reihenfolge, k.reihenfolge, ag.was
     `
-    const result = await db.prepare(query).bind(vacationId).all<any>()
+    const result = await db.prepare(query).bind(vacationId).all<Record<string, unknown>>()
     
     // Konvertiere 0/1 zu boolean für gepackt
-    return (result.results || []).map((item: any) => ({
-      ...item,
-      gepackt: !!item.gepackt
+    return (result.results || []).map((item) => ({
+      id: String(item.id),
+      packliste_id: String(item.packliste_id),
+      gegenstand_id: String(item.gegenstand_id),
+      anzahl: Number(item.anzahl),
+      gepackt: !!item.gepackt,
+      was: String(item.was),
+      kategorie: String(item.kategorie),
+      hauptkategorie: String(item.hauptkategorie),
+      details: item.details ? String(item.details) : undefined,
+      einzelgewicht: item.einzelgewicht ? Number(item.einzelgewicht) : undefined,
+      created_at: String(item.created_at || '')
     }))
   } catch (error) {
     console.error('Error fetching packing items:', error)
