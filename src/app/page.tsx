@@ -163,10 +163,13 @@ export default function Home() {
       })
       const data = await res.json()
       if (data.success) {
-        setVacations(vacations.filter(v => v.id !== vacationId))
+        const updatedVacations = vacations.filter(v => v.id !== vacationId)
+        setVacations(updatedVacations)
+        
         if (selectedVacationId === vacationId) {
-          const remaining = vacations.filter(v => v.id !== vacationId)
-          setSelectedVacationId(remaining.length > 0 ? remaining[0].id : null)
+          // Absolut sichere Zuweisung für TypeScript
+          const nextVacation = updatedVacations.length > 0 ? updatedVacations[0] : null
+          setSelectedVacationId(nextVacation ? nextVacation.id : null)
         }
       } else {
         alert('Fehler beim Löschen des Urlaubs: ' + data.error)
