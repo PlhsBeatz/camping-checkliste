@@ -42,6 +42,19 @@ export interface EquipmentItem {
   created_at: string
 }
 
+export interface Category {
+  id: string
+  titel: string
+  hauptkategorie_id: string
+  reihenfolge: number
+}
+
+export interface MainCategory {
+  id: string
+  titel: string
+  reihenfolge: number
+}
+
 export interface CloudflareEnv {
   DB: D1Database
 }
@@ -428,5 +441,39 @@ export async function deleteEquipmentItem(db: D1Database, id: string): Promise<b
   } catch (error) {
     console.error('Error deleting equipment item:', error)
     return false
+  }
+}
+
+/**
+ * Abrufen aller Hauptkategorien
+ */
+export async function getMainCategories(db: D1Database): Promise<MainCategory[]> {
+  try {
+    const result = await db.prepare('SELECT id, titel, reihenfolge FROM hauptkategorien ORDER BY reihenfolge').all<MainCategory>()
+    return result.results || []
+  } catch (error) {
+    console.error('Error fetching main categories:', error)
+    return []
+  }
+}
+
+/**
+ * Abrufen aller Kategorien mit ihren Hauptkategorien
+ */
+export async function getCategoriesWithMainCategories(db: D1Database): Promise<Array<Category & { hauptkategorie_titel: string }>> {
+  try {
+    const query = `
+      SELECT 
+        k.id, k.titel, k.hauptkategorie_id, k.reihenfolge,
+        hk.titel as hauptkategorie_titel
+      FROM kategorien k
+      JOIN hauptkategorien hk ON k.hauptkategorie_id = hk.id
+      ORDER BY hk.reihenfolge, k.reihenfolge
+    `
+    const result = await db.prepare(query).all<Category & { hauptkategorie_titel: string }>()
+    return result.results || []
+  } catch (error) {
+    console.error('Error fetching categories with main categories:', error)
+    return []
   }
 }

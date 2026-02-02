@@ -5,23 +5,30 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { PackingList } from '@/components/packing-list'
-import { Plus, Package, MapPin, Users, Trash2, Edit2 } from 'lucide-react'
-import { useState, useEffect } from 'react'
-import { Vacation, PackingItem, EquipmentItem } from '@/lib/db'
+import { Plus, Package, MapPin, Users, Trash2, Edit2, ChevronDown } from 'lucide-react'
+import { useState, useEffect, useMemo } from 'react'
+import { Vacation, PackingItem, EquipmentItem, Category } from '@/lib/db'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+
+interface CategoryWithMain extends Category {
+  hauptkategorie_titel: string
+}
 
 export default function Home() {
   const [vacations, setVacations] = useState<Vacation[]>([])
   const [packingItems, setPackingItems] = useState<PackingItem[]>([])
   const [equipmentItems, setEquipmentItems] = useState<EquipmentItem[]>([])
+  const [categories, setCategories] = useState<CategoryWithMain[]>([])
   const [selectedVacationId, setSelectedVacationId] = useState<string | null>(null)
   const [packedItems, setPackedItems] = useState<Set<string>>(new Set())
   const [isLoading, setIsLoading] = useState(false)
   const [showNewVacationDialog, setShowNewVacationDialog] = useState(false)
   const [showEquipmentDialog, setShowEquipmentDialog] = useState(false)
   const [editingEquipmentId, setEditingEquipmentId] = useState<string | null>(null)
+  const [categorySearchTerm, setCategorySearchTerm] = useState('')
+  const [showCategoryDropdown, setShowCategoryDropdown] = useState(false)
   const [newVacationForm, setNewVacationForm] = useState({
     titel: '',
     startdatum: '',
@@ -96,6 +103,46 @@ export default function Home() {
     }
     fetchEquipmentItems()
   }, [])
+
+  // Fetch Categories
+  useEffect(() => {
+    const fetchCategories = async () => {
+      try {
+        const res = await fetch('/api/categories')
+        const data = await res.json()
+        if (data.success) {
+          setCategories(data.data)
+        }
+      } catch (error) {
+        console.error('Failed to fetch categories:', error)
+      }
+    }
+    fetchCategories()
+  }, [])
+
+  // Filter categories based on search term
+  const filteredCategories = useMemo(() => {
+    if (!categorySearchTerm) return categories
+    const term = categorySearchTerm.toLowerCase()
+    return categories.filter(cat =>
+      cat.titel.toLowerCase().includes(term) ||
+      cat.hauptkategorie_titel.toLowerCase().includes(term)
+    )
+  }, [categories, categorySearchTerm])
+
+  // Group categories by main category
+  const groupedCategories = useMemo(() => {
+    const grouped: Record<string, CategoryWithMain[]> = {}
+    filteredCategories.forEach(cat => {
+      if (!grouped[cat.hauptkategorie_titel]) {
+        grouped[cat.hauptkategorie_titel] = []
+      }
+      grouped[cat.hauptkategorie_titel].push(cat)
+    })
+    return grouped
+  }, [filteredCategories])
+
+  const selectedCategory = categories.find(c => c.id === newEquipmentForm.kategorie_id)
 
   const handleToggleItem = async (id: string) => {
     const isCurrentlyPacked = packedItems.has(id)
@@ -201,6 +248,22 @@ export default function Home() {
     }
   }
 
+  // Convert German number format (comma) to English format (dot) for storage
+  const parseGermanNumber = (value: string): number | null => {
+    if (!value) return null
+    const normalized = value.replace(/\./g, '').replace(/,/g, '.')
+    const parsed = parseFloat(normalized)
+    return isNaN(parsed) ? null : parsed
+  }
+
+  // Format number to German format
+  const formatGermanNumber = (value: number): string => {
+    return new Intl.NumberFormat('de-DE', {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 2
+    }).format(value)
+  }
+
   const handleCreateEquipment = async () => {
     if (!newEquipmentForm.was || !newEquipmentForm.kategorie_id) {
       alert('Bitte füllen Sie alle erforderlichen Felder aus')
@@ -209,10 +272,23 @@ export default function Home() {
 
     setIsLoading(true)
     try {
+      const einzelgewicht = newEquipmentForm.einzelgewicht 
+        ? parseGermanNumber(newEquipmentForm.einzelgewicht)
+        : null
+
       const method = editingEquipmentId ? 'PUT' : 'POST'
       const body = editingEquipmentId
-        ? { ...newEquipmentForm, id: editingEquipmentId, einzelgewicht: newEquipmentForm.einzelgewicht ? parseFloat(newEquipmentForm.einzelgewicht) : null, standard_anzahl: parseInt(newEquipmentForm.standard_anzahl) }
-        : { ...newEquipmentForm, einzelgewicht: newEquipmentForm.einzelgewicht ? parseFloat(newEquipmentForm.einzelgewicht) : null, standard_anzahl: parseInt(newEquipmentForm.standard_anzahl) }
+        ? {
+            ...newEquipmentForm,
+            id: editingEquipmentId,
+            einzelgewicht,
+            standard_anzahl: parseInt(newEquipmentForm.standard_anzahl)
+          }
+        : {
+            ...newEquipmentForm,
+            einzelgewicht,
+            standard_anzahl: parseInt(newEquipmentForm.standard_anzahl)
+          }
 
       const res = await fetch('/api/equipment-items', {
         method,
@@ -236,6 +312,7 @@ export default function Home() {
           status: 'Immer gepackt',
           details: ''
         })
+        setCategorySearchTerm('')
       } else {
         alert('Fehler beim Speichern des Gegenstands: ' + data.error)
       }
@@ -252,11 +329,12 @@ export default function Home() {
     setNewEquipmentForm({
       was: item.was,
       kategorie_id: item.kategorie_id,
-      einzelgewicht: item.einzelgewicht?.toString() || '',
+      einzelgewicht: item.einzelgewicht ? formatGermanNumber(item.einzelgewicht) : '',
       standard_anzahl: item.standard_anzahl.toString(),
       status: item.status,
       details: item.details || ''
     })
+    setCategorySearchTerm('')
     setShowEquipmentDialog(true)
   }
 
@@ -295,6 +373,7 @@ export default function Home() {
       status: 'Immer gepackt',
       details: ''
     })
+    setCategorySearchTerm('')
   }
 
   const currentVacation = vacations.find(v => v.id === selectedVacationId)
@@ -478,7 +557,7 @@ export default function Home() {
                         Neuer Gegenstand
                       </Button>
                     </DialogTrigger>
-                    <DialogContent>
+                    <DialogContent className="max-w-md">
                       <DialogHeader>
                         <DialogTitle>
                           {editingEquipmentId ? 'Gegenstand bearbeiten' : 'Neuen Gegenstand erstellen'}
@@ -498,24 +577,77 @@ export default function Home() {
                           />
                         </div>
                         <div>
-                          <Label htmlFor="kategorie">Kategorie ID</Label>
-                          <Input
-                            id="kategorie"
-                            placeholder="z.B. 1"
-                            value={newEquipmentForm.kategorie_id}
-                            onChange={(e) => setNewEquipmentForm({ ...newEquipmentForm, kategorie_id: e.target.value })}
-                          />
+                          <Label htmlFor="kategorie">Kategorie</Label>
+                          <div className="relative">
+                            <button
+                              onClick={() => setShowCategoryDropdown(!showCategoryDropdown)}
+                              className="w-full px-3 py-2 border border-input rounded-md bg-background text-left flex justify-between items-center hover:bg-accent"
+                            >
+                              <span>
+                                {selectedCategory
+                                  ? `${selectedCategory.hauptkategorie_titel} > ${selectedCategory.titel}`
+                                  : 'Kategorie wählen...'}
+                              </span>
+                              <ChevronDown className="h-4 w-4 opacity-50" />
+                            </button>
+                            {showCategoryDropdown && (
+                              <div className="absolute z-10 w-full mt-1 border border-input rounded-md bg-background shadow-md">
+                                <Input
+                                  placeholder="Suchen..."
+                                  value={categorySearchTerm}
+                                  onChange={(e) => setCategorySearchTerm(e.target.value)}
+                                  className="border-0 border-b rounded-none"
+                                />
+                                <div className="max-h-64 overflow-y-auto">
+                                  {Object.entries(groupedCategories).length === 0 ? (
+                                    <div className="p-3 text-sm text-muted-foreground text-center">
+                                      Keine Kategorien gefunden
+                                    </div>
+                                  ) : (
+                                    Object.entries(groupedCategories).map(([mainCat, cats]) => (
+                                      <div key={mainCat}>
+                                        <div className="px-3 py-2 text-xs font-semibold text-muted-foreground bg-muted/50">
+                                          {mainCat}
+                                        </div>
+                                        {cats.map(cat => (
+                                          <button
+                                            key={cat.id}
+                                            onClick={() => {
+                                              setNewEquipmentForm({ ...newEquipmentForm, kategorie_id: cat.id })
+                                              setShowCategoryDropdown(false)
+                                              setCategorySearchTerm('')
+                                            }}
+                                            className="w-full px-6 py-2 text-left text-sm hover:bg-accent transition-colors"
+                                          >
+                                            {cat.titel}
+                                          </button>
+                                        ))}
+                                      </div>
+                                    ))
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                          </div>
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                           <div>
                             <Label htmlFor="gewicht">Gewicht (kg)</Label>
                             <Input
                               id="gewicht"
-                              type="number"
-                              step="0.1"
-                              placeholder="z.B. 2.5"
+                              placeholder="z.B. 2,5"
                               value={newEquipmentForm.einzelgewicht}
-                              onChange={(e) => setNewEquipmentForm({ ...newEquipmentForm, einzelgewicht: e.target.value })}
+                              onChange={(e) => {
+                                let value = e.target.value
+                                // Allow only digits and comma
+                                value = value.replace(/[^\d,]/g, '')
+                                // Prevent multiple commas
+                                const parts = value.split(',')
+                                if (parts.length > 2) {
+                                  value = parts[0] + ',' + parts.slice(1).join('')
+                                }
+                                setNewEquipmentForm({ ...newEquipmentForm, einzelgewicht: value })
+                              }}
                             />
                           </div>
                           <div>
@@ -593,7 +725,7 @@ export default function Home() {
                       </CardHeader>
                       <CardContent className="pb-3 space-y-2 text-sm">
                         {item.einzelgewicht && (
-                          <p><span className="font-medium">Gewicht:</span> {item.einzelgewicht} kg</p>
+                          <p><span className="font-medium">Gewicht:</span> {formatGermanNumber(item.einzelgewicht)} kg</p>
                         )}
                         <p><span className="font-medium">Standard-Anzahl:</span> {item.standard_anzahl}</p>
                         {item.details && (
