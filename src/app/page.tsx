@@ -5,7 +5,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { PackingList } from '@/components/packing-list'
-import { EquipmentList } from '@/components/equipment-list'
 import { Plus, Package, MapPin, Users, Trash2, Edit2 } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { Vacation, PackingItem, EquipmentItem } from '@/lib/db'
