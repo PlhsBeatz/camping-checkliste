@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { PackingList } from '@/components/packing-list'
 import { EquipmentList } from '@/components/equipment-list'
-import { Plus, Package, MapPin, Users, Trash2 } from 'lucide-react'
+import { Plus, Package, MapPin, Users, Trash2, Edit2 } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { Vacation, PackingItem, EquipmentItem } from '@/lib/db'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
@@ -21,11 +21,21 @@ export default function Home() {
   const [packedItems, setPackedItems] = useState<Set<string>>(new Set())
   const [isLoading, setIsLoading] = useState(false)
   const [showNewVacationDialog, setShowNewVacationDialog] = useState(false)
+  const [showEquipmentDialog, setShowEquipmentDialog] = useState(false)
+  const [editingEquipmentId, setEditingEquipmentId] = useState<string | null>(null)
   const [newVacationForm, setNewVacationForm] = useState({
     titel: '',
     startdatum: '',
     enddatum: '',
     reiseziel_name: ''
+  })
+  const [newEquipmentForm, setNewEquipmentForm] = useState({
+    was: '',
+    kategorie_id: '',
+    einzelgewicht: '',
+    standard_anzahl: '1',
+    status: 'Immer gepackt',
+    details: ''
   })
 
   // Fetch Vacations
@@ -92,12 +102,19 @@ export default function Home() {
     const isCurrentlyPacked = packedItems.has(id)
     const newPacked = new Set(packedItems)
 
+    // Update state immediately for visual feedback
     if (isCurrentlyPacked) {
       newPacked.delete(id)
     } else {
       newPacked.add(id)
     }
     setPackedItems(newPacked)
+
+    // Update packingItems array to reflect the change
+    const updatedPackingItems = packingItems.map(item =>
+      item.id === id ? { ...item, gepackt: !isCurrentlyPacked } : item
+    )
+    setPackingItems(updatedPackingItems)
 
     try {
       const res = await fetch('/api/packing-items', {
@@ -108,11 +125,15 @@ export default function Home() {
       const data = await res.json()
       if (!data.success) {
         console.error('Failed to update packing item:', data.error)
+        // Revert on error
         setPackedItems(packedItems)
+        setPackingItems(packingItems)
       }
     } catch (error) {
       console.error('Failed to update packing item:', error)
+      // Revert on error
       setPackedItems(packedItems)
+      setPackingItems(packingItems)
     }
   }
 
@@ -167,7 +188,6 @@ export default function Home() {
         setVacations(updatedVacations)
         
         if (selectedVacationId === vacationId) {
-          // Absolut sichere Zuweisung für TypeScript
           const nextVacation = updatedVacations.length > 0 ? updatedVacations[0] : null
           setSelectedVacationId(nextVacation ? nextVacation.id : null)
         }
@@ -180,6 +200,102 @@ export default function Home() {
     } finally {
       setIsLoading(false)
     }
+  }
+
+  const handleCreateEquipment = async () => {
+    if (!newEquipmentForm.was || !newEquipmentForm.kategorie_id) {
+      alert('Bitte füllen Sie alle erforderlichen Felder aus')
+      return
+    }
+
+    setIsLoading(true)
+    try {
+      const method = editingEquipmentId ? 'PUT' : 'POST'
+      const body = editingEquipmentId
+        ? { ...newEquipmentForm, id: editingEquipmentId, einzelgewicht: newEquipmentForm.einzelgewicht ? parseFloat(newEquipmentForm.einzelgewicht) : null, standard_anzahl: parseInt(newEquipmentForm.standard_anzahl) }
+        : { ...newEquipmentForm, einzelgewicht: newEquipmentForm.einzelgewicht ? parseFloat(newEquipmentForm.einzelgewicht) : null, standard_anzahl: parseInt(newEquipmentForm.standard_anzahl) }
+
+      const res = await fetch('/api/equipment-items', {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      })
+      const data = await res.json()
+      if (data.success) {
+        if (editingEquipmentId) {
+          setEquipmentItems(equipmentItems.map(item => item.id === editingEquipmentId ? data.data : item))
+        } else {
+          setEquipmentItems([...equipmentItems, data.data])
+        }
+        setShowEquipmentDialog(false)
+        setEditingEquipmentId(null)
+        setNewEquipmentForm({
+          was: '',
+          kategorie_id: '',
+          einzelgewicht: '',
+          standard_anzahl: '1',
+          status: 'Immer gepackt',
+          details: ''
+        })
+      } else {
+        alert('Fehler beim Speichern des Gegenstands: ' + data.error)
+      }
+    } catch (error) {
+      console.error('Failed to save equipment:', error)
+      alert('Fehler beim Speichern des Gegenstands')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleEditEquipment = (item: EquipmentItem) => {
+    setEditingEquipmentId(item.id)
+    setNewEquipmentForm({
+      was: item.was,
+      kategorie_id: item.kategorie_id,
+      einzelgewicht: item.einzelgewicht?.toString() || '',
+      standard_anzahl: item.standard_anzahl.toString(),
+      status: item.status,
+      details: item.details || ''
+    })
+    setShowEquipmentDialog(true)
+  }
+
+  const handleDeleteEquipment = async (equipmentId: string) => {
+    if (!confirm('Sind Sie sicher, dass Sie diesen Gegenstand löschen möchten?')) {
+      return
+    }
+
+    setIsLoading(true)
+    try {
+      const res = await fetch(`/api/equipment-items?id=${equipmentId}`, {
+        method: 'DELETE'
+      })
+      const data = await res.json()
+      if (data.success) {
+        setEquipmentItems(equipmentItems.filter(item => item.id !== equipmentId))
+      } else {
+        alert('Fehler beim Löschen des Gegenstands: ' + data.error)
+      }
+    } catch (error) {
+      console.error('Failed to delete equipment:', error)
+      alert('Fehler beim Löschen des Gegenstands')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleCloseEquipmentDialog = () => {
+    setShowEquipmentDialog(false)
+    setEditingEquipmentId(null)
+    setNewEquipmentForm({
+      was: '',
+      kategorie_id: '',
+      einzelgewicht: '',
+      standard_anzahl: '1',
+      status: 'Immer gepackt',
+      details: ''
+    })
   }
 
   const currentVacation = vacations.find(v => v.id === selectedVacationId)
@@ -343,17 +459,156 @@ export default function Home() {
           <TabsContent value="equipment" className="space-y-4">
             <Card>
               <CardHeader>
-                <CardTitle>Ausrüstungsverwaltung</CardTitle>
-                <CardDescription>
-                  Verwalten Sie Ihre Camping-Ausrüstungsgegenstände
-                </CardDescription>
+                <div className="flex justify-between items-start">
+                  <div>
+                    <CardTitle>Ausrüstungsverwaltung</CardTitle>
+                    <CardDescription>
+                      Verwalten Sie Ihre Camping-Ausrüstungsgegenstände
+                    </CardDescription>
+                  </div>
+                  <Dialog open={showEquipmentDialog} onOpenChange={(open) => {
+                    if (!open) {
+                      handleCloseEquipmentDialog()
+                    } else {
+                      setShowEquipmentDialog(true)
+                    }
+                  }}>
+                    <DialogTrigger asChild>
+                      <Button size="sm">
+                        <Plus className="h-4 w-4 mr-2" />
+                        Neuer Gegenstand
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>
+                          {editingEquipmentId ? 'Gegenstand bearbeiten' : 'Neuen Gegenstand erstellen'}
+                        </DialogTitle>
+                        <DialogDescription>
+                          {editingEquipmentId ? 'Bearbeiten Sie die Details des Gegenstands' : 'Geben Sie die Details für einen neuen Gegenstand ein'}
+                        </DialogDescription>
+                      </DialogHeader>
+                      <div className="space-y-4">
+                        <div>
+                          <Label htmlFor="was">Bezeichnung</Label>
+                          <Input
+                            id="was"
+                            placeholder="z.B. Zelt"
+                            value={newEquipmentForm.was}
+                            onChange={(e) => setNewEquipmentForm({ ...newEquipmentForm, was: e.target.value })}
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="kategorie">Kategorie ID</Label>
+                          <Input
+                            id="kategorie"
+                            placeholder="z.B. 1"
+                            value={newEquipmentForm.kategorie_id}
+                            onChange={(e) => setNewEquipmentForm({ ...newEquipmentForm, kategorie_id: e.target.value })}
+                          />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <Label htmlFor="gewicht">Gewicht (kg)</Label>
+                            <Input
+                              id="gewicht"
+                              type="number"
+                              step="0.1"
+                              placeholder="z.B. 2.5"
+                              value={newEquipmentForm.einzelgewicht}
+                              onChange={(e) => setNewEquipmentForm({ ...newEquipmentForm, einzelgewicht: e.target.value })}
+                            />
+                          </div>
+                          <div>
+                            <Label htmlFor="anzahl">Standard-Anzahl</Label>
+                            <Input
+                              id="anzahl"
+                              type="number"
+                              placeholder="z.B. 1"
+                              value={newEquipmentForm.standard_anzahl}
+                              onChange={(e) => setNewEquipmentForm({ ...newEquipmentForm, standard_anzahl: e.target.value })}
+                            />
+                          </div>
+                        </div>
+                        <div>
+                          <Label htmlFor="status">Status</Label>
+                          <select
+                            id="status"
+                            value={newEquipmentForm.status}
+                            onChange={(e) => setNewEquipmentForm({ ...newEquipmentForm, status: e.target.value })}
+                            className="w-full px-3 py-2 border border-input rounded-md bg-background"
+                          >
+                            <option value="Immer gepackt">Immer gepackt</option>
+                            <option value="Fest Installiert">Fest Installiert</option>
+                            <option value="Ausgemustert">Ausgemustert</option>
+                            <option value="Optional">Optional</option>
+                          </select>
+                        </div>
+                        <div>
+                          <Label htmlFor="details">Details</Label>
+                          <Input
+                            id="details"
+                            placeholder="z.B. 3-Personen Zelt"
+                            value={newEquipmentForm.details}
+                            onChange={(e) => setNewEquipmentForm({ ...newEquipmentForm, details: e.target.value })}
+                          />
+                        </div>
+                        <Button onClick={handleCreateEquipment} disabled={isLoading} className="w-full">
+                          {isLoading ? 'Wird gespeichert...' : editingEquipmentId ? 'Gegenstand aktualisieren' : 'Gegenstand erstellen'}
+                        </Button>
+                      </div>
+                    </DialogContent>
+                  </Dialog>
+                </div>
               </CardHeader>
               <CardContent>
-                <EquipmentList
-                  items={equipmentItems}
-                  onEditItem={(id) => console.log('Edit:', id)}
-                  onAddItem={() => console.log('Add new item')}
-                />
+                <div className="space-y-3">
+                  {equipmentItems.map(item => (
+                    <Card key={item.id} className="overflow-hidden">
+                      <CardHeader className="pb-3">
+                        <div className="flex justify-between items-start gap-4">
+                          <div className="flex-grow">
+                            <CardTitle className="text-base">{item.was}</CardTitle>
+                            <CardDescription className="text-xs">
+                              {item.status}
+                            </CardDescription>
+                          </div>
+                          <div className="flex gap-2">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleEditEquipment(item)}
+                            >
+                              <Edit2 className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleDeleteEquipment(item.id)}
+                              disabled={isLoading}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      </CardHeader>
+                      <CardContent className="pb-3 space-y-2 text-sm">
+                        {item.einzelgewicht && (
+                          <p><span className="font-medium">Gewicht:</span> {item.einzelgewicht} kg</p>
+                        )}
+                        <p><span className="font-medium">Standard-Anzahl:</span> {item.standard_anzahl}</p>
+                        {item.details && (
+                          <p><span className="font-medium">Details:</span> {item.details}</p>
+                        )}
+                      </CardContent>
+                    </Card>
+                  ))}
+                  {equipmentItems.length === 0 && (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <p>Keine Gegenstände vorhanden. Erstellen Sie einen neuen Gegenstand!</p>
+                    </div>
+                  )}
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
