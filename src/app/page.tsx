@@ -134,10 +134,15 @@ export default function Home() {
   const groupedCategories = useMemo(() => {
     const grouped: Record<string, CategoryWithMain[]> = {}
     filteredCategories.forEach(cat => {
-      if (!grouped[cat.hauptkategorie_titel]) {
-        grouped[cat.hauptkategorie_titel] = []
+      const title = cat.hauptkategorie_titel
+      if (!grouped[title]) {
+        grouped[title] = []
       }
-      grouped[cat.hauptkategorie_titel].push(cat)
+      // Use a non-null assertion or a safe push
+      const group = grouped[title]
+      if (group) {
+        group.push(cat)
+      }
     })
     return grouped
   }, [filteredCategories])
