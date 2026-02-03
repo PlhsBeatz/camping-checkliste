@@ -5,9 +5,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { PackingList } from '@/components/packing-list'
+import { MitreisendeManager } from '@/components/mitreisende-manager'
 import { Plus, Package, MapPin, Users, Trash2, Edit2, ChevronDown, Link as LinkIcon, X } from 'lucide-react'
 import { useState, useEffect, useMemo } from 'react'
-import { Vacation, PackingItem, EquipmentItem, Category, TransportVehicle } from '@/lib/db'
+import { Vacation, PackingItem, EquipmentItem, Category, TransportVehicle, Mitreisender } from '@/lib/db'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -22,6 +23,7 @@ export default function Home() {
   const [equipmentItems, setEquipmentItems] = useState<EquipmentItem[]>([])
   const [categories, setCategories] = useState<CategoryWithMain[]>([])
   const [transportVehicles, setTransportVehicles] = useState<TransportVehicle[]>([])
+  const [vacationMitreisende, setVacationMitreisende] = useState<Mitreisender[]>([])
   const [selectedVacationId, setSelectedVacationId] = useState<string | null>(null)
   const [packedItems, setPackedItems] = useState<Set<string>>(new Set())
   const [isLoading, setIsLoading] = useState(false)
@@ -717,6 +719,13 @@ export default function Home() {
                     />
                   </div>
                 </div>
+                
+                {/* Mitreisenden-Verwaltung */}
+                <MitreisendeManager 
+                  vacationId={editingVacationId}
+                  onMitreisendeChange={setVacationMitreisende}
+                />
+                
                 <Button onClick={handleCreateVacation} disabled={isLoading} className="w-full">
                   {isLoading ? 'Wird gespeichert...' : editingVacationId ? 'Urlaub aktualisieren' : 'Urlaub erstellen'}
                 </Button>
