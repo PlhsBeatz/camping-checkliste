@@ -290,6 +290,21 @@ export default function Home() {
       return
     }
 
+    // Find the selected equipment item to get mitreisenden_typ and standard_mitreisende
+    const selectedEquipment = equipmentItems.find(item => item.id === packingItemForm.gegenstandId)
+    let mitreisendeIds: string[] = []
+    
+    if (selectedEquipment) {
+      if (selectedEquipment.mitreisenden_typ === 'alle') {
+        // Use all mitreisende from the vacation
+        mitreisendeIds = _vacationMitreisende.map(m => m.id)
+      } else if (selectedEquipment.mitreisenden_typ === 'ausgewaehlte') {
+        // Use standard_mitreisende from the equipment item
+        mitreisendeIds = selectedEquipment.standard_mitreisende || []
+      }
+      // For 'pauschal', mitreisendeIds remains empty
+    }
+
     setIsLoading(true)
     try {
       const res = await fetch('/api/packing-items', {
@@ -300,7 +315,8 @@ export default function Home() {
           gegenstandId: packingItemForm.gegenstandId,
           anzahl: parseInt(packingItemForm.anzahl) || 1,
           bemerkung: packingItemForm.bemerkung || null,
-          transportId: packingItemForm.transportId || null
+          transportId: packingItemForm.transportId || null,
+          mitreisende: mitreisendeIds
         })
       })
       const data = await res.json()
