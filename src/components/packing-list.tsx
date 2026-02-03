@@ -168,7 +168,7 @@ export const PackingList: React.FC<PackingListProps> = ({
   }, [items, hidePackedItems]);
 
   const { packedCount, totalCount } = useMemo(() => {
-    return items.reduce((acc, item) => {
+    const result = items.reduce((acc, item) => {
       if (item.mitreisenden_typ === 'pauschal') {
         acc.total += 1;
         if (item.gepackt) acc.packed += 1;
@@ -178,6 +178,7 @@ export const PackingList: React.FC<PackingListProps> = ({
       }
       return acc;
     }, { packed: 0, total: 0 });
+    return { packedCount: result.packed, totalCount: result.total };
   }, [items]);
 
   const mainCategories = Object.keys(itemsByMainCategory);
