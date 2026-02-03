@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { 
+  getDB,
   getMitreisende, 
   getMitreisendeForVacation,
   createMitreisender, 
   updateMitreisender, 
   deleteMitreisender,
-  setMitreisendeForVacation
+  setMitreisendeForVacation,
+  CloudflareEnv
 } from '@/lib/db'
 
 export const runtime = 'edge'
@@ -18,17 +20,14 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const vacationId = searchParams.get('vacationId')
-    const env = (process.env as unknown) as { DB: D1Database }
-    
-    if (!env.DB) {
-      return NextResponse.json({ success: false, error: 'Database not configured' }, { status: 500 })
-    }
+    const env = process.env as unknown as CloudflareEnv
+    const db = getDB(env)
 
     let mitreisende
     if (vacationId) {
-      mitreisende = await getMitreisendeForVacation(env.DB, vacationId)
+      mitreisende = await getMitreisendeForVacation(db, vacationId)
     } else {
-      mitreisende = await getMitreisende(env.DB)
+      mitreisende = await getMitreisende(db)
     }
 
     return NextResponse.json({ success: true, data: mitreisende })
@@ -45,11 +44,8 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
-    const env = (process.env as unknown) as { DB: D1Database }
-    
-    if (!env.DB) {
-      return NextResponse.json({ success: false, error: 'Database not configured' }, { status: 500 })
-    }
+    const env = process.env as unknown as CloudflareEnv
+    const db = getDB(env)
 
     const body = await request.json()
     const { name, user_id, is_default_member } = body
@@ -58,7 +54,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Name is required' }, { status: 400 })
     }
 
-    const id = await createMitreisender(env.DB, name, user_id, is_default_member)
+    const id = await createMitreisender(db, name, user_id, is_default_member)
     
     if (!id) {
       return NextResponse.json({ success: false, error: 'Failed to create mitreisender' }, { status: 500 })
@@ -78,18 +74,15 @@ export async function POST(request: NextRequest) {
  */
 export async function PUT(request: NextRequest) {
   try {
-    const env = (process.env as unknown) as { DB: D1Database }
-    
-    if (!env.DB) {
-      return NextResponse.json({ success: false, error: 'Database not configured' }, { status: 500 })
-    }
+    const env = process.env as unknown as CloudflareEnv
+    const db = getDB(env)
 
     const body = await request.json()
     const { id, name, user_id, is_default_member, vacationId, mitreisendeIds } = body
 
     // Setzen der Mitreisenden für einen Urlaub
     if (vacationId && mitreisendeIds) {
-      const success = await setMitreisendeForVacation(env.DB, vacationId, mitreisendeIds)
+      const success = await setMitreisendeForVacation(db, vacationId, mitreisendeIds)
       if (!success) {
         return NextResponse.json({ success: false, error: 'Failed to set mitreisende for vacation' }, { status: 500 })
       }
@@ -101,7 +94,7 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'ID and name are required' }, { status: 400 })
     }
 
-    const success = await updateMitreisender(env.DB, id, name, user_id, is_default_member)
+    const success = await updateMitreisender(db, id, name, user_id, is_default_member)
     
     if (!success) {
       return NextResponse.json({ success: false, error: 'Failed to update mitreisender' }, { status: 500 })
@@ -123,17 +116,14 @@ export async function DELETE(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
-    const env = (process.env as unknown) as { DB: D1Database }
-    
-    if (!env.DB) {
-      return NextResponse.json({ success: false, error: 'Database not configured' }, { status: 500 })
-    }
+    const env = process.env as unknown as CloudflareEnv
+    const db = getDB(env)
 
     if (!id) {
       return NextResponse.json({ success: false, error: 'ID is required' }, { status: 400 })
     }
 
-    const success = await deleteMitreisender(env.DB, id)
+    const success = await deleteMitreisender(db, id)
     
     if (!success) {
       return NextResponse.json({ success: false, error: 'Failed to delete mitreisender' }, { status: 500 })
