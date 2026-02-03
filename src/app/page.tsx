@@ -23,6 +23,7 @@ export default function Home() {
   const [equipmentItems, setEquipmentItems] = useState<EquipmentItem[]>([])
   const [categories, setCategories] = useState<CategoryWithMain[]>([])
   const [transportVehicles, setTransportVehicles] = useState<TransportVehicle[]>([])
+  const [allMitreisende, setAllMitreisende] = useState<Mitreisender[]>([])
   const [_vacationMitreisende, setVacationMitreisende] = useState<Mitreisender[]>([])
   const [selectedVacationId, setSelectedVacationId] = useState<string | null>(null)
   const [packedItems, setPackedItems] = useState<Set<string>>(new Set())
@@ -59,7 +60,9 @@ export default function Home() {
     standard_anzahl: '1',
     status: 'Immer gepackt',
     details: '',
-    links: ['']
+    links: [''],
+    mitreisenden_typ: 'pauschal' as 'pauschal' | 'alle' | 'ausgewaehlte',
+    standard_mitreisende: [] as string[]
   })
 
   // Fetch Vacations
@@ -152,6 +155,22 @@ export default function Home() {
       }
     }
     fetchTransportVehicles()
+  }, [])
+
+  // Fetch All Mitreisende
+  useEffect(() => {
+    const fetchAllMitreisende = async () => {
+      try {
+        const res = await fetch('/api/mitreisende')
+        const data = await res.json()
+        if (data.success) {
+          setAllMitreisende(data.data)
+        }
+      } catch (error) {
+        console.error('Failed to fetch mitreisende:', error)
+      }
+    }
+    fetchAllMitreisende()
   }, [])
 
   // Filter categories based on search term
@@ -512,14 +531,18 @@ export default function Home() {
             transport_id: newEquipmentForm.transport_id || null,
             einzelgewicht,
             standard_anzahl: parseInt(newEquipmentForm.standard_anzahl),
-            links: validLinks
+            links: validLinks,
+            mitreisenden_typ: newEquipmentForm.mitreisenden_typ,
+            standard_mitreisende: newEquipmentForm.standard_mitreisende
           }
         : {
             ...newEquipmentForm,
             transport_id: newEquipmentForm.transport_id || null,
             einzelgewicht,
             standard_anzahl: parseInt(newEquipmentForm.standard_anzahl),
-            links: validLinks
+            links: validLinks,
+            mitreisenden_typ: newEquipmentForm.mitreisenden_typ,
+            standard_mitreisende: newEquipmentForm.standard_mitreisende
           }
 
       const res = await fetch('/api/equipment-items', {
@@ -544,7 +567,9 @@ export default function Home() {
           standard_anzahl: '1',
           status: 'Immer gepackt',
           details: '',
-          links: ['']
+          links: [''],
+          mitreisenden_typ: 'pauschal' as 'pauschal' | 'alle' | 'ausgewaehlte',
+          standard_mitreisende: [] as string[]
         })
         setCategorySearchTerm('')
       } else {
@@ -568,7 +593,9 @@ export default function Home() {
       standard_anzahl: item.standard_anzahl.toString(),
       status: item.status,
       details: item.details || '',
-      links: item.links && item.links.length > 0 ? item.links.map(l => l.url) : ['']
+      links: item.links && item.links.length > 0 ? item.links.map(l => l.url) : [''],
+      mitreisenden_typ: item.mitreisenden_typ || 'pauschal',
+      standard_mitreisende: item.standard_mitreisende || []
     })
     setCategorySearchTerm('')
     setShowEquipmentDialog(true)
@@ -1097,6 +1124,71 @@ export default function Home() {
                             onChange={(e) => setNewEquipmentForm({ ...newEquipmentForm, details: e.target.value })}
                           />
                         </div>
+                        
+                        {/* Mitreisenden-Typ */}
+                        <div>
+                          <Label htmlFor="mitreisenden-typ">Für wen gilt dieser Gegenstand?</Label>
+                          <select
+                            id="mitreisenden-typ"
+                            value={newEquipmentForm.mitreisenden_typ}
+                            onChange={(e) => setNewEquipmentForm({ 
+                              ...newEquipmentForm, 
+                              mitreisenden_typ: e.target.value as 'pauschal' | 'alle' | 'ausgewaehlte',
+                              standard_mitreisende: e.target.value === 'ausgewaehlte' ? newEquipmentForm.standard_mitreisende : []
+                            })}
+                            className="w-full px-3 py-2 border border-input rounded-md bg-background"
+                          >
+                            <option value="pauschal">Pauschal (gemeinsam für alle)</option>
+                            <option value="alle">Für jeden Mitreisenden separat</option>
+                            <option value="ausgewaehlte">Nur für ausgewählte Mitreisende</option>
+                          </select>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {newEquipmentForm.mitreisenden_typ === 'pauschal' && 'Wird einmal für den gesamten Urlaub gepackt (z.B. Gasflasche)'}
+                            {newEquipmentForm.mitreisenden_typ === 'alle' && 'Jeder Mitreisende muss separat packen und abhaken (z.B. Kleidung, Kosmetik)'}
+                            {newEquipmentForm.mitreisenden_typ === 'ausgewaehlte' && 'Nur bestimmte Personen müssen packen (z.B. Kontaktlinsen, Spielzeug)'}
+                          </p>
+                        </div>
+                        
+                        {/* Standard-Mitreisende (nur bei "ausgewählte") */}
+                        {newEquipmentForm.mitreisenden_typ === 'ausgewaehlte' && (
+                          <div>
+                            <Label>Standard-Mitreisende</Label>
+                            <div className="border rounded-md p-3 space-y-2 max-h-48 overflow-y-auto">
+                              {allMitreisende.length === 0 ? (
+                                <p className="text-sm text-muted-foreground text-center py-2">
+                                  Noch keine Mitreisenden angelegt
+                                </p>
+                              ) : (
+                                allMitreisende.map((mitreisender) => (
+                                  <div key={mitreisender.id} className="flex items-center gap-2">
+                                    <input
+                                      type="checkbox"
+                                      id={`std-mitreisender-${mitreisender.id}`}
+                                      checked={newEquipmentForm.standard_mitreisende.includes(mitreisender.id)}
+                                      onChange={(e) => {
+                                        const newSelection = e.target.checked
+                                          ? [...newEquipmentForm.standard_mitreisende, mitreisender.id]
+                                          : newEquipmentForm.standard_mitreisende.filter(id => id !== mitreisender.id)
+                                        setNewEquipmentForm({ ...newEquipmentForm, standard_mitreisende: newSelection })
+                                      }}
+                                      className="h-4 w-4 rounded border-gray-300"
+                                    />
+                                    <label
+                                      htmlFor={`std-mitreisender-${mitreisender.id}`}
+                                      className="text-sm cursor-pointer"
+                                    >
+                                      {mitreisender.name}
+                                    </label>
+                                  </div>
+                                ))
+                              )}
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              Diese Mitreisenden werden standardmäßig zugeordnet, wenn der Gegenstand zur Packliste hinzugefügt wird
+                            </p>
+                          </div>
+                        )}
+                        
                         <div>
                           <div className="flex justify-between items-center mb-2">
                             <Label>Links</Label>
