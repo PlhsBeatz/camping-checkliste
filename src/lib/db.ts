@@ -25,11 +25,29 @@ export interface PackingItem {
   anzahl: number
   gepackt: boolean
   bemerkung?: string | null
+  transport_id?: string | null
+  transport_name?: string
+  mitreisenden_typ: 'pauschal' | 'alle' | 'ausgewaehlte'
+  mitreisende?: PackingItemMitreisender[] // Zugeordnete Mitreisende mit Gepackt-Status
   was: string // Gejoint aus ausruestungsgegenstaende
   kategorie: string // Gejoint
   hauptkategorie: string // Gejoint
   details?: string
   einzelgewicht?: number
+  created_at: string
+}
+
+export interface PackingItemMitreisender {
+  mitreisender_id: string
+  mitreisender_name: string
+  gepackt: boolean
+}
+
+export interface Mitreisender {
+  id: string
+  name: string
+  user_id?: string | null
+  is_default_member: boolean
   created_at: string
 }
 
@@ -45,6 +63,8 @@ export interface EquipmentItem {
   standard_anzahl: number
   status: string
   details: string
+  mitreisenden_typ: 'pauschal' | 'alle' | 'ausgewaehlte'
+  standard_mitreisende?: string[] // IDs der standardmäßig zugeordneten Mitreisenden
   links?: EquipmentLink[]
   created_at: string
 }
@@ -366,17 +386,26 @@ export async function getEquipmentItems(db: D1Database): Promise<EquipmentItem[]
     `
     const items = await db.prepare(query).all<EquipmentItem>()
     
-    // Fetch links for all equipment items
-    const itemsWithLinks = await Promise.all(
+    // Fetch links and standard mitreisende for all equipment items
+    const itemsWithDetails = await Promise.all(
       (items.results || []).map(async (item) => {
         const links = await db.prepare(
           'SELECT * FROM ausruestungsgegenstaende_links WHERE gegenstand_id = ?'
         ).bind(item.id).all<EquipmentLink>()
-        return { ...item, links: links.results || [] }
+        
+        const standardMitreisende = await db.prepare(
+          'SELECT mitreisender_id FROM ausruestungsgegenstaende_standard_mitreisende WHERE gegenstand_id = ?'
+        ).bind(item.id).all<{ mitreisender_id: string }>()
+        
+        return { 
+          ...item, 
+          links: links.results || [],
+          standard_mitreisende: standardMitreisende.results?.map(m => m.mitreisender_id) || []
+        }
       })
     )
     
-    return itemsWithLinks
+    return itemsWithDetails
   } catch (error) {
     console.error('Error fetching equipment items:', error)
     return []
@@ -408,7 +437,16 @@ export async function getEquipmentItem(db: D1Database, id: string): Promise<Equi
       'SELECT * FROM ausruestungsgegenstaende_links WHERE gegenstand_id = ?'
     ).bind(id).all<EquipmentLink>()
     
-    return { ...item, links: links.results || [] }
+    // Fetch standard mitreisende for this equipment item
+    const standardMitreisende = await db.prepare(
+      'SELECT mitreisender_id FROM ausruestungsgegenstaende_standard_mitreisende WHERE gegenstand_id = ?'
+    ).bind(id).all<{ mitreisender_id: string }>()
+    
+    return { 
+      ...item, 
+      links: links.results || [],
+      standard_mitreisende: standardMitreisende.results?.map(m => m.mitreisender_id) || []
+    }
   } catch (error) {
     console.error('Error fetching equipment item:', error)
     return null
@@ -428,6 +466,8 @@ export async function createEquipmentItem(
     standard_anzahl?: number
     status?: string
     details?: string
+    mitreisenden_typ?: 'pauschal' | 'alle' | 'ausgewaehlte'
+    standard_mitreisende?: string[]
     links?: string[]
   }
 ): Promise<EquipmentItem | null> {
@@ -436,8 +476,8 @@ export async function createEquipmentItem(
     await db
       .prepare(
         `INSERT INTO ausruestungsgegenstaende 
-         (id, was, kategorie_id, transport_id, einzelgewicht, standard_anzahl, status, details) 
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+         (id, was, kategorie_id, transport_id, einzelgewicht, standard_anzahl, status, details, mitreisenden_typ) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .bind(
         id,
@@ -447,7 +487,8 @@ export async function createEquipmentItem(
         item.einzelgewicht || 0,
         item.standard_anzahl || 1,
         item.status || 'Normal',
-        item.details || ''
+        item.details || '',
+        item.mitreisenden_typ || 'pauschal'
       )
       .run()
 
@@ -458,6 +499,15 @@ export async function createEquipmentItem(
         await db.prepare(
           'INSERT INTO ausruestungsgegenstaende_links (id, gegenstand_id, url) VALUES (?, ?, ?)'
         ).bind(linkId, id, url).run()
+      }
+    }
+
+    // Insert standard mitreisende if provided
+    if (item.standard_mitreisende && item.standard_mitreisende.length > 0) {
+      for (const mitreisenderId of item.standard_mitreisende) {
+        await db.prepare(
+          'INSERT INTO ausruestungsgegenstaende_standard_mitreisende (gegenstand_id, mitreisender_id) VALUES (?, ?)'
+        ).bind(id, mitreisenderId).run()
       }
     }
 
@@ -482,6 +532,8 @@ export async function updateEquipmentItem(
     standard_anzahl?: number
     status?: string
     details?: string
+    mitreisenden_typ?: 'pauschal' | 'alle' | 'ausgewaehlte'
+    standard_mitreisende?: string[]
     links?: string[]
   }
 ): Promise<EquipmentItem | null> {
@@ -517,6 +569,10 @@ export async function updateEquipmentItem(
       fields.push('details = ?')
       values.push(updates.details)
     }
+    if (updates.mitreisenden_typ !== undefined) {
+      fields.push('mitreisenden_typ = ?')
+      values.push(updates.mitreisenden_typ)
+    }
 
     if (fields.length > 0) {
       values.push(id)
@@ -536,6 +592,21 @@ export async function updateEquipmentItem(
           await db.prepare(
             'INSERT INTO ausruestungsgegenstaende_links (id, gegenstand_id, url) VALUES (?, ?, ?)'
           ).bind(linkId, id, url).run()
+        }
+      }
+    }
+
+    // Update standard mitreisende if provided
+    if (updates.standard_mitreisende !== undefined) {
+      // Delete existing standard mitreisende
+      await db.prepare('DELETE FROM ausruestungsgegenstaende_standard_mitreisende WHERE gegenstand_id = ?').bind(id).run()
+      
+      // Insert new standard mitreisende
+      if (updates.standard_mitreisende.length > 0) {
+        for (const mitreisenderId of updates.standard_mitreisende) {
+          await db.prepare(
+            'INSERT INTO ausruestungsgegenstaende_standard_mitreisende (gegenstand_id, mitreisender_id) VALUES (?, ?)'
+          ).bind(id, mitreisenderId).run()
         }
       }
     }
@@ -620,20 +691,33 @@ export async function addPackingItem(
   packlisteId: string,
   gegenstandId: string,
   anzahl: number,
-  bemerkung?: string | null
-): Promise<boolean> {
+  bemerkung?: string | null,
+  transportId?: string | null,
+  mitreisende?: string[]
+): Promise<string | null> {
   try {
     const id = crypto.randomUUID()
     await db
       .prepare(
-        'INSERT INTO packlisten_eintraege (id, packliste_id, gegenstand_id, anzahl, bemerkung) VALUES (?, ?, ?, ?, ?)'
+        'INSERT INTO packlisten_eintraege (id, packliste_id, gegenstand_id, anzahl, bemerkung, transport_id) VALUES (?, ?, ?, ?, ?, ?)'
       )
-      .bind(id, packlisteId, gegenstandId, anzahl, bemerkung || null)
+      .bind(id, packlisteId, gegenstandId, anzahl, bemerkung || null, transportId || null)
       .run()
-    return true
+    
+    // Add mitreisende associations if provided
+    if (mitreisende && mitreisende.length > 0) {
+      for (const mitreisenderId of mitreisende) {
+        await db
+          .prepare('INSERT INTO packlisten_eintrag_mitreisende (packlisten_eintrag_id, mitreisender_id, gepackt) VALUES (?, ?, ?)')
+          .bind(id, mitreisenderId, 0)
+          .run()
+      }
+    }
+    
+    return id
   } catch (error) {
     console.error('Error adding packing item:', error)
-    return false
+    return null
   }
 }
 
@@ -660,5 +744,253 @@ export async function getPacklisteId(db: D1Database, vacationId: string): Promis
   } catch (error) {
     console.error('Error fetching packliste ID:', error)
     return null
+  }
+}
+
+/**
+ * ========================================
+ * MITREISENDE (TRAVELERS) FUNCTIONS
+ * ========================================
+ */
+
+/**
+ * Abrufen aller Mitreisenden
+ */
+export async function getMitreisende(db: D1Database): Promise<Mitreisender[]> {
+  try {
+    const result = await db.prepare('SELECT * FROM mitreisende ORDER BY name').all<Mitreisender>()
+    return result.results || []
+  } catch (error) {
+    console.error('Error fetching mitreisende:', error)
+    return []
+  }
+}
+
+/**
+ * Abrufen der Mitreisenden für einen bestimmten Urlaub
+ */
+export async function getMitrei sendeForVacation(db: D1Database, vacationId: string): Promise<Mitreisender[]> {
+  try {
+    const result = await db
+      .prepare(`
+        SELECT m.* 
+        FROM mitreisende m
+        INNER JOIN urlaub_mitreisende um ON m.id = um.mitreisender_id
+        WHERE um.urlaub_id = ?
+        ORDER BY m.name
+      `)
+      .bind(vacationId)
+      .all<Mitreisender>()
+    return result.results || []
+  } catch (error) {
+    console.error('Error fetching mitreisende for vacation:', error)
+    return []
+  }
+}
+
+/**
+ * Erstellen eines neuen Mitreisenden
+ */
+export async function createMitreisender(
+  db: D1Database,
+  name: string,
+  userId?: string | null,
+  isDefaultMember: boolean = false
+): Promise<string | null> {
+  try {
+    const id = crypto.randomUUID()
+    await db
+      .prepare('INSERT INTO mitreisende (id, name, user_id, is_default_member) VALUES (?, ?, ?, ?)')
+      .bind(id, name, userId || null, isDefaultMember ? 1 : 0)
+      .run()
+    return id
+  } catch (error) {
+    console.error('Error creating mitreisender:', error)
+    return null
+  }
+}
+
+/**
+ * Aktualisieren eines Mitreisenden
+ */
+export async function updateMitreisender(
+  db: D1Database,
+  id: string,
+  name: string,
+  userId?: string | null,
+  isDefaultMember?: boolean
+): Promise<boolean> {
+  try {
+    await db
+      .prepare('UPDATE mitreisende SET name = ?, user_id = ?, is_default_member = ? WHERE id = ?')
+      .bind(name, userId || null, isDefaultMember ? 1 : 0, id)
+      .run()
+    return true
+  } catch (error) {
+    console.error('Error updating mitreisender:', error)
+    return false
+  }
+}
+
+/**
+ * Löschen eines Mitreisenden
+ */
+export async function deleteMitreisender(db: D1Database, id: string): Promise<boolean> {
+  try {
+    await db.prepare('DELETE FROM mitreisende WHERE id = ?').bind(id).run()
+    return true
+  } catch (error) {
+    console.error('Error deleting mitreisender:', error)
+    return false
+  }
+}
+
+/**
+ * Hinzufügen eines Mitreisenden zu einem Urlaub
+ */
+export async function addMitreisenderToVacation(
+  db: D1Database,
+  vacationId: string,
+  mitreisenderId: string
+): Promise<boolean> {
+  try {
+    await db
+      .prepare('INSERT OR IGNORE INTO urlaub_mitreisende (urlaub_id, mitreisender_id) VALUES (?, ?)')
+      .bind(vacationId, mitreisenderId)
+      .run()
+    return true
+  } catch (error) {
+    console.error('Error adding mitreisender to vacation:', error)
+    return false
+  }
+}
+
+/**
+ * Entfernen eines Mitreisenden von einem Urlaub
+ */
+export async function removeMitreisenderFromVacation(
+  db: D1Database,
+  vacationId: string,
+  mitreisenderId: string
+): Promise<boolean> {
+  try {
+    await db
+      .prepare('DELETE FROM urlaub_mitreisende WHERE urlaub_id = ? AND mitreisender_id = ?')
+      .bind(vacationId, mitreisenderId)
+      .run()
+    return true
+  } catch (error) {
+    console.error('Error removing mitreisender from vacation:', error)
+    return false
+  }
+}
+
+/**
+ * Setzen der Mitreisenden für einen Urlaub (ersetzt alle bisherigen)
+ */
+export async function setMitreisende ForVacation(
+  db: D1Database,
+  vacationId: string,
+  mitreisende Ids: string[]
+): Promise<boolean> {
+  try {
+    // Erst alle bisherigen Zuordnungen löschen
+    await db.prepare('DELETE FROM urlaub_mitreisende WHERE urlaub_id = ?').bind(vacationId).run()
+    
+    // Dann neue Zuordnungen hinzufügen
+    for (const mitreisenderId of mitreisende Ids) {
+      await db
+        .prepare('INSERT INTO urlaub_mitreisende (urlaub_id, mitreisender_id) VALUES (?, ?)')
+        .bind(vacationId, mitreisenderId)
+        .run()
+    }
+    return true
+  } catch (error) {
+    console.error('Error setting mitreisende for vacation:', error)
+    return false
+  }
+}
+
+/**
+ * Abrufen der Standard-Mitreisenden für einen Ausrüstungsgegenstand
+ */
+export async function getStandardMitreisende ForEquipment(
+  db: D1Database,
+  gegenstandId: string
+): Promise<string[]> {
+  try {
+    const result = await db
+      .prepare('SELECT mitreisender_id FROM ausruestungsgegenstaende_standard_mitreisende WHERE gegenstand_id = ?')
+      .bind(gegenstandId)
+      .all<{ mitreisender_id: string }>()
+    return result.results?.map(r => r.mitreisender_id) || []
+  } catch (error) {
+    console.error('Error fetching standard mitreisende for equipment:', error)
+    return []
+  }
+}
+
+/**
+ * Setzen der Standard-Mitreisenden für einen Ausrüstungsgegenstand
+ */
+export async function setStandardMitreisende ForEquipment(
+  db: D1Database,
+  gegenstandId: string,
+  mitreisende Ids: string[]
+): Promise<boolean> {
+  try {
+    // Erst alle bisherigen Zuordnungen löschen
+    await db
+      .prepare('DELETE FROM ausruestungsgegenstaende_standard_mitreisende WHERE gegenstand_id = ?')
+      .bind(gegenstandId)
+      .run()
+    
+    // Dann neue Zuordnungen hinzufügen
+    for (const mitreisenderId of mitreisende Ids) {
+      await db
+        .prepare('INSERT INTO ausruestungsgegenstaende_standard_mitreisende (gegenstand_id, mitreisender_id) VALUES (?, ?)')
+        .bind(gegenstandId, mitreisenderId)
+        .run()
+    }
+    return true
+  } catch (error) {
+    console.error('Error setting standard mitreisende for equipment:', error)
+    return false
+  }
+}
+
+/**
+ * Abhaken eines Packlisten-Eintrags für einen bestimmten Mitreisenden
+ */
+export async function togglePackingItemForMitreisender(
+  db: D1Database,
+  packlistenEintragId: string,
+  mitreisenderId: string,
+  gepackt: boolean
+): Promise<boolean> {
+  try {
+    // Prüfen, ob bereits ein Eintrag existiert
+    const existing = await db
+      .prepare('SELECT gepackt FROM packlisten_eintrag_mitreisende WHERE packlisten_eintrag_id = ? AND mitreisender_id = ?')
+      .bind(packlistenEintragId, mitreisenderId)
+      .first<{ gepackt: number }>()
+    
+    if (existing) {
+      // Update
+      await db
+        .prepare('UPDATE packlisten_eintrag_mitreisende SET gepackt = ? WHERE packlisten_eintrag_id = ? AND mitreisender_id = ?')
+        .bind(gepackt ? 1 : 0, packlistenEintragId, mitreisenderId)
+        .run()
+    } else {
+      // Insert
+      await db
+        .prepare('INSERT INTO packlisten_eintrag_mitreisende (packlisten_eintrag_id, mitreisender_id, gepackt) VALUES (?, ?, ?)')
+        .bind(packlistenEintragId, mitreisenderId, gepackt ? 1 : 0)
+        .run()
+    }
+    return true
+  } catch (error) {
+    console.error('Error toggling packing item for mitreisender:', error)
+    return false
   }
 }

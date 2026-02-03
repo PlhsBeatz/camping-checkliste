@@ -36,6 +36,8 @@ export async function POST(request: NextRequest) {
       standard_anzahl: body.standard_anzahl,
       status: body.status,
       details: body.details,
+      mitreisenden_typ: body.mitreisenden_typ,
+      standard_mitreisende: body.standard_mitreisende,
       links: body.links
     })
 

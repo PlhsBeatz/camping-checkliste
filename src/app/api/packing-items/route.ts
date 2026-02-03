@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
     const env = process.env as unknown as CloudflareEnv
     const db = getDB(env)
     const body = await request.json()
-    const { vacationId, gegenstandId, anzahl, bemerkung } = body
+    const { vacationId, gegenstandId, anzahl, bemerkung, transportId, mitreisende } = body
 
     if (!vacationId || !gegenstandId) {
       return NextResponse.json({ error: 'vacationId and gegenstandId are required' }, { status: 400 })
@@ -39,9 +39,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Packliste not found' }, { status: 404 })
     }
 
-    const success = await addPackingItem(db, packlisteId, gegenstandId, anzahl || 1, bemerkung)
+    const itemId = await addPackingItem(db, packlisteId, gegenstandId, anzahl || 1, bemerkung, transportId, mitreisende)
 
-    if (!success) {
+    if (!itemId) {
       return NextResponse.json({ error: 'Failed to add packing item' }, { status: 400 })
     }
 
