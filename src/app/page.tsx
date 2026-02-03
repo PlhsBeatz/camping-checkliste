@@ -245,7 +245,7 @@ export default function Home() {
         const itemsData = await itemsRes.json()
         if (itemsData.success) {
           setPackingItems(itemsData.data)
-          const packed = new Set(itemsData.data.filter((item: PackingItem) => item.gepackt).map((item: PackingItem) => item.id))
+          const packed = new Set<string>(itemsData.data.filter((item: PackingItem) => item.gepackt).map((item: PackingItem) => item.id))
           setPackedItems(packed)
         }
         setShowAddItemDialog(false)
@@ -293,7 +293,7 @@ export default function Home() {
         const itemsData = await itemsRes.json()
         if (itemsData.success) {
           setPackingItems(itemsData.data)
-          const packed = new Set(itemsData.data.filter((item: PackingItem) => item.gepackt).map((item: PackingItem) => item.id))
+          const packed = new Set<string>(itemsData.data.filter((item: PackingItem) => item.gepackt).map((item: PackingItem) => item.id))
           setPackedItems(packed)
         }
         setShowEditItemDialog(false)
@@ -327,7 +327,7 @@ export default function Home() {
         const itemsData = await itemsRes.json()
         if (itemsData.success) {
           setPackingItems(itemsData.data)
-          const packed = new Set(itemsData.data.filter((item: PackingItem) => item.gepackt).map((item: PackingItem) => item.id))
+          const packed = new Set<string>(itemsData.data.filter((item: PackingItem) => item.gepackt).map((item: PackingItem) => item.id))
           setPackedItems(packed)
         }
       } else {
