@@ -167,7 +167,6 @@ export default function Home() {
   }, [filteredCategories])
 
   const selectedCategory = categories.find(c => c.id === newEquipmentForm.kategorie_id)
-  const selectedTransport = transportVehicles.find(t => t.id === newEquipmentForm.transport_id)
 
   const handleToggleItem = async (id: string) => {
     const isCurrentlyPacked = packedItems.has(id)
