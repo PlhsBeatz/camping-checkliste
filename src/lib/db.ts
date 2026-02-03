@@ -769,7 +769,7 @@ export async function getMitreisende(db: D1Database): Promise<Mitreisender[]> {
 /**
  * Abrufen der Mitreisenden für einen bestimmten Urlaub
  */
-export async function getMitrei sendeForVacation(db: D1Database, vacationId: string): Promise<Mitreisender[]> {
+export async function getMitreisendeForVacation(db: D1Database, vacationId: string): Promise<Mitreisender[]> {
   try {
     const result = await db
       .prepare(`
@@ -888,17 +888,17 @@ export async function removeMitreisenderFromVacation(
 /**
  * Setzen der Mitreisenden für einen Urlaub (ersetzt alle bisherigen)
  */
-export async function setMitreisende ForVacation(
+export async function setMitreisendeForVacation(
   db: D1Database,
   vacationId: string,
-  mitreisende Ids: string[]
+  mitreisendeIds: string[]
 ): Promise<boolean> {
   try {
     // Erst alle bisherigen Zuordnungen löschen
     await db.prepare('DELETE FROM urlaub_mitreisende WHERE urlaub_id = ?').bind(vacationId).run()
     
     // Dann neue Zuordnungen hinzufügen
-    for (const mitreisenderId of mitreisende Ids) {
+    for (const mitreisenderId of mitreisendeIds) {
       await db
         .prepare('INSERT INTO urlaub_mitreisende (urlaub_id, mitreisender_id) VALUES (?, ?)')
         .bind(vacationId, mitreisenderId)
@@ -914,7 +914,7 @@ export async function setMitreisende ForVacation(
 /**
  * Abrufen der Standard-Mitreisenden für einen Ausrüstungsgegenstand
  */
-export async function getStandardMitreisende ForEquipment(
+export async function getStandardMitreisendeForEquipment(
   db: D1Database,
   gegenstandId: string
 ): Promise<string[]> {
@@ -933,10 +933,10 @@ export async function getStandardMitreisende ForEquipment(
 /**
  * Setzen der Standard-Mitreisenden für einen Ausrüstungsgegenstand
  */
-export async function setStandardMitreisende ForEquipment(
+export async function setStandardMitreisendeForEquipment(
   db: D1Database,
   gegenstandId: string,
-  mitreisende Ids: string[]
+  mitreisendeIds: string[]
 ): Promise<boolean> {
   try {
     // Erst alle bisherigen Zuordnungen löschen
@@ -946,7 +946,7 @@ export async function setStandardMitreisende ForEquipment(
       .run()
     
     // Dann neue Zuordnungen hinzufügen
-    for (const mitreisenderId of mitreisende Ids) {
+    for (const mitreisenderId of mitreisendeIds) {
       await db
         .prepare('INSERT INTO ausruestungsgegenstaende_standard_mitreisende (gegenstand_id, mitreisender_id) VALUES (?, ?)')
         .bind(gegenstandId, mitreisenderId)

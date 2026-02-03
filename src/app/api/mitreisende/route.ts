@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { 
   getMitreisende, 
-  getMitreisende ForVacation,
+  getMitreisendeForVacation,
   createMitreisender, 
   updateMitreisender, 
   deleteMitreisender,
-  setMitreisende ForVacation
+  setMitreisendeForVacation
 } from '@/lib/db'
 
 export const runtime = 'edge'
@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
 
     let mitreisende
     if (vacationId) {
-      mitreisende = await getMitreisende ForVacation(env.DB, vacationId)
+      mitreisende = await getMitreisendeForVacation(env.DB, vacationId)
     } else {
       mitreisende = await getMitreisende(env.DB)
     }
@@ -85,11 +85,11 @@ export async function PUT(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { id, name, user_id, is_default_member, vacationId, mitreisende Ids } = body
+    const { id, name, user_id, is_default_member, vacationId, mitreisendeIds } = body
 
     // Setzen der Mitreisenden für einen Urlaub
-    if (vacationId && mitreisende Ids) {
-      const success = await setMitreisende ForVacation(env.DB, vacationId, mitreisende Ids)
+    if (vacationId && mitreisendeIds) {
+      const success = await setMitreisendeForVacation(env.DB, vacationId, mitreisendeIds)
       if (!success) {
         return NextResponse.json({ success: false, error: 'Failed to set mitreisende for vacation' }, { status: 500 })
       }
