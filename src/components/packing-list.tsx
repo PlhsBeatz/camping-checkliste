@@ -1,3 +1,4 @@
+
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -39,19 +40,16 @@ const PackingItem: React.FC<PackingItemProps> = ({
   details,
   fullItem
 }) => {
-  // Determine if item is fully packed based on mitreisenden_typ
   const isFullyPacked = useMemo(() => {
     if (mitreisenden_typ === 'pauschal') {
       return gepackt;
     }
-    // For 'alle' and 'ausgewaehlte', check if all assigned mitreisende have packed
     return mitreisende.length > 0 && mitreisende.every(m => m.gepackt);
   }, [mitreisenden_typ, gepackt, mitreisende]);
 
   return (
     <div className={`p-3 border-b transition-colors ${isFullyPacked ? 'bg-muted/50' : 'hover:bg-muted/30'}`}>
       <div className="flex items-start space-x-3">
-        {/* Main checkbox (only for pauschal items) */}
         {mitreisenden_typ === 'pauschal' && (
           <Checkbox
             id={`item-${id}`}
@@ -80,7 +78,6 @@ const PackingItem: React.FC<PackingItemProps> = ({
           {details && <p className="text-xs text-muted-foreground mt-1">{details}</p>}
           {bemerkung && <p className="text-xs text-blue-600 mt-1">📝 {bemerkung}</p>}
           
-          {/* Individual mitreisende checkboxes for 'alle' and 'ausgewaehlte' */}
           {(mitreisenden_typ === 'alle' || mitreisenden_typ === 'ausgewaehlte') && mitreisende.length > 0 && (
             <div className="mt-2 space-y-1">
               {mitreisende.map((m) => (
@@ -143,12 +140,10 @@ export const PackingList: React.FC<PackingListProps> = ({
   onDeleteItem,
   hidePackedItems = false
 }) => {
-  // Memoize the grouped items to avoid unnecessary recalculations
   const itemsByMainCategory = useMemo(() => {
     const grouped: Record<string, Record<string, DBPackingItem[]>> = {};
 
     items.forEach(item => {
-      // Check if item is fully packed
       const isFullyPacked = item.mitreisenden_typ === 'pauschal' 
         ? item.gepackt 
         : item.mitreisende.length > 0 && item.mitreisende.every(m => m.gepackt);
@@ -172,46 +167,42 @@ export const PackingList: React.FC<PackingListProps> = ({
     return grouped;
   }, [items, hidePackedItems]);
 
-  // Calculate packed count based on mitreisenden_typ
   const { packedCount, totalCount } = useMemo(() => {
-    let packed = 0;
-    let total = 0;
-
-    items.forEach(item => {
+    return items.reduce((acc, item) => {
       if (item.mitreisenden_typ === 'pauschal') {
-        total += 1;
-        if (item.gepackt) packed += 1;
+        acc.total += 1;
+        if (item.gepackt) acc.packed += 1;
       } else {
-        // For 'alle' and 'ausgewaehlte', count each mitreisender separately
-        total += item.mitreisende.length;
-        packed += item.mitreisende.filter(m => m.gepackt).length;
+        acc.total += item.mitreisende.length;
+        acc.packed += item.mitreisende.filter(m => m.gepackt).length;
       }
-    });
-
-    return { packedCount: packed, totalCount: total };
+      return acc;
+    }, { packed: 0, total: 0 });
   }, [items]);
 
   const mainCategories = Object.keys(itemsByMainCategory);
 
+  if (!items) {
+    return <div>Lade Packliste...</div>;
+  }
+
   return (
     <div className="space-y-4">
-      {/* Progress Bar */}
       {totalCount > 0 && (
         <div className="space-y-2">
           <div className="flex justify-between text-sm">
             <span className="font-medium">Packfortschritt</span>
-            <span className="text-muted-foreground">{packedCount}/{totalCount} ({Math.round((packedCount / totalCount) * 100)}%)</span>
+            <span className="text-muted-foreground">{packedCount}/{totalCount} ({totalCount > 0 ? Math.round((packedCount / totalCount) * 100) : 0}%)</span>
           </div>
           <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
             <div
               className="bg-primary h-full transition-all duration-300 rounded-full"
-              style={{ width: `${(packedCount / totalCount) * 100}%` }}
+              style={{ width: `${totalCount > 0 ? (packedCount / totalCount) * 100 : 0}%` }}
             />
           </div>
         </div>
       )}
 
-      {/* Tabs */}
       <Tabs defaultValue={mainCategories[0] || "empty"} className="w-full">
         <TabsList className="grid grid-flow-col auto-cols-fr mb-4 overflow-x-auto w-full">
           {mainCategories.map((category) => (
@@ -261,7 +252,7 @@ export const PackingList: React.FC<PackingListProps> = ({
           <TabsContent value="empty" className="text-center py-12 text-muted-foreground">
             <p>Keine Einträge in der Packliste vorhanden.</p>
           </TabsContent>
-        ))}
+        )}
       </Tabs>
     </div>
   );
