@@ -636,7 +636,9 @@ export default function Home() {
       standard_anzahl: '1',
       status: 'Immer gepackt',
       details: '',
-      links: ['']
+      links: [''],
+      mitreisenden_typ: 'pauschal' as 'pauschal' | 'alle' | 'ausgewaehlte',
+      standard_mitreisende: [] as string[]
     })
     setCategorySearchTerm('')
   }
