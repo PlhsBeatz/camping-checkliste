@@ -27,14 +27,18 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(false)
   const [showNewVacationDialog, setShowNewVacationDialog] = useState(false)
   const [showEquipmentDialog, setShowEquipmentDialog] = useState(false)
+  const [editingVacationId, setEditingVacationId] = useState<string | null>(null)
   const [editingEquipmentId, setEditingEquipmentId] = useState<string | null>(null)
   const [categorySearchTerm, setCategorySearchTerm] = useState('')
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false)
   const [newVacationForm, setNewVacationForm] = useState({
     titel: '',
     startdatum: '',
+    abfahrtdatum: '',
     enddatum: '',
-    reiseziel_name: ''
+    reiseziel_name: '',
+    reiseziel_adresse: '',
+    land_region: ''
   })
   const [newEquipmentForm, setNewEquipmentForm] = useState({
     was: '',
@@ -215,31 +219,72 @@ export default function Home() {
 
     setIsLoading(true)
     try {
+      const method = editingVacationId ? 'PUT' : 'POST'
+      const body = editingVacationId
+        ? { ...newVacationForm, id: editingVacationId }
+        : newVacationForm
+
       const res = await fetch('/api/vacations', {
-        method: 'POST',
+        method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newVacationForm)
+        body: JSON.stringify(body)
       })
       const data = await res.json()
       if (data.success) {
-        setVacations([...vacations, data.data])
-        setSelectedVacationId(data.data.id)
+        if (editingVacationId) {
+          setVacations(vacations.map(v => v.id === editingVacationId ? data.data : v))
+        } else {
+          setVacations([...vacations, data.data])
+          setSelectedVacationId(data.data.id)
+        }
         setShowNewVacationDialog(false)
+        setEditingVacationId(null)
         setNewVacationForm({
           titel: '',
           startdatum: '',
+          abfahrtdatum: '',
           enddatum: '',
-          reiseziel_name: ''
+          reiseziel_name: '',
+          reiseziel_adresse: '',
+          land_region: ''
         })
       } else {
-        alert('Fehler beim Erstellen des Urlaubs: ' + data.error)
+        alert('Fehler beim Speichern des Urlaubs: ' + data.error)
       }
     } catch (error) {
-      console.error('Failed to create vacation:', error)
-      alert('Fehler beim Erstellen des Urlaubs')
+      console.error('Failed to save vacation:', error)
+      alert('Fehler beim Speichern des Urlaubs')
     } finally {
       setIsLoading(false)
     }
+  }
+
+  const handleEditVacation = (vacation: Vacation) => {
+    setEditingVacationId(vacation.id)
+    setNewVacationForm({
+      titel: vacation.titel,
+      startdatum: vacation.startdatum,
+      abfahrtdatum: vacation.abfahrtdatum || '',
+      enddatum: vacation.enddatum,
+      reiseziel_name: vacation.reiseziel_name,
+      reiseziel_adresse: vacation.reiseziel_adresse || '',
+      land_region: vacation.land_region || ''
+    })
+    setShowNewVacationDialog(true)
+  }
+
+  const handleCloseVacationDialog = () => {
+    setShowNewVacationDialog(false)
+    setEditingVacationId(null)
+    setNewVacationForm({
+      titel: '',
+      startdatum: '',
+      abfahrtdatum: '',
+      enddatum: '',
+      reiseziel_name: '',
+      reiseziel_adresse: '',
+      land_region: ''
+    })
   }
 
   const handleDeleteVacation = async (vacationId: string) => {
@@ -451,23 +496,31 @@ export default function Home() {
             <h1 className="text-3xl font-bold tracking-tight">Camping Packlisten</h1>
             <p className="text-muted-foreground mt-2">Organisieren Sie Ihre Campingausrüstung intelligent</p>
           </div>
-          <Dialog open={showNewVacationDialog} onOpenChange={setShowNewVacationDialog}>
+          <Dialog open={showNewVacationDialog} onOpenChange={(open) => {
+            if (!open) {
+              handleCloseVacationDialog()
+            } else {
+              setShowNewVacationDialog(true)
+            }
+          }}>
             <DialogTrigger asChild>
               <Button size="lg">
                 <Plus className="h-4 w-4 mr-2" />
                 Neuer Urlaub
               </Button>
             </DialogTrigger>
-            <DialogContent>
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
-                <DialogTitle>Neuen Urlaub erstellen</DialogTitle>
+                <DialogTitle>
+                  {editingVacationId ? 'Urlaub bearbeiten' : 'Neuen Urlaub erstellen'}
+                </DialogTitle>
                 <DialogDescription>
-                  Geben Sie die Details für Ihren neuen Urlaub ein
+                  {editingVacationId ? 'Bearbeiten Sie die Details des Urlaubs' : 'Geben Sie die Details für Ihren neuen Urlaub ein'}
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-4">
                 <div>
-                  <Label htmlFor="titel">Titel</Label>
+                  <Label htmlFor="titel">Titel *</Label>
                   <Input
                     id="titel"
                     placeholder="z.B. Sommerurlaub 2024"
@@ -484,9 +537,39 @@ export default function Home() {
                     onChange={(e) => setNewVacationForm({ ...newVacationForm, reiseziel_name: e.target.value })}
                   />
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="reiseziel_adresse">Adresse</Label>
+                  <Input
+                    id="reiseziel_adresse"
+                    placeholder="z.B. Campingplatz am See, 79822 Titisee"
+                    value={newVacationForm.reiseziel_adresse}
+                    onChange={(e) => setNewVacationForm({ ...newVacationForm, reiseziel_adresse: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="land_region">Land / Region</Label>
+                  <Input
+                    id="land_region"
+                    placeholder="z.B. Deutschland, Baden-Württemberg"
+                    value={newVacationForm.land_region}
+                    onChange={(e) => setNewVacationForm({ ...newVacationForm, land_region: e.target.value })}
+                  />
+                </div>
+                <div className="grid grid-cols-3 gap-4">
                   <div>
-                    <Label htmlFor="startdatum">Startdatum</Label>
+                    <Label htmlFor="abfahrtdatum">Abreisedatum</Label>
+                    <Input
+                      id="abfahrtdatum"
+                      type="date"
+                      value={newVacationForm.abfahrtdatum}
+                      onChange={(e) => setNewVacationForm({ ...newVacationForm, abfahrtdatum: e.target.value })}
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Wann starten Sie von zuhause?
+                    </p>
+                  </div>
+                  <div>
+                    <Label htmlFor="startdatum">Startdatum *</Label>
                     <Input
                       id="startdatum"
                       type="date"
@@ -495,7 +578,7 @@ export default function Home() {
                     />
                   </div>
                   <div>
-                    <Label htmlFor="enddatum">Enddatum</Label>
+                    <Label htmlFor="enddatum">Enddatum *</Label>
                     <Input
                       id="enddatum"
                       type="date"
@@ -505,7 +588,7 @@ export default function Home() {
                   </div>
                 </div>
                 <Button onClick={handleCreateVacation} disabled={isLoading} className="w-full">
-                  {isLoading ? 'Wird erstellt...' : 'Urlaub erstellen'}
+                  {isLoading ? 'Wird gespeichert...' : editingVacationId ? 'Urlaub aktualisieren' : 'Urlaub erstellen'}
                 </Button>
               </div>
             </DialogContent>
@@ -906,27 +989,42 @@ export default function Home() {
                           <CardTitle>{vacation.titel}</CardTitle>
                           <CardDescription>
                             <div className="space-y-1 mt-2">
-                              <p>📍 {vacation.reiseziel_name}</p>
+                              {vacation.reiseziel_name && <p>📍 {vacation.reiseziel_name}</p>}
+                              {vacation.reiseziel_adresse && <p>📍 {vacation.reiseziel_adresse}</p>}
+                              {vacation.land_region && <p>🌍 {vacation.land_region}</p>}
+                              {vacation.abfahrtdatum && <p>🚗 Abreise: {vacation.abfahrtdatum}</p>}
                               <p>📅 {vacation.startdatum} bis {vacation.enddatum}</p>
                             </div>
                           </CardDescription>
                         </div>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleDeleteVacation(vacation.id)
-                          }}
-                          disabled={isLoading}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        <div className="flex gap-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleEditVacation(vacation)
+                            }}
+                          >
+                            <Edit2 className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleDeleteVacation(vacation.id)
+                            }}
+                            disabled={isLoading}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </div>
                     </CardHeader>
                     <CardContent>
                       <Button variant="outline" size="sm">
-                        Öffnen
+                        Packliste öffnen
                       </Button>
                     </CardContent>
                   </Card>

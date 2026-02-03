@@ -10,8 +10,11 @@ export interface Vacation {
   id: string
   titel: string
   startdatum: string
+  abfahrtdatum?: string | null
   enddatum: string
   reiseziel_name: string
+  reiseziel_adresse?: string | null
+  land_region?: string | null
   created_at: string
 }
 
@@ -137,15 +140,32 @@ export async function getVacation(db: D1Database, id: string): Promise<Vacation 
  */
 export async function createVacation(
   db: D1Database,
-  vacation: { titel: string; startdatum: string; enddatum: string; reiseziel_name: string }
+  vacation: { 
+    titel: string
+    startdatum: string
+    abfahrtdatum?: string | null
+    enddatum: string
+    reiseziel_name: string
+    reiseziel_adresse?: string | null
+    land_region?: string | null
+  }
 ): Promise<Vacation | null> {
   try {
     const id = crypto.randomUUID()
     await db
       .prepare(
-        'INSERT INTO urlaube (id, titel, startdatum, enddatum, reiseziel_name) VALUES (?, ?, ?, ?, ?)'
+        'INSERT INTO urlaube (id, titel, startdatum, abfahrtdatum, enddatum, reiseziel_name, reiseziel_adresse, land_region) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
       )
-      .bind(id, vacation.titel, vacation.startdatum, vacation.enddatum, vacation.reiseziel_name)
+      .bind(
+        id, 
+        vacation.titel, 
+        vacation.startdatum, 
+        vacation.abfahrtdatum || null,
+        vacation.enddatum, 
+        vacation.reiseziel_name,
+        vacation.reiseziel_adresse || null,
+        vacation.land_region || null
+      )
       .run()
 
     // Auch eine Packliste für diesen Urlaub erstellen
@@ -165,11 +185,19 @@ export async function createVacation(
 export async function updateVacation(
   db: D1Database,
   id: string,
-  updates: { titel?: string; startdatum?: string; enddatum?: string; reiseziel_name?: string }
+  updates: { 
+    titel?: string
+    startdatum?: string
+    abfahrtdatum?: string | null
+    enddatum?: string
+    reiseziel_name?: string
+    reiseziel_adresse?: string | null
+    land_region?: string | null
+  }
 ): Promise<Vacation | null> {
   try {
     const fields: string[] = []
-    const values: (string | number)[] = []
+    const values: (string | number | null)[] = []
 
     if (updates.titel !== undefined) {
       fields.push('titel = ?')
@@ -179,6 +207,10 @@ export async function updateVacation(
       fields.push('startdatum = ?')
       values.push(updates.startdatum)
     }
+    if (updates.abfahrtdatum !== undefined) {
+      fields.push('abfahrtdatum = ?')
+      values.push(updates.abfahrtdatum)
+    }
     if (updates.enddatum !== undefined) {
       fields.push('enddatum = ?')
       values.push(updates.enddatum)
@@ -186,6 +218,14 @@ export async function updateVacation(
     if (updates.reiseziel_name !== undefined) {
       fields.push('reiseziel_name = ?')
       values.push(updates.reiseziel_name)
+    }
+    if (updates.reiseziel_adresse !== undefined) {
+      fields.push('reiseziel_adresse = ?')
+      values.push(updates.reiseziel_adresse)
+    }
+    if (updates.land_region !== undefined) {
+      fields.push('land_region = ?')
+      values.push(updates.land_region)
     }
 
     if (fields.length === 0) return getVacation(db, id)

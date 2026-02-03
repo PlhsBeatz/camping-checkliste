@@ -24,8 +24,11 @@ export async function POST(request: NextRequest) {
     const vacation = await createVacation(db, {
       titel: body.titel || body.title,
       startdatum: body.startdatum || body.startDate,
+      abfahrtdatum: body.abfahrtdatum || null,
       enddatum: body.enddatum || body.endDate,
-      reiseziel_name: body.reiseziel_name || body.destination
+      reiseziel_name: body.reiseziel_name || body.destination,
+      reiseziel_adresse: body.reiseziel_adresse || null,
+      land_region: body.land_region || null
     })
 
     if (!vacation) {
