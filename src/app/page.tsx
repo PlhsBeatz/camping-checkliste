@@ -23,7 +23,7 @@ export default function Home() {
   const [equipmentItems, setEquipmentItems] = useState<EquipmentItem[]>([])
   const [categories, setCategories] = useState<CategoryWithMain[]>([])
   const [transportVehicles, setTransportVehicles] = useState<TransportVehicle[]>([])
-  const [vacationMitreisende, setVacationMitreisende] = useState<Mitreisender[]>([])
+  const [_vacationMitreisende, setVacationMitreisende] = useState<Mitreisender[]>([])
   const [selectedVacationId, setSelectedVacationId] = useState<string | null>(null)
   const [packedItems, setPackedItems] = useState<Set<string>>(new Set())
   const [isLoading, setIsLoading] = useState(false)
