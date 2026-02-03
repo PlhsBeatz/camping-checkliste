@@ -15,7 +15,7 @@ interface PackingItemProps {
   bemerkung?: string | null;
   transport_name?: string | null;
   mitreisenden_typ: 'pauschal' | 'alle' | 'ausgewaehlte';
-  mitreisende: Array<{ mitreisender_id: string; mitreisender_name: string; gepackt: boolean }>;
+  mitreisende?: Array<{ mitreisender_id: string; mitreisender_name: string; gepackt: boolean }>;
   onToggle: (id: string) => void;
   onToggleMitreisender: (packingItemId: string, mitreisenderId: string, currentStatus: boolean) => void;
   onEdit: (item: DBPackingItem) => void;
@@ -44,7 +44,7 @@ const PackingItem: React.FC<PackingItemProps> = ({
     if (mitreisenden_typ === 'pauschal') {
       return gepackt;
     }
-    return mitreisende.length > 0 && mitreisende.every(m => m.gepackt);
+    return (mitreisende?.length ?? 0) > 0 && mitreisende?.every(m => m.gepackt);
   }, [mitreisenden_typ, gepackt, mitreisende]);
 
   return (
@@ -78,7 +78,7 @@ const PackingItem: React.FC<PackingItemProps> = ({
           {details && <p className="text-xs text-muted-foreground mt-1">{details}</p>}
           {bemerkung && <p className="text-xs text-blue-600 mt-1">📝 {bemerkung}</p>}
           
-          {(mitreisenden_typ === 'alle' || mitreisenden_typ === 'ausgewaehlte') && mitreisende.length > 0 && (
+          {(mitreisenden_typ === 'alle' || mitreisenden_typ === 'ausgewaehlte') && mitreisende && mitreisende.length > 0 && (
             <div className="mt-2 space-y-1">
               {mitreisende.map((m) => (
                 <div key={m.mitreisender_id} className="flex items-center space-x-2">
@@ -146,7 +146,7 @@ export const PackingList: React.FC<PackingListProps> = ({
     items.forEach(item => {
       const isFullyPacked = item.mitreisenden_typ === 'pauschal' 
         ? item.gepackt 
-        : item.mitreisende.length > 0 && item.mitreisende.every(m => m.gepackt);
+        : (item.mitreisende?.length ?? 0) > 0 && item.mitreisende?.every(m => m.gepackt);
       
       if (hidePackedItems && isFullyPacked) return;
 
@@ -172,7 +172,7 @@ export const PackingList: React.FC<PackingListProps> = ({
       if (item.mitreisenden_typ === 'pauschal') {
         acc.total += 1;
         if (item.gepackt) acc.packed += 1;
-      } else {
+      } else if (item.mitreisende) {
         acc.total += item.mitreisende.length;
         acc.packed += item.mitreisende.filter(m => m.gepackt).length;
       }
