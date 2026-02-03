@@ -247,7 +247,7 @@ export default function Home() {
 
     // Optimistically update UI
     const updatedPackingItems = packingItems.map(item => {
-      if (item.id === packingItemId) {
+      if (item.id === packingItemId && item.mitreisende) {
         return {
           ...item,
           mitreisende: item.mitreisende.map(m => 
