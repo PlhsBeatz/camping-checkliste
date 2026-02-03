@@ -1,6 +1,8 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Button } from "@/components/ui/button";
+import { Edit2, Trash2 } from "lucide-react";
 import { useMemo } from "react";
 import { PackingItem as DBPackingItem } from "@/lib/db";
 
@@ -9,8 +11,12 @@ interface PackingItemProps {
   was: string;
   anzahl: number;
   gepackt: boolean;
+  bemerkung?: string | null;
   onToggle: (id: string) => void;
+  onEdit: (item: DBPackingItem) => void;
+  onDelete: (id: string) => void;
   details?: string;
+  fullItem: DBPackingItem;
 }
 
 const PackingItem: React.FC<PackingItemProps> = ({
@@ -18,8 +24,12 @@ const PackingItem: React.FC<PackingItemProps> = ({
   was,
   anzahl,
   gepackt,
+  bemerkung,
   onToggle,
-  details
+  onEdit,
+  onDelete,
+  details,
+  fullItem
 }) => {
   return (
     <div className={`flex items-center space-x-3 p-3 border-b transition-colors ${gepackt ? 'bg-muted/50' : 'hover:bg-muted/30'}`}>
@@ -37,6 +47,25 @@ const PackingItem: React.FC<PackingItemProps> = ({
           {was} {anzahl > 1 ? `(${anzahl}x)` : ''}
         </label>
         {details && <p className="text-xs text-muted-foreground mt-1">{details}</p>}
+        {bemerkung && <p className="text-xs text-blue-600 mt-1">📝 {bemerkung}</p>}
+      </div>
+      <div className="flex gap-1">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => onEdit(fullItem)}
+          className="h-8 w-8 p-0"
+        >
+          <Edit2 className="h-3 w-3" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => onDelete(id)}
+          className="h-8 w-8 p-0"
+        >
+          <Trash2 className="h-3 w-3" />
+        </Button>
       </div>
     </div>
   );
@@ -45,12 +74,16 @@ const PackingItem: React.FC<PackingItemProps> = ({
 interface PackingListProps {
   items: DBPackingItem[];
   onToggleItem: (id: string) => void;
+  onEditItem: (item: DBPackingItem) => void;
+  onDeleteItem: (id: string) => void;
   hidePackedItems?: boolean;
 }
 
 export const PackingList: React.FC<PackingListProps> = ({
   items,
   onToggleItem,
+  onEditItem,
+  onDeleteItem,
   hidePackedItems = false
 }) => {
   // Memoize the grouped items to avoid unnecessary recalculations
@@ -127,8 +160,12 @@ export const PackingList: React.FC<PackingListProps> = ({
                       was={item.was}
                       anzahl={item.anzahl}
                       gepackt={item.gepackt}
+                      bemerkung={item.bemerkung}
                       onToggle={onToggleItem}
+                      onEdit={onEditItem}
+                      onDelete={onDeleteItem}
                       details={item.details}
+                      fullItem={item}
                     />
                   ))}
                 </CardContent>

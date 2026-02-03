@@ -24,6 +24,7 @@ export interface PackingItem {
   gegenstand_id: string
   anzahl: number
   gepackt: boolean
+  bemerkung?: string | null
   was: string // Gejoint aus ausruestungsgegenstaende
   kategorie: string // Gejoint
   hauptkategorie: string // Gejoint
@@ -273,8 +274,8 @@ export async function getPackingItems(db: D1Database, vacationId: string): Promi
     // Wir müssen über die packlisten Tabelle gehen
     const query = `
       SELECT 
-        pe.id, pe.packliste_id, pe.gegenstand_id, pe.anzahl, pe.gepackt, pe.bemerkung as details,
-        ag.was, ag.einzelgewicht,
+        pe.id, pe.packliste_id, pe.gegenstand_id, pe.anzahl, pe.gepackt, pe.bemerkung,
+        ag.was, ag.einzelgewicht, ag.details,
         k.titel as kategorie,
         hk.titel as hauptkategorie,
         pe.created_at
@@ -295,6 +296,7 @@ export async function getPackingItems(db: D1Database, vacationId: string): Promi
       gegenstand_id: String(item.gegenstand_id),
       anzahl: Number(item.anzahl),
       gepackt: !!item.gepackt,
+      bemerkung: item.bemerkung ? String(item.bemerkung) : null,
       was: String(item.was),
       kategorie: String(item.kategorie),
       hauptkategorie: String(item.hauptkategorie),
@@ -314,7 +316,7 @@ export async function getPackingItems(db: D1Database, vacationId: string): Promi
 export async function updatePackingItem(
   db: D1Database,
   id: string,
-  updates: { gepackt?: boolean; anzahl?: number }
+  updates: { gepackt?: boolean; anzahl?: number; bemerkung?: string | null }
 ): Promise<boolean> {
   try {
     const fields: string[] = []
@@ -327,6 +329,10 @@ export async function updatePackingItem(
     if (updates.anzahl !== undefined) {
       fields.push('anzahl = ?')
       values.push(updates.anzahl)
+    }
+    if (updates.bemerkung !== undefined) {
+      fields.push('bemerkung = ?')
+      values.push(updates.bemerkung || '')
     }
 
     if (fields.length === 0) return true
@@ -603,5 +609,56 @@ export async function getTransportVehicles(db: D1Database): Promise<TransportVeh
   } catch (error) {
     console.error('Error fetching transport vehicles:', error)
     return []
+  }
+}
+
+/**
+ * Hinzufügen eines Gegenstands zur Packliste
+ */
+export async function addPackingItem(
+  db: D1Database,
+  packlisteId: string,
+  gegenstandId: string,
+  anzahl: number,
+  bemerkung?: string | null
+): Promise<boolean> {
+  try {
+    const id = crypto.randomUUID()
+    await db
+      .prepare(
+        'INSERT INTO packlisten_eintraege (id, packliste_id, gegenstand_id, anzahl, bemerkung) VALUES (?, ?, ?, ?, ?)'
+      )
+      .bind(id, packlisteId, gegenstandId, anzahl, bemerkung || null)
+      .run()
+    return true
+  } catch (error) {
+    console.error('Error adding packing item:', error)
+    return false
+  }
+}
+
+/**
+ * Löschen eines Packartikels
+ */
+export async function deletePackingItem(db: D1Database, id: string): Promise<boolean> {
+  try {
+    await db.prepare('DELETE FROM packlisten_eintraege WHERE id = ?').bind(id).run()
+    return true
+  } catch (error) {
+    console.error('Error deleting packing item:', error)
+    return false
+  }
+}
+
+/**
+ * Abrufen der Packliste-ID für einen Urlaub
+ */
+export async function getPacklisteId(db: D1Database, vacationId: string): Promise<string | null> {
+  try {
+    const result = await db.prepare('SELECT id FROM packlisten WHERE urlaub_id = ?').bind(vacationId).first<{ id: string }>()
+    return result?.id || null
+  } catch (error) {
+    console.error('Error fetching packliste ID:', error)
+    return null
   }
 }

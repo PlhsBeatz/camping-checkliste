@@ -27,10 +27,19 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(false)
   const [showNewVacationDialog, setShowNewVacationDialog] = useState(false)
   const [showEquipmentDialog, setShowEquipmentDialog] = useState(false)
+  const [showAddItemDialog, setShowAddItemDialog] = useState(false)
+  const [showEditItemDialog, setShowEditItemDialog] = useState(false)
   const [editingVacationId, setEditingVacationId] = useState<string | null>(null)
   const [editingEquipmentId, setEditingEquipmentId] = useState<string | null>(null)
+  const [editingPackingItemId, setEditingPackingItemId] = useState<string | null>(null)
   const [categorySearchTerm, setCategorySearchTerm] = useState('')
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false)
+  const [equipmentSearchTerm, setEquipmentSearchTerm] = useState('')
+  const [packingItemForm, setPackingItemForm] = useState({
+    gegenstandId: '',
+    anzahl: '1',
+    bemerkung: ''
+  })
   const [newVacationForm, setNewVacationForm] = useState({
     titel: '',
     startdatum: '',
@@ -208,6 +217,127 @@ export default function Home() {
       // Revert on error
       setPackedItems(packedItems)
       setPackingItems(packingItems)
+    }
+  }
+
+  const handleAddPackingItem = async () => {
+    if (!packingItemForm.gegenstandId || !selectedVacationId) {
+      alert('Bitte wählen Sie einen Gegenstand aus')
+      return
+    }
+
+    setIsLoading(true)
+    try {
+      const res = await fetch('/api/packing-items', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          vacationId: selectedVacationId,
+          gegenstandId: packingItemForm.gegenstandId,
+          anzahl: parseInt(packingItemForm.anzahl) || 1,
+          bemerkung: packingItemForm.bemerkung || null
+        })
+      })
+      const data = await res.json()
+      if (data.success) {
+        // Refresh packing items
+        const itemsRes = await fetch(`/api/packing-items?vacationId=${selectedVacationId}`)
+        const itemsData = await itemsRes.json()
+        if (itemsData.success) {
+          setPackingItems(itemsData.data)
+          const packed = new Set(itemsData.data.filter((item: PackingItem) => item.gepackt).map((item: PackingItem) => item.id))
+          setPackedItems(packed)
+        }
+        setShowAddItemDialog(false)
+        setPackingItemForm({ gegenstandId: '', anzahl: '1', bemerkung: '' })
+        setEquipmentSearchTerm('')
+      } else {
+        alert('Fehler beim Hinzufügen: ' + data.error)
+      }
+    } catch (error) {
+      console.error('Failed to add packing item:', error)
+      alert('Fehler beim Hinzufügen')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleEditPackingItem = (item: PackingItem) => {
+    setEditingPackingItemId(item.id)
+    setPackingItemForm({
+      gegenstandId: item.gegenstand_id,
+      anzahl: String(item.anzahl),
+      bemerkung: item.bemerkung || ''
+    })
+    setShowEditItemDialog(true)
+  }
+
+  const handleUpdatePackingItem = async () => {
+    if (!editingPackingItemId) return
+
+    setIsLoading(true)
+    try {
+      const res = await fetch('/api/packing-items', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: editingPackingItemId,
+          anzahl: parseInt(packingItemForm.anzahl) || 1,
+          bemerkung: packingItemForm.bemerkung || null
+        })
+      })
+      const data = await res.json()
+      if (data.success && selectedVacationId) {
+        // Refresh packing items
+        const itemsRes = await fetch(`/api/packing-items?vacationId=${selectedVacationId}`)
+        const itemsData = await itemsRes.json()
+        if (itemsData.success) {
+          setPackingItems(itemsData.data)
+          const packed = new Set(itemsData.data.filter((item: PackingItem) => item.gepackt).map((item: PackingItem) => item.id))
+          setPackedItems(packed)
+        }
+        setShowEditItemDialog(false)
+        setEditingPackingItemId(null)
+        setPackingItemForm({ gegenstandId: '', anzahl: '1', bemerkung: '' })
+      } else {
+        alert('Fehler beim Aktualisieren: ' + data.error)
+      }
+    } catch (error) {
+      console.error('Failed to update packing item:', error)
+      alert('Fehler beim Aktualisieren')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleDeletePackingItem = async (id: string) => {
+    if (!confirm('Möchten Sie diesen Eintrag wirklich aus der Packliste entfernen?')) {
+      return
+    }
+
+    setIsLoading(true)
+    try {
+      const res = await fetch(`/api/packing-items?id=${id}`, {
+        method: 'DELETE'
+      })
+      const data = await res.json()
+      if (data.success && selectedVacationId) {
+        // Refresh packing items
+        const itemsRes = await fetch(`/api/packing-items?vacationId=${selectedVacationId}`)
+        const itemsData = await itemsRes.json()
+        if (itemsData.success) {
+          setPackingItems(itemsData.data)
+          const packed = new Set(itemsData.data.filter((item: PackingItem) => item.gepackt).map((item: PackingItem) => item.id))
+          setPackedItems(packed)
+        }
+      } else {
+        alert('Fehler beim Löschen: ' + data.error)
+      }
+    } catch (error) {
+      console.error('Failed to delete packing item:', error)
+      alert('Fehler beim Löschen')
+    } finally {
+      setIsLoading(false)
     }
   }
 
@@ -664,15 +794,126 @@ export default function Home() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                {currentVacation ? (
-                  <PackingList
-                    items={packingItems}
-                    onToggleItem={handleToggleItem}
-                    hidePackedItems={false}
-                  />
-                ) : (
-                  <p className="text-muted-foreground">Keine Urlaube vorhanden</p>
-                )}
+                <div className="space-y-4">
+                  {currentVacation && (
+                    <div className="flex justify-end">
+                      <Dialog open={showAddItemDialog} onOpenChange={setShowAddItemDialog}>
+                        <DialogTrigger asChild>
+                          <Button size="sm">
+                            <Plus className="h-4 w-4 mr-2" />
+                            Gegenstand hinzufügen
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent>
+                          <DialogHeader>
+                            <DialogTitle>Gegenstand zur Packliste hinzufügen</DialogTitle>
+                            <DialogDescription>
+                              Wählen Sie einen Gegenstand aus Ihrer Ausrüstung
+                            </DialogDescription>
+                          </DialogHeader>
+                          <div className="space-y-4">
+                            <div>
+                              <Label htmlFor="equipment-search">Gegenstand suchen</Label>
+                              <Input
+                                id="equipment-search"
+                                placeholder="Suchen..."
+                                value={equipmentSearchTerm}
+                                onChange={(e) => setEquipmentSearchTerm(e.target.value)}
+                              />
+                              <div className="mt-2 max-h-48 overflow-y-auto border rounded-md">
+                                {equipmentItems
+                                  .filter(item => 
+                                    item.was.toLowerCase().includes(equipmentSearchTerm.toLowerCase()) ||
+                                    (item.kategorie_titel?.toLowerCase().includes(equipmentSearchTerm.toLowerCase()))
+                                  )
+                                  .slice(0, 10)
+                                  .map(item => (
+                                    <div
+                                      key={item.id}
+                                      className={`p-2 cursor-pointer hover:bg-muted ${
+                                        packingItemForm.gegenstandId === item.id ? 'bg-muted' : ''
+                                      }`}
+                                      onClick={() => setPackingItemForm({ ...packingItemForm, gegenstandId: item.id })}
+                                    >
+                                      <div className="text-sm font-medium">{item.was}</div>
+                                      <div className="text-xs text-muted-foreground">{item.kategorie_titel}</div>
+                                    </div>
+                                  ))}
+                              </div>
+                            </div>
+                            <div>
+                              <Label htmlFor="anzahl">Anzahl</Label>
+                              <Input
+                                id="anzahl"
+                                type="number"
+                                min="1"
+                                value={packingItemForm.anzahl}
+                                onChange={(e) => setPackingItemForm({ ...packingItemForm, anzahl: e.target.value })}
+                              />
+                            </div>
+                            <div>
+                              <Label htmlFor="bemerkung">Bemerkung (optional)</Label>
+                              <Input
+                                id="bemerkung"
+                                placeholder="z.B. nur für Wanderungen"
+                                value={packingItemForm.bemerkung}
+                                onChange={(e) => setPackingItemForm({ ...packingItemForm, bemerkung: e.target.value })}
+                              />
+                            </div>
+                            <Button onClick={handleAddPackingItem} disabled={isLoading} className="w-full">
+                              {isLoading ? 'Wird hinzugefügt...' : 'Hinzufügen'}
+                            </Button>
+                          </div>
+                        </DialogContent>
+                      </Dialog>
+                      <Dialog open={showEditItemDialog} onOpenChange={setShowEditItemDialog}>
+                        <DialogContent>
+                          <DialogHeader>
+                            <DialogTitle>Packlisten-Eintrag bearbeiten</DialogTitle>
+                            <DialogDescription>
+                              Anzahl und Bemerkung anpassen
+                            </DialogDescription>
+                          </DialogHeader>
+                          <div className="space-y-4">
+                            <div>
+                              <Label htmlFor="edit-anzahl">Anzahl</Label>
+                              <Input
+                                id="edit-anzahl"
+                                type="number"
+                                min="1"
+                                value={packingItemForm.anzahl}
+                                onChange={(e) => setPackingItemForm({ ...packingItemForm, anzahl: e.target.value })}
+                              />
+                            </div>
+                            <div>
+                              <Label htmlFor="edit-bemerkung">Bemerkung (optional)</Label>
+                              <Input
+                                id="edit-bemerkung"
+                                placeholder="z.B. nur für Wanderungen"
+                                value={packingItemForm.bemerkung}
+                                onChange={(e) => setPackingItemForm({ ...packingItemForm, bemerkung: e.target.value })}
+                              />
+                            </div>
+                            <Button onClick={handleUpdatePackingItem} disabled={isLoading} className="w-full">
+                              {isLoading ? 'Wird aktualisiert...' : 'Aktualisieren'}
+                            </Button>
+                          </div>
+                        </DialogContent>
+                      </Dialog>
+                    </div>
+                  )}
+                  {currentVacation ? (
+                    <PackingList
+                      items={packingItems}
+                      onToggleItem={handleToggleItem}
+                      onEditItem={handleEditPackingItem}
+                      onDeleteItem={handleDeletePackingItem}
+                      hidePackedItems={false}
+                    />
+                  ) : (
+                    <p className="text-muted-foreground">Keine Urlaube vorhanden</p>
+                  )}
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
