@@ -5,9 +5,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { PackingList } from '@/components/packing-list'
-import { Plus, Package, MapPin, Users, Trash2, Edit2, ChevronDown } from 'lucide-react'
+import { Plus, Package, MapPin, Users, Trash2, Edit2, ChevronDown, Link as LinkIcon, X } from 'lucide-react'
 import { useState, useEffect, useMemo } from 'react'
-import { Vacation, PackingItem, EquipmentItem, Category } from '@/lib/db'
+import { Vacation, PackingItem, EquipmentItem, Category, TransportVehicle } from '@/lib/db'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -21,6 +21,7 @@ export default function Home() {
   const [packingItems, setPackingItems] = useState<PackingItem[]>([])
   const [equipmentItems, setEquipmentItems] = useState<EquipmentItem[]>([])
   const [categories, setCategories] = useState<CategoryWithMain[]>([])
+  const [transportVehicles, setTransportVehicles] = useState<TransportVehicle[]>([])
   const [selectedVacationId, setSelectedVacationId] = useState<string | null>(null)
   const [packedItems, setPackedItems] = useState<Set<string>>(new Set())
   const [isLoading, setIsLoading] = useState(false)
@@ -38,10 +39,12 @@ export default function Home() {
   const [newEquipmentForm, setNewEquipmentForm] = useState({
     was: '',
     kategorie_id: '',
+    transport_id: '',
     einzelgewicht: '',
     standard_anzahl: '1',
     status: 'Immer gepackt',
-    details: ''
+    details: '',
+    links: ['']
   })
 
   // Fetch Vacations
@@ -120,6 +123,22 @@ export default function Home() {
     fetchCategories()
   }, [])
 
+  // Fetch Transport Vehicles
+  useEffect(() => {
+    const fetchTransportVehicles = async () => {
+      try {
+        const res = await fetch('/api/transport-vehicles')
+        const data = await res.json()
+        if (data.success) {
+          setTransportVehicles(data.data)
+        }
+      } catch (error) {
+        console.error('Failed to fetch transport vehicles:', error)
+      }
+    }
+    fetchTransportVehicles()
+  }, [])
+
   // Filter categories based on search term
   const filteredCategories = useMemo(() => {
     if (!categorySearchTerm) return categories
@@ -148,6 +167,7 @@ export default function Home() {
   }, [filteredCategories])
 
   const selectedCategory = categories.find(c => c.id === newEquipmentForm.kategorie_id)
+  const selectedTransport = transportVehicles.find(t => t.id === newEquipmentForm.transport_id)
 
   const handleToggleItem = async (id: string) => {
     const isCurrentlyPacked = packedItems.has(id)
@@ -269,6 +289,30 @@ export default function Home() {
     }).format(value)
   }
 
+  const handleAddLink = () => {
+    setNewEquipmentForm({
+      ...newEquipmentForm,
+      links: [...newEquipmentForm.links, '']
+    })
+  }
+
+  const handleRemoveLink = (index: number) => {
+    const newLinks = newEquipmentForm.links.filter((_, i) => i !== index)
+    setNewEquipmentForm({
+      ...newEquipmentForm,
+      links: newLinks.length > 0 ? newLinks : ['']
+    })
+  }
+
+  const handleLinkChange = (index: number, value: string) => {
+    const newLinks = [...newEquipmentForm.links]
+    newLinks[index] = value
+    setNewEquipmentForm({
+      ...newEquipmentForm,
+      links: newLinks
+    })
+  }
+
   const handleCreateEquipment = async () => {
     if (!newEquipmentForm.was || !newEquipmentForm.kategorie_id) {
       alert('Bitte füllen Sie alle erforderlichen Felder aus')
@@ -281,18 +325,25 @@ export default function Home() {
         ? parseGermanNumber(newEquipmentForm.einzelgewicht)
         : null
 
+      // Filter out empty links
+      const validLinks = newEquipmentForm.links.filter(link => link.trim() !== '')
+
       const method = editingEquipmentId ? 'PUT' : 'POST'
       const body = editingEquipmentId
         ? {
             ...newEquipmentForm,
             id: editingEquipmentId,
+            transport_id: newEquipmentForm.transport_id || null,
             einzelgewicht,
-            standard_anzahl: parseInt(newEquipmentForm.standard_anzahl)
+            standard_anzahl: parseInt(newEquipmentForm.standard_anzahl),
+            links: validLinks
           }
         : {
             ...newEquipmentForm,
+            transport_id: newEquipmentForm.transport_id || null,
             einzelgewicht,
-            standard_anzahl: parseInt(newEquipmentForm.standard_anzahl)
+            standard_anzahl: parseInt(newEquipmentForm.standard_anzahl),
+            links: validLinks
           }
 
       const res = await fetch('/api/equipment-items', {
@@ -312,10 +363,12 @@ export default function Home() {
         setNewEquipmentForm({
           was: '',
           kategorie_id: '',
+          transport_id: '',
           einzelgewicht: '',
           standard_anzahl: '1',
           status: 'Immer gepackt',
-          details: ''
+          details: '',
+          links: ['']
         })
         setCategorySearchTerm('')
       } else {
@@ -334,10 +387,12 @@ export default function Home() {
     setNewEquipmentForm({
       was: item.was,
       kategorie_id: item.kategorie_id,
+      transport_id: item.transport_id || '',
       einzelgewicht: item.einzelgewicht ? formatGermanNumber(item.einzelgewicht) : '',
       standard_anzahl: item.standard_anzahl.toString(),
       status: item.status,
-      details: item.details || ''
+      details: item.details || '',
+      links: item.links && item.links.length > 0 ? item.links.map(l => l.url) : ['']
     })
     setCategorySearchTerm('')
     setShowEquipmentDialog(true)
@@ -373,10 +428,12 @@ export default function Home() {
     setNewEquipmentForm({
       was: '',
       kategorie_id: '',
+      transport_id: '',
       einzelgewicht: '',
       standard_anzahl: '1',
       status: 'Immer gepackt',
-      details: ''
+      details: '',
+      links: ['']
     })
     setCategorySearchTerm('')
   }
@@ -562,7 +619,7 @@ export default function Home() {
                         Neuer Gegenstand
                       </Button>
                     </DialogTrigger>
-                    <DialogContent className="max-w-md">
+                    <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
                       <DialogHeader>
                         <DialogTitle>
                           {editingEquipmentId ? 'Gegenstand bearbeiten' : 'Neuen Gegenstand erstellen'}
@@ -635,6 +692,25 @@ export default function Home() {
                             )}
                           </div>
                         </div>
+                        <div>
+                          <Label htmlFor="transport">Transport-Standard</Label>
+                          <select
+                            id="transport"
+                            value={newEquipmentForm.transport_id}
+                            onChange={(e) => setNewEquipmentForm({ ...newEquipmentForm, transport_id: e.target.value })}
+                            className="w-full px-3 py-2 border border-input rounded-md bg-background"
+                          >
+                            <option value="">Kein Standard festgelegt</option>
+                            {transportVehicles.map(vehicle => (
+                              <option key={vehicle.id} value={vehicle.id}>
+                                {vehicle.name}
+                              </option>
+                            ))}
+                          </select>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Wo wird dieser Gegenstand normalerweise transportiert?
+                          </p>
+                        </div>
                         <div className="grid grid-cols-2 gap-4">
                           <div>
                             <Label htmlFor="gewicht">Gewicht (kg)</Label>
@@ -674,10 +750,10 @@ export default function Home() {
                             onChange={(e) => setNewEquipmentForm({ ...newEquipmentForm, status: e.target.value })}
                             className="w-full px-3 py-2 border border-input rounded-md bg-background"
                           >
+                            <option value="Normal">Normal</option>
                             <option value="Immer gepackt">Immer gepackt</option>
                             <option value="Fest Installiert">Fest Installiert</option>
                             <option value="Ausgemustert">Ausgemustert</option>
-                            <option value="Optional">Optional</option>
                           </select>
                         </div>
                         <div>
@@ -688,6 +764,44 @@ export default function Home() {
                             value={newEquipmentForm.details}
                             onChange={(e) => setNewEquipmentForm({ ...newEquipmentForm, details: e.target.value })}
                           />
+                        </div>
+                        <div>
+                          <div className="flex justify-between items-center mb-2">
+                            <Label>Links</Label>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={handleAddLink}
+                            >
+                              <Plus className="h-3 w-3 mr-1" />
+                              Link hinzufügen
+                            </Button>
+                          </div>
+                          <div className="space-y-2">
+                            {newEquipmentForm.links.map((link, index) => (
+                              <div key={index} className="flex gap-2">
+                                <Input
+                                  placeholder="https://..."
+                                  value={link}
+                                  onChange={(e) => handleLinkChange(index, e.target.value)}
+                                />
+                                {newEquipmentForm.links.length > 1 && (
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleRemoveLink(index)}
+                                  >
+                                    <X className="h-4 w-4" />
+                                  </Button>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Fügen Sie Links zu Produktseiten, Anleitungen oder Komponenten hinzu
+                          </p>
                         </div>
                         <Button onClick={handleCreateEquipment} disabled={isLoading} className="w-full">
                           {isLoading ? 'Wird gespeichert...' : editingEquipmentId ? 'Gegenstand aktualisieren' : 'Gegenstand erstellen'}
@@ -705,8 +819,11 @@ export default function Home() {
                         <div className="flex justify-between items-start gap-4">
                           <div className="flex-grow">
                             <CardTitle className="text-base">{item.was}</CardTitle>
-                            <CardDescription className="text-xs">
-                              {item.status}
+                            <CardDescription className="text-xs space-y-1">
+                              <div>{item.status}</div>
+                              {item.transport_name && (
+                                <div className="text-xs">🚗 {item.transport_name}</div>
+                              )}
                             </CardDescription>
                           </div>
                           <div className="flex gap-2">
@@ -735,6 +852,25 @@ export default function Home() {
                         <p><span className="font-medium">Standard-Anzahl:</span> {item.standard_anzahl}</p>
                         {item.details && (
                           <p><span className="font-medium">Details:</span> {item.details}</p>
+                        )}
+                        {item.links && item.links.length > 0 && (
+                          <div>
+                            <span className="font-medium">Links:</span>
+                            <div className="flex flex-wrap gap-2 mt-1">
+                              {item.links.map((link, idx) => (
+                                <a
+                                  key={link.id}
+                                  href={link.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 underline"
+                                >
+                                  <LinkIcon className="h-3 w-3" />
+                                  Link {idx + 1}
+                                </a>
+                              ))}
+                            </div>
+                          </div>
                         )}
                       </CardContent>
                     </Card>

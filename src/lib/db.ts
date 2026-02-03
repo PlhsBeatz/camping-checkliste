@@ -35,10 +35,28 @@ export interface EquipmentItem {
   kategorie_id: string
   kategorie_titel?: string
   hauptkategorie_titel?: string
+  transport_id: string | null
+  transport_name?: string
   einzelgewicht: number
   standard_anzahl: number
   status: string
   details: string
+  links?: EquipmentLink[]
+  created_at: string
+}
+
+export interface EquipmentLink {
+  id: string
+  gegenstand_id: string
+  url: string
+  created_at: string
+}
+
+export interface TransportVehicle {
+  id: string
+  name: string
+  zul_gesamtgewicht: number
+  eigengewicht: number
   created_at: string
 }
 
@@ -292,14 +310,27 @@ export async function getEquipmentItems(db: D1Database): Promise<EquipmentItem[]
       SELECT 
         ag.*, 
         k.titel as kategorie_titel,
-        hk.titel as hauptkategorie_titel
+        hk.titel as hauptkategorie_titel,
+        t.name as transport_name
       FROM ausruestungsgegenstaende ag
       JOIN kategorien k ON ag.kategorie_id = k.id
       JOIN hauptkategorien hk ON k.hauptkategorie_id = hk.id
+      LEFT JOIN transportmittel t ON ag.transport_id = t.id
       ORDER BY hk.reihenfolge, k.reihenfolge, ag.was
     `
-    const result = await db.prepare(query).all<EquipmentItem>()
-    return result.results || []
+    const items = await db.prepare(query).all<EquipmentItem>()
+    
+    // Fetch links for all equipment items
+    const itemsWithLinks = await Promise.all(
+      (items.results || []).map(async (item) => {
+        const links = await db.prepare(
+          'SELECT * FROM ausruestungsgegenstaende_links WHERE gegenstand_id = ?'
+        ).bind(item.id).all<EquipmentLink>()
+        return { ...item, links: links.results || [] }
+      })
+    )
+    
+    return itemsWithLinks
   } catch (error) {
     console.error('Error fetching equipment items:', error)
     return []
@@ -315,14 +346,23 @@ export async function getEquipmentItem(db: D1Database, id: string): Promise<Equi
       SELECT 
         ag.*, 
         k.titel as kategorie_titel,
-        hk.titel as hauptkategorie_titel
+        hk.titel as hauptkategorie_titel,
+        t.name as transport_name
       FROM ausruestungsgegenstaende ag
       JOIN kategorien k ON ag.kategorie_id = k.id
       JOIN hauptkategorien hk ON k.hauptkategorie_id = hk.id
+      LEFT JOIN transportmittel t ON ag.transport_id = t.id
       WHERE ag.id = ?
     `
-    const result = await db.prepare(query).bind(id).first<EquipmentItem>()
-    return result || null
+    const item = await db.prepare(query).bind(id).first<EquipmentItem>()
+    if (!item) return null
+    
+    // Fetch links for this equipment item
+    const links = await db.prepare(
+      'SELECT * FROM ausruestungsgegenstaende_links WHERE gegenstand_id = ?'
+    ).bind(id).all<EquipmentLink>()
+    
+    return { ...item, links: links.results || [] }
   } catch (error) {
     console.error('Error fetching equipment item:', error)
     return null
@@ -337,10 +377,12 @@ export async function createEquipmentItem(
   item: {
     was: string
     kategorie_id: string
+    transport_id?: string | null
     einzelgewicht?: number
     standard_anzahl?: number
     status?: string
     details?: string
+    links?: string[]
   }
 ): Promise<EquipmentItem | null> {
   try {
@@ -348,19 +390,30 @@ export async function createEquipmentItem(
     await db
       .prepare(
         `INSERT INTO ausruestungsgegenstaende 
-         (id, was, kategorie_id, einzelgewicht, standard_anzahl, status, details) 
-         VALUES (?, ?, ?, ?, ?, ?, ?)`
+         (id, was, kategorie_id, transport_id, einzelgewicht, standard_anzahl, status, details) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .bind(
         id,
         item.was,
         item.kategorie_id,
+        item.transport_id || null,
         item.einzelgewicht || 0,
         item.standard_anzahl || 1,
-        item.status || 'Verfügbar',
+        item.status || 'Normal',
         item.details || ''
       )
       .run()
+
+    // Insert links if provided
+    if (item.links && item.links.length > 0) {
+      for (const url of item.links) {
+        const linkId = crypto.randomUUID()
+        await db.prepare(
+          'INSERT INTO ausruestungsgegenstaende_links (id, gegenstand_id, url) VALUES (?, ?, ?)'
+        ).bind(linkId, id, url).run()
+      }
+    }
 
     return getEquipmentItem(db, id)
   } catch (error) {
@@ -378,15 +431,17 @@ export async function updateEquipmentItem(
   updates: {
     was?: string
     kategorie_id?: string
+    transport_id?: string | null
     einzelgewicht?: number
     standard_anzahl?: number
     status?: string
     details?: string
+    links?: string[]
   }
 ): Promise<EquipmentItem | null> {
   try {
     const fields: string[] = []
-    const values: (string | number)[] = []
+    const values: (string | number | null)[] = []
 
     if (updates.was !== undefined) {
       fields.push('was = ?')
@@ -395,6 +450,10 @@ export async function updateEquipmentItem(
     if (updates.kategorie_id !== undefined) {
       fields.push('kategorie_id = ?')
       values.push(updates.kategorie_id)
+    }
+    if (updates.transport_id !== undefined) {
+      fields.push('transport_id = ?')
+      values.push(updates.transport_id)
     }
     if (updates.einzelgewicht !== undefined) {
       fields.push('einzelgewicht = ?')
@@ -413,11 +472,27 @@ export async function updateEquipmentItem(
       values.push(updates.details)
     }
 
-    if (fields.length === 0) return getEquipmentItem(db, id)
+    if (fields.length > 0) {
+      values.push(id)
+      const query = `UPDATE ausruestungsgegenstaende SET ${fields.join(', ')} WHERE id = ?`
+      await db.prepare(query).bind(...values).run()
+    }
 
-    values.push(id)
-    const query = `UPDATE ausruestungsgegenstaende SET ${fields.join(', ')} WHERE id = ?`
-    await db.prepare(query).bind(...values).run()
+    // Update links if provided
+    if (updates.links !== undefined) {
+      // Delete existing links
+      await db.prepare('DELETE FROM ausruestungsgegenstaende_links WHERE gegenstand_id = ?').bind(id).run()
+      
+      // Insert new links
+      if (updates.links.length > 0) {
+        for (const url of updates.links) {
+          const linkId = crypto.randomUUID()
+          await db.prepare(
+            'INSERT INTO ausruestungsgegenstaende_links (id, gegenstand_id, url) VALUES (?, ?, ?)'
+          ).bind(linkId, id, url).run()
+        }
+      }
+    }
 
     return getEquipmentItem(db, id)
   } catch (error) {
@@ -474,6 +549,19 @@ export async function getCategoriesWithMainCategories(db: D1Database): Promise<A
     return result.results || []
   } catch (error) {
     console.error('Error fetching categories with main categories:', error)
+    return []
+  }
+}
+
+/**
+ * Abrufen aller Transportmittel
+ */
+export async function getTransportVehicles(db: D1Database): Promise<TransportVehicle[]> {
+  try {
+    const result = await db.prepare('SELECT * FROM transportmittel ORDER BY name').all<TransportVehicle>()
+    return result.results || []
+  } catch (error) {
+    console.error('Error fetching transport vehicles:', error)
     return []
   }
 }

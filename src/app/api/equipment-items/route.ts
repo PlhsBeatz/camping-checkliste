@@ -31,10 +31,12 @@ export async function POST(request: NextRequest) {
     const item = await createEquipmentItem(db, {
       was: body.was,
       kategorie_id: body.kategorie_id,
+      transport_id: body.transport_id,
       einzelgewicht: body.einzelgewicht,
       standard_anzahl: body.standard_anzahl,
       status: body.status,
-      details: body.details
+      details: body.details,
+      links: body.links
     })
 
     if (!item) {
