@@ -41,7 +41,8 @@ export default function Home() {
   const [packingItemForm, setPackingItemForm] = useState({
     gegenstandId: '',
     anzahl: '1',
-    bemerkung: ''
+    bemerkung: '',
+    transportId: ''
   })
   const [newVacationForm, setNewVacationForm] = useState({
     titel: '',
@@ -256,7 +257,8 @@ export default function Home() {
           vacationId: selectedVacationId,
           gegenstandId: packingItemForm.gegenstandId,
           anzahl: parseInt(packingItemForm.anzahl) || 1,
-          bemerkung: packingItemForm.bemerkung || null
+          bemerkung: packingItemForm.bemerkung || null,
+          transportId: packingItemForm.transportId || null
         })
       })
       const data = await res.json()
@@ -270,7 +272,7 @@ export default function Home() {
           setPackedItems(packed)
         }
         setShowAddItemDialog(false)
-        setPackingItemForm({ gegenstandId: '', anzahl: '1', bemerkung: '' })
+        setPackingItemForm({ gegenstandId: '', anzahl: '1', bemerkung: '', transportId: '' })
         setEquipmentSearchTerm('')
       } else {
         alert('Fehler beim Hinzufügen: ' + data.error)
@@ -288,7 +290,8 @@ export default function Home() {
     setPackingItemForm({
       gegenstandId: item.gegenstand_id,
       anzahl: String(item.anzahl),
-      bemerkung: item.bemerkung || ''
+      bemerkung: item.bemerkung || '',
+      transportId: item.transport_id || ''
     })
     setShowEditItemDialog(true)
   }
@@ -319,7 +322,7 @@ export default function Home() {
         }
         setShowEditItemDialog(false)
         setEditingPackingItemId(null)
-        setPackingItemForm({ gegenstandId: '', anzahl: '1', bemerkung: '' })
+        setPackingItemForm({ gegenstandId: '', anzahl: '1', bemerkung: '', transportId: '' })
       } else {
         alert('Fehler beim Aktualisieren: ' + data.error)
       }
@@ -860,10 +863,14 @@ export default function Home() {
                               />
                               <div className="mt-2 max-h-48 overflow-y-auto border rounded-md">
                                 {equipmentItems
-                                  .filter(item => 
-                                    item.was.toLowerCase().includes(equipmentSearchTerm.toLowerCase()) ||
-                                    (item.kategorie_titel?.toLowerCase().includes(equipmentSearchTerm.toLowerCase()))
-                                  )
+                                  .filter(item => {
+                                    // Filter by search term
+                                    const matchesSearch = item.was.toLowerCase().includes(equipmentSearchTerm.toLowerCase()) ||
+                                      (item.kategorie_titel?.toLowerCase().includes(equipmentSearchTerm.toLowerCase()))
+                                    // Exclude items already in packing list
+                                    const notInPackingList = !packingItems.some(pi => pi.gegenstand_id === item.id)
+                                    return matchesSearch && notInPackingList
+                                  })
                                   .slice(0, 10)
                                   .map(item => (
                                     <div
@@ -871,7 +878,14 @@ export default function Home() {
                                       className={`p-2 cursor-pointer hover:bg-muted ${
                                         packingItemForm.gegenstandId === item.id ? 'bg-muted' : ''
                                       }`}
-                                      onClick={() => setPackingItemForm({ ...packingItemForm, gegenstandId: item.id })}
+                                      onClick={() => {
+                                        // Set transport from equipment default
+                                        setPackingItemForm({ 
+                                          ...packingItemForm, 
+                                          gegenstandId: item.id,
+                                          transportId: item.transport_id || ''
+                                        })
+                                      }}
                                     >
                                       <div className="text-sm font-medium">{item.was}</div>
                                       <div className="text-xs text-muted-foreground">{item.kategorie_titel}</div>
@@ -888,6 +902,25 @@ export default function Home() {
                                 value={packingItemForm.anzahl}
                                 onChange={(e) => setPackingItemForm({ ...packingItemForm, anzahl: e.target.value })}
                               />
+                            </div>
+                            <div>
+                              <Label htmlFor="transport">Transport</Label>
+                              <select
+                                id="transport"
+                                value={packingItemForm.transportId}
+                                onChange={(e) => setPackingItemForm({ ...packingItemForm, transportId: e.target.value })}
+                                className="w-full px-3 py-2 border border-input rounded-md bg-background"
+                              >
+                                <option value="">Nicht festgelegt</option>
+                                {transportVehicles.map(vehicle => (
+                                  <option key={vehicle.id} value={vehicle.id}>
+                                    {vehicle.name}
+                                  </option>
+                                ))}
+                              </select>
+                              <p className="text-xs text-muted-foreground mt-1">
+                                Wo wird dieser Gegenstand transportiert?
+                              </p>
                             </div>
                             <div>
                               <Label htmlFor="bemerkung">Bemerkung (optional)</Label>
