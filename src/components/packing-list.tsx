@@ -2,7 +2,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
-import { Edit2, Trash2 } from "lucide-react";
+import { Edit2, Trash2, Truck } from "lucide-react";
 import { useMemo } from "react";
 import { PackingItem as DBPackingItem } from "@/lib/db";
 
@@ -12,7 +12,11 @@ interface PackingItemProps {
   anzahl: number;
   gepackt: boolean;
   bemerkung?: string | null;
+  transport_name?: string | null;
+  mitreisenden_typ: 'pauschal' | 'alle' | 'ausgewaehlte';
+  mitreisende: Array<{ mitreisender_id: string; mitreisender_name: string; gepackt: boolean }>;
   onToggle: (id: string) => void;
+  onToggleMitreisender: (packingItemId: string, mitreisenderId: string, currentStatus: boolean) => void;
   onEdit: (item: DBPackingItem) => void;
   onDelete: (id: string) => void;
   details?: string;
@@ -25,47 +29,98 @@ const PackingItem: React.FC<PackingItemProps> = ({
   anzahl,
   gepackt,
   bemerkung,
+  transport_name,
+  mitreisenden_typ,
+  mitreisende,
   onToggle,
+  onToggleMitreisender,
   onEdit,
   onDelete,
   details,
   fullItem
 }) => {
+  // Determine if item is fully packed based on mitreisenden_typ
+  const isFullyPacked = useMemo(() => {
+    if (mitreisenden_typ === 'pauschal') {
+      return gepackt;
+    }
+    // For 'alle' and 'ausgewaehlte', check if all assigned mitreisende have packed
+    return mitreisende.length > 0 && mitreisende.every(m => m.gepackt);
+  }, [mitreisenden_typ, gepackt, mitreisende]);
+
   return (
-    <div className={`flex items-center space-x-3 p-3 border-b transition-colors ${gepackt ? 'bg-muted/50' : 'hover:bg-muted/30'}`}>
-      <Checkbox
-        id={`item-${id}`}
-        checked={gepackt}
-        onCheckedChange={() => onToggle(id)}
-        className="mt-0.5"
-      />
-      <div className="flex-grow min-w-0">
-        <label
-          htmlFor={`item-${id}`}
-          className={`text-sm font-medium leading-none cursor-pointer block ${gepackt ? 'line-through text-muted-foreground' : ''}`}
-        >
-          {was} {anzahl > 1 ? `(${anzahl}x)` : ''}
-        </label>
-        {details && <p className="text-xs text-muted-foreground mt-1">{details}</p>}
-        {bemerkung && <p className="text-xs text-blue-600 mt-1">📝 {bemerkung}</p>}
-      </div>
-      <div className="flex gap-1">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => onEdit(fullItem)}
-          className="h-8 w-8 p-0"
-        >
-          <Edit2 className="h-3 w-3" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => onDelete(id)}
-          className="h-8 w-8 p-0"
-        >
-          <Trash2 className="h-3 w-3" />
-        </Button>
+    <div className={`p-3 border-b transition-colors ${isFullyPacked ? 'bg-muted/50' : 'hover:bg-muted/30'}`}>
+      <div className="flex items-start space-x-3">
+        {/* Main checkbox (only for pauschal items) */}
+        {mitreisenden_typ === 'pauschal' && (
+          <Checkbox
+            id={`item-${id}`}
+            checked={gepackt}
+            onCheckedChange={() => onToggle(id)}
+            className="mt-0.5"
+          />
+        )}
+        
+        <div className="flex-grow min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <label
+              htmlFor={`item-${id}`}
+              className={`text-sm font-medium leading-none ${mitreisenden_typ === 'pauschal' ? 'cursor-pointer' : ''} ${isFullyPacked ? 'line-through text-muted-foreground' : ''}`}
+            >
+              {was} {anzahl > 1 ? `(${anzahl}x)` : ''}
+            </label>
+            {transport_name && (
+              <span className="inline-flex items-center gap-1 text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">
+                <Truck className="h-3 w-3" />
+                {transport_name}
+              </span>
+            )}
+          </div>
+          
+          {details && <p className="text-xs text-muted-foreground mt-1">{details}</p>}
+          {bemerkung && <p className="text-xs text-blue-600 mt-1">📝 {bemerkung}</p>}
+          
+          {/* Individual mitreisende checkboxes for 'alle' and 'ausgewaehlte' */}
+          {(mitreisenden_typ === 'alle' || mitreisenden_typ === 'ausgewaehlte') && mitreisende.length > 0 && (
+            <div className="mt-2 space-y-1">
+              {mitreisende.map((m) => (
+                <div key={m.mitreisender_id} className="flex items-center space-x-2">
+                  <Checkbox
+                    id={`item-${id}-mitreisender-${m.mitreisender_id}`}
+                    checked={m.gepackt}
+                    onCheckedChange={() => onToggleMitreisender(id, m.mitreisender_id, m.gepackt)}
+                    className="h-3.5 w-3.5"
+                  />
+                  <label
+                    htmlFor={`item-${id}-mitreisender-${m.mitreisender_id}`}
+                    className={`text-xs cursor-pointer ${m.gepackt ? 'line-through text-muted-foreground' : ''}`}
+                  >
+                    {m.mitreisender_name}
+                  </label>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        
+        <div className="flex gap-1 flex-shrink-0">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => onEdit(fullItem)}
+            className="h-8 w-8 p-0"
+          >
+            <Edit2 className="h-3 w-3" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => onDelete(id)}
+            className="h-8 w-8 p-0"
+          >
+            <Trash2 className="h-3 w-3" />
+          </Button>
+        </div>
       </div>
     </div>
   );
@@ -74,6 +129,7 @@ const PackingItem: React.FC<PackingItemProps> = ({
 interface PackingListProps {
   items: DBPackingItem[];
   onToggleItem: (id: string) => void;
+  onToggleMitreisender: (packingItemId: string, mitreisenderId: string, currentStatus: boolean) => void;
   onEditItem: (item: DBPackingItem) => void;
   onDeleteItem: (id: string) => void;
   hidePackedItems?: boolean;
@@ -82,6 +138,7 @@ interface PackingListProps {
 export const PackingList: React.FC<PackingListProps> = ({
   items,
   onToggleItem,
+  onToggleMitreisender,
   onEditItem,
   onDeleteItem,
   hidePackedItems = false
@@ -91,7 +148,12 @@ export const PackingList: React.FC<PackingListProps> = ({
     const grouped: Record<string, Record<string, DBPackingItem[]>> = {};
 
     items.forEach(item => {
-      if (hidePackedItems && item.gepackt) return;
+      // Check if item is fully packed
+      const isFullyPacked = item.mitreisenden_typ === 'pauschal' 
+        ? item.gepackt 
+        : item.mitreisende.length > 0 && item.mitreisende.every(m => m.gepackt);
+      
+      if (hidePackedItems && isFullyPacked) return;
 
       if (!grouped[item.hauptkategorie]) {
         grouped[item.hauptkategorie] = {};
@@ -110,9 +172,26 @@ export const PackingList: React.FC<PackingListProps> = ({
     return grouped;
   }, [items, hidePackedItems]);
 
+  // Calculate packed count based on mitreisenden_typ
+  const { packedCount, totalCount } = useMemo(() => {
+    let packed = 0;
+    let total = 0;
+
+    items.forEach(item => {
+      if (item.mitreisenden_typ === 'pauschal') {
+        total += 1;
+        if (item.gepackt) packed += 1;
+      } else {
+        // For 'alle' and 'ausgewaehlte', count each mitreisender separately
+        total += item.mitreisende.length;
+        packed += item.mitreisende.filter(m => m.gepackt).length;
+      }
+    });
+
+    return { packedCount: packed, totalCount: total };
+  }, [items]);
+
   const mainCategories = Object.keys(itemsByMainCategory);
-  const packedCount = items.filter(item => item.gepackt).length;
-  const totalCount = items.length;
 
   return (
     <div className="space-y-4">
@@ -161,7 +240,11 @@ export const PackingList: React.FC<PackingListProps> = ({
                       anzahl={item.anzahl}
                       gepackt={item.gepackt}
                       bemerkung={item.bemerkung}
+                      transport_name={item.transport_name}
+                      mitreisenden_typ={item.mitreisenden_typ}
+                      mitreisende={item.mitreisende}
                       onToggle={onToggleItem}
+                      onToggleMitreisender={onToggleMitreisender}
                       onEdit={onEditItem}
                       onDelete={onDeleteItem}
                       details={item.details}
@@ -178,7 +261,7 @@ export const PackingList: React.FC<PackingListProps> = ({
           <TabsContent value="empty" className="text-center py-12 text-muted-foreground">
             <p>Keine Einträge in der Packliste vorhanden.</p>
           </TabsContent>
-        )}
+        ))}
       </Tabs>
     </div>
   );

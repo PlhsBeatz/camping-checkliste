@@ -242,6 +242,48 @@ export default function Home() {
     }
   }
 
+  const handleToggleMitreisender = async (packingItemId: string, mitreisenderId: string, currentStatus: boolean) => {
+    const newStatus = !currentStatus
+
+    // Optimistically update UI
+    const updatedPackingItems = packingItems.map(item => {
+      if (item.id === packingItemId) {
+        return {
+          ...item,
+          mitreisende: item.mitreisende.map(m => 
+            m.mitreisender_id === mitreisenderId 
+              ? { ...m, gepackt: newStatus }
+              : m
+          )
+        }
+      }
+      return item
+    })
+    setPackingItems(updatedPackingItems)
+
+    try {
+      const res = await fetch('/api/packing-items/toggle-mitreisender', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          packingItemId, 
+          mitreisenderId, 
+          gepackt: newStatus 
+        }),
+      })
+      const data = await res.json()
+      if (!data.success) {
+        console.error('Failed to update mitreisender status:', data.error)
+        // Revert on error
+        setPackingItems(packingItems)
+      }
+    } catch (error) {
+      console.error('Failed to update mitreisender status:', error)
+      // Revert on error
+      setPackingItems(packingItems)
+    }
+  }
+
   const handleAddPackingItem = async () => {
     if (!packingItemForm.gegenstandId || !selectedVacationId) {
       alert('Bitte wählen Sie einen Gegenstand aus')
@@ -977,6 +1019,7 @@ export default function Home() {
                     <PackingList
                       items={packingItems}
                       onToggleItem={handleToggleItem}
+                      onToggleMitreisender={handleToggleMitreisender}
                       onEditItem={handleEditPackingItem}
                       onDeleteItem={handleDeletePackingItem}
                       hidePackedItems={false}
