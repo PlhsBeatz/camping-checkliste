@@ -1,21 +1,48 @@
 import { NextRequest, NextResponse } from 'next/server'
-import {
-  getDB,
+import { 
+  getDB, 
   getEquipmentItems,
-  createEquipmentItem,
-  updateEquipmentItem,
+  getEquipmentItem,
+  createEquipmentItem, 
+  updateEquipmentItem, 
   deleteEquipmentItem,
-  CloudflareEnv
+  getTagsForEquipment,
+  CloudflareEnv 
 } from '@/lib/db'
 
 export const runtime = 'edge'
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const env = process.env as unknown as CloudflareEnv
     const db = getDB(env)
-    const items = await getEquipmentItems(db)
-    return NextResponse.json({ success: true, data: items })
+    const { searchParams } = new URL(request.url)
+    const id = searchParams.get('id')
+
+    if (id) {
+      // Get single equipment item with tags
+      const item = await getEquipmentItem(db, id)
+      if (!item) {
+        return NextResponse.json({ error: 'Equipment item not found' }, { status: 404 })
+      }
+      
+      // Load tags for this item
+      const tags = await getTagsForEquipment(db, id)
+      item.tags = tags
+      
+      return NextResponse.json({ success: true, data: item })
+    } else {
+      // Get all equipment items with tags
+      const items = await getEquipmentItems(db)
+      
+      // Load tags for each item
+      for (const item of items) {
+        const tags = await getTagsForEquipment(db, item.id)
+        item.tags = tags
+      }
+      
+      return NextResponse.json({ success: true, data: items })
+    }
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error)
     return NextResponse.json({ error: message }, { status: 500 })
@@ -27,22 +54,47 @@ export async function POST(request: NextRequest) {
     const env = process.env as unknown as CloudflareEnv
     const db = getDB(env)
     const body = await request.json()
+    
+    const {
+      was,
+      kategorie_id,
+      transport_id,
+      einzelgewicht,
+      standard_anzahl,
+      status,
+      details,
+      is_standard,
+      mitreisenden_typ,
+      standard_mitreisende,
+      tags,
+      links
+    } = body
+
+    if (!was || !kategorie_id) {
+      return NextResponse.json({ 
+        error: 'was and kategorie_id are required' 
+      }, { status: 400 })
+    }
 
     const item = await createEquipmentItem(db, {
-      was: body.was,
-      kategorie_id: body.kategorie_id,
-      transport_id: body.transport_id,
-      einzelgewicht: body.einzelgewicht,
-      standard_anzahl: body.standard_anzahl,
-      status: body.status,
-      details: body.details,
-      mitreisenden_typ: body.mitreisenden_typ,
-      standard_mitreisende: body.standard_mitreisende,
-      links: body.links
+      was,
+      kategorie_id,
+      transport_id,
+      einzelgewicht,
+      standard_anzahl,
+      status,
+      details,
+      is_standard,
+      mitreisenden_typ,
+      standard_mitreisende,
+      tags,
+      links
     })
 
     if (!item) {
-      return NextResponse.json({ error: 'Failed to create equipment item' }, { status: 400 })
+      return NextResponse.json({ 
+        error: 'Failed to create equipment item' 
+      }, { status: 500 })
     }
 
     return NextResponse.json({ success: true, data: item }, { status: 201 })
@@ -57,16 +109,46 @@ export async function PUT(request: NextRequest) {
     const env = process.env as unknown as CloudflareEnv
     const db = getDB(env)
     const body = await request.json()
-    const { id, ...updates } = body
+    
+    const {
+      id,
+      was,
+      kategorie_id,
+      transport_id,
+      einzelgewicht,
+      standard_anzahl,
+      status,
+      details,
+      is_standard,
+      mitreisenden_typ,
+      standard_mitreisende,
+      tags,
+      links
+    } = body
 
     if (!id) {
       return NextResponse.json({ error: 'id is required' }, { status: 400 })
     }
 
-    const item = await updateEquipmentItem(db, id, updates)
+    const item = await updateEquipmentItem(db, id, {
+      was,
+      kategorie_id,
+      transport_id,
+      einzelgewicht,
+      standard_anzahl,
+      status,
+      details,
+      is_standard,
+      mitreisenden_typ,
+      standard_mitreisende,
+      tags,
+      links
+    })
 
     if (!item) {
-      return NextResponse.json({ error: 'Failed to update equipment item' }, { status: 400 })
+      return NextResponse.json({ 
+        error: 'Failed to update equipment item' 
+      }, { status: 500 })
     }
 
     return NextResponse.json({ success: true, data: item })
@@ -90,7 +172,9 @@ export async function DELETE(request: NextRequest) {
     const success = await deleteEquipmentItem(db, id)
 
     if (!success) {
-      return NextResponse.json({ error: 'Failed to delete equipment item' }, { status: 400 })
+      return NextResponse.json({ 
+        error: 'Failed to delete equipment item' 
+      }, { status: 500 })
     }
 
     return NextResponse.json({ success: true })

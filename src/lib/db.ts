@@ -63,8 +63,10 @@ export interface EquipmentItem {
   standard_anzahl: number
   status: string
   details: string
+  is_standard: boolean // Immer dabei
   mitreisenden_typ: 'pauschal' | 'alle' | 'ausgewaehlte'
   standard_mitreisende?: string[] // IDs der standardmäßig zugeordneten Mitreisenden
+  tags?: Tag[] // Zugeordnete Tags
   links?: EquipmentLink[]
   created_at: string
 }
@@ -95,6 +97,15 @@ export interface MainCategory {
   id: string
   titel: string
   reihenfolge: number
+}
+
+export interface Tag {
+  id: string
+  titel: string
+  farbe?: string | null
+  icon?: string | null
+  beschreibung?: string | null
+  created_at: string
 }
 
 export interface CloudflareEnv {
@@ -494,8 +505,10 @@ export async function createEquipmentItem(
     standard_anzahl?: number
     status?: string
     details?: string
+    is_standard?: boolean
     mitreisenden_typ?: 'pauschal' | 'alle' | 'ausgewaehlte'
     standard_mitreisende?: string[]
+    tags?: string[]
     links?: string[]
   }
 ): Promise<EquipmentItem | null> {
@@ -504,8 +517,8 @@ export async function createEquipmentItem(
     await db
       .prepare(
         `INSERT INTO ausruestungsgegenstaende 
-         (id, was, kategorie_id, transport_id, einzelgewicht, standard_anzahl, status, details, mitreisenden_typ) 
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+         (id, was, kategorie_id, transport_id, einzelgewicht, standard_anzahl, status, details, is_standard, mitreisenden_typ) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .bind(
         id,
@@ -516,6 +529,7 @@ export async function createEquipmentItem(
         item.standard_anzahl || 1,
         item.status || 'Normal',
         item.details || '',
+        item.is_standard ? 1 : 0,
         item.mitreisenden_typ || 'pauschal'
       )
       .run()
@@ -539,6 +553,11 @@ export async function createEquipmentItem(
       }
     }
 
+    // Insert tags if provided
+    if (item.tags && item.tags.length > 0) {
+      await setTagsForEquipment(db, id, item.tags)
+    }
+
     return getEquipmentItem(db, id)
   } catch (error) {
     console.error('Error creating equipment item:', error)
@@ -560,8 +579,10 @@ export async function updateEquipmentItem(
     standard_anzahl?: number
     status?: string
     details?: string
+    is_standard?: boolean
     mitreisenden_typ?: 'pauschal' | 'alle' | 'ausgewaehlte'
     standard_mitreisende?: string[]
+    tags?: string[]
     links?: string[]
   }
 ): Promise<EquipmentItem | null> {
@@ -601,6 +622,10 @@ export async function updateEquipmentItem(
       fields.push('mitreisenden_typ = ?')
       values.push(updates.mitreisenden_typ)
     }
+    if (updates.is_standard !== undefined) {
+      fields.push('is_standard = ?')
+      values.push(updates.is_standard ? 1 : 0)
+    }
 
     if (fields.length > 0) {
       values.push(id)
@@ -637,6 +662,11 @@ export async function updateEquipmentItem(
           ).bind(id, mitreisenderId).run()
         }
       }
+    }
+
+    // Update tags if provided
+    if (updates.tags !== undefined) {
+      await setTagsForEquipment(db, id, updates.tags)
     }
 
     return getEquipmentItem(db, id)
@@ -1197,6 +1227,196 @@ export async function getDefaultMitreisende(db: D1Database): Promise<Mitreisende
     return result.results || []
   } catch (error) {
     console.error('Error fetching default mitreisende:', error)
+    return []
+  }
+}
+
+/**
+ * ==========================================
+ * TAG-VERWALTUNG
+ * ==========================================
+ */
+
+/**
+ * Abrufen aller Tags
+ */
+export async function getTags(db: D1Database): Promise<Tag[]> {
+  try {
+    const result = await db
+      .prepare('SELECT * FROM tags ORDER BY titel')
+      .all<Tag>()
+    return result.results || []
+  } catch (error) {
+    console.error('Error fetching tags:', error)
+    return []
+  }
+}
+
+/**
+ * Erstellen eines neuen Tags
+ */
+export async function createTag(
+  db: D1Database,
+  titel: string,
+  farbe?: string | null,
+  icon?: string | null,
+  beschreibung?: string | null
+): Promise<string | null> {
+  try {
+    const id = crypto.randomUUID()
+    await db
+      .prepare('INSERT INTO tags (id, titel, farbe, icon, beschreibung) VALUES (?, ?, ?, ?, ?)')
+      .bind(id, titel, farbe || null, icon || null, beschreibung || null)
+      .run()
+    return id
+  } catch (error) {
+    console.error('Error creating tag:', error)
+    return null
+  }
+}
+
+/**
+ * Aktualisieren eines Tags
+ */
+export async function updateTag(
+  db: D1Database,
+  id: string,
+  titel: string,
+  farbe?: string | null,
+  icon?: string | null,
+  beschreibung?: string | null
+): Promise<boolean> {
+  try {
+    await db
+      .prepare('UPDATE tags SET titel = ?, farbe = ?, icon = ?, beschreibung = ? WHERE id = ?')
+      .bind(titel, farbe || null, icon || null, beschreibung || null, id)
+      .run()
+    return true
+  } catch (error) {
+    console.error('Error updating tag:', error)
+    return false
+  }
+}
+
+/**
+ * Löschen eines Tags
+ */
+export async function deleteTag(db: D1Database, id: string): Promise<boolean> {
+  try {
+    // Erst alle Zuordnungen löschen
+    await db
+      .prepare('DELETE FROM ausruestungsgegenstaende_tags WHERE tag_id = ?')
+      .bind(id)
+      .run()
+    
+    // Dann den Tag selbst löschen
+    await db.prepare('DELETE FROM tags WHERE id = ?').bind(id).run()
+    return true
+  } catch (error) {
+    console.error('Error deleting tag:', error)
+    return false
+  }
+}
+
+/**
+ * Abrufen der Tags für einen Ausrüstungsgegenstand
+ */
+export async function getTagsForEquipment(db: D1Database, gegenstandId: string): Promise<Tag[]> {
+  try {
+    const result = await db
+      .prepare(`
+        SELECT t.* 
+        FROM tags t
+        INNER JOIN ausruestungsgegenstaende_tags at ON t.id = at.tag_id
+        WHERE at.gegenstand_id = ?
+        ORDER BY t.titel
+      `)
+      .bind(gegenstandId)
+      .all<Tag>()
+    return result.results || []
+  } catch (error) {
+    console.error('Error fetching tags for equipment:', error)
+    return []
+  }
+}
+
+/**
+ * Setzen der Tags für einen Ausrüstungsgegenstand (ersetzt alle bisherigen)
+ */
+export async function setTagsForEquipment(
+  db: D1Database,
+  gegenstandId: string,
+  tagIds: string[]
+): Promise<boolean> {
+  try {
+    // Erst alle bisherigen Zuordnungen löschen
+    await db
+      .prepare('DELETE FROM ausruestungsgegenstaende_tags WHERE gegenstand_id = ?')
+      .bind(gegenstandId)
+      .run()
+    
+    // Dann neue Zuordnungen hinzufügen
+    for (const tagId of tagIds) {
+      await db
+        .prepare('INSERT INTO ausruestungsgegenstaende_tags (gegenstand_id, tag_id) VALUES (?, ?)')
+        .bind(gegenstandId, tagId)
+        .run()
+    }
+    
+    return true
+  } catch (error) {
+    console.error('Error setting tags for equipment:', error)
+    return false
+  }
+}
+
+/**
+ * Abrufen aller Ausrüstungsgegenstände mit bestimmten Tags
+ */
+export async function getEquipmentByTags(
+  db: D1Database,
+  tagIds: string[],
+  includeStandard: boolean = true
+): Promise<EquipmentItem[]> {
+  try {
+    let query = `
+      SELECT DISTINCT
+        a.*,
+        k.titel as kategorie_titel,
+        h.titel as hauptkategorie_titel,
+        t.name as transport_name
+      FROM ausruestungsgegenstaende a
+      LEFT JOIN kategorien k ON a.kategorie_id = k.id
+      LEFT JOIN hauptkategorien h ON k.hauptkategorie_id = h.id
+      LEFT JOIN transportmittel t ON a.transport_id = t.id
+      WHERE (
+    `
+    
+    if (includeStandard) {
+      query += 'a.is_standard = 1'
+      if (tagIds.length > 0) {
+        query += ' OR '
+      }
+    }
+    
+    if (tagIds.length > 0) {
+      query += `
+        a.id IN (
+          SELECT gegenstand_id 
+          FROM ausruestungsgegenstaende_tags 
+          WHERE tag_id IN (${tagIds.map(() => '?').join(', ')})
+        )
+      `
+    }
+    
+    query += ') ORDER BY h.reihenfolge, k.reihenfolge, a.was'
+    
+    const stmt = db.prepare(query)
+    const result = await stmt.bind(...tagIds).all<EquipmentItem>()
+    
+    return result.results || []
+  } catch (error) {
+    console.error('Error fetching equipment by tags:', error)
     return []
   }
 }
