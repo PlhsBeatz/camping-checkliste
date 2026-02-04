@@ -6,9 +6,10 @@ import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { PackingList } from '@/components/packing-list'
 import { MitreisendeManager } from '@/components/mitreisende-manager'
-import { Plus, Package, MapPin, Users, Trash2, Edit2, ChevronDown, Link as LinkIcon, X } from 'lucide-react'
+import { CategoryManager } from '@/components/category-manager'
+import { Plus, Package, MapPin, Users, Trash2, Edit2, ChevronDown, Link as LinkIcon, X, FolderTree } from 'lucide-react'
 import { useState, useEffect, useMemo } from 'react'
-import { Vacation, PackingItem, EquipmentItem, Category, TransportVehicle, Mitreisender } from '@/lib/db'
+import { Vacation, PackingItem, EquipmentItem, Category, TransportVehicle, Mitreisender, MainCategory } from '@/lib/db'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -22,6 +23,7 @@ export default function Home() {
   const [packingItems, setPackingItems] = useState<PackingItem[]>([])
   const [equipmentItems, setEquipmentItems] = useState<EquipmentItem[]>([])
   const [categories, setCategories] = useState<CategoryWithMain[]>([])
+  const [mainCategories, setMainCategories] = useState<MainCategory[]>([])
   const [transportVehicles, setTransportVehicles] = useState<TransportVehicle[]>([])
   const [allMitreisende, setAllMitreisende] = useState<Mitreisender[]>([])
   const [_vacationMitreisende, setVacationMitreisende] = useState<Mitreisender[]>([])
@@ -140,6 +142,22 @@ export default function Home() {
       }
     }
     fetchCategories()
+  }, [])
+
+  // Fetch Main Categories
+  useEffect(() => {
+    const fetchMainCategories = async () => {
+      try {
+        const res = await fetch('/api/main-categories')
+        const data = await res.json()
+        if (data.success) {
+          setMainCategories(data.data)
+        }
+      } catch (error) {
+        console.error('Failed to fetch main categories:', error)
+      }
+    }
+    fetchMainCategories()
   }, [])
 
   // Fetch Transport Vehicles
@@ -862,7 +880,7 @@ export default function Home() {
 
         {/* Main Content */}
         <Tabs defaultValue="packing" className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="packing">
               <Package className="h-4 w-4 mr-2" />
               <span className="hidden sm:inline">Packliste</span>
@@ -870,6 +888,10 @@ export default function Home() {
             <TabsTrigger value="equipment">
               <MapPin className="h-4 w-4 mr-2" />
               <span className="hidden sm:inline">Ausrüstung</span>
+            </TabsTrigger>
+            <TabsTrigger value="categories">
+              <FolderTree className="h-4 w-4 mr-2" />
+              <span className="hidden sm:inline">Kategorien</span>
             </TabsTrigger>
             <TabsTrigger value="vacations">
               <Users className="h-4 w-4 mr-2" />
@@ -1399,6 +1421,35 @@ export default function Home() {
                     </div>
                   )}
                 </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Categories Tab */}
+          <TabsContent value="categories" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Kategorien verwalten</CardTitle>
+                <CardDescription>
+                  Verwalten Sie Hauptkategorien und Kategorien für Ihre Ausrüstungsgegenstände
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <CategoryManager
+                  categories={categories}
+                  mainCategories={mainCategories}
+                  onRefresh={async () => {
+                    // Refresh categories
+                    const catRes = await fetch('/api/categories')
+                    const catData = await catRes.json()
+                    if (catData.success) setCategories(catData.data)
+                    
+                    // Refresh main categories
+                    const mainCatRes = await fetch('/api/main-categories')
+                    const mainCatData = await mainCatRes.json()
+                    if (mainCatData.success) setMainCategories(mainCatData.data)
+                  }}
+                />
               </CardContent>
             </Card>
           </TabsContent>

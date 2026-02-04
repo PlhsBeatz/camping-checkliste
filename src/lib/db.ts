@@ -1022,3 +1022,159 @@ export async function togglePackingItemForMitreisender(
     return false
   }
 }
+
+/**
+ * Erstellen einer neuen Hauptkategorie
+ */
+export async function createMainCategory(
+  db: D1Database,
+  titel: string,
+  reihenfolge?: number
+): Promise<string | null> {
+  try {
+    const id = crypto.randomUUID()
+    const order = reihenfolge ?? 999
+    await db
+      .prepare('INSERT INTO hauptkategorien (id, titel, reihenfolge) VALUES (?, ?, ?)')
+      .bind(id, titel, order)
+      .run()
+    return id
+  } catch (error) {
+    console.error('Error creating main category:', error)
+    return null
+  }
+}
+
+/**
+ * Aktualisieren einer Hauptkategorie
+ */
+export async function updateMainCategory(
+  db: D1Database,
+  id: string,
+  titel: string,
+  reihenfolge?: number
+): Promise<boolean> {
+  try {
+    if (reihenfolge !== undefined) {
+      await db
+        .prepare('UPDATE hauptkategorien SET titel = ?, reihenfolge = ? WHERE id = ?')
+        .bind(titel, reihenfolge, id)
+        .run()
+    } else {
+      await db
+        .prepare('UPDATE hauptkategorien SET titel = ? WHERE id = ?')
+        .bind(titel, id)
+        .run()
+    }
+    return true
+  } catch (error) {
+    console.error('Error updating main category:', error)
+    return false
+  }
+}
+
+/**
+ * Löschen einer Hauptkategorie
+ */
+export async function deleteMainCategory(db: D1Database, id: string): Promise<boolean> {
+  try {
+    // Check if there are categories using this main category
+    const categories = await db
+      .prepare('SELECT COUNT(*) as count FROM kategorien WHERE hauptkategorie_id = ?')
+      .bind(id)
+      .first<{ count: number }>()
+    
+    if (categories && categories.count > 0) {
+      throw new Error('Cannot delete main category with existing categories')
+    }
+    
+    await db.prepare('DELETE FROM hauptkategorien WHERE id = ?').bind(id).run()
+    return true
+  } catch (error) {
+    console.error('Error deleting main category:', error)
+    return false
+  }
+}
+
+/**
+ * Erstellen einer neuen Kategorie
+ */
+export async function createCategory(
+  db: D1Database,
+  titel: string,
+  hauptkategorieId: string,
+  reihenfolge?: number
+): Promise<string | null> {
+  try {
+    const id = crypto.randomUUID()
+    const order = reihenfolge ?? 999
+    await db
+      .prepare('INSERT INTO kategorien (id, titel, hauptkategorie_id, reihenfolge) VALUES (?, ?, ?, ?)')
+      .bind(id, titel, hauptkategorieId, order)
+      .run()
+    return id
+  } catch (error) {
+    console.error('Error creating category:', error)
+    return null
+  }
+}
+
+/**
+ * Aktualisieren einer Kategorie
+ */
+export async function updateCategory(
+  db: D1Database,
+  id: string,
+  titel: string,
+  hauptkategorieId?: string,
+  reihenfolge?: number
+): Promise<boolean> {
+  try {
+    const fields: string[] = ['titel = ?']
+    const values: (string | number)[] = [titel]
+    
+    if (hauptkategorieId !== undefined) {
+      fields.push('hauptkategorie_id = ?')
+      values.push(hauptkategorieId)
+    }
+    
+    if (reihenfolge !== undefined) {
+      fields.push('reihenfolge = ?')
+      values.push(reihenfolge)
+    }
+    
+    values.push(id)
+    
+    await db
+      .prepare(`UPDATE kategorien SET ${fields.join(', ')} WHERE id = ?`)
+      .bind(...values)
+      .run()
+    return true
+  } catch (error) {
+    console.error('Error updating category:', error)
+    return false
+  }
+}
+
+/**
+ * Löschen einer Kategorie
+ */
+export async function deleteCategory(db: D1Database, id: string): Promise<boolean> {
+  try {
+    // Check if there are equipment items using this category
+    const equipment = await db
+      .prepare('SELECT COUNT(*) as count FROM ausruestungsgegenstaende WHERE kategorie_id = ?')
+      .bind(id)
+      .first<{ count: number }>()
+    
+    if (equipment && equipment.count > 0) {
+      throw new Error('Cannot delete category with existing equipment items')
+    }
+    
+    await db.prepare('DELETE FROM kategorien WHERE id = ?').bind(id).run()
+    return true
+  } catch (error) {
+    console.error('Error deleting category:', error)
+    return false
+  }
+}
