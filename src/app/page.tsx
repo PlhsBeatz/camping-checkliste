@@ -800,6 +800,8 @@ export default function Home() {
       standard_anzahl: '1',
       status: 'Immer gepackt',
       details: '',
+      is_standard: false,
+      tags: [] as string[],
       links: [''],
       mitreisenden_typ: 'pauschal' as 'pauschal' | 'alle' | 'ausgewaehlte',
       standard_mitreisende: [] as string[]
