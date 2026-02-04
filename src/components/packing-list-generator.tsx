@@ -19,7 +19,7 @@ interface PackingListGeneratorProps {
 export function PackingListGenerator({ 
   open, 
   onOpenChange, 
-  vacationId, 
+  vacationId: _vacationId, 
   onGenerate 
 }: PackingListGeneratorProps) {
   const [tags, setTags] = useState<Tag[]>([])
@@ -38,6 +38,7 @@ export function PackingListGenerator({
     if (open) {
       fetchPreview()
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedTags, includeStandard, open])
 
   const fetchTags = async () => {
@@ -158,7 +159,7 @@ export function PackingListGenerator({
             <CardContent>
               {tags.length === 0 ? (
                 <p className="text-sm text-muted-foreground text-center py-4">
-                  Noch keine Tags vorhanden. Erstellen Sie zuerst Tags im Tab "Tags".
+                  Noch keine Tags vorhanden. Erstellen Sie zuerst Tags im Tab &quot;Tags&quot;.
                 </p>
               ) : (
                 <div className="grid gap-2 md:grid-cols-2">

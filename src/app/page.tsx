@@ -1369,7 +1369,7 @@ export default function Home() {
                           <div className="border rounded-lg p-3 space-y-2 max-h-48 overflow-y-auto">
                             {tags.length === 0 ? (
                               <p className="text-sm text-muted-foreground text-center py-2">
-                                Keine Tags vorhanden. Erstellen Sie zuerst Tags im Tab "Tags".
+                                Keine Tags vorhanden. Erstellen Sie zuerst Tags im Tab &quot;Tags&quot;.
                               </p>
                             ) : (
                               <div className="grid grid-cols-2 gap-2">
