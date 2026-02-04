@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Plus, Trash2, Users } from 'lucide-react'
+import { Plus, Users } from 'lucide-react'
 import { Mitreisender } from '@/lib/db'
 
 interface MitreisendeManagerProps {
@@ -130,27 +130,7 @@ export function MitreisendeManager({ vacationId, onMitreisendeChange }: Mitreise
     }
   }
 
-  const handleDeleteMitreisender = async (mitreisenderId: string) => {
-    if (!confirm('Sind Sie sicher, dass Sie diesen Mitreisenden löschen möchten?')) {
-      return
-    }
 
-    try {
-      const res = await fetch(`/api/mitreisende?id=${mitreisenderId}`, {
-        method: 'DELETE'
-      })
-      const data = await res.json()
-      if (data.success) {
-        setAllMitreisende(allMitreisende.filter(m => m.id !== mitreisenderId))
-        setVacationMitreisende(vacationMitreisende.filter(id => id !== mitreisenderId))
-      } else {
-        alert('Fehler beim Löschen des Mitreisenden: ' + data.error)
-      }
-    } catch (error) {
-      console.error('Failed to delete mitreisender:', error)
-      alert('Fehler beim Löschen des Mitreisenden')
-    }
-  }
 
   return (
     <div className="space-y-4">
@@ -220,17 +200,11 @@ export function MitreisendeManager({ vacationId, onMitreisendeChange }: Mitreise
                   className="text-sm font-medium cursor-pointer"
                 >
                   {mitreisender.name}
+                  {mitreisender.is_default_member && (
+                    <span className="ml-2 text-xs text-yellow-600 font-normal">⭐ Standard</span>
+                  )}
                 </label>
               </div>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => handleDeleteMitreisender(mitreisender.id)}
-                className="h-8 w-8 p-0"
-              >
-                <Trash2 className="h-4 w-4 text-destructive" />
-              </Button>
             </div>
           ))
         )}

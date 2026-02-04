@@ -48,13 +48,17 @@ export async function POST(request: NextRequest) {
     const db = getDB(env)
 
     const body = await request.json()
-    const { name, user_id, is_default_member } = body
+    const { name, userId, user_id, isDefaultMember, is_default_member } = body
 
     if (!name) {
       return NextResponse.json({ success: false, error: 'Name is required' }, { status: 400 })
     }
 
-    const id = await createMitreisender(db, name, user_id, is_default_member)
+    // Support both camelCase and snake_case
+    const finalUserId = userId || user_id
+    const finalIsDefault = isDefaultMember !== undefined ? isDefaultMember : is_default_member
+
+    const id = await createMitreisender(db, name, finalUserId, finalIsDefault)
     
     if (!id) {
       return NextResponse.json({ success: false, error: 'Failed to create mitreisender' }, { status: 500 })
@@ -78,7 +82,7 @@ export async function PUT(request: NextRequest) {
     const db = getDB(env)
 
     const body = await request.json()
-    const { id, name, user_id, is_default_member, vacationId, mitreisendeIds } = body
+    const { id, name, userId, user_id, isDefaultMember, is_default_member, vacationId, mitreisendeIds } = body
 
     // Setzen der Mitreisenden für einen Urlaub
     if (vacationId && mitreisendeIds) {
@@ -94,7 +98,11 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'ID and name are required' }, { status: 400 })
     }
 
-    const success = await updateMitreisender(db, id, name, user_id, is_default_member)
+    // Support both camelCase and snake_case
+    const finalUserId = userId || user_id
+    const finalIsDefault = isDefaultMember !== undefined ? isDefaultMember : is_default_member
+
+    const success = await updateMitreisender(db, id, name, finalUserId, finalIsDefault)
     
     if (!success) {
       return NextResponse.json({ success: false, error: 'Failed to update mitreisender' }, { status: 500 })
