@@ -849,10 +849,17 @@ export async function updateMitreisender(
   isDefaultMember?: boolean
 ): Promise<boolean> {
   try {
-    await db
-      .prepare('UPDATE mitreisende SET name = ?, user_id = ?, is_default_member = ? WHERE id = ?')
-      .bind(name, userId || null, isDefaultMember ? 1 : 0, id)
-      .run()
+    if (isDefaultMember !== undefined) {
+      await db
+        .prepare('UPDATE mitreisende SET name = ?, user_id = ?, is_default_member = ? WHERE id = ?')
+        .bind(name, userId || null, isDefaultMember ? 1 : 0, id)
+        .run()
+    } else {
+      await db
+        .prepare('UPDATE mitreisende SET name = ?, user_id = ? WHERE id = ?')
+        .bind(name, userId || null, id)
+        .run()
+    }
     return true
   } catch (error) {
     console.error('Error updating mitreisender:', error)
@@ -1176,5 +1183,20 @@ export async function deleteCategory(db: D1Database, id: string): Promise<boolea
   } catch (error) {
     console.error('Error deleting category:', error)
     return false
+  }
+}
+
+/**
+ * Abrufen aller Standard-Mitreisenden (is_default_member = true)
+ */
+export async function getDefaultMitreisende(db: D1Database): Promise<Mitreisender[]> {
+  try {
+    const result = await db
+      .prepare('SELECT * FROM mitreisende WHERE is_default_member = 1 ORDER BY name')
+      .all<Mitreisender>()
+    return result.results || []
+  } catch (error) {
+    console.error('Error fetching default mitreisende:', error)
+    return []
   }
 }

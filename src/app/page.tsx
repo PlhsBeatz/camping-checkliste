@@ -7,7 +7,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { PackingList } from '@/components/packing-list'
 import { MitreisendeManager } from '@/components/mitreisende-manager'
 import { CategoryManager } from '@/components/category-manager'
-import { Plus, Package, MapPin, Users, Trash2, Edit2, ChevronDown, Link as LinkIcon, X, FolderTree } from 'lucide-react'
+import { TravelersManager } from '@/components/travelers-manager'
+import { Plus, Package, MapPin, Users, Trash2, Edit2, ChevronDown, Link as LinkIcon, X, FolderTree, UserCircle } from 'lucide-react'
 import { useState, useEffect, useMemo } from 'react'
 import { Vacation, PackingItem, EquipmentItem, Category, TransportVehicle, Mitreisender, MainCategory } from '@/lib/db'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
@@ -464,8 +465,25 @@ export default function Home() {
         if (editingVacationId) {
           setVacations(vacations.map(v => v.id === editingVacationId ? data.data : v))
         } else {
+          // New vacation created - assign default travelers
+          const newVacationId = data.data.id
+          const defaultTravelers = allMitreisende.filter(m => m.is_default_member)
+          
+          if (defaultTravelers.length > 0) {
+            // Assign default travelers to the new vacation
+            const defaultIds = defaultTravelers.map(m => m.id)
+            await fetch('/api/vacations/mitreisende', {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                vacationId: newVacationId,
+                mitreisendeIds: defaultIds
+              })
+            })
+          }
+          
           setVacations([...vacations, data.data])
-          setSelectedVacationId(data.data.id)
+          setSelectedVacationId(newVacationId)
         }
         setShowNewVacationDialog(false)
         setEditingVacationId(null)
@@ -880,7 +898,7 @@ export default function Home() {
 
         {/* Main Content */}
         <Tabs defaultValue="packing" className="w-full">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="packing">
               <Package className="h-4 w-4 mr-2" />
               <span className="hidden sm:inline">Packliste</span>
@@ -892,6 +910,10 @@ export default function Home() {
             <TabsTrigger value="categories">
               <FolderTree className="h-4 w-4 mr-2" />
               <span className="hidden sm:inline">Kategorien</span>
+            </TabsTrigger>
+            <TabsTrigger value="travelers">
+              <UserCircle className="h-4 w-4 mr-2" />
+              <span className="hidden sm:inline">Mitreisende</span>
             </TabsTrigger>
             <TabsTrigger value="vacations">
               <Users className="h-4 w-4 mr-2" />
@@ -1452,6 +1474,19 @@ export default function Home() {
                 />
               </CardContent>
             </Card>
+          </TabsContent>
+
+          {/* Travelers Tab */}
+          <TabsContent value="travelers" className="space-y-4">
+            <TravelersManager
+              travelers={allMitreisende}
+              onRefresh={async () => {
+                // Refresh all mitreisende
+                const res = await fetch('/api/mitreisende')
+                const data = await res.json()
+                if (data.success) setAllMitreisende(data.data)
+              }}
+            />
           </TabsContent>
 
           {/* Vacations Tab */}
