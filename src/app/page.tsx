@@ -338,7 +338,7 @@ export default function Home() {
     if (selectedEquipment) {
       if (selectedEquipment.mitreisenden_typ === 'alle') {
         // Use all mitreisende from the vacation
-        mitreisendeIds = _vacationMitreisende.map(m => m.id)
+        mitreisendeIds = vacationMitreisende.map(m => m.id)
       } else if (selectedEquipment.mitreisenden_typ === 'ausgewaehlte') {
         // Use standard_mitreisende from the equipment item
         mitreisendeIds = selectedEquipment.standard_mitreisende || []
