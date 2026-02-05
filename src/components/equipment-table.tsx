@@ -282,11 +282,11 @@ export function EquipmentTable({
                     {/* Category Header */}
                     <TableRow key={`header-${group.categoryName}`} className="bg-muted/50">
                       <TableCell colSpan={8} className="font-semibold">
-                        {group.categoryName} ({group.items.length})
+                        {group.categoryName} ({group.items?.length || 0})
                       </TableCell>
                     </TableRow>
                     {/* Items */}
-                    {group.items.map(item => (
+                    {group.items?.map(item => (
                       <TableRow key={item.id} className="hover:bg-muted/30">
                         <TableCell className="font-medium">
                           <div className="flex items-center gap-2">
