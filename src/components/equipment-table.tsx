@@ -190,7 +190,7 @@ export function EquipmentTable({
                   <SelectItem value="all">Alle</SelectItem>
                   {mainCategories.map(mc => (
                     <SelectItem key={mc.id} value={mc.id}>
-                      {mc.icon} {mc.titel}
+                      {mc.titel}
                     </SelectItem>
                   ))}
                 </SelectContent>
