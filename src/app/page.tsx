@@ -30,7 +30,7 @@ export default function Home() {
   const [transportVehicles, setTransportVehicles] = useState<TransportVehicle[]>([])
   const [allMitreisende, setAllMitreisende] = useState<Mitreisender[]>([])
   const [tags, setTags] = useState<Tag[]>([])
-  const [_vacationMitreisende, setVacationMitreisende] = useState<Mitreisender[]>([])
+  const [vacationMitreisende, setVacationMitreisende] = useState<Mitreisender[]>([])
   const [selectedVacationId, setSelectedVacationId] = useState<string | null>(null)
   const [packedItems, setPackedItems] = useState<Set<string>>(new Set())
   const [isLoading, setIsLoading] = useState(false)
@@ -197,6 +197,22 @@ export default function Home() {
       }
     }
     fetchAllMitreisende()
+  }, [])
+
+  // Fetch Tags
+  useEffect(() => {
+    const fetchTags = async () => {
+      try {
+        const res = await fetch('/api/tags')
+        const data = await res.json()
+        if (data.success) {
+          setTags(data.data)
+        }
+      } catch (error) {
+        console.error('Failed to fetch tags:', error)
+      }
+    }
+    fetchTags()
   }, [])
 
   // Filter categories based on search term
@@ -449,7 +465,7 @@ export default function Home() {
   }
 
   const handleCreateVacation = async () => {
-    if (!newVacationForm.titel || !newVacationForm.startdatum || !newVacationForm.enddatum) {
+    if (!newVacationForm.titel || !newVacationForm.startdatum || !newVacationForm.enddatum || !newVacationForm.reiseziel_name) {
       alert('Bitte füllen Sie alle erforderlichen Felder aus')
       return
     }
@@ -471,19 +487,18 @@ export default function Home() {
         if (editingVacationId) {
           setVacations(vacations.map(v => v.id === editingVacationId ? data.data : v))
         } else {
-          // New vacation created - assign default travelers
+          // New vacation created - assign selected travelers
           const newVacationId = data.data.id
-          const defaultTravelers = allMitreisende.filter(m => m.is_default_member)
           
-          if (defaultTravelers.length > 0) {
-            // Assign default travelers to the new vacation
-            const defaultIds = defaultTravelers.map(m => m.id)
-            await fetch('/api/vacations/mitreisende', {
+          if (vacationMitreisende.length > 0) {
+            // Assign selected travelers to the new vacation
+            const selectedIds = vacationMitreisende.map(m => m.id)
+            await fetch('/api/mitreisende', {
               method: 'PUT',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 vacationId: newVacationId,
-                mitreisendeIds: defaultIds
+                mitreisendeIds: selectedIds
               })
             })
           }
@@ -857,7 +872,7 @@ export default function Home() {
                   />
                 </div>
                 <div>
-                  <Label htmlFor="reiseziel">Reiseziel</Label>
+                  <Label htmlFor="reiseziel">Reiseziel *</Label>
                   <Input
                     id="reiseziel"
                     placeholder="z.B. Schwarzwald"

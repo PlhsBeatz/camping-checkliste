@@ -19,6 +19,7 @@ export function MitreisendeManager({ vacationId, onMitreisendeChange }: Mitreise
   const [showAddDialog, setShowAddDialog] = useState(false)
   const [newMitreisenderName, setNewMitreisenderName] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [initialLoadDone, setInitialLoadDone] = useState(false)
 
   // Lade alle Mitreisenden
   useEffect(() => {
@@ -28,15 +29,28 @@ export function MitreisendeManager({ vacationId, onMitreisendeChange }: Mitreise
         const data = await res.json()
         if (data.success) {
           setAllMitreisende(data.data)
+          
+          // Wenn kein vacationId (= Erstell-Modus), wähle Standard-Mitreisende vor
+          if (!vacationId && !initialLoadDone) {
+            const defaultIds = data.data
+              .filter((m: Mitreisender) => m.is_default_member)
+              .map((m: Mitreisender) => m.id)
+            setVacationMitreisende(defaultIds)
+            if (onMitreisendeChange) {
+              const defaultMitreisende = data.data.filter((m: Mitreisender) => m.is_default_member)
+              onMitreisendeChange(defaultMitreisende)
+            }
+            setInitialLoadDone(true)
+          }
         }
       } catch (error) {
         console.error('Failed to fetch mitreisende:', error)
       }
     }
     fetchAllMitreisende()
-  }, [])
+  }, [vacationId, initialLoadDone, onMitreisendeChange])
 
-  // Lade Mitreisende für den aktuellen Urlaub
+  // Lade Mitreisende für den aktuellen Urlaub (nur im Edit-Modus)
   useEffect(() => {
     if (!vacationId) return
     
@@ -59,31 +73,37 @@ export function MitreisendeManager({ vacationId, onMitreisendeChange }: Mitreise
   }, [vacationId, onMitreisendeChange])
 
   const handleToggleMitreisender = async (mitreisenderId: string) => {
-    if (!vacationId) return
-
     const newSelection = vacationMitreisende.includes(mitreisenderId)
       ? vacationMitreisende.filter(id => id !== mitreisenderId)
       : [...vacationMitreisende, mitreisenderId]
 
     setVacationMitreisende(newSelection)
 
-    // Speichere die Auswahl
-    try {
-      const res = await fetch('/api/mitreisende', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          vacationId,
-          mitreisendeIds: newSelection
+    // Wenn vacationId vorhanden (Edit-Modus), speichere sofort
+    if (vacationId) {
+      try {
+        const res = await fetch('/api/mitreisende', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            vacationId,
+            mitreisendeIds: newSelection
+          })
         })
-      })
-      const data = await res.json()
-      if (data.success && onMitreisendeChange) {
+        const data = await res.json()
+        if (data.success && onMitreisendeChange) {
+          const selectedMitreisende = allMitreisende.filter(m => newSelection.includes(m.id))
+          onMitreisendeChange(selectedMitreisende)
+        }
+      } catch (error) {
+        console.error('Failed to update vacation mitreisende:', error)
+      }
+    } else {
+      // Im Erstell-Modus nur lokal speichern
+      if (onMitreisendeChange) {
         const selectedMitreisende = allMitreisende.filter(m => newSelection.includes(m.id))
         onMitreisendeChange(selectedMitreisende)
       }
-    } catch (error) {
-      console.error('Failed to update vacation mitreisende:', error)
     }
   }
 
@@ -115,10 +135,8 @@ export function MitreisendeManager({ vacationId, onMitreisendeChange }: Mitreise
         setNewMitreisenderName('')
         setShowAddDialog(false)
         
-        // Automatisch zur Urlaubsauswahl hinzufügen
-        if (vacationId) {
-          await handleToggleMitreisender(data.data.id)
-        }
+        // Automatisch zur Auswahl hinzufügen
+        await handleToggleMitreisender(data.data.id)
       } else {
         alert('Fehler beim Erstellen des Mitreisenden: ' + data.error)
       }
@@ -193,7 +211,6 @@ export function MitreisendeManager({ vacationId, onMitreisendeChange }: Mitreise
                   id={`mitreisender-${mitreisender.id}`}
                   checked={vacationMitreisende.includes(mitreisender.id)}
                   onCheckedChange={() => handleToggleMitreisender(mitreisender.id)}
-                  disabled={!vacationId}
                 />
                 <label
                   htmlFor={`mitreisender-${mitreisender.id}`}
@@ -212,7 +229,7 @@ export function MitreisendeManager({ vacationId, onMitreisendeChange }: Mitreise
 
       {!vacationId && allMitreisende.length > 0 && (
         <p className="text-xs text-muted-foreground">
-          Wählen Sie zuerst einen Urlaub aus, um Mitreisende zuzuordnen
+          💡 Standard-Mitreisende sind automatisch ausgewählt
         </p>
       )}
     </div>
