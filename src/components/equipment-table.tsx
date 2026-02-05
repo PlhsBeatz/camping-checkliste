@@ -208,7 +208,7 @@ export function EquipmentTable({
                   <SelectItem value="none">Kein Transport</SelectItem>
                   {transportVehicles.map(tv => (
                     <SelectItem key={tv.id} value={tv.id}>
-                      {tv.icon} {tv.name}
+                      {tv.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
