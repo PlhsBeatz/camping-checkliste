@@ -789,7 +789,8 @@ export default function Home() {
       }
     }
   
-  const handleCloseEquipmentDialog = () => {
+  // fix: comment to force new commit and build
+    const handleCloseEquipmentDialog = () => {
     setShowEquipmentDialog(false)
     setEditingEquipmentId(null)
     setNewEquipmentForm({
