@@ -16,6 +16,7 @@ import { Vacation, PackingItem, EquipmentItem, Category, TransportVehicle, Mitre
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { EquipmentTable } from '@/components/equipment-table'
 
 interface CategoryWithMain extends Category {
   hauptkategorie_titel: string
@@ -1534,75 +1535,15 @@ export default function Home() {
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="space-y-3">
-                  {equipmentItems.map(item => (
-                    <Card key={item.id} className="overflow-hidden">
-                      <CardHeader className="pb-3">
-                        <div className="flex justify-between items-start gap-4">
-                          <div className="flex-grow">
-                            <CardTitle className="text-base">{item.was}</CardTitle>
-                            <CardDescription className="text-xs space-y-1">
-                              <div>{item.status}</div>
-                              {item.transport_name && (
-                                <div className="text-xs">🚗 {item.transport_name}</div>
-                              )}
-                            </CardDescription>
-                          </div>
-                          <div className="flex gap-2">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleEditEquipment(item)}
-                            >
-                              <Edit2 className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleDeleteEquipment(item.id)}
-                              disabled={isLoading}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </div>
-                      </CardHeader>
-                      <CardContent className="pb-3 space-y-2 text-sm">
-                        {item.einzelgewicht && (
-                          <p><span className="font-medium">Gewicht:</span> {formatGermanNumber(item.einzelgewicht)} kg</p>
-                        )}
-                        <p><span className="font-medium">Standard-Anzahl:</span> {item.standard_anzahl}</p>
-                        {item.details && (
-                          <p><span className="font-medium">Details:</span> {item.details}</p>
-                        )}
-                        {item.links && item.links.length > 0 && (
-                          <div>
-                            <span className="font-medium">Links:</span>
-                            <div className="flex flex-wrap gap-2 mt-1">
-                              {item.links.map((link, idx) => (
-                                <a
-                                  key={link.id}
-                                  href={link.url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 underline"
-                                >
-                                  <LinkIcon className="h-3 w-3" />
-                                  Link {idx + 1}
-                                </a>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </CardContent>
-                    </Card>
-                  ))}
-                  {equipmentItems.length === 0 && (
-                    <div className="text-center py-8 text-muted-foreground">
-                      <p>Keine Gegenstände vorhanden. Erstellen Sie einen neuen Gegenstand!</p>
-                    </div>
-                  )}
-                </div>
+                <EquipmentTable
+                  equipmentItems={equipmentItems}
+                  categories={categories}
+                  mainCategories={mainCategories}
+                  transportVehicles={transportVehicles}
+                  tags={tags}
+                  onEdit={handleEditEquipment}
+                  onDelete={handleDeleteEquipment}
+                />
               </CardContent>
             </Card>
           </TabsContent>
