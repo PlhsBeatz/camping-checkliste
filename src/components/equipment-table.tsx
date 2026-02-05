@@ -73,7 +73,7 @@ export function EquipmentTable({
     if (!item.tags || item.tags.length === 0) return []
     return item.tags.map(tagId => {
       const tag = tags.find(t => t.id === tagId.id)
-      return tag?.name || ''
+      return tag?.titel || ''
     }).filter(Boolean)
   }
 
