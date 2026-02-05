@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -48,18 +48,18 @@ export function EquipmentTable({
   const [showFilters, setShowFilters] = useState(false)
 
   // Get category name by ID
-  const getCategoryName = (categoryId: string) => {
+  const getCategoryName = useCallback((categoryId: string) => {
     const category = categories.find(c => c.id === categoryId)
     return category?.titel || 'Unbekannt'
-  }
+  }, [categories])
 
   // Get main category name by category ID
-  const getMainCategoryName = (categoryId: string) => {
+  const getMainCategoryName = useCallback((categoryId: string) => {
     const category = categories.find(c => c.id === categoryId)
     if (!category) return 'Unbekannt'
     const mainCategory = mainCategories.find(mc => mc.id === category.hauptkategorie_id)
     return mainCategory?.titel || 'Unbekannt'
-  }
+  }, [categories, mainCategories])
 
   // Get transport name by ID
   const getTransportName = (transportId: string | null) => {
@@ -120,7 +120,7 @@ export function EquipmentTable({
 
       return true
     })
-  }, [equipmentItems, searchTerm, filterMainCategory, filterTransport, filterStatus, categories, mainCategories])
+  }, [equipmentItems, searchTerm, filterMainCategory, filterTransport, filterStatus, mainCategories, getMainCategoryName])
 
   // Group by category
   const groupedItems = useMemo(() => {
@@ -141,7 +141,7 @@ export function EquipmentTable({
         categoryName,
         items: groups[categoryName]
       }))
-  }, [filteredItems, categories])
+  }, [filteredItems, getCategoryName])
 
   // Status badge colors
   const getStatusColor = (status: string) => {
