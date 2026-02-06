@@ -17,6 +17,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { EquipmentTable } from '@/components/equipment-table'
+import { PackingSettingsSidebar } from '@/components/packing-settings-sidebar'
 
 interface CategoryWithMain extends Category {
   hauptkategorie_titel: string
@@ -46,6 +47,9 @@ export default function Home() {
   const [categorySearchTerm, setCategorySearchTerm] = useState('')
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false)
   const [equipmentSearchTerm, setEquipmentSearchTerm] = useState('')
+  const [selectedPackProfile, setSelectedPackProfile] = useState<string | null>(null)
+  const [hidePackedItems, setHidePackedItems] = useState(false)
+  const [showPackSettings, setShowPackSettings] = useState(false)
   const [packingItemForm, setPackingItemForm] = useState({
     gegenstandId: '',
     anzahl: '1',
@@ -1177,11 +1181,23 @@ export default function Home() {
                   {currentVacation ? (
                     <PackingList
                       items={packingItems}
-                      onToggleItem={handleToggleItem}
+                      onToggle={handleTogglePackingItem}
                       onToggleMitreisender={handleToggleMitreisender}
-                      onEditItem={handleEditPackingItem}
-                      onDeleteItem={handleDeletePackingItem}
-                      hidePackedItems={false}
+                      onEdit={handleEditPackingItem}
+                      onDelete={handleDeletePackingItem}
+                      selectedProfile={selectedPackProfile}
+                      hidePackedItems={hidePackedItems}
+                      onOpenSettings={() => setShowPackSettings(true)}
+                    />
+
+                    <PackingSettingsSidebar
+                      isOpen={showPackSettings}
+                      onClose={() => setShowPackSettings(false)}
+                      mitreisende={vacationMitreisende}
+                      selectedProfile={selectedPackProfile}
+                      onProfileChange={setSelectedPackProfile}
+                      hidePackedItems={hidePackedItems}
+                      onHidePackedChange={setHidePackedItems}
                     />
                   ) : (
                     <p className="text-muted-foreground">Keine Urlaube vorhanden</p>
