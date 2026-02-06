@@ -807,7 +807,7 @@ export default function Home() {
       setIsLoading(false)
     }
   }
-  
+
   const handleCloseEquipmentDialog = () => {
     setShowEquipmentDialog(false)
     setEditingEquipmentId(null)
