@@ -751,62 +751,62 @@ export default function Home() {
     }
   }
 
-    const handleGeneratePackingList = async (equipmentIds: string[]) => {
-      if (!selectedVacationId) return
+  const handleGeneratePackingList = async (equipmentIds: string[]) => {
+    if (!selectedVacationId) return
 
-      setIsLoading(true)
-      try {
-        // Get default travelers for the vacation
-        const defaultTravelersRes = await fetch(`/api/mitreisende?vacationId=${selectedVacationId}`)
-        const defaultTravelersData = await defaultTravelersRes.json()
-        const defaultTravelers = defaultTravelersData.success ? defaultTravelersData.data : []
+    setIsLoading(true)
+    try {
+      // Get default travelers for the vacation
+      const defaultTravelersRes = await fetch(`/api/mitreisende?vacationId=${selectedVacationId}`)
+      const defaultTravelersData = await defaultTravelersRes.json()
+      const defaultTravelers = defaultTravelersData.success ? defaultTravelersData.data : []
 
-        // Create packing items for each equipment item
-        for (const equipmentId of equipmentIds) {
-          const equipment = equipmentItems.find(e => e.id === equipmentId)
-          if (!equipment) continue
+      // Create packing items for each equipment item
+      for (const equipmentId of equipmentIds) {
+        const equipment = equipmentItems.find(e => e.id === equipmentId)
+        if (!equipment) continue
 
-          // Determine mitreisende based on equipment settings
-          let mitreisende: string[] = []
-          if (equipment.mitreisenden_typ === 'alle') {
-            mitreisende = defaultTravelers.map((m: Mitreisender) => m.id)
-          } else if (equipment.mitreisenden_typ === 'ausgewaehlte' && equipment.standard_mitreisende) {
-            mitreisende = equipment.standard_mitreisende
-          }
+        // Determine mitreisende based on equipment settings
+        let mitreisende: string[] = []
+        if (equipment.mitreisenden_typ === 'alle') {
+          mitreisende = defaultTravelers.map((m: Mitreisender) => m.id)
+        } else if (equipment.mitreisenden_typ === 'ausgewaehlte' && equipment.standard_mitreisende) {
+          mitreisende = equipment.standard_mitreisende
+        }
 
-          const res = await fetch('/api/packing-items', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              vacationId: selectedVacationId,
-              gegenstandId: equipmentId,
-              anzahl: equipment.standard_anzahl || 1,
-              bemerkung: '',
-              transportId: equipment.transport_id || null,
-              mitreisende
-            })
+        const res = await fetch('/api/packing-items', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            vacationId: selectedVacationId,
+            gegenstandId: equipmentId,
+            anzahl: equipment.standard_anzahl || 1,
+            bemerkung: '',
+            transportId: equipment.transport_id || null,
+            mitreisende
           })
+        })
 
-          if (!res.ok) {
-            console.error(`Failed to add equipment ${equipment.was}`)
-          }
+        if (!res.ok) {
+          console.error(`Failed to add equipment ${equipment.was}`)
         }
-
-        // Refresh packing items
-        const refreshRes = await fetch(`/api/packing-items?vacationId=${selectedVacationId}`)
-        const refreshData = await refreshRes.json()
-        if (refreshData.success) {
-          setPackingItems(refreshData.data)
-        }
-
-        alert(`${equipmentIds.length} Gegenstände zur Packliste hinzugefügt!`)
-      } catch (error) {
-        console.error('Failed to generate packing list:', error)
-        alert('Fehler beim Generieren der Packliste')
-      } finally {
-        setIsLoading(false)
       }
+
+      // Refresh packing items
+      const refreshRes = await fetch(`/api/packing-items?vacationId=${selectedVacationId}`)
+      const refreshData = await refreshRes.json()
+      if (refreshData.success) {
+        setPackingItems(refreshData.data)
+      }
+
+      alert(`${equipmentIds.length} Gegenstände zur Packliste hinzugefügt!`)
+    } catch (error) {
+      console.error('Failed to generate packing list:', error)
+      alert('Fehler beim Generieren der Packliste')
+    } finally {
+      setIsLoading(false)
     }
+  }
   
   const handleCloseEquipmentDialog = () => {
     setShowEquipmentDialog(false)
