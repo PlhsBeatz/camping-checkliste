@@ -1,6 +1,5 @@
 'use client'
 
-import { Layout } from '@/components/layout'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -836,8 +835,8 @@ export default function Home() {
   const packingPercentage = totalItems > 0 ? Math.round((packedCount / totalItems) * 100) : 0
 
   return (
-    <Layout>
-      <div className="space-y-8">
+    <div className="min-h-screen bg-background">
+      <div className="container mx-auto p-4 space-y-8">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
@@ -1696,6 +1695,7 @@ export default function Home() {
         vacationId={selectedVacationId || ''}
         onGenerate={handleGeneratePackingList}
       />
-    </Layout>
+      </div>
+    </div>
   )
 }
