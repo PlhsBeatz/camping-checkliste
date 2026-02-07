@@ -1177,26 +1177,26 @@ export default function Home() {
                     </div>
                   )}
                   {currentVacation ? (
-                    <PackingList
-                      items={packingItems}
-                      onToggle={handleTogglePackingItem}
-                      onToggleMitreisender={handleToggleMitreisender}
-                      onEdit={handleEditPackingItem}
-                      onDelete={handleDeletePackingItem}
-                      selectedProfile={selectedPackProfile}
-                      hidePackedItems={hidePackedItems}
-                      onOpenSettings={() => setShowPackSettings(true)}
-                    />
+                    <>
+                      <PackingList
+                        items={packingItems}
+                        onToggleItem={handleToggleItem}
+                        onToggleMitreisender={handleToggleMitreisender}
+                        onEditItem={handleEditPackingItem}
+                        onDeleteItem={handleDeletePackingItem}
+                        hidePackedItems={hidePackedItems}
+                      />
 
-                    <PackingSettingsSidebar
-                      isOpen={showPackSettings}
-                      onClose={() => setShowPackSettings(false)}
-                      mitreisende={vacationMitreisende}
-                      selectedProfile={selectedPackProfile}
-                      onProfileChange={setSelectedPackProfile}
-                      hidePackedItems={hidePackedItems}
-                      onHidePackedChange={setHidePackedItems}
-                    />
+                      <PackingSettingsSidebar
+                        isOpen={showPackSettings}
+                        onClose={() => setShowPackSettings(false)}
+                        mitreisende={vacationMitreisende}
+                        selectedProfile={selectedPackProfile}
+                        onProfileChange={setSelectedPackProfile}
+                        hidePackedItems={hidePackedItems}
+                        onHidePackedChange={setHidePackedItems}
+                      />
+                    </>
                   ) : (
                     <p className="text-muted-foreground">Keine Urlaube vorhanden</p>
                   )}
