@@ -334,7 +334,7 @@ export function PackingList({
             <CardTitle className="text-lg">{mainCategory}</CardTitle>
           </CardHeader>
           <CardContent className="p-0">
-            {itemsByMainCategory[mainCategory].map(item => (
+            {itemsByMainCategory[mainCategory]?.map(item => (
               <PackingItem
                 key={item.id}
                 id={item.id}
