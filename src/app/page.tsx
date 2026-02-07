@@ -1184,7 +1184,9 @@ export default function Home() {
                         onToggleMitreisender={handleToggleMitreisender}
                         onEdit={handleEditPackingItem}
                         onDelete={handleDeletePackingItem}
+                        selectedProfile={selectedPackProfile}
                         hidePackedItems={hidePackedItems}
+                        onOpenSettings={() => setShowPackSettings(true)}
                       />
 
                       <PackingSettingsSidebar
