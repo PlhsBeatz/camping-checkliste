@@ -17,6 +17,7 @@ interface MarkAllConfirmationDialogProps {
   onConfirm: () => void
   _itemName: string
   travelerNames: string[]
+  isUnmarkMode?: boolean
 }
 
 export function MarkAllConfirmationDialog({
@@ -24,7 +25,8 @@ export function MarkAllConfirmationDialog({
   onClose,
   onConfirm,
   _itemName,
-  travelerNames
+  travelerNames,
+  isUnmarkMode = false
 }: MarkAllConfirmationDialogProps) {
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -33,9 +35,12 @@ export function MarkAllConfirmationDialog({
           <div className="mx-auto w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center mb-4">
             <CheckCheck className="h-6 w-6 text-blue-600" />
           </div>
-          <DialogTitle className="text-center">Für alle abhaken?</DialogTitle>
+          <DialogTitle className="text-center">{isUnmarkMode ? 'Für alle zurücksetzen?' : 'Für alle abhaken?'}</DialogTitle>
           <DialogDescription className="text-center">
-            Dieser Gegenstand wird für {travelerNames.join(', ')} als &quot;gepackt&quot; markiert.
+            {isUnmarkMode 
+              ? `Dieser Gegenstand wird für ${travelerNames.join(', ')} als "nicht gepackt" zurückgesetzt.`
+              : `Dieser Gegenstand wird für ${travelerNames.join(', ')} als "gepackt" markiert.`
+            }
           </DialogDescription>
         </DialogHeader>
         
@@ -54,7 +59,7 @@ export function MarkAllConfirmationDialog({
             }}
             className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700"
           >
-            Ja, für alle
+            {isUnmarkMode ? 'Ja, zurücksetzen' : 'Ja, für alle'}
           </Button>
         </DialogFooter>
       </DialogContent>

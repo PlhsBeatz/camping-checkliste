@@ -127,7 +127,7 @@ const PackingItem: React.FC<PackingItemProps> = ({
     }
   };
 
-  // Handle "mark all" toggle (for Zentral/Alle mode)
+  // Handle "mark all" or "unmark all" toggle (for Zentral/Alle mode)
   const handleMarkAllToggle = () => {
     if (selectedProfile === null && mitreisenden_typ !== 'pauschal') {
       setShowMarkAllDialog(true);
@@ -138,6 +138,7 @@ const PackingItem: React.FC<PackingItemProps> = ({
     if (onMarkAllConfirm) {
       onMarkAllConfirm();
     }
+    setShowMarkAllDialog(false);
   };
 
   // Hide if packed
@@ -249,6 +250,7 @@ const PackingItem: React.FC<PackingItemProps> = ({
           onConfirm={confirmMarkAll}
           _itemName={was}
           travelerNames={mitreisende.map(m => m.mitreisender_name)}
+          isUnmarkMode={isFullyPacked}
         />
       )}
     </>
@@ -325,37 +327,70 @@ export function PackingList({
 
   const progressPercentage = totalCount > 0 ? Math.round((packedCount / totalCount) * 100) : 0;
 
-  // Handle mark all for an item - FIXED to actually mark all
+  // Handle mark all or unmark all for an item
   const handleMarkAllForItem = (item: DBPackingItem) => {
     if (item.mitreisende) {
-      const travelerNames: string[] = [];
-      const travelersToMark: Array<{ id: string; name: string }> = [];
+      // Check if all are already packed
+      const allPacked = item.mitreisende.every(m => m.gepackt);
       
-      // Collect travelers that need to be marked
-      item.mitreisende.forEach(m => {
-        if (!m.gepackt) {
-          travelersToMark.push({ id: m.mitreisender_id, name: m.mitreisender_name });
+      if (allPacked) {
+        // Unmark all
+        const travelerNames: string[] = [];
+        const travelersToUnmark: Array<{ id: string; name: string }> = [];
+        
+        item.mitreisende.forEach(m => {
+          travelersToUnmark.push({ id: m.mitreisender_id, name: m.mitreisender_name });
           travelerNames.push(m.mitreisender_name);
+        });
+
+        // Unmark all travelers
+        travelersToUnmark.forEach(t => {
+          onToggleMitreisender(item.id, t.id, true);
+        });
+
+        // Show undo toast
+        if (hidePackedItems && travelerNames.length > 0) {
+          setUndoToast({
+            visible: true,
+            itemName: `${item.was} zurückgesetzt (${travelerNames.join(', ')})`,
+            action: () => {
+              // Undo: mark all that were just unmarked
+              travelersToUnmark.forEach(t => {
+                onToggleMitreisender(item.id, t.id, false);
+              });
+            }
+          });
         }
-      });
-
-      // Mark all travelers - do this in a single batch
-      travelersToMark.forEach(t => {
-        onToggleMitreisender(item.id, t.id, false);
-      });
-
-      // Show undo toast if hide-packed is active and items were marked
-      if (hidePackedItems && travelerNames.length > 0) {
-        setUndoToast({
-          visible: true,
-          itemName: `${item.was} (${travelerNames.join(', ')})`,
-          action: () => {
-            // Undo: unmark all that were just marked
-            travelersToMark.forEach(t => {
-              onToggleMitreisender(item.id, t.id, true);
-            });
+      } else {
+        // Mark all unpacked travelers
+        const travelerNames: string[] = [];
+        const travelersToMark: Array<{ id: string; name: string }> = [];
+        
+        item.mitreisende.forEach(m => {
+          if (!m.gepackt) {
+            travelersToMark.push({ id: m.mitreisender_id, name: m.mitreisender_name });
+            travelerNames.push(m.mitreisender_name);
           }
         });
+
+        // Mark all travelers
+        travelersToMark.forEach(t => {
+          onToggleMitreisender(item.id, t.id, false);
+        });
+
+        // Show undo toast
+        if (hidePackedItems && travelerNames.length > 0) {
+          setUndoToast({
+            visible: true,
+            itemName: `${item.was} (${travelerNames.join(', ')})`,
+            action: () => {
+              // Undo: unmark all that were just marked
+              travelersToMark.forEach(t => {
+                onToggleMitreisender(item.id, t.id, true);
+              });
+            }
+          });
+        }
       }
     }
   };
