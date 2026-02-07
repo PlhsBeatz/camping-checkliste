@@ -4,7 +4,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
-import { Edit2, Trash2, Truck, Menu } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { MoreVertical, Edit2, Trash2, Truck, Menu } from "lucide-react";
 import { useMemo, useState } from "react";
 import { PackingItem as DBPackingItem } from "@/lib/db";
 import { MarkAllConfirmationDialog } from "./mark-all-confirmation-dialog";
@@ -28,7 +34,7 @@ interface PackingItemProps {
   selectedProfile: string | null;
   hidePackedItems: boolean;
   onMarkAllConfirm?: () => void;
-  onShowToast?: (itemName: string, travelerName?: string) => void;
+  onShowToast?: (itemName: string, travelerName: string | undefined, undoAction: () => void) => void;
 }
 
 const PackingItem: React.FC<PackingItemProps> = ({
@@ -80,12 +86,28 @@ const PackingItem: React.FC<PackingItemProps> = ({
     return mitreisende.find(m => m.mitreisender_id === selectedProfile);
   }, [selectedProfile, mitreisende]);
 
+  // Check if item should be hidden in individual profile view
+  const shouldHideInProfileView = useMemo(() => {
+    if (!hidePackedItems) return false;
+    if (selectedProfile && selectedTravelerItem) {
+      // In individual profile view, hide if packed for THIS profile
+      return selectedTravelerItem.gepackt;
+    }
+    // In Zentral/Alle view, hide if fully packed
+    return isFullyPacked;
+  }, [hidePackedItems, selectedProfile, selectedTravelerItem, isFullyPacked]);
+
   // Handle pauschal toggle
   const handlePauschalToggle = () => {
     if (canTogglePauschal) {
+      const wasUnpacked = !gepackt;
       onToggle(id);
-      if (hidePackedItems && !gepackt && onShowToast) {
-        onShowToast(was);
+      if (hidePackedItems && wasUnpacked && onShowToast) {
+        // Create undo action
+        const undoAction = () => {
+          onToggle(id); // Toggle back
+        };
+        onShowToast(was, undefined, undoAction);
       }
     }
   };
@@ -93,9 +115,14 @@ const PackingItem: React.FC<PackingItemProps> = ({
   // Handle individual toggle (for selected profile)
   const handleIndividualToggle = () => {
     if (selectedProfile && selectedTravelerItem) {
+      const wasUnpacked = !selectedTravelerItem.gepackt;
       onToggleMitreisender(id, selectedProfile, selectedTravelerItem.gepackt);
-      if (hidePackedItems && !selectedTravelerItem.gepackt && onShowToast) {
-        onShowToast(was, selectedTravelerItem.mitreisender_name);
+      if (hidePackedItems && wasUnpacked && onShowToast) {
+        // Create undo action
+        const undoAction = () => {
+          onToggleMitreisender(id, selectedProfile, !selectedTravelerItem.gepackt);
+        };
+        onShowToast(was, selectedTravelerItem.mitreisender_name, undoAction);
       }
     }
   };
@@ -113,8 +140,8 @@ const PackingItem: React.FC<PackingItemProps> = ({
     }
   };
 
-  // Hide if packed and hide mode is active
-  if (hidePackedItems && isFullyPacked) {
+  // Hide if packed
+  if (shouldHideInProfileView) {
     return null;
   }
 
@@ -186,24 +213,31 @@ const PackingItem: React.FC<PackingItemProps> = ({
             )}
           </div>
 
-          <div className="flex items-center space-x-1">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8"
-              onClick={() => onEdit(fullItem)}
-            >
-              <Edit2 className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 text-destructive"
-              onClick={() => onDelete(id)}
-            >
-              <Trash2 className="h-4 w-4" />
-            </Button>
-          </div>
+          {/* Three-dot menu for edit/delete */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+              >
+                <MoreVertical className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => onEdit(fullItem)}>
+                <Edit2 className="h-4 w-4 mr-2" />
+                Bearbeiten
+              </DropdownMenuItem>
+              <DropdownMenuItem 
+                onClick={() => onDelete(id)}
+                className="text-destructive focus:text-destructive"
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Löschen
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
@@ -242,7 +276,7 @@ export function PackingList({
   hidePackedItems,
   onOpenSettings
 }: PackingListProps) {
-  const [undoToast, setUndoToast] = useState<{ visible: boolean; itemName: string; travelerName?: string; action: () => void } | null>(null);
+  const [undoToast, setUndoToast] = useState<{ visible: boolean; itemName: string; action: () => void } | null>(null);
   const [activeMainCategory, setActiveMainCategory] = useState<string>('');
 
   // Group items by main category and category
@@ -291,31 +325,34 @@ export function PackingList({
 
   const progressPercentage = totalCount > 0 ? Math.round((packedCount / totalCount) * 100) : 0;
 
-  // Handle mark all for an item
+  // Handle mark all for an item - FIXED to actually mark all
   const handleMarkAllForItem = (item: DBPackingItem) => {
     if (item.mitreisende) {
       const travelerNames: string[] = [];
+      const travelersToMark: Array<{ id: string; name: string }> = [];
       
-      // Mark all travelers for this item
+      // Collect travelers that need to be marked
       item.mitreisende.forEach(m => {
         if (!m.gepackt) {
-          onToggleMitreisender(item.id, m.mitreisender_id, false);
+          travelersToMark.push({ id: m.mitreisender_id, name: m.mitreisender_name });
           travelerNames.push(m.mitreisender_name);
         }
+      });
+
+      // Mark all travelers - do this in a single batch
+      travelersToMark.forEach(t => {
+        onToggleMitreisender(item.id, t.id, false);
       });
 
       // Show undo toast if hide-packed is active and items were marked
       if (hidePackedItems && travelerNames.length > 0) {
         setUndoToast({
           visible: true,
-          itemName: item.was,
-          travelerName: travelerNames.join(', '),
+          itemName: `${item.was} (${travelerNames.join(', ')})`,
           action: () => {
             // Undo: unmark all that were just marked
-            item.mitreisende?.forEach(m => {
-              if (m.gepackt) {
-                onToggleMitreisender(item.id, m.mitreisender_id, true);
-              }
+            travelersToMark.forEach(t => {
+              onToggleMitreisender(item.id, t.id, true);
             });
           }
         });
@@ -323,18 +360,16 @@ export function PackingList({
     }
   };
 
-  const showToast = (itemName: string, travelerName?: string) => {
+  const showToast = (itemName: string, travelerName: string | undefined, undoAction: () => void) => {
+    const displayName = travelerName ? `${itemName} (${travelerName})` : itemName;
     setUndoToast({
       visible: true,
-      itemName,
-      travelerName,
-      action: () => {
-        // This will be set by the specific toggle handler
-      }
+      itemName: displayName,
+      action: undoAction
     });
   };
 
-  // Check if a category should be shown (has unpacked items or hidePackedItems is false)
+  // Check if a category should be shown - FIXED for individual profile view
   const shouldShowCategory = (categoryItems: DBPackingItem[]) => {
     if (!hidePackedItems) return true;
     
@@ -342,6 +377,14 @@ export function PackingList({
       if (item.mitreisenden_typ === 'pauschal') {
         return !item.gepackt;
       }
+      
+      // If in individual profile view, check only for that profile
+      if (selectedProfile) {
+        const travelerItem = item.mitreisende?.find(m => m.mitreisender_id === selectedProfile);
+        return travelerItem ? !travelerItem.gepackt : false;
+      }
+      
+      // In Zentral/Alle view, check if any traveler hasn't packed
       return item.mitreisende?.some(m => !m.gepackt) ?? false;
     });
   };
@@ -438,7 +481,7 @@ export function PackingList({
       {undoToast && (
         <UndoToast
           isVisible={undoToast.visible}
-          itemName={`${undoToast.itemName}${undoToast.travelerName ? ` (${undoToast.travelerName})` : ''}`}
+          itemName={undoToast.itemName}
           onUndo={undoToast.action}
           onDismiss={() => setUndoToast(null)}
         />
