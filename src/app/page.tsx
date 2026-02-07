@@ -1694,7 +1694,6 @@ export default function Home() {
         vacationId={selectedVacationId || ''}
         onGenerate={handleGeneratePackingList}
       />
-      </div>
     </div>
   )
 }
