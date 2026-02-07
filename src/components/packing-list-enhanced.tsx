@@ -256,14 +256,14 @@ export function PackingList({
   const { packedCount, totalCount } = useMemo(() => {
     return items.reduce((acc, item) => {
       if (item.mitreisenden_typ === 'pauschal') {
-        acc.total += 1;
-        if (item.gepackt) acc.packed += 1;
+        acc.totalCount += 1;
+        if (item.gepackt) acc.packedCount += 1;
       } else if (item.mitreisende) {
-        acc.total += item.mitreisende.length;
-        acc.packed += item.mitreisende.filter(m => m.gepackt).length;
+        acc.totalCount += item.mitreisende.length;
+        acc.packedCount += item.mitreisende.filter(m => m.gepackt).length;
       }
       return acc;
-    }, { packed: 0, total: 0 });
+    }, { packedCount: 0, totalCount: 0 });
   }, [items]);
 
   const progressPercentage = totalCount > 0 ? Math.round((packedCount / totalCount) * 100) : 0;
