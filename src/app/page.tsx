@@ -1180,10 +1180,10 @@ export default function Home() {
                     <>
                       <PackingList
                         items={packingItems}
-                        onToggleItem={handleToggleItem}
+                        onToggle={handleToggleItem}
                         onToggleMitreisender={handleToggleMitreisender}
-                        onEditItem={handleEditPackingItem}
-                        onDeleteItem={handleDeletePackingItem}
+                        onEdit={handleEditPackingItem}
+                        onDelete={handleDeletePackingItem}
                         hidePackedItems={hidePackedItems}
                       />
 
