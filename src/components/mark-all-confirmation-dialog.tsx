@@ -15,7 +15,7 @@ interface MarkAllConfirmationDialogProps {
   isOpen: boolean
   onClose: () => void
   onConfirm: () => void
-  itemName: string
+  _itemName: string
   travelerNames: string[]
 }
 

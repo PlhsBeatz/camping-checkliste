@@ -1,6 +1,6 @@
 'use client'
 
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+// Tabs components removed - not used in this component
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
@@ -71,7 +71,7 @@ const PackingItem: React.FC<PackingItemProps> = ({
 
   // Determine if checkbox should be enabled
   const canTogglePauschal = mitreisenden_typ === 'pauschal';
-  const canToggleIndividual = mitreisenden_typ !== 'pauschal' && selectedProfile !== null;
+  // canToggleIndividual logic is implicit in the conditional rendering
 
   // Get selected traveler's item
   const selectedTravelerItem = useMemo(() => {
