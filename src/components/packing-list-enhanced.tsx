@@ -253,7 +253,7 @@ export function PackingList({
   const mainCategories = Object.keys(itemsByMainCategory);
 
   // Calculate progress
-  const { packedCount, totalCount } = useMemo(() => {
+  const { packed, total } = useMemo(() => {
     return items.reduce((acc, item) => {
       if (item.mitreisenden_typ === 'pauschal') {
         acc.total += 1;
