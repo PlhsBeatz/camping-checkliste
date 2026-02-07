@@ -3,7 +3,7 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { PackingList } from '@/components/packing-list'
+import { PackingList } from '@/components/packing-list-enhanced'
 import { MitreisendeManager } from '@/components/mitreisende-manager'
 import { CategoryManager } from '@/components/category-manager'
 import { TravelersManager } from '@/components/travelers-manager'
