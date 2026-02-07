@@ -23,7 +23,7 @@ export function MarkAllConfirmationDialog({
   isOpen,
   onClose,
   onConfirm,
-  itemName,
+  _itemName,
   travelerNames
 }: MarkAllConfirmationDialogProps) {
   return (
