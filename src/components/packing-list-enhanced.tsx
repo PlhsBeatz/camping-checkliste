@@ -207,7 +207,7 @@ const PackingItem: React.FC<PackingItemProps> = ({
                 )}
                 {selectedProfile === null && (
                   <span className="text-xs text-blue-600 font-medium">
-                    {packedCount} von {totalCount}
+                    {packedCount}/{totalCount} Personen
                   </span>
                 )}
               </div>
@@ -261,6 +261,7 @@ interface PackingListProps {
   items: DBPackingItem[];
   onToggle: (id: string) => void;
   onToggleMitreisender: (packingItemId: string, mitreisenderId: string, currentStatus: boolean) => void;
+  onToggleMultipleMitreisende: (packingItemId: string, updates: Array<{ mitreisenderId: string; newStatus: boolean }>) => void;
   onEdit: (item: DBPackingItem) => void;
   onDelete: (id: string) => void;
   selectedProfile: string | null;
@@ -272,6 +273,7 @@ export function PackingList({
   items,
   onToggle,
   onToggleMitreisender,
+  onToggleMultipleMitreisende,
   onEdit,
   onDelete,
   selectedProfile,
@@ -336,58 +338,52 @@ export function PackingList({
       if (allPacked) {
         // Unmark all
         const travelerNames: string[] = [];
-        const travelersToUnmark: Array<{ id: string; name: string }> = [];
+        const updates: Array<{ mitreisenderId: string; newStatus: boolean }> = [];
         
         item.mitreisende.forEach(m => {
-          travelersToUnmark.push({ id: m.mitreisender_id, name: m.mitreisender_name });
+          updates.push({ mitreisenderId: m.mitreisender_id, newStatus: false });
           travelerNames.push(m.mitreisender_name);
         });
 
-        // Unmark all travelers
-        travelersToUnmark.forEach(t => {
-          onToggleMitreisender(item.id, t.id, true);
-        });
+        // Unmark all travelers in a single batch
+        onToggleMultipleMitreisende(item.id, updates);
 
-        // Show undo toast
+        // Show undo toast only if hidePackedItems is active
         if (hidePackedItems && travelerNames.length > 0) {
           setUndoToast({
             visible: true,
-            itemName: `${item.was} zurückgesetzt (${travelerNames.join(', ')})`,
+            itemName: `${item.was} (${travelerNames.join(', ')})`,
             action: () => {
               // Undo: mark all that were just unmarked
-              travelersToUnmark.forEach(t => {
-                onToggleMitreisender(item.id, t.id, false);
-              });
+              const undoUpdates = updates.map(u => ({ ...u, newStatus: true }));
+              onToggleMultipleMitreisende(item.id, undoUpdates);
             }
           });
         }
       } else {
         // Mark all unpacked travelers
         const travelerNames: string[] = [];
-        const travelersToMark: Array<{ id: string; name: string }> = [];
+        const updates: Array<{ mitreisenderId: string; newStatus: boolean }> = [];
         
         item.mitreisende.forEach(m => {
           if (!m.gepackt) {
-            travelersToMark.push({ id: m.mitreisender_id, name: m.mitreisender_name });
+            updates.push({ mitreisenderId: m.mitreisender_id, newStatus: true });
             travelerNames.push(m.mitreisender_name);
           }
         });
 
-        // Mark all travelers
-        travelersToMark.forEach(t => {
-          onToggleMitreisender(item.id, t.id, false);
-        });
+        // Mark all travelers in a single batch
+        onToggleMultipleMitreisende(item.id, updates);
 
-        // Show undo toast
+        // Show undo toast only if hidePackedItems is active
         if (hidePackedItems && travelerNames.length > 0) {
           setUndoToast({
             visible: true,
             itemName: `${item.was} (${travelerNames.join(', ')})`,
             action: () => {
               // Undo: unmark all that were just marked
-              travelersToMark.forEach(t => {
-                onToggleMitreisender(item.id, t.id, true);
-              });
+              const undoUpdates = updates.map(u => ({ ...u, newStatus: false }));
+              onToggleMultipleMitreisende(item.id, undoUpdates);
             }
           });
         }

@@ -349,6 +349,43 @@ export default function Home() {
     }
   }
 
+  // Handle toggling multiple mitreisende at once (for mark-all/unmark-all)
+  const handleToggleMultipleMitreisende = async (packingItemId: string, updates: Array<{ mitreisenderId: string; newStatus: boolean }>) => {
+    // Optimistically update UI in a single batch
+    const updatedPackingItems = packingItems.map(item => {
+      if (item.id === packingItemId && item.mitreisende) {
+        return {
+          ...item,
+          mitreisende: item.mitreisende.map(m => {
+            const update = updates.find(u => u.mitreisenderId === m.mitreisender_id)
+            return update ? { ...m, gepackt: update.newStatus } : m
+          })
+        }
+      }
+      return item
+    })
+    setPackingItems(updatedPackingItems)
+
+    // Send all updates to the server
+    try {
+      await Promise.all(updates.map(({ mitreisenderId, newStatus }) =>
+        fetch('/api/packing-items/toggle-mitreisender', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            packingItemId, 
+            mitreisenderId, 
+            gepackt: newStatus 
+          }),
+        })
+      ))
+    } catch (error) {
+      console.error('Failed to update mitreisende:', error)
+      // Revert on error
+      setPackingItems(packingItems)
+    }
+  }
+
   const handleAddPackingItem = async () => {
     if (!packingItemForm.gegenstandId || !selectedVacationId) {
       alert('Bitte wählen Sie einen Gegenstand aus')
@@ -1202,6 +1239,7 @@ export default function Home() {
                         items={packingItems}
                         onToggle={handleToggleItem}
                         onToggleMitreisender={handleToggleMitreisender}
+                        onToggleMultipleMitreisende={handleToggleMultipleMitreisende}
                         onEdit={handleEditPackingItem}
                         onDelete={handleDeletePackingItem}
                         selectedProfile={selectedPackProfile}
