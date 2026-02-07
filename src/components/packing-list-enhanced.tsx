@@ -389,7 +389,7 @@ export function PackingList({
 
         {mainCategories.map(mainCat => (
           <TabsContent key={mainCat} value={mainCat} className="space-y-4 mt-4">
-            {Object.entries(itemsByMainCategory[mainCat]).map(([category, categoryItems]) => {
+            {Object.entries(itemsByMainCategory[mainCat] ?? {}).map(([category, categoryItems]) => {
               if (!shouldShowCategory(categoryItems)) return null;
               
               return (
