@@ -101,11 +101,14 @@ const PackingItem: React.FC<PackingItemProps> = ({
   const handlePauschalToggle = () => {
     if (canTogglePauschal) {
       const wasUnpacked = !gepackt;
-      onToggle(id);
+      const itemId = id; // Capture id in closure
+      onToggle(itemId);
       if (hidePackedItems && wasUnpacked && onShowToast) {
-        // Create undo action
+        // Create undo action - use setTimeout to ensure state has updated
         const undoAction = () => {
-          onToggle(id); // Toggle back
+          setTimeout(() => {
+            onToggle(itemId); // Toggle back
+          }, 0);
         };
         onShowToast(was, undefined, undoAction);
       }
@@ -116,11 +119,16 @@ const PackingItem: React.FC<PackingItemProps> = ({
   const handleIndividualToggle = () => {
     if (selectedProfile && selectedTravelerItem) {
       const wasUnpacked = !selectedTravelerItem.gepackt;
-      onToggleMitreisender(id, selectedProfile, selectedTravelerItem.gepackt);
+      const itemId = id;
+      const profileId = selectedProfile;
+      const currentStatus = selectedTravelerItem.gepackt;
+      onToggleMitreisender(itemId, profileId, currentStatus);
       if (hidePackedItems && wasUnpacked && onShowToast) {
-        // Create undo action
+        // Create undo action - use setTimeout to ensure state has updated
         const undoAction = () => {
-          onToggleMitreisender(id, selectedProfile, !selectedTravelerItem.gepackt);
+          setTimeout(() => {
+            onToggleMitreisender(itemId, profileId, !currentStatus);
+          }, 0);
         };
         onShowToast(was, selectedTravelerItem.mitreisender_name, undoAction);
       }
