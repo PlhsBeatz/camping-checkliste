@@ -20,13 +20,13 @@ export function UndoToast({
   duration = 5000
 }: UndoToastProps) {
   useEffect(() => {
-    if (isVisible) {
-      const timer = setTimeout(() => {
-        onDismiss()
-      }, duration)
-      
-      return () => clearTimeout(timer)
-    }
+    if (!isVisible) return
+    
+    const timer = setTimeout(() => {
+      onDismiss()
+    }, duration)
+    
+    return () => clearTimeout(timer)
   }, [isVisible, duration, onDismiss])
 
   if (!isVisible) return null
