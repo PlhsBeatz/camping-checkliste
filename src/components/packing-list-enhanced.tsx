@@ -268,7 +268,10 @@ export function PackingList({
   // Set initial active tab
   useMemo(() => {
     if (mainCategories.length > 0 && !activeMainCategory) {
-      setActiveMainCategory(mainCategories[0]);
+      const firstCategory = mainCategories[0];
+      if (firstCategory) {  // Type guard to ensure it's not undefined
+        setActiveMainCategory(firstCategory);
+      }
     }
   }, [mainCategories, activeMainCategory]);
 
