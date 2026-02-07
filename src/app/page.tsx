@@ -121,9 +121,29 @@ export default function Home() {
       }
     }
     fetchPackingItems()
+   }, [selectedVacationId])
+
+  // Load mitreisende for selected vacation
+  useEffect(() => {
+    const fetchVacationMitreisende = async () => {
+      if (selectedVacationId) {
+        try {
+          const res = await fetch(`/api/mitreisende?vacationId=${selectedVacationId}`)
+          const data = await res.json()
+          if (data.success) {
+            setVacationMitreisende(data.data)
+          }
+        } catch (error) {
+          console.error('Failed to fetch vacation mitreisende:', error)
+        }
+      } else {
+        setVacationMitreisende([])
+      }
+    }
+    fetchVacationMitreisende()
   }, [selectedVacationId])
 
-  // Fetch Equipment Items
+  // Load equipment items
   useEffect(() => {
     const fetchEquipmentItems = async () => {
       try {

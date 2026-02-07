@@ -1,7 +1,7 @@
 'use client'
 
-// Tabs components removed - not used in this component
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { Edit2, Trash2, Truck, Menu } from "lucide-react";
@@ -28,6 +28,7 @@ interface PackingItemProps {
   selectedProfile: string | null;
   hidePackedItems: boolean;
   onMarkAllConfirm?: () => void;
+  onShowToast?: (itemName: string, travelerName?: string) => void;
 }
 
 const PackingItem: React.FC<PackingItemProps> = ({
@@ -47,7 +48,8 @@ const PackingItem: React.FC<PackingItemProps> = ({
   fullItem,
   selectedProfile,
   hidePackedItems,
-  onMarkAllConfirm
+  onMarkAllConfirm,
+  onShowToast
 }) => {
   const [showMarkAllDialog, setShowMarkAllDialog] = useState(false);
 
@@ -71,7 +73,6 @@ const PackingItem: React.FC<PackingItemProps> = ({
 
   // Determine if checkbox should be enabled
   const canTogglePauschal = mitreisenden_typ === 'pauschal';
-  // canToggleIndividual logic is implicit in the conditional rendering
 
   // Get selected traveler's item
   const selectedTravelerItem = useMemo(() => {
@@ -83,6 +84,9 @@ const PackingItem: React.FC<PackingItemProps> = ({
   const handlePauschalToggle = () => {
     if (canTogglePauschal) {
       onToggle(id);
+      if (hidePackedItems && !gepackt && onShowToast) {
+        onShowToast(was);
+      }
     }
   };
 
@@ -90,6 +94,9 @@ const PackingItem: React.FC<PackingItemProps> = ({
   const handleIndividualToggle = () => {
     if (selectedProfile && selectedTravelerItem) {
       onToggleMitreisender(id, selectedProfile, selectedTravelerItem.gepackt);
+      if (hidePackedItems && !selectedTravelerItem.gepackt && onShowToast) {
+        onShowToast(was, selectedTravelerItem.mitreisender_name);
+      }
     }
   };
 
@@ -235,22 +242,35 @@ export function PackingList({
   hidePackedItems,
   onOpenSettings
 }: PackingListProps) {
-  const [undoToast, setUndoToast] = useState<{ visible: boolean; itemName: string; action: () => void } | null>(null);
+  const [undoToast, setUndoToast] = useState<{ visible: boolean; itemName: string; travelerName?: string; action: () => void } | null>(null);
+  const [activeMainCategory, setActiveMainCategory] = useState<string>('');
 
-  // Group items by main category
+  // Group items by main category and category
   const itemsByMainCategory = useMemo(() => {
-    const grouped: Record<string, DBPackingItem[]> = {};
+    const grouped: Record<string, Record<string, DBPackingItem[]>> = {};
     items.forEach(item => {
       const mainCat = item.hauptkategorie || 'Sonstiges';
+      const cat = item.kategorie_titel || 'Ohne Kategorie';
+      
       if (!grouped[mainCat]) {
-        grouped[mainCat] = [];
+        grouped[mainCat] = {};
       }
-      grouped[mainCat].push(item);
+      if (!grouped[mainCat][cat]) {
+        grouped[mainCat][cat] = [];
+      }
+      grouped[mainCat][cat].push(item);
     });
     return grouped;
   }, [items]);
 
   const mainCategories = Object.keys(itemsByMainCategory);
+
+  // Set initial active tab
+  useMemo(() => {
+    if (mainCategories.length > 0 && !activeMainCategory) {
+      setActiveMainCategory(mainCategories[0]);
+    }
+  }, [mainCategories, activeMainCategory]);
 
   // Calculate progress
   const { packedCount, totalCount } = useMemo(() => {
@@ -271,20 +291,24 @@ export function PackingList({
   // Handle mark all for an item
   const handleMarkAllForItem = (item: DBPackingItem) => {
     if (item.mitreisende) {
+      const travelerNames: string[] = [];
+      
       // Mark all travelers for this item
       item.mitreisende.forEach(m => {
         if (!m.gepackt) {
           onToggleMitreisender(item.id, m.mitreisender_id, false);
+          travelerNames.push(m.mitreisender_name);
         }
       });
 
-      // Show undo toast if hide-packed is active
-      if (hidePackedItems) {
+      // Show undo toast if hide-packed is active and items were marked
+      if (hidePackedItems && travelerNames.length > 0) {
         setUndoToast({
           visible: true,
           itemName: item.was,
+          travelerName: travelerNames.join(', '),
           action: () => {
-            // Undo: unmark all
+            // Undo: unmark all that were just marked
             item.mitreisende?.forEach(m => {
               if (m.gepackt) {
                 onToggleMitreisender(item.id, m.mitreisender_id, true);
@@ -294,6 +318,29 @@ export function PackingList({
         });
       }
     }
+  };
+
+  const showToast = (itemName: string, travelerName?: string) => {
+    setUndoToast({
+      visible: true,
+      itemName,
+      travelerName,
+      action: () => {
+        // This will be set by the specific toggle handler
+      }
+    });
+  };
+
+  // Check if a category should be shown (has unpacked items or hidePackedItems is false)
+  const shouldShowCategory = (categoryItems: DBPackingItem[]) => {
+    if (!hidePackedItems) return true;
+    
+    return categoryItems.some(item => {
+      if (item.mitreisenden_typ === 'pauschal') {
+        return !item.gepackt;
+      }
+      return item.mitreisende?.some(m => !m.gepackt) ?? false;
+    });
   };
 
   return (
@@ -327,44 +374,68 @@ export function PackingList({
         </div>
       )}
 
-      {/* Items grouped by main category */}
-      {mainCategories.map(mainCategory => (
-        <Card key={mainCategory}>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-lg">{mainCategory}</CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            {itemsByMainCategory[mainCategory]?.map(item => (
-              <PackingItem
-                key={item.id}
-                id={item.id}
-                was={item.was}
-                anzahl={item.anzahl}
-                gepackt={item.gepackt}
-                bemerkung={item.bemerkung}
-                transport_name={item.transport_name}
-                mitreisenden_typ={item.mitreisenden_typ}
-                mitreisende={item.mitreisende}
-                onToggle={onToggle}
-                onToggleMitreisender={onToggleMitreisender}
-                onEdit={onEdit}
-                onDelete={onDelete}
-                details={item.details}
-                fullItem={item}
-                selectedProfile={selectedProfile}
-                hidePackedItems={hidePackedItems}
-                onMarkAllConfirm={() => handleMarkAllForItem(item)}
-              />
-            ))}
-          </CardContent>
-        </Card>
-      ))}
+      {/* Main Category Tabs */}
+      <Tabs value={activeMainCategory} onValueChange={setActiveMainCategory}>
+        <TabsList className="w-full justify-start overflow-x-auto">
+          {mainCategories.map(mainCat => (
+            <TabsTrigger key={mainCat} value={mainCat}>
+              {mainCat}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+
+        {mainCategories.map(mainCat => (
+          <TabsContent key={mainCat} value={mainCat} className="space-y-4 mt-4">
+            {Object.entries(itemsByMainCategory[mainCat]).map(([category, categoryItems]) => {
+              if (!shouldShowCategory(categoryItems)) return null;
+              
+              return (
+                <div key={category}>
+                  {/* Category Subheading */}
+                  <h3 className="text-sm font-semibold text-gray-500 uppercase mb-2 px-1">
+                    {category}
+                  </h3>
+                  
+                  {/* Items in this category */}
+                  <Card>
+                    <CardContent className="p-0">
+                      {categoryItems.map(item => (
+                        <PackingItem
+                          key={item.id}
+                          id={item.id}
+                          was={item.was}
+                          anzahl={item.anzahl}
+                          gepackt={item.gepackt}
+                          bemerkung={item.bemerkung}
+                          transport_name={item.transport_name}
+                          mitreisenden_typ={item.mitreisenden_typ}
+                          mitreisende={item.mitreisende}
+                          onToggle={onToggle}
+                          onToggleMitreisender={onToggleMitreisender}
+                          onEdit={onEdit}
+                          onDelete={onDelete}
+                          details={item.details}
+                          fullItem={item}
+                          selectedProfile={selectedProfile}
+                          hidePackedItems={hidePackedItems}
+                          onMarkAllConfirm={() => handleMarkAllForItem(item)}
+                          onShowToast={showToast}
+                        />
+                      ))}
+                    </CardContent>
+                  </Card>
+                </div>
+              );
+            })}
+          </TabsContent>
+        ))}
+      </Tabs>
 
       {/* Undo Toast */}
       {undoToast && (
         <UndoToast
           isVisible={undoToast.visible}
-          itemName={undoToast.itemName}
+          itemName={`${undoToast.itemName}${undoToast.travelerName ? ` (${undoToast.travelerName})` : ''}`}
           onUndo={undoToast.action}
           onDismiss={() => setUndoToast(null)}
         />
