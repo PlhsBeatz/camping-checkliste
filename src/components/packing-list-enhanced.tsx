@@ -206,7 +206,7 @@ const PackingItem: React.FC<PackingItemProps> = ({
           isOpen={showMarkAllDialog}
           onClose={() => setShowMarkAllDialog(false)}
           onConfirm={confirmMarkAll}
-          itemName={was}
+          _itemName={was}
           travelerNames={mitreisende.map(m => m.mitreisender_name)}
         />
       )}
