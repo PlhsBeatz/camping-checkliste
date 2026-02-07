@@ -241,7 +241,7 @@ export function PackingList({
   const itemsByMainCategory = useMemo(() => {
     const grouped: Record<string, DBPackingItem[]> = {};
     items.forEach(item => {
-      const mainCat = item.hauptkategorie_titel || 'Sonstiges';
+      const mainCat = item.hauptkategorie || 'Sonstiges';
       if (!grouped[mainCat]) {
         grouped[mainCat] = [];
       }
