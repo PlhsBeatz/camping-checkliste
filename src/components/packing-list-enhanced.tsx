@@ -250,7 +250,7 @@ export function PackingList({
     const grouped: Record<string, Record<string, DBPackingItem[]>> = {};
     items.forEach(item => {
       const mainCat = item.hauptkategorie || 'Sonstiges';
-      const cat = item.kategorie_titel || 'Ohne Kategorie';
+      const cat = item.kategorie || 'Ohne Kategorie';
       
       if (!grouped[mainCat]) {
         grouped[mainCat] = {};
