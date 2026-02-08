@@ -158,8 +158,8 @@ const PackingItem: React.FC<PackingItemProps> = ({
   return (
     <>
       <div className={cn(
-        "p-4 border-b border-border/50 transition-all duration-200",
-        isFullyPacked ? 'bg-muted/30' : 'hover:bg-accent/5'
+        "p-4 mb-3 bg-white rounded-xl border border-gray-200 shadow-sm transition-all duration-200",
+        isFullyPacked ? 'opacity-60' : 'hover:shadow-md'
       )}>
         <div className="flex items-start space-x-3">
           {/* Checkbox logic based on mode */}
@@ -168,7 +168,7 @@ const PackingItem: React.FC<PackingItemProps> = ({
               id={`item-${id}`}
               checked={gepackt}
               onCheckedChange={handlePauschalToggle}
-              className="mt-0.5 border-primary/30 data-[state=checked]:bg-primary data-[state=checked]:border-primary"
+              className="mt-0.5 h-6 w-6 rounded-md border-2 border-gray-300 data-[state=checked]:bg-[rgb(45,79,30)] data-[state=checked]:border-[rgb(45,79,30)]"
             />
           )}
           
@@ -177,7 +177,7 @@ const PackingItem: React.FC<PackingItemProps> = ({
               id={`item-${id}`}
               checked={selectedTravelerItem.gepackt}
               onCheckedChange={handleIndividualToggle}
-              className="mt-0.5 border-primary/30 data-[state=checked]:bg-primary data-[state=checked]:border-primary"
+              className="mt-0.5 h-6 w-6 rounded-md border-2 border-gray-300 data-[state=checked]:bg-[rgb(45,79,30)] data-[state=checked]:border-[rgb(45,79,30)]"
             />
           )}
 
@@ -186,7 +186,7 @@ const PackingItem: React.FC<PackingItemProps> = ({
               id={`item-${id}`}
               checked={isFullyPacked}
               onCheckedChange={handleMarkAllToggle}
-              className="mt-0.5 border-primary/30 data-[state=checked]:bg-primary data-[state=checked]:border-primary"
+              className="mt-0.5 h-6 w-6 rounded-md border-2 border-gray-300 data-[state=checked]:bg-[rgb(45,79,30)] data-[state=checked]:border-[rgb(45,79,30)]"
             />
           )}
           
@@ -202,7 +202,7 @@ const PackingItem: React.FC<PackingItemProps> = ({
                 {was} {anzahl > 1 ? `(${anzahl}x)` : ''}
               </label>
               {transport_name && (
-                <span className="inline-flex items-center gap-1 text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-md border border-primary/20">
+                <span className="inline-flex items-center gap-1 text-xs bg-[rgb(45,79,30)]/10 text-[rgb(45,79,30)] px-2 py-0.5 rounded-md border border-[rgb(45,79,30)]/20">
                   <Truck className="h-3 w-3" />
                   {transport_name}
                 </span>
@@ -440,7 +440,7 @@ export function PackingList({
       {totalCount > 0 && (
         <div className="space-y-2 px-1">
           <div className="flex justify-between text-sm">
-            <span className="font-semibold text-foreground">Packfortschritt</span>
+            <span className="sr-only">Packfortschritt</span>
             <span className="text-muted-foreground font-medium">{packedCount}/{totalCount} ({progressPercentage}%)</span>
           </div>
           <div className="h-2.5 bg-muted rounded-full overflow-hidden border border-border/50">
@@ -454,12 +454,12 @@ export function PackingList({
 
       {/* Main Category Tabs */}
       <Tabs value={activeMainCategory} onValueChange={setActiveMainCategory} className="w-full">
-        <TabsList className="w-full justify-start overflow-x-auto bg-muted/50 p-1 rounded-lg border border-border/50">
+        <TabsList className="w-full justify-start overflow-x-auto bg-white border-b border-gray-200 p-0 h-auto rounded-none">
           {mainCategories.map(mainCat => (
             <TabsTrigger 
               key={mainCat} 
               value={mainCat}
-              className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm font-medium px-4"
+              className="uppercase text-xs font-semibold tracking-wide px-6 py-3 rounded-none border-b-4 border-transparent data-[state=active]:border-[#e67e22] data-[state=active]:text-[rgb(45,79,30)] data-[state=inactive]:text-[rgb(168,162,158)] hover:text-gray-900 transition-colors relative data-[state=active]:bg-transparent data-[state=inactive]:bg-transparent"
             >
               {mainCat}
             </TabsTrigger>

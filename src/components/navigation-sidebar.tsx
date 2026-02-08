@@ -4,10 +4,6 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { 
-  ListChecks, 
-  Calendar, 
-  Package, 
-  Settings, 
   ChevronDown,
   ChevronRight,
   Tent
@@ -25,19 +21,19 @@ export function NavigationSidebar({ isOpen, onClose }: NavigationSidebarProps) {
 
   const menuItems = [
     {
-      icon: ListChecks,
+      icon: 'checklist',
       label: 'AKTUELLE PACKLISTE',
       href: '/',
       active: pathname === '/'
     },
     {
-      icon: Calendar,
+      icon: 'event',
       label: 'MEINE URLAUBE',
       href: '/urlaube',
       active: pathname.startsWith('/urlaube')
     },
     {
-      icon: Package,
+      icon: 'inventory_2',
       label: 'AUSRÜSTUNG',
       href: '/ausruestung',
       active: pathname.startsWith('/ausruestung')
@@ -45,10 +41,10 @@ export function NavigationSidebar({ isOpen, onClose }: NavigationSidebarProps) {
   ]
 
   const configItems = [
-    { label: 'Kategorien', href: '/kategorien' },
-    { label: 'Tags & Labels', href: '/tags' },
-    { label: 'Mitreisende', href: '/mitreisende' },
-    { label: 'Transportmittel', href: '/transportmittel', disabled: true }
+    { label: 'KATEGORIEN', href: '/kategorien' },
+    { label: 'TAGS & LABELS', href: '/tags' },
+    { label: 'MITREISENDE', href: '/mitreisende' },
+    { label: 'TRANSPORTMITTEL', href: '/transportmittel', disabled: true }
   ]
 
   return (
@@ -64,19 +60,19 @@ export function NavigationSidebar({ isOpen, onClose }: NavigationSidebarProps) {
       {/* Sidebar */}
       <aside
         className={cn(
-          "fixed top-0 left-0 h-full w-[280px] bg-sidebar text-sidebar-foreground z-50 transition-transform duration-300 ease-in-out flex flex-col",
+          "fixed top-0 left-0 h-screen w-[280px] bg-white z-50 transition-transform duration-300 ease-in-out flex flex-col",
           isOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
         )}
       >
         {/* Logo & Version */}
-        <div className="p-6 border-b border-sidebar-border">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="w-10 h-10 bg-sidebar-primary rounded-lg flex items-center justify-center">
-              <Tent className="w-6 h-6 text-sidebar-primary-foreground" />
+        <div className="p-6 bg-[rgb(250,250,249)]">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-[rgb(45,79,30)] rounded-lg flex items-center justify-center flex-shrink-0">
+              <Tent className="w-6 h-6 text-white" />
             </div>
             <div>
-              <h1 className="text-xl font-bold text-sidebar-foreground">CAMPPACK</h1>
-              <p className="text-xs text-sidebar-foreground/60">v 0.3 PRO</p>
+              <h1 className="text-xl font-bold text-[rgb(45,79,30)] leading-tight">CAMPPACK</h1>
+              <p className="text-xs text-[rgb(45,79,30)]/60">v 0.3 PRO</p>
             </div>
           </div>
         </div>
@@ -84,35 +80,37 @@ export function NavigationSidebar({ isOpen, onClose }: NavigationSidebarProps) {
         {/* Navigation */}
         <nav className="flex-1 py-4 overflow-y-auto">
           {/* Main Menu Items */}
-          {menuItems.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              onClick={() => onClose()}
-              className={cn(
-                "flex items-center gap-3 px-6 py-3 text-sm font-medium transition-colors",
-                item.active
-                  ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                  : "text-sidebar-foreground/80 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
-              )}
-            >
-              <item.icon className="w-5 h-5" />
-              <span>{item.label}</span>
-            </Link>
-          ))}
-
-          {/* Separator */}
-          <div className="my-4 border-t border-sidebar-border" />
+          <div className="px-3 space-y-1">
+            {menuItems.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={() => onClose()}
+                className={cn(
+                  "flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-lg transition-colors",
+                  item.active
+                    ? "bg-[rgb(45,79,30)] text-white"
+                    : "text-gray-700 hover:bg-[rgb(250,250,249)]"
+                )}
+              >
+                <span className="material-icons text-xl">{item.icon}</span>
+                <span className="text-xs tracking-wide">{item.label}</span>
+                {item.active && (
+                  <div className="ml-auto w-2 h-2 bg-white rounded-full" />
+                )}
+              </Link>
+            ))}
+          </div>
 
           {/* Configuration Dropdown */}
-          <div>
+          <div className="mt-4 px-3">
             <button
               onClick={() => setConfigExpanded(!configExpanded)}
-              className="flex items-center justify-between w-full px-6 py-3 text-sm font-medium text-sidebar-foreground/80 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground transition-colors"
+              className="flex items-center justify-between w-full px-4 py-3 text-sm font-medium text-gray-700 hover:bg-[rgb(250,250,249)] rounded-lg transition-colors"
             >
               <div className="flex items-center gap-3">
-                <Settings className="w-5 h-5" />
-                <span>KONFIGURATION</span>
+                <span className="material-icons text-xl">settings</span>
+                <span className="text-xs tracking-wide">KONFIGURATION</span>
               </div>
               {configExpanded ? (
                 <ChevronDown className="w-4 h-4" />
@@ -123,7 +121,7 @@ export function NavigationSidebar({ isOpen, onClose }: NavigationSidebarProps) {
 
             {/* Config Submenu */}
             {configExpanded && (
-              <div className="py-2">
+              <div className="mt-1 ml-11 space-y-1">
                 {configItems.map((item) => (
                   <Link
                     key={item.href}
@@ -136,12 +134,12 @@ export function NavigationSidebar({ isOpen, onClose }: NavigationSidebarProps) {
                       onClose()
                     }}
                     className={cn(
-                      "block px-12 py-2 text-sm transition-colors",
+                      "block px-4 py-2 text-xs tracking-wide rounded-lg transition-colors",
                       item.disabled
-                        ? "text-sidebar-foreground/30 cursor-not-allowed"
+                        ? "text-gray-400 cursor-not-allowed"
                         : pathname === item.href
-                        ? "text-sidebar-primary font-medium"
-                        : "text-sidebar-foreground/70 hover:text-sidebar-foreground"
+                        ? "text-[rgb(45,79,30)] font-medium bg-[rgb(250,250,249)]"
+                        : "text-gray-600 hover:bg-[rgb(250,250,249)] hover:text-gray-900"
                     )}
                   >
                     {item.label}
@@ -153,13 +151,19 @@ export function NavigationSidebar({ isOpen, onClose }: NavigationSidebarProps) {
         </nav>
 
         {/* Status Indicator */}
-        <div className="p-6 border-t border-sidebar-border">
-          <div className="flex items-center gap-2 text-xs text-sidebar-foreground/60">
-            <div className="w-2 h-2 bg-sidebar-primary rounded-full" />
-            <span>ONLINE & SYNCHRONISIERT</span>
+        <div className="p-6 bg-[rgb(250,250,249)] border-t border-gray-200">
+          <div className="flex items-center gap-2 text-xs text-gray-600">
+            <div className="w-2 h-2 bg-green-500 rounded-full" />
+            <span className="tracking-wide">ONLINE & SYNCHRONISIERT</span>
           </div>
         </div>
       </aside>
+
+      {/* Add Material Icons font if not already included */}
+      <link
+        href="https://fonts.googleapis.com/icon?family=Material+Icons"
+        rel="stylesheet"
+      />
     </>
   )
 }

@@ -1,6 +1,6 @@
 'use client'
 
-import { X, Users } from 'lucide-react'
+import { X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
@@ -65,96 +65,104 @@ export function PackingSettingsSidebar({
       {/* Sidebar - Slide in from RIGHT */}
       <div 
         className={cn(
-          "fixed right-0 top-0 h-full w-80 bg-sidebar text-sidebar-foreground shadow-xl z-50 transform transition-transform duration-300 ease-in-out",
+          "fixed right-0 top-0 h-full w-80 bg-white shadow-xl z-50 transform transition-transform duration-300 ease-in-out",
           isOpen ? 'translate-x-0' : 'translate-x-full'
         )}
       >
-        {/* Header */}
-        <div className="p-6 border-b border-sidebar-border flex items-center justify-between">
-          <h2 className="text-lg font-bold">WER PACKT?</h2>
-          <Button 
-            variant="ghost" 
-            size="icon"
-            onClick={onClose}
-            className="text-sidebar-foreground hover:bg-sidebar-accent -mr-2"
-          >
-            <X className="h-5 w-5" />
-          </Button>
-        </div>
-
-        {/* Content */}
-        <div className="p-6 space-y-6">
-          {/* Explanation Text */}
-          <p className="text-sm text-sidebar-foreground/70 leading-relaxed">
+        {/* Header - Dark Green */}
+        <div className="p-6 bg-[rgb(45,79,30)] text-white">
+          <div className="flex items-start justify-between mb-3">
+            <h2 className="text-lg font-bold">WER PACKT?</h2>
+            <Button 
+              variant="ghost" 
+              size="icon"
+              onClick={onClose}
+              className="text-white hover:bg-white/20 -mr-2"
+            >
+              <X className="h-5 w-5" />
+            </Button>
+          </div>
+          <p className="text-sm text-white/80 leading-relaxed">
             Gewähltes Profil steuert das Abhaken der persönlichen Gegenstände.
           </p>
-          
+        </div>
+
+        {/* Content - White Background */}
+        <div className="p-6 space-y-4">
           {/* Zentral / Alle Option */}
           <button
             onClick={() => onProfileChange(null)}
             className={cn(
-              "w-full p-4 rounded-lg border-2 transition-all",
+              "w-full p-4 rounded-xl border-2 transition-all",
               selectedProfile === null
-                ? 'border-sidebar-primary bg-white/10'
-                : 'border-sidebar-border bg-white/5 hover:border-sidebar-foreground/30'
+                ? 'border-[rgb(45,79,30)] bg-[rgb(45,79,30)]/5'
+                : 'border-gray-200 hover:border-gray-300'
             )}
           >
             <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-full bg-sidebar-primary flex items-center justify-center">
-                <Users className="h-6 w-6 text-sidebar-primary-foreground" />
+              <div className="w-12 h-12 bg-[rgb(45,79,30)] rounded-full flex items-center justify-center flex-shrink-0">
+                <span className="material-icons text-white">groups</span>
               </div>
               <div className="text-left">
-                <div className="font-semibold text-sidebar-foreground">Zentral / Alle</div>
-                <div className="text-xs text-sidebar-foreground/60 uppercase tracking-wide">Gemeinsames Gut</div>
+                <div className="font-semibold text-gray-900">Zentral / Alle</div>
+                <div className="text-xs text-gray-500 uppercase tracking-wide">GEMEINSAMES GUT</div>
               </div>
             </div>
           </button>
 
-          {/* Individual Travelers */}
+          {/* Mitreisende Grid */}
           {mitreisende.length > 0 && (
             <div className="grid grid-cols-2 gap-3">
-              {mitreisende.map((m, index) => (
+              {mitreisende.map((person, index) => (
                 <button
-                  key={m.id}
-                  onClick={() => onProfileChange(m.id)}
+                  key={person.id}
+                  onClick={() => onProfileChange(person.id)}
                   className={cn(
-                    "p-3 rounded-lg border-2 transition-all",
-                    selectedProfile === m.id
-                      ? 'border-sidebar-primary bg-white/10'
-                      : 'border-sidebar-border bg-white/5 hover:border-sidebar-foreground/30'
+                    "p-3 rounded-xl border-2 transition-all flex flex-col items-center gap-2",
+                    selectedProfile === person.id
+                      ? 'border-[rgb(45,79,30)] bg-[rgb(45,79,30)]/5'
+                      : 'border-gray-200 hover:border-gray-300'
                   )}
                 >
-                  <div className="flex flex-col items-center gap-2">
-                    <div className={`w-14 h-14 rounded-full flex items-center justify-center text-lg font-bold ${getAvatarColor(index)}`}>
-                      {getInitials(m.name)}
-                    </div>
-                    <div className="text-sm font-medium text-sidebar-foreground">{m.name}</div>
+                  <div className={cn(
+                    "w-12 h-12 rounded-full flex items-center justify-center text-lg font-bold",
+                    getAvatarColor(index)
+                  )}>
+                    {getInitials(person.name)}
                   </div>
+                  <span className="text-sm font-medium text-gray-900 text-center">
+                    {person.name}
+                  </span>
                 </button>
               ))}
             </div>
           )}
 
-          {/* Separator */}
-          <div className="border-t border-sidebar-border" />
-
-          {/* Hide Packed Items Checkbox */}
-          <div className="flex items-center justify-between p-3 rounded-lg border border-sidebar-border bg-white/5">
-            <Label 
-              htmlFor="hide-packed" 
-              className="text-sm font-medium cursor-pointer flex-1 text-sidebar-foreground"
-            >
-              GEPACKTES AUSBLENDEN
-            </Label>
-            <Checkbox
-              id="hide-packed"
-              checked={hidePackedItems}
-              onCheckedChange={(checked) => onHidePackedChange(checked as boolean)}
-              className="border-sidebar-foreground/30 data-[state=checked]:bg-sidebar-primary data-[state=checked]:border-sidebar-primary"
-            />
+          {/* Gepacktes ausblenden */}
+          <div className="pt-4 border-t border-gray-200">
+            <div className="flex items-center justify-between">
+              <Label 
+                htmlFor="hide-packed" 
+                className="text-sm font-medium text-gray-700 uppercase tracking-wide cursor-pointer"
+              >
+                GEPACKTES AUSBLENDEN
+              </Label>
+              <Checkbox
+                id="hide-packed"
+                checked={hidePackedItems}
+                onCheckedChange={onHidePackedChange}
+                className="data-[state=checked]:bg-[rgb(45,79,30)] data-[state=checked]:border-[rgb(45,79,30)]"
+              />
+            </div>
           </div>
         </div>
       </div>
+
+      {/* Add Material Icons font if not already included */}
+      <link
+        href="https://fonts.googleapis.com/icon?family=Material+Icons"
+        rel="stylesheet"
+      />
     </>
   )
 }
