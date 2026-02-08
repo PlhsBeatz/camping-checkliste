@@ -293,7 +293,7 @@ export function PackingList({
   onDelete,
   selectedProfile,
   hidePackedItems,
-  onOpenSettings
+  onOpenSettings: _onOpenSettings
 }: PackingListProps) {
   const [undoToast, setUndoToast] = useState<{ visible: boolean; itemName: string; action: () => void } | null>(null);
   const [activeMainCategory, setActiveMainCategory] = useState<string>('');
