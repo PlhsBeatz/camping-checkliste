@@ -2,7 +2,7 @@
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+//import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { PackingList } from '@/components/packing-list-enhanced'
 import { MitreisendeManager } from '@/components/mitreisende-manager'
 import { CategoryManager } from '@/components/category-manager'
@@ -17,6 +17,9 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { EquipmentTable } from '@/components/equipment-table'
 import { PackingSettingsSidebar } from '@/components/packing-settings-sidebar'
+import { NavigationSidebar } from '@/components/navigation-sidebar'
+import { Menu, Users2 } from 'lucide-react'
+import { cn } from '@/lib/utils'
 
 interface CategoryWithMain extends Category {
   hauptkategorie_titel: string
@@ -48,6 +51,7 @@ export default function Home() {
   const [equipmentSearchTerm, setEquipmentSearchTerm] = useState('')
   const [selectedPackProfile, setSelectedPackProfile] = useState<string | null>(null)
   const [hidePackedItems, setHidePackedItems] = useState(false)
+  const [showNavSidebar, setShowNavSidebar] = useState(false)
   const [showPackSettings, setShowPackSettings] = useState(false)
   const [packingItemForm, setPackingItemForm] = useState({
     gegenstandId: '',
@@ -885,868 +889,642 @@ export default function Home() {
     setCategorySearchTerm('')
   }
 
+  const PacklisteView = () => {
+    const currentVacation = vacations.find(v => v.id === selectedVacationId)
+    
+    if (!currentVacation) {
+      return (
+        <Card>
+          <CardContent className="pt-6">
+            <p className="text-muted-foreground text-center">
+              Keine Urlaube vorhanden. Erstellen Sie einen neuen Urlaub!
+            </p>
+          </CardContent>
+        </Card>
+      )
+    }
+
+    return (
+      <div className="space-y-6">
+        {/* Automatisch generieren Button - nur wenn Liste leer */}
+        {packingItems.length === 0 && (
+          <Card className="border-dashed">
+            <CardContent className="pt-6 text-center">
+              <p className="text-muted-foreground mb-4">
+                Ihre Packliste ist leer. Generieren Sie automatisch Vorschläge oder fügen Sie manuell Gegenstände hinzu.
+              </p>
+              <Button 
+                size="lg" 
+                variant="outline"
+                onClick={() => setShowGeneratorDialog(true)}
+              >
+                <Sparkles className="h-4 w-4 mr-2" />
+                Automatisch generieren
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Packing List */}
+        {packingItems.length > 0 && (
+          <PackingList
+            items={packingItems}
+            onToggle={handleToggleItem}
+            onToggleMitreisender={handleToggleMitreisender}
+            onToggleMultipleMitreisende={handleToggleMultipleMitreisende}
+            onEdit={handleEditPackingItem}
+            onDelete={handleDeletePackingItem}
+            selectedProfile={selectedPackProfile}
+            hidePackedItems={hidePackedItems}
+            onOpenSettings={() => setShowPackSettings(true)}
+          />
+        )}
+
+        {/* Edit Item Dialog */}
+        <Dialog open={showEditItemDialog} onOpenChange={setShowEditItemDialog}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Packlisten-Eintrag bearbeiten</DialogTitle>
+              <DialogDescription>
+                Anzahl und Bemerkung anpassen
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="edit-anzahl">Anzahl</Label>
+                <Input
+                  id="edit-anzahl"
+                  type="number"
+                  min="1"
+                  value={packingItemForm.anzahl}
+                  onChange={(e) => setPackingItemForm({ ...packingItemForm, anzahl: e.target.value })}
+                />
+              </div>
+              <div>
+                <Label htmlFor="edit-bemerkung">Bemerkung (optional)</Label>
+                <Input
+                  id="edit-bemerkung"
+                  placeholder="z.B. nur für Wanderungen"
+                  value={packingItemForm.bemerkung}
+                  onChange={(e) => setPackingItemForm({ ...packingItemForm, bemerkung: e.target.value })}
+                />
+              </div>
+              <Button onClick={handleUpdatePackingItem} disabled={isLoading} className="w-full">
+                {isLoading ? 'Wird aktualisiert...' : 'Aktualisieren'}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Add Item Dialog Content */}
+        <Dialog open={showAddItemDialog} onOpenChange={setShowAddItemDialog}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Gegenstand zur Packliste hinzufügen</DialogTitle>
+              <DialogDescription>
+                Wählen Sie einen Gegenstand aus Ihrer Ausrüstung
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="equipment-search">Gegenstand suchen</Label>
+                <Input
+                  id="equipment-search"
+                  placeholder="Suchen..."
+                  value={equipmentSearchTerm}
+                  onChange={(e) => setEquipmentSearchTerm(e.target.value)}
+                />
+                <div className="mt-2 max-h-48 overflow-y-auto border rounded-md">
+                  {equipmentItems
+                    .filter(item => {
+                      const matchesSearch = item.was.toLowerCase().includes(equipmentSearchTerm.toLowerCase()) ||
+                        (item.kategorie_titel?.toLowerCase().includes(equipmentSearchTerm.toLowerCase()))
+                      const notInPackingList = !packingItems.some(pi => pi.gegenstand_id === item.id)
+                      return matchesSearch && notInPackingList
+                    })
+                    .slice(0, 10)
+                    .map(item => (
+                      <div
+                        key={item.id}
+                        className={`p-2 cursor-pointer hover:bg-muted ${
+                          packingItemForm.gegenstandId === item.id ? 'bg-muted' : ''
+                        }`}
+                        onClick={() => {
+                          setPackingItemForm({ 
+                            ...packingItemForm, 
+                            gegenstandId: item.id,
+                            transportId: item.transport_id || ''
+                          })
+                        }}
+                      >
+                        <div className="text-sm font-medium">{item.was}</div>
+                        <div className="text-xs text-muted-foreground">{item.kategorie_titel}</div>
+                      </div>
+                    ))}
+                </div>
+              </div>
+              <div>
+                <Label htmlFor="anzahl">Anzahl</Label>
+                <Input
+                  id="anzahl"
+                  type="number"
+                  min="1"
+                  value={packingItemForm.anzahl}
+                  onChange={(e) => setPackingItemForm({ ...packingItemForm, anzahl: e.target.value })}
+                />
+              </div>
+              <div>
+                <Label htmlFor="transport">Transport</Label>
+                <select
+                  id="transport"
+                  value={packingItemForm.transportId}
+                  onChange={(e) => setPackingItemForm({ ...packingItemForm, transportId: e.target.value })}
+                  className="w-full px-3 py-2 border border-input rounded-md bg-background"
+                >
+                  <option value="">Nicht festgelegt</option>
+                  {transportVehicles.map(vehicle => (
+                    <option key={vehicle.id} value={vehicle.id}>
+                      {vehicle.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <Label htmlFor="bemerkung">Bemerkung (optional)</Label>
+                <Input
+                  id="bemerkung"
+                  placeholder="z.B. nur für Wanderungen"
+                  value={packingItemForm.bemerkung}
+                  onChange={(e) => setPackingItemForm({ ...packingItemForm, bemerkung: e.target.value })}
+                />
+              </div>
+              <Button onClick={handleAddPackingItem} disabled={isLoading} className="w-full">
+                {isLoading ? 'Wird hinzugefügt...' : 'Hinzufügen'}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      </div>
+    )
+  }
+
+  const AusruestungView = () => {
+    return (
+      <Card>
+        <CardHeader>
+          <div className="flex justify-between items-start">
+            <div>
+              <CardTitle>Ausrüstungsverwaltung</CardTitle>
+              <CardDescription>
+                Verwalten Sie Ihre Camping-Ausrüstungsgegenstände
+              </CardDescription>
+            </div>
+            <Dialog open={showEquipmentDialog} onOpenChange={(open) => {
+              if (!open) {
+                handleCloseEquipmentDialog()
+              } else {
+                setShowEquipmentDialog(true)
+              }
+            }}>
+              <DialogTrigger asChild>
+                <Button size="sm">
+                  <Plus className="h-4 w-4 mr-2" />
+                  Neuer Gegenstand
+                </Button>
+              </DialogTrigger>
+              {/* Equipment Dialog Content - kopiere aus der alten page.tsx */}
+            </Dialog>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <EquipmentTable
+            equipmentItems={equipmentItems}
+            categories={categories}
+            mainCategories={mainCategories}
+            transportVehicles={transportVehicles}
+            tags={tags}
+            onEdit={handleEditEquipment}
+            onDelete={handleDeleteEquipment}
+          />
+        </CardContent>
+      </Card>
+    )
+  }
+
+  const UrlaubeView = () => {
+    return (
+      <div className="grid gap-4">
+        {vacations.length === 0 ? (
+          <Card>
+            <CardContent className="pt-6">
+              <p className="text-muted-foreground text-center">
+                Keine Urlaube vorhanden. Erstellen Sie einen neuen Urlaub!
+              </p>
+            </CardContent>
+          </Card>
+        ) : (
+          vacations.map((vacation) => (
+            <Card
+              key={vacation.id}
+              className={cn(
+                "cursor-pointer hover:shadow-md transition-shadow",
+                selectedVacationId === vacation.id && "ring-2 ring-primary"
+              )}
+            >
+              <CardHeader>
+                <div className="flex justify-between items-start">
+                  <div className="flex-1">
+                    <CardTitle>{vacation.titel}</CardTitle>
+                    <CardDescription>
+                      <div className="space-y-1 mt-2">
+                        {vacation.reiseziel_name && <p>📍 {vacation.reiseziel_name}</p>}
+                        {vacation.reiseziel_adresse && <p>📍 {vacation.reiseziel_adresse}</p>}
+                        {vacation.land_region && <p>🌍 {vacation.land_region}</p>}
+                        {vacation.abfahrtdatum && <p>🚗 Abreise: {vacation.abfahrtdatum}</p>}
+                        <p>📅 {vacation.startdatum} bis {vacation.enddatum}</p>
+                      </div>
+                    </CardDescription>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleEditVacation(vacation)
+                      }}
+                    >
+                      <Edit2 className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleDeleteVacation(vacation.id)
+                      }}
+                      disabled={isLoading}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                >
+                  Packliste öffnen
+                </Button>
+              </CardContent>
+            </Card>
+          ))
+        )}
+      </div>
+    )
+  }
+
+  const KonfigurationView = () => {
+    const [configTab, setConfigTab] = useState<'kategorien' | 'tags' | 'mitreisende'>('kategorien')
+    
+    return (
+      <div className="space-y-6">
+        {/* Simple Tab Navigation */}
+        <div className="flex gap-2 border-b">
+          <Button
+            variant={configTab === 'kategorien' ? 'default' : 'ghost'}
+            onClick={() => setConfigTab('kategorien')}
+          >
+            Kategorien
+          </Button>
+          <Button
+            variant={configTab === 'tags' ? 'default' : 'ghost'}
+            onClick={() => setConfigTab('tags')}
+          >
+            Tags
+          </Button>
+          <Button
+            variant={configTab === 'mitreisende' ? 'default' : 'ghost'}
+            onClick={() => setConfigTab('mitreisende')}
+          >
+            Mitreisende
+          </Button>
+        </div>
+
+        {/* Tab Content */}
+        {configTab === 'kategorien' && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Kategorien verwalten</CardTitle>
+              <CardDescription>
+                Verwalten Sie Hauptkategorien und Kategorien für Ihre Ausrüstungsgegenstände
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <CategoryManager
+                categories={categories}
+                mainCategories={mainCategories}
+                onRefresh={async () => {
+                  const catRes = await fetch('/api/categories')
+                  const catData = await catRes.json()
+                  if (catData.success) setCategories(catData.data)
+                  
+                  const mainCatRes = await fetch('/api/main-categories')
+                  const mainCatData = await mainCatRes.json()
+                  if (mainCatData.success) setMainCategories(mainCatData.data)
+                }}
+              />
+            </CardContent>
+          </Card>
+        )}
+
+        {configTab === 'tags' && (
+          <TagManager 
+            tags={tags} 
+            onRefresh={() => {
+              fetch('/api/tags')
+                .then(res => res.json())
+                .then(data => {
+                  if (data.success) {
+                    setTags(data.data)
+                  }
+                })
+            }} 
+          />
+        )}
+
+        {configTab === 'mitreisende' && (
+          <TravelersManager
+            travelers={allMitreisende}
+            onRefresh={async () => {
+              const res = await fetch('/api/mitreisende')
+              const data = await res.json()
+              if (data.success) setAllMitreisende(data.data)
+            }}
+          />
+        )}
+      </div>
+    )
+  }
+
   const currentVacation = vacations.find(v => v.id === selectedVacationId)
   const totalItems = packingItems.length
   const packedCount = packedItems.size
   const packingPercentage = totalItems > 0 ? Math.round((packedCount / totalItems) * 100) : 0
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="container mx-auto p-4 space-y-8">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">Camping Packlisten</h1>
-            <p className="text-muted-foreground mt-2">Organisieren Sie Ihre Campingausrüstung intelligent</p>
-          </div>
-          <Dialog open={showNewVacationDialog} onOpenChange={(open) => {
-            if (!open) {
-              handleCloseVacationDialog()
-            } else {
-              setShowNewVacationDialog(true)
-            }
-          }}>
-            <DialogTrigger asChild>
-              <Button size="lg">
-                <Plus className="h-4 w-4 mr-2" />
-                Neuer Urlaub
+    <div className="min-h-screen bg-background flex">
+      {/* Navigation Sidebar (Links) */}
+      <NavigationSidebar
+        isOpen={showNavSidebar}
+        onClose={() => setShowNavSidebar(false)}
+      />
+
+      {/* Main Content Area */}
+      <div className={cn(
+        "flex-1 transition-all duration-300",
+        "lg:ml-[280px]" // Platz für permanente Sidebar auf Desktop
+      )}>
+        <div className="container mx-auto p-4 md:p-6 space-y-6">
+          {/* Header mit Toggle-Buttons */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              {/* Mobile Menu Toggle */}
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => setShowNavSidebar(true)}
+                className="lg:hidden"
+              >
+                <Menu className="h-5 w-5" />
               </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle>
-                  {editingVacationId ? 'Urlaub bearbeiten' : 'Neuen Urlaub erstellen'}
-                </DialogTitle>
-                <DialogDescription>
-                  {editingVacationId ? 'Bearbeiten Sie die Details des Urlaubs' : 'Geben Sie die Details für Ihren neuen Urlaub ein'}
-                </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-4">
-                <div>
-                  <Label htmlFor="titel">Titel *</Label>
-                  <Input
-                    id="titel"
-                    placeholder="z.B. Sommerurlaub 2024"
-                    value={newVacationForm.titel}
-                    onChange={(e) => setNewVacationForm({ ...newVacationForm, titel: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="reiseziel">Reiseziel *</Label>
-                  <Input
-                    id="reiseziel"
-                    placeholder="z.B. Schwarzwald"
-                    value={newVacationForm.reiseziel_name}
-                    onChange={(e) => setNewVacationForm({ ...newVacationForm, reiseziel_name: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="reiseziel_adresse">Adresse</Label>
-                  <Input
-                    id="reiseziel_adresse"
-                    placeholder="z.B. Campingplatz am See, 79822 Titisee"
-                    value={newVacationForm.reiseziel_adresse}
-                    onChange={(e) => setNewVacationForm({ ...newVacationForm, reiseziel_adresse: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="land_region">Land / Region</Label>
-                  <Input
-                    id="land_region"
-                    placeholder="z.B. Deutschland, Baden-Württemberg"
-                    value={newVacationForm.land_region}
-                    onChange={(e) => setNewVacationForm({ ...newVacationForm, land_region: e.target.value })}
-                  />
-                </div>
-                <div className="grid grid-cols-3 gap-4">
-                  <div>
-                    <Label htmlFor="abfahrtdatum">Abreisedatum</Label>
-                    <Input
-                      id="abfahrtdatum"
-                      type="date"
-                      value={newVacationForm.abfahrtdatum}
-                      onChange={(e) => setNewVacationForm({ ...newVacationForm, abfahrtdatum: e.target.value })}
-                    />
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Wann starten Sie von zuhause?
-                    </p>
-                  </div>
-                  <div>
-                    <Label htmlFor="startdatum">Startdatum *</Label>
-                    <Input
-                      id="startdatum"
-                      type="date"
-                      value={newVacationForm.startdatum}
-                      onChange={(e) => setNewVacationForm({ ...newVacationForm, startdatum: e.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="enddatum">Enddatum *</Label>
-                    <Input
-                      id="enddatum"
-                      type="date"
-                      value={newVacationForm.enddatum}
-                      onChange={(e) => setNewVacationForm({ ...newVacationForm, enddatum: e.target.value })}
-                    />
-                  </div>
-                </div>
-                
-                {/* Mitreisenden-Verwaltung */}
-                <MitreisendeManager 
-                  vacationId={editingVacationId}
-                  onMitreisendeChange={setVacationMitreisende}
-                />
-                
-                <Button onClick={handleCreateVacation} disabled={isLoading} className="w-full">
-                  {isLoading ? 'Wird gespeichert...' : editingVacationId ? 'Urlaub aktualisieren' : 'Urlaub erstellen'}
-                </Button>
+              
+              <div>
+                <h1 className="text-3xl font-bold tracking-tight">
+                  Aktuelle Packliste
+                </h1>
+                <p className="text-muted-foreground mt-1">
+                  {currentVacation?.titel || 'Kein Urlaub ausgewählt'}
+                </p>
               </div>
-            </DialogContent>
-          </Dialog>
-        </div>
+            </div>
 
-        {/* Quick Stats */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Aktive Urlaube</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{vacations.length}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Ausrüstung</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{equipmentItems.length}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Gepackt</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{packedCount}/{totalItems}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Fortschritt</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{packingPercentage}%</div>
-            </CardContent>
-          </Card>
-        </div>
+            {/* Pack Profile Toggle */}
+            {currentVacation && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowPackSettings(true)}
+                className="flex items-center gap-2"
+              >
+                <Users2 className="h-4 w-4" />
+                <span className="hidden sm:inline">Pack-Profil</span>
+              </Button>
+            )}
+          </div>
 
-        {/* Main Content */}
-        <Tabs defaultValue="packing" className="w-full">
-          <TabsList className="grid w-full grid-cols-6">
-            <TabsTrigger value="packing">
-              <Package className="h-4 w-4 mr-2" />
-              <span className="hidden sm:inline">Packliste</span>
-            </TabsTrigger>
-            <TabsTrigger value="equipment">
-              <MapPin className="h-4 w-4 mr-2" />
-              <span className="hidden sm:inline">Ausrüstung</span>
-            </TabsTrigger>
-            <TabsTrigger value="categories">
-              <FolderTree className="h-4 w-4 mr-2" />
-              <span className="hidden sm:inline">Kategorien</span>
-            </TabsTrigger>
-            <TabsTrigger value="tags">
-              <TagIcon className="h-4 w-4 mr-2" />
-              Tags
-            </TabsTrigger>
-            <TabsTrigger value="travelers">
-              <UserCircle className="h-4 w-4 mr-2" />
-              <span className="hidden sm:inline">Mitreisende</span>
-            </TabsTrigger>
-            <TabsTrigger value="vacations">
-              <Users className="h-4 w-4 mr-2" />
-              <span className="hidden sm:inline">Urlaube</span>
-            </TabsTrigger>
-          </TabsList>
-
-          {/* Packing Tab */}
-          <TabsContent value="packing" className="space-y-4">
+          {/* Packliste Content */}
+          {!currentVacation ? (
             <Card>
-              <CardHeader>
-                <CardTitle>Packliste: {currentVacation?.titel || 'Keine Auswahl'}</CardTitle>
-                <CardDescription>
-                  {currentVacation ? (
-                    <>
-                      {currentVacation.reiseziel_name} • {currentVacation.startdatum} bis {currentVacation.enddatum}
-                    </>
-                  ) : (
-                    'Wählen Sie einen Urlaub aus, um die Packliste zu sehen'
-                  )}
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {currentVacation && (
-                    <div className="flex justify-end gap-2">
-                      <Button 
-                        size="sm" 
-                        variant="outline"
-                        onClick={() => setShowGeneratorDialog(true)}
-                      >
-                        <Sparkles className="h-4 w-4 mr-2" />
-                        Automatisch generieren
-                      </Button>
-
-                      <Dialog open={showAddItemDialog} onOpenChange={setShowAddItemDialog}>
-                        <DialogTrigger asChild>
-                          <Button size="sm">
-                            <Plus className="h-4 w-4 mr-2" />
-                            Gegenstand hinzufügen
-                          </Button>
-                        </DialogTrigger>
-                        <DialogContent>
-                          <DialogHeader>
-                            <DialogTitle>Gegenstand zur Packliste hinzufügen</DialogTitle>
-                            <DialogDescription>
-                              Wählen Sie einen Gegenstand aus Ihrer Ausrüstung
-                            </DialogDescription>
-                          </DialogHeader>
-                          <div className="space-y-4">
-                            <div>
-                              <Label htmlFor="equipment-search">Gegenstand suchen</Label>
-                              <Input
-                                id="equipment-search"
-                                placeholder="Suchen..."
-                                value={equipmentSearchTerm}
-                                onChange={(e) => setEquipmentSearchTerm(e.target.value)}
-                              />
-                              <div className="mt-2 max-h-48 overflow-y-auto border rounded-md">
-                                {equipmentItems
-                                  .filter(item => {
-                                    // Filter by search term
-                                    const matchesSearch = item.was.toLowerCase().includes(equipmentSearchTerm.toLowerCase()) ||
-                                      (item.kategorie_titel?.toLowerCase().includes(equipmentSearchTerm.toLowerCase()))
-                                    // Exclude items already in packing list
-                                    const notInPackingList = !packingItems.some(pi => pi.gegenstand_id === item.id)
-                                    return matchesSearch && notInPackingList
-                                  })
-                                  .slice(0, 10)
-                                  .map(item => (
-                                    <div
-                                      key={item.id}
-                                      className={`p-2 cursor-pointer hover:bg-muted ${
-                                        packingItemForm.gegenstandId === item.id ? 'bg-muted' : ''
-                                      }`}
-                                      onClick={() => {
-                                        // Set transport from equipment default
-                                        setPackingItemForm({ 
-                                          ...packingItemForm, 
-                                          gegenstandId: item.id,
-                                          transportId: item.transport_id || ''
-                                        })
-                                      }}
-                                    >
-                                      <div className="text-sm font-medium">{item.was}</div>
-                                      <div className="text-xs text-muted-foreground">{item.kategorie_titel}</div>
-                                    </div>
-                                  ))}
-                              </div>
-                            </div>
-                            <div>
-                              <Label htmlFor="anzahl">Anzahl</Label>
-                              <Input
-                                id="anzahl"
-                                type="number"
-                                min="1"
-                                value={packingItemForm.anzahl}
-                                onChange={(e) => setPackingItemForm({ ...packingItemForm, anzahl: e.target.value })}
-                              />
-                            </div>
-                            <div>
-                              <Label htmlFor="transport">Transport</Label>
-                              <select
-                                id="transport"
-                                value={packingItemForm.transportId}
-                                onChange={(e) => setPackingItemForm({ ...packingItemForm, transportId: e.target.value })}
-                                className="w-full px-3 py-2 border border-input rounded-md bg-background"
-                              >
-                                <option value="">Nicht festgelegt</option>
-                                {transportVehicles.map(vehicle => (
-                                  <option key={vehicle.id} value={vehicle.id}>
-                                    {vehicle.name}
-                                  </option>
-                                ))}
-                              </select>
-                              <p className="text-xs text-muted-foreground mt-1">
-                                Wo wird dieser Gegenstand transportiert?
-                              </p>
-                            </div>
-                            <div>
-                              <Label htmlFor="bemerkung">Bemerkung (optional)</Label>
-                              <Input
-                                id="bemerkung"
-                                placeholder="z.B. nur für Wanderungen"
-                                value={packingItemForm.bemerkung}
-                                onChange={(e) => setPackingItemForm({ ...packingItemForm, bemerkung: e.target.value })}
-                              />
-                            </div>
-                            <Button onClick={handleAddPackingItem} disabled={isLoading} className="w-full">
-                              {isLoading ? 'Wird hinzugefügt...' : 'Hinzufügen'}
-                            </Button>
-                          </div>
-                        </DialogContent>
-                      </Dialog>
-                      <Dialog open={showEditItemDialog} onOpenChange={setShowEditItemDialog}>
-                        <DialogContent>
-                          <DialogHeader>
-                            <DialogTitle>Packlisten-Eintrag bearbeiten</DialogTitle>
-                            <DialogDescription>
-                              Anzahl und Bemerkung anpassen
-                            </DialogDescription>
-                          </DialogHeader>
-                          <div className="space-y-4">
-                            <div>
-                              <Label htmlFor="edit-anzahl">Anzahl</Label>
-                              <Input
-                                id="edit-anzahl"
-                                type="number"
-                                min="1"
-                                value={packingItemForm.anzahl}
-                                onChange={(e) => setPackingItemForm({ ...packingItemForm, anzahl: e.target.value })}
-                              />
-                            </div>
-                            <div>
-                              <Label htmlFor="edit-bemerkung">Bemerkung (optional)</Label>
-                              <Input
-                                id="edit-bemerkung"
-                                placeholder="z.B. nur für Wanderungen"
-                                value={packingItemForm.bemerkung}
-                                onChange={(e) => setPackingItemForm({ ...packingItemForm, bemerkung: e.target.value })}
-                              />
-                            </div>
-                            <Button onClick={handleUpdatePackingItem} disabled={isLoading} className="w-full">
-                              {isLoading ? 'Wird aktualisiert...' : 'Aktualisieren'}
-                            </Button>
-                          </div>
-                        </DialogContent>
-                      </Dialog>
-                    </div>
-                  )}
-                  {currentVacation ? (
-                    <>
-                      <PackingList
-                        items={packingItems}
-                        onToggle={handleToggleItem}
-                        onToggleMitreisender={handleToggleMitreisender}
-                        onToggleMultipleMitreisende={handleToggleMultipleMitreisende}
-                        onEdit={handleEditPackingItem}
-                        onDelete={handleDeletePackingItem}
-                        selectedProfile={selectedPackProfile}
-                        hidePackedItems={hidePackedItems}
-                        onOpenSettings={() => setShowPackSettings(true)}
-                      />
-
-                      <PackingSettingsSidebar
-                        isOpen={showPackSettings}
-                        onClose={() => setShowPackSettings(false)}
-                        mitreisende={vacationMitreisende}
-                        selectedProfile={selectedPackProfile}
-                        onProfileChange={setSelectedPackProfile}
-                        hidePackedItems={hidePackedItems}
-                        onHidePackedChange={setHidePackedItems}
-                      />
-                    </>
-                  ) : (
-                    <p className="text-muted-foreground">Keine Urlaube vorhanden</p>
-                  )}
-                </div>
+              <CardContent className="pt-6">
+                <p className="text-muted-foreground text-center">
+                  Keine Urlaube vorhanden. Erstellen Sie einen neuen Urlaub über die Navigation!
+                </p>
               </CardContent>
             </Card>
-          </TabsContent>
-
-          {/* Equipment Tab */}
-          <TabsContent value="equipment" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <div className="flex justify-between items-start">
-                  <div>
-                    <CardTitle>Ausrüstungsverwaltung</CardTitle>
-                    <CardDescription>
-                      Verwalten Sie Ihre Camping-Ausrüstungsgegenstände
-                    </CardDescription>
-                  </div>
-                  <Dialog open={showEquipmentDialog} onOpenChange={(open) => {
-                    if (!open) {
-                      handleCloseEquipmentDialog()
-                    } else {
-                      setShowEquipmentDialog(true)
-                    }
-                  }}>
-                    <DialogTrigger asChild>
-                      <Button size="sm">
-                        <Plus className="h-4 w-4 mr-2" />
-                        Neuer Gegenstand
-                      </Button>
-                    </DialogTrigger>
-                    <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-                      <DialogHeader>
-                        <DialogTitle>
-                          {editingEquipmentId ? 'Gegenstand bearbeiten' : 'Neuen Gegenstand erstellen'}
-                        </DialogTitle>
-                        <DialogDescription>
-                          {editingEquipmentId ? 'Bearbeiten Sie die Details des Gegenstands' : 'Geben Sie die Details für einen neuen Gegenstand ein'}
-                        </DialogDescription>
-                      </DialogHeader>
-                      <div className="space-y-4">
-                        <div>
-                          <Label htmlFor="was">Bezeichnung</Label>
-                          <Input
-                            id="was"
-                            placeholder="z.B. Zelt"
-                            value={newEquipmentForm.was}
-                            onChange={(e) => setNewEquipmentForm({ ...newEquipmentForm, was: e.target.value })}
-                          />
-                        </div>
-                        <div>
-                          <Label htmlFor="kategorie">Kategorie</Label>
-                          <div className="relative">
-                            <button
-                              onClick={() => setShowCategoryDropdown(!showCategoryDropdown)}
-                              className="w-full px-3 py-2 border border-input rounded-md bg-background text-left flex justify-between items-center hover:bg-accent"
-                            >
-                              <span>
-                                {selectedCategory
-                                  ? `${selectedCategory.hauptkategorie_titel} > ${selectedCategory.titel}`
-                                  : 'Kategorie wählen...'}
-                              </span>
-                              <ChevronDown className="h-4 w-4 opacity-50" />
-                            </button>
-                            {showCategoryDropdown && (
-                              <div className="absolute z-10 w-full mt-1 border border-input rounded-md bg-background shadow-md">
-                                <Input
-                                  placeholder="Suchen..."
-                                  value={categorySearchTerm}
-                                  onChange={(e) => setCategorySearchTerm(e.target.value)}
-                                  className="border-0 border-b rounded-none"
-                                />
-                                <div className="max-h-64 overflow-y-auto">
-                                  {Object.entries(groupedCategories).length === 0 ? (
-                                    <div className="p-3 text-sm text-muted-foreground text-center">
-                                      Keine Kategorien gefunden
-                                    </div>
-                                  ) : (
-                                    Object.entries(groupedCategories).map(([mainCat, cats]) => (
-                                      <div key={mainCat}>
-                                        <div className="px-3 py-2 text-xs font-semibold text-muted-foreground bg-muted/50">
-                                          {mainCat}
-                                        </div>
-                                        {cats.map(cat => (
-                                          <button
-                                            key={cat.id}
-                                            onClick={() => {
-                                              setNewEquipmentForm({ ...newEquipmentForm, kategorie_id: cat.id })
-                                              setShowCategoryDropdown(false)
-                                              setCategorySearchTerm('')
-                                            }}
-                                            className="w-full px-6 py-2 text-left text-sm hover:bg-accent transition-colors"
-                                          >
-                                            {cat.titel}
-                                          </button>
-                                        ))}
-                                      </div>
-                                    ))
-                                  )}
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                        <div>
-                          <Label htmlFor="transport">Transport-Standard</Label>
-                          <select
-                            id="transport"
-                            value={newEquipmentForm.transport_id}
-                            onChange={(e) => setNewEquipmentForm({ ...newEquipmentForm, transport_id: e.target.value })}
-                            className="w-full px-3 py-2 border border-input rounded-md bg-background"
-                          >
-                            <option value="">Kein Standard festgelegt</option>
-                            {transportVehicles.map(vehicle => (
-                              <option key={vehicle.id} value={vehicle.id}>
-                                {vehicle.name}
-                              </option>
-                            ))}
-                          </select>
-                          <p className="text-xs text-muted-foreground mt-1">
-                            Wo wird dieser Gegenstand normalerweise transportiert?
-                          </p>
-                        </div>
-                        <div className="grid grid-cols-2 gap-4">
-                          <div>
-                            <Label htmlFor="gewicht">Gewicht (kg)</Label>
-                            <Input
-                              id="gewicht"
-                              placeholder="z.B. 2,5"
-                              value={newEquipmentForm.einzelgewicht}
-                              onChange={(e) => {
-                                let value = e.target.value
-                                // Allow only digits and comma
-                                value = value.replace(/[^\d,]/g, '')
-                                // Prevent multiple commas
-                                const parts = value.split(',')
-                                if (parts.length > 2) {
-                                  value = parts[0] + ',' + parts.slice(1).join('')
-                                }
-                                setNewEquipmentForm({ ...newEquipmentForm, einzelgewicht: value })
-                              }}
-                            />
-                          </div>
-                          <div>
-                            <Label htmlFor="anzahl">Standard-Anzahl</Label>
-                            <Input
-                              id="anzahl"
-                              type="number"
-                              placeholder="z.B. 1"
-                              value={newEquipmentForm.standard_anzahl}
-                              onChange={(e) => setNewEquipmentForm({ ...newEquipmentForm, standard_anzahl: e.target.value })}
-                            />
-                          </div>
-                        </div>
-                        <div>
-                          <Label htmlFor="status">Status</Label>
-                          <select
-                            id="status"
-                            value={newEquipmentForm.status}
-                            onChange={(e) => setNewEquipmentForm({ ...newEquipmentForm, status: e.target.value })}
-                            className="w-full px-3 py-2 border border-input rounded-md bg-background"
-                          >
-                            <option value="Normal">Normal</option>
-                            <option value="Immer gepackt">Immer gepackt</option>
-                            <option value="Fest Installiert">Fest Installiert</option>
-                            <option value="Ausgemustert">Ausgemustert</option>
-                          </select>
-                        </div>
-                        <div>
-                          <Label htmlFor="details">Details</Label>
-                          <Input
-                            id="details"
-                            placeholder="z.B. 3-Personen Zelt"
-                            value={newEquipmentForm.details}
-                            onChange={(e) => setNewEquipmentForm({ ...newEquipmentForm, details: e.target.value })}
-                          />
-                        </div>
-
-                        {/* Standard-Flag */}
-                        <div className="flex items-center space-x-2 p-3 border rounded-lg bg-yellow-50">
-                          <input
-                            type="checkbox"
-                            id="is-standard"
-                            checked={newEquipmentForm.is_standard}
-                            onChange={(e) => setNewEquipmentForm({ ...newEquipmentForm, is_standard: e.target.checked })}
-                            className="h-4 w-4 rounded border-gray-300"
-                          />
-                          <label htmlFor="is-standard" className="text-sm cursor-pointer flex items-center gap-2">
-                            <span className="text-lg">⭐</span>
-                            <div>
-                              <div className="font-medium">Als Standard markieren</div>
-                              <div className="text-xs text-muted-foreground">
-                                Wird bei automatischer Packlisten-Generierung immer vorgeschlagen
-                              </div>
-                            </div>
-                          </label>
-                        </div>
-
-                        {/* Tags */}
-                        <div>
-                          <Label>Tags für Packlisten-Generierung</Label>
-                          <div className="border rounded-lg p-3 space-y-2 max-h-48 overflow-y-auto">
-                            {tags.length === 0 ? (
-                              <p className="text-sm text-muted-foreground text-center py-2">
-                                Keine Tags vorhanden. Erstellen Sie zuerst Tags im Tab &quot;Tags&quot;.
-                              </p>
-                            ) : (
-                              <div className="grid grid-cols-2 gap-2">
-                                {tags.map((tag) => (
-                                  <div key={tag.id} className="flex items-center space-x-2">
-                                    <input
-                                      type="checkbox"
-                                      id={`tag-${tag.id}`}
-                                      checked={newEquipmentForm.tags.includes(tag.id)}
-                                      onChange={(e) => {
-                                        const newTags = e.target.checked
-                                          ? [...newEquipmentForm.tags, tag.id]
-                                          : newEquipmentForm.tags.filter(id => id !== tag.id)
-                                        setNewEquipmentForm({ ...newEquipmentForm, tags: newTags })
-                                      }}
-                                      className="h-4 w-4 rounded border-gray-300"
-                                    />
-                                    <label htmlFor={`tag-${tag.id}`} className="text-sm cursor-pointer flex items-center gap-1">
-                                      <span
-                                        className="w-3 h-3 rounded-full inline-block"
-                                        style={{ backgroundColor: tag.farbe || '#3b82f6' }}
-                                      />
-                                      {tag.icon && <span>{tag.icon}</span>}
-                                      {tag.titel}
-                                    </label>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                          <p className="text-xs text-muted-foreground mt-1">
-                            Tags helfen bei der automatischen Generierung von Packlisten (z.B. Sommer, Strand, Feuerküche)
-                          </p>
-                        </div>
-                        
-                        {/* Mitreisenden-Typ */}
-                        <div>
-                          <Label htmlFor="mitreisenden-typ">Für wen gilt dieser Gegenstand?</Label>
-                          <select
-                            id="mitreisenden-typ"
-                            value={newEquipmentForm.mitreisenden_typ}
-                            onChange={(e) => setNewEquipmentForm({ 
-                              ...newEquipmentForm, 
-                              mitreisenden_typ: e.target.value as 'pauschal' | 'alle' | 'ausgewaehlte',
-                              standard_mitreisende: e.target.value === 'ausgewaehlte' ? newEquipmentForm.standard_mitreisende : []
-                            })}
-                            className="w-full px-3 py-2 border border-input rounded-md bg-background"
-                          >
-                            <option value="pauschal">Pauschal (gemeinsam für alle)</option>
-                            <option value="alle">Für jeden Mitreisenden separat</option>
-                            <option value="ausgewaehlte">Nur für ausgewählte Mitreisende</option>
-                          </select>
-                          <p className="text-xs text-muted-foreground mt-1">
-                            {newEquipmentForm.mitreisenden_typ === 'pauschal' && 'Wird einmal für den gesamten Urlaub gepackt (z.B. Gasflasche)'}
-                            {newEquipmentForm.mitreisenden_typ === 'alle' && 'Jeder Mitreisende muss separat packen und abhaken (z.B. Kleidung, Kosmetik)'}
-                            {newEquipmentForm.mitreisenden_typ === 'ausgewaehlte' && 'Nur bestimmte Personen müssen packen (z.B. Kontaktlinsen, Spielzeug)'}
-                          </p>
-                        </div>
-                        
-                        {/* Standard-Mitreisende (nur bei "ausgewählte") */}
-                        {newEquipmentForm.mitreisenden_typ === 'ausgewaehlte' && (
-                          <div>
-                            <Label>Standard-Mitreisende</Label>
-                            <div className="border rounded-md p-3 space-y-2 max-h-48 overflow-y-auto">
-                              {allMitreisende.length === 0 ? (
-                                <p className="text-sm text-muted-foreground text-center py-2">
-                                  Noch keine Mitreisenden angelegt
-                                </p>
-                              ) : (
-                                allMitreisende.map((mitreisender) => (
-                                  <div key={mitreisender.id} className="flex items-center gap-2">
-                                    <input
-                                      type="checkbox"
-                                      id={`std-mitreisender-${mitreisender.id}`}
-                                      checked={newEquipmentForm.standard_mitreisende.includes(mitreisender.id)}
-                                      onChange={(e) => {
-                                        const newSelection = e.target.checked
-                                          ? [...newEquipmentForm.standard_mitreisende, mitreisender.id]
-                                          : newEquipmentForm.standard_mitreisende.filter(id => id !== mitreisender.id)
-                                        setNewEquipmentForm({ ...newEquipmentForm, standard_mitreisende: newSelection })
-                                      }}
-                                      className="h-4 w-4 rounded border-gray-300"
-                                    />
-                                    <label
-                                      htmlFor={`std-mitreisender-${mitreisender.id}`}
-                                      className="text-sm cursor-pointer"
-                                    >
-                                      {mitreisender.name}
-                                    </label>
-                                  </div>
-                                ))
-                              )}
-                            </div>
-                            <p className="text-xs text-muted-foreground mt-1">
-                              Diese Mitreisenden werden standardmäßig zugeordnet, wenn der Gegenstand zur Packliste hinzugefügt wird
-                            </p>
-                          </div>
-                        )}
-                        
-                        <div>
-                          <div className="flex justify-between items-center mb-2">
-                            <Label>Links</Label>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={handleAddLink}
-                            >
-                              <Plus className="h-3 w-3 mr-1" />
-                              Link hinzufügen
-                            </Button>
-                          </div>
-                          <div className="space-y-2">
-                            {newEquipmentForm.links.map((link, index) => (
-                              <div key={index} className="flex gap-2">
-                                <Input
-                                  placeholder="https://..."
-                                  value={link}
-                                  onChange={(e) => handleLinkChange(index, e.target.value)}
-                                />
-                                {newEquipmentForm.links.length > 1 && (
-                                  <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => handleRemoveLink(index)}
-                                  >
-                                    <X className="h-4 w-4" />
-                                  </Button>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                          <p className="text-xs text-muted-foreground mt-1">
-                            Fügen Sie Links zu Produktseiten, Anleitungen oder Komponenten hinzu
-                          </p>
-                        </div>
-                        <Button onClick={handleCreateEquipment} disabled={isLoading} className="w-full">
-                          {isLoading ? 'Wird gespeichert...' : editingEquipmentId ? 'Gegenstand aktualisieren' : 'Gegenstand erstellen'}
-                        </Button>
-                      </div>
-                    </DialogContent>
-                  </Dialog>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <EquipmentTable
-                  equipmentItems={equipmentItems}
-                  categories={categories}
-                  mainCategories={mainCategories}
-                  transportVehicles={transportVehicles}
-                  tags={tags}
-                  onEdit={handleEditEquipment}
-                  onDelete={handleDeleteEquipment}
-                />
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* Categories Tab */}
-          <TabsContent value="categories" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Kategorien verwalten</CardTitle>
-                <CardDescription>
-                  Verwalten Sie Hauptkategorien und Kategorien für Ihre Ausrüstungsgegenstände
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <CategoryManager
-                  categories={categories}
-                  mainCategories={mainCategories}
-                  onRefresh={async () => {
-                    // Refresh categories
-                    const catRes = await fetch('/api/categories')
-                    const catData = await catRes.json()
-                    if (catData.success) setCategories(catData.data)
-                    
-                    // Refresh main categories
-                    const mainCatRes = await fetch('/api/main-categories')
-                    const mainCatData = await mainCatRes.json()
-                    if (mainCatData.success) setMainCategories(mainCatData.data)
-                  }}
-                />
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* Tags Tab */}
-          <TabsContent value="tags">
-            <TagManager 
-              tags={tags} 
-              onRefresh={() => {
-                fetch('/api/tags')
-                  .then(res => res.json())
-                  .then(data => {
-                    if (data.success) {
-                      setTags(data.data)
-                    }
-                  })
-              }} 
-            />
-          </TabsContent>
-
-          {/* Travelers Tab */}
-          <TabsContent value="travelers" className="space-y-4">
-            <TravelersManager
-              travelers={allMitreisende}
-              onRefresh={async () => {
-                // Refresh all mitreisende
-                const res = await fetch('/api/mitreisende')
-                const data = await res.json()
-                if (data.success) setAllMitreisende(data.data)
-              }}
-            />
-          </TabsContent>
-
-          {/* Vacations Tab */}
-          <TabsContent value="vacations" className="space-y-4">
-            <div className="grid gap-4">
-              {vacations.length === 0 ? (
-                <Card>
-                  <CardContent className="pt-6">
-                    <p className="text-muted-foreground text-center">Keine Urlaube vorhanden. Erstellen Sie einen neuen Urlaub!</p>
+          ) : (
+            <div className="space-y-6">
+              {/* Automatisch generieren Button - nur wenn Liste leer */}
+              {packingItems.length === 0 && (
+                <Card className="border-dashed">
+                  <CardContent className="pt-6 text-center">
+                    <p className="text-muted-foreground mb-4">
+                      Ihre Packliste ist leer. Generieren Sie automatisch Vorschläge oder fügen Sie manuell Gegenstände hinzu.
+                    </p>
+                    <Button 
+                      size="lg" 
+                      variant="outline"
+                      onClick={() => setShowGeneratorDialog(true)}
+                    >
+                      <Sparkles className="h-4 w-4 mr-2" />
+                      Automatisch generieren
+                    </Button>
                   </CardContent>
                 </Card>
-              ) : (
-                vacations.map((vacation) => (
-                  <Card
-                    key={vacation.id}
-                    className="cursor-pointer hover:shadow-md transition-shadow"
-                    onClick={() => setSelectedVacationId(vacation.id)}
-                  >
-                    <CardHeader>
-                      <div className="flex justify-between items-start">
-                        <div className="flex-1">
-                          <CardTitle>{vacation.titel}</CardTitle>
-                          <CardDescription>
-                            <div className="space-y-1 mt-2">
-                              {vacation.reiseziel_name && <p>📍 {vacation.reiseziel_name}</p>}
-                              {vacation.reiseziel_adresse && <p>📍 {vacation.reiseziel_adresse}</p>}
-                              {vacation.land_region && <p>🌍 {vacation.land_region}</p>}
-                              {vacation.abfahrtdatum && <p>🚗 Abreise: {vacation.abfahrtdatum}</p>}
-                              <p>📅 {vacation.startdatum} bis {vacation.enddatum}</p>
-                            </div>
-                          </CardDescription>
-                        </div>
-                        <div className="flex gap-2">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handleEditVacation(vacation)
-                            }}
-                          >
-                            <Edit2 className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handleDeleteVacation(vacation.id)
-                            }}
-                            disabled={isLoading}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
-                    </CardHeader>
-                    <CardContent>
-                      <Button variant="outline" size="sm">
-                        Packliste öffnen
-                      </Button>
-                    </CardContent>
-                  </Card>
-                ))
               )}
+
+              {/* Packing List */}
+              {packingItems.length > 0 && (
+                <PackingList
+                  items={packingItems}
+                  onToggle={handleToggleItem}
+                  onToggleMitreisender={handleToggleMitreisender}
+                  onToggleMultipleMitreisende={handleToggleMultipleMitreisende}
+                  onEdit={handleEditPackingItem}
+                  onDelete={handleDeletePackingItem}
+                  selectedProfile={selectedPackProfile}
+                  hidePackedItems={hidePackedItems}
+                  onOpenSettings={() => setShowPackSettings(true)}
+                />
+              )}
+
+              {/* Edit Item Dialog */}
+              <Dialog open={showEditItemDialog} onOpenChange={setShowEditItemDialog}>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Packlisten-Eintrag bearbeiten</DialogTitle>
+                    <DialogDescription>
+                      Anzahl und Bemerkung anpassen
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-4">
+                    <div>
+                      <Label htmlFor="edit-anzahl">Anzahl</Label>
+                      <Input
+                        id="edit-anzahl"
+                        type="number"
+                        min="1"
+                        value={packingItemForm.anzahl}
+                        onChange={(e) => setPackingItemForm({ ...packingItemForm, anzahl: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="edit-bemerkung">Bemerkung (optional)</Label>
+                      <Input
+                        id="edit-bemerkung"
+                        placeholder="z.B. nur für Wanderungen"
+                        value={packingItemForm.bemerkung}
+                        onChange={(e) => setPackingItemForm({ ...packingItemForm, bemerkung: e.target.value })}
+                      />
+                    </div>
+                    <Button onClick={handleUpdatePackingItem} disabled={isLoading} className="w-full">
+                      {isLoading ? 'Wird aktualisiert...' : 'Aktualisieren'}
+                    </Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
+
+              {/* Add Item Dialog */}
+              <Dialog open={showAddItemDialog} onOpenChange={setShowAddItemDialog}>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Gegenstand zur Packliste hinzufügen</DialogTitle>
+                    <DialogDescription>
+                      Wählen Sie einen Gegenstand aus Ihrer Ausrüstung
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-4">
+                    <div>
+                      <Label htmlFor="equipment-search">Gegenstand suchen</Label>
+                      <Input
+                        id="equipment-search"
+                        placeholder="Suchen..."
+                        value={equipmentSearchTerm}
+                        onChange={(e) => setEquipmentSearchTerm(e.target.value)}
+                      />
+                      <div className="mt-2 max-h-48 overflow-y-auto border rounded-md">
+                        {equipmentItems
+                          .filter(item => {
+                            const matchesSearch = item.was.toLowerCase().includes(equipmentSearchTerm.toLowerCase()) ||
+                              (item.kategorie_titel?.toLowerCase().includes(equipmentSearchTerm.toLowerCase()))
+                            const notInPackingList = !packingItems.some(pi => pi.gegenstand_id === item.id)
+                            return matchesSearch && notInPackingList
+                          })
+                          .slice(0, 10)
+                          .map(item => (
+                            <div
+                              key={item.id}
+                              className={`p-2 cursor-pointer hover:bg-muted ${
+                                packingItemForm.gegenstandId === item.id ? 'bg-muted' : ''
+                              }`}
+                              onClick={() => {
+                                setPackingItemForm({ 
+                                  ...packingItemForm, 
+                                  gegenstandId: item.id,
+                                  transportId: item.transport_id || ''
+                                })
+                              }}
+                            >
+                              <div className="text-sm font-medium">{item.was}</div>
+                              <div className="text-xs text-muted-foreground">{item.kategorie_titel}</div>
+                            </div>
+                          ))}
+                      </div>
+                    </div>
+                    <div>
+                      <Label htmlFor="anzahl">Anzahl</Label>
+                      <Input
+                        id="anzahl"
+                        type="number"
+                        min="1"
+                        value={packingItemForm.anzahl}
+                        onChange={(e) => setPackingItemForm({ ...packingItemForm, anzahl: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="transport">Transport</Label>
+                      <select
+                        id="transport"
+                        value={packingItemForm.transportId}
+                        onChange={(e) => setPackingItemForm({ ...packingItemForm, transportId: e.target.value })}
+                        className="w-full px-3 py-2 border border-input rounded-md bg-background"
+                      >
+                        <option value="">Nicht festgelegt</option>
+                        {transportVehicles.map(vehicle => (
+                          <option key={vehicle.id} value={vehicle.id}>
+                            {vehicle.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <Label htmlFor="bemerkung">Bemerkung (optional)</Label>
+                      <Input
+                        id="bemerkung"
+                        placeholder="z.B. nur für Wanderungen"
+                        value={packingItemForm.bemerkung}
+                        onChange={(e) => setPackingItemForm({ ...packingItemForm, bemerkung: e.target.value })}
+                      />
+                    </div>
+                    <Button onClick={handleAddPackingItem} disabled={isLoading} className="w-full">
+                      {isLoading ? 'Wird hinzugefügt...' : 'Hinzufügen'}
+                    </Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
             </div>
-          </TabsContent>
-        </Tabs>
+          )}
+        </div>
       </div>
+
+      {/* Pack Settings Sidebar (Rechts) */}
+      <PackingSettingsSidebar
+        isOpen={showPackSettings}
+        onClose={() => setShowPackSettings(false)}
+        mitreisende={vacationMitreisende}
+        selectedProfile={selectedPackProfile}
+        onProfileChange={setSelectedPackProfile}
+        hidePackedItems={hidePackedItems}
+        onHidePackedChange={setHidePackedItems}
+      />
+
+      {/* FAB Button für Gegenstand hinzufügen */}
+      {currentVacation && (
+        <div className="fixed bottom-6 right-6 z-30">
+          <Dialog open={showAddItemDialog} onOpenChange={setShowAddItemDialog}>
+            <DialogTrigger asChild>
+              <Button
+                size="lg"
+                className="h-14 w-14 rounded-full shadow-lg hover:shadow-xl transition-shadow"
+              >
+                <Plus className="h-6 w-6" />
+              </Button>
+            </DialogTrigger>
+          </Dialog>
+        </div>
+      )}
+
       {/* Packing List Generator Dialog */}
       <PackingListGenerator
         open={showGeneratorDialog}
