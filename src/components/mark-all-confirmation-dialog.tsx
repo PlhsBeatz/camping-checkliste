@@ -10,6 +10,7 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { CheckCheck } from 'lucide-react'
+import { cn } from '@/lib/utils'
 
 interface MarkAllConfirmationDialogProps {
   isOpen: boolean
@@ -32,11 +33,13 @@ export function MarkAllConfirmationDialog({
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <div className="mx-auto w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center mb-4">
-            <CheckCheck className="h-6 w-6 text-blue-600" />
+          <div className="mx-auto w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mb-4 border border-primary/20">
+            <CheckCheck className="h-6 w-6 text-primary" />
           </div>
-          <DialogTitle className="text-center">{isUnmarkMode ? 'Für alle zurücksetzen?' : 'Für alle abhaken?'}</DialogTitle>
-          <DialogDescription className="text-center">
+          <DialogTitle className="text-center text-foreground">
+            {isUnmarkMode ? 'Für alle zurücksetzen?' : 'Für alle abhaken?'}
+          </DialogTitle>
+          <DialogDescription className="text-center text-muted-foreground">
             {isUnmarkMode 
               ? `Dieser Gegenstand wird für ${travelerNames.join(', ')} als "nicht gepackt" zurückgesetzt.`
               : `Dieser Gegenstand wird für ${travelerNames.join(', ')} als "gepackt" markiert.`
@@ -48,7 +51,7 @@ export function MarkAllConfirmationDialog({
           <Button
             variant="outline"
             onClick={onClose}
-            className="w-full sm:w-auto"
+            className="w-full sm:w-auto border-border hover:bg-accent"
           >
             Abbrechen
           </Button>
@@ -57,7 +60,11 @@ export function MarkAllConfirmationDialog({
               onConfirm()
               onClose()
             }}
-            className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700"
+            className={cn(
+              "w-full sm:w-auto",
+              "bg-primary hover:bg-primary/90 text-primary-foreground",
+              "font-medium"
+            )}
           >
             {isUnmarkMode ? 'Ja, zurücksetzen' : 'Ja, für alle'}
           </Button>

@@ -3,6 +3,7 @@
 import { useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Undo2 } from 'lucide-react'
+import { cn } from '@/lib/utils'
 
 interface UndoToastProps {
   isVisible: boolean
@@ -32,9 +33,9 @@ export function UndoToast({
   if (!isVisible) return null
 
   return (
-    <div className="fixed bottom-4 left-4 right-4 z-50 animate-in slide-in-from-bottom-5">
-      <div className="bg-gray-900 text-white rounded-lg shadow-lg p-4 flex items-center justify-between max-w-md mx-auto">
-        <div className="flex-1">
+    <div className="fixed bottom-6 left-4 right-4 z-50 animate-in slide-in-from-bottom-5 md:left-auto md:right-6 md:max-w-md">
+      <div className="bg-primary text-primary-foreground rounded-lg shadow-xl p-4 flex items-center justify-between border border-primary-foreground/10">
+        <div className="flex-1 pr-4">
           <p className="text-sm font-medium">
             {itemName} als gepackt markiert
           </p>
@@ -46,9 +47,13 @@ export function UndoToast({
             onUndo()
             onDismiss()
           }}
-          className="text-blue-400 hover:text-blue-300 hover:bg-gray-800 ml-4"
+          className={cn(
+            "bg-orange-500 hover:bg-orange-600 text-white font-bold uppercase tracking-wide",
+            "px-4 py-2 rounded-md transition-colors duration-200",
+            "flex items-center gap-2 shrink-0"
+          )}
         >
-          <Undo2 className="h-4 w-4 mr-2" />
+          <Undo2 className="h-4 w-4" />
           Rückgängig
         </Button>
       </div>
