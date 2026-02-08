@@ -20,7 +20,7 @@ export default function AusruestungPage() {
   const [mainCategories, setMainCategories] = useState<MainCategory[]>([])
   const [transportVehicles, setTransportVehicles] = useState<TransportVehicle[]>([])
   const [tags, setTags] = useState<Tag[]>([])
-  const [isLoading, setIsLoading] = useState(false)
+  const [_isLoading, _setIsLoading] = useState(false)
 
   // Load equipment items
   useEffect(() => {
@@ -112,7 +112,7 @@ export default function AusruestungPage() {
       return
     }
 
-    setIsLoading(true)
+    _setIsLoading(true)
     try {
       const res = await fetch(`/api/equipment-items?id=${equipmentId}`, {
         method: 'DELETE'
@@ -127,7 +127,7 @@ export default function AusruestungPage() {
       console.error('Failed to delete equipment:', error)
       alert('Fehler beim Löschen des Gegenstands')
     } finally {
-      setIsLoading(false)
+      _setIsLoading(false)
     }
   }
 

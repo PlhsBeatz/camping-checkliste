@@ -6,10 +6,10 @@ import { PackingList } from '@/components/packing-list-enhanced'
 import { PackingListGenerator } from '@/components/packing-list-generator'
 import { NavigationSidebar } from '@/components/navigation-sidebar'
 import { PackingSettingsSidebar } from '@/components/packing-settings-sidebar'
-import { Plus, Trash2, Edit2, Sparkles, Menu, Users2 } from 'lucide-react'
+import { Plus, Sparkles, Menu, Users2 } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { Vacation, PackingItem, TransportVehicle, Mitreisender } from '@/lib/db'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
@@ -18,7 +18,7 @@ export default function Home() {
   // Data state
   const [vacations, setVacations] = useState<Vacation[]>([])
   const [packingItems, setPackingItems] = useState<PackingItem[]>([])
-  const [transportVehicles, setTransportVehicles] = useState<TransportVehicle[]>([])
+  const [_transportVehicles, _setTransportVehicles] = useState<TransportVehicle[]>([])
   const [vacationMitreisende, setVacationMitreisende] = useState<Mitreisender[]>([])
   const [selectedVacationId, setSelectedVacationId] = useState<string | null>(null)
   const [packedItems, setPackedItems] = useState<Set<string>>(new Set())
@@ -31,7 +31,7 @@ export default function Home() {
   const [showEditItemDialog, setShowEditItemDialog] = useState(false)
   const [showGeneratorDialog, setShowGeneratorDialog] = useState(false)
   const [editingPackingItemId, setEditingPackingItemId] = useState<string | null>(null)
-  const [equipmentSearchTerm, setEquipmentSearchTerm] = useState('')
+  const [_equipmentSearchTerm, _setEquipmentSearchTerm] = useState('')
   const [selectedPackProfile, setSelectedPackProfile] = useState<string | null>(null)
   const [hidePackedItems, setHidePackedItems] = useState(false)
   
@@ -114,7 +114,7 @@ export default function Home() {
         const res = await fetch('/api/transport-vehicles')
         const data = await res.json()
         if (data.success) {
-          setTransportVehicles(data.data)
+          _setTransportVehicles(data.data)
         }
       } catch (error) {
         console.error('Failed to fetch transport vehicles:', error)
@@ -241,7 +241,7 @@ export default function Home() {
     }
   }
 
-  const handleAddPackingItem = async () => {
+  const _handleAddPackingItem = async () => {
     if (!packingItemForm.gegenstandId || !selectedVacationId) {
       alert('Bitte wählen Sie einen Gegenstand aus')
       return
@@ -273,7 +273,7 @@ export default function Home() {
         }
         setShowAddItemDialog(false)
         setPackingItemForm({ gegenstandId: '', anzahl: '1', bemerkung: '', transportId: '' })
-        setEquipmentSearchTerm('')
+        _setEquipmentSearchTerm('')
       } else {
         alert('Fehler beim Hinzufügen: ' + data.error)
       }
