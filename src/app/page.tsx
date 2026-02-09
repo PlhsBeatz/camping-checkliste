@@ -7,7 +7,7 @@ import { PackingListGenerator } from '@/components/packing-list-generator'
 import { NavigationSidebar } from '@/components/navigation-sidebar'
 import { PackingSettingsSidebar } from '@/components/packing-settings-sidebar'
 import { Plus, Sparkles, Menu, Users2 } from 'lucide-react'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { Vacation, PackingItem, TransportVehicle, Mitreisender } from '@/lib/db'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
@@ -42,7 +42,7 @@ const findNextVacation = (vacations: Vacation[]): Vacation | null => {
   )[0] || null
 }
 
-export default function Home() {
+function HomeContent() {
   // Data state
   const [vacations, setVacations] = useState<Vacation[]>([])
   const [packingItems, setPackingItems] = useState<PackingItem[]>([])
@@ -101,7 +101,7 @@ export default function Home() {
       }
     }
     fetchVacations()
-  }, [urlVacationId]) // Run when URL parameter changes
+  }, [urlVacationId, selectedVacationId]) // Added selectedVacationId to dependencies
 
   // Fetch Packing Items for selected vacation
   useEffect(() => {
@@ -620,5 +620,21 @@ export default function Home() {
         onGenerate={handleGeneratePackingList}
       />
     </div>
+  )
+}
+
+// Wrap in Suspense boundary for useSearchParams
+export default function Home() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-[rgb(250,250,249)] flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[rgb(45,79,30)] mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Lädt...</p>
+        </div>
+      </div>
+    }>
+      <HomeContent />
+    </Suspense>
   )
 }
