@@ -19,7 +19,13 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { Pencil, Trash2, Search, Filter, Star } from 'lucide-react'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { Search, Filter, Star, MoreVertical, Pencil, Trash2, ExternalLink } from 'lucide-react'
 import { EquipmentItem, Category, MainCategory, TransportVehicle, Tag } from '@/lib/db'
 
 interface EquipmentTableProps {
@@ -61,6 +67,12 @@ export function EquipmentTable({
     return mainCategory?.titel || 'Unbekannt'
   }, [categories, mainCategories])
 
+  // Get main category ID by category ID
+  const getMainCategoryId = useCallback((categoryId: string) => {
+    const category = categories.find(c => c.id === categoryId)
+    return category?.hauptkategorie_id || null
+  }, [categories])
+
   // Get transport name by ID
   const getTransportName = (transportId: string | null) => {
     if (!transportId) return '-'
@@ -75,6 +87,13 @@ export function EquipmentTable({
       const tag = tags.find(t => t.id === tagId.id)
       return tag?.titel || ''
     }).filter(Boolean)
+  }
+
+  // Format weight in kg with German decimal format
+  const formatWeight = (weightInGrams: number | null) => {
+    if (!weightInGrams) return '-'
+    const kg = weightInGrams / 1000
+    return `${kg.toFixed(3).replace('.', ',')} kg`
   }
 
   // Filter and search logic
@@ -96,9 +115,8 @@ export function EquipmentTable({
 
       // Main category filter
       if (filterMainCategory !== 'all') {
-        const itemMainCategory = getMainCategoryName(item.kategorie_id)
-        const filterMainCategoryName = mainCategories.find(mc => mc.id === filterMainCategory)?.titel
-        if (itemMainCategory !== filterMainCategoryName) {
+        const itemMainCategoryId = getMainCategoryId(item.kategorie_id)
+        if (itemMainCategoryId !== filterMainCategory) {
           return false
         }
       }
@@ -120,28 +138,43 @@ export function EquipmentTable({
 
       return true
     })
-  }, [equipmentItems, searchTerm, filterMainCategory, filterTransport, filterStatus, mainCategories, getMainCategoryName])
+  }, [equipmentItems, searchTerm, filterMainCategory, filterTransport, filterStatus, getMainCategoryId])
 
-  // Group by category
+  // Group by main category and then by category with sticky headers
   const groupedItems = useMemo(() => {
-    const groups: Record<string, EquipmentItem[]> = {}
+    const mainCategoryGroups: Record<string, Record<string, EquipmentItem[]>> = {}
     
     filteredItems.forEach(item => {
+      const mainCategoryName = getMainCategoryName(item.kategorie_id)
       const categoryName = getCategoryName(item.kategorie_id)
-      if (!groups[categoryName]) {
-        groups[categoryName] = []
+      
+      if (!mainCategoryGroups[mainCategoryName]) {
+        mainCategoryGroups[mainCategoryName] = {}
       }
-      groups[categoryName].push(item)
+      if (!mainCategoryGroups[mainCategoryName][categoryName]) {
+        mainCategoryGroups[mainCategoryName][categoryName] = []
+      }
+      mainCategoryGroups[mainCategoryName][categoryName].push(item)
     })
 
-    // Sort categories alphabetically
-    return Object.keys(groups)
+    // Sort main categories and categories alphabetically
+    return Object.keys(mainCategoryGroups)
       .sort()
-      .map(categoryName => ({
-        categoryName,
-        items: groups[categoryName]
-      }))
-  }, [filteredItems, getCategoryName])
+      .map(mainCategoryName => {
+        const categoryGroup = mainCategoryGroups[mainCategoryName]
+        if (!categoryGroup) return { mainCategoryName, categories: [] }
+        
+        return {
+          mainCategoryName,
+          categories: Object.keys(categoryGroup)
+            .sort()
+            .map(categoryName => ({
+              categoryName,
+              items: categoryGroup[categoryName] || []
+            }))
+        }
+      })
+  }, [filteredItems, getCategoryName, getMainCategoryName])
 
   // Status badge colors
   const getStatusColor = (status: string) => {
@@ -149,6 +182,7 @@ export function EquipmentTable({
       case 'Immer gepackt': return 'bg-green-100 text-green-800'
       case 'Immer dabei': return 'bg-blue-100 text-blue-800'
       case 'Optional': return 'bg-gray-100 text-gray-800'
+      case 'Ausgemustert': return 'bg-red-100 text-red-800'
       default: return 'bg-gray-100 text-gray-800'
     }
   }
@@ -226,6 +260,7 @@ export function EquipmentTable({
                   <SelectItem value="Immer gepackt">Immer gepackt</SelectItem>
                   <SelectItem value="Immer dabei">Immer dabei</SelectItem>
                   <SelectItem value="Optional">Optional</SelectItem>
+                  <SelectItem value="Ausgemustert">Ausgemustert</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -253,97 +288,147 @@ export function EquipmentTable({
         </div>
       </div>
 
-      {/* Table */}
+      {/* Table - Mobile responsive with horizontal scroll */}
       <div className="border rounded-lg overflow-hidden">
-        <div className="max-h-[600px] overflow-y-auto">
+        <div className="max-h-[600px] overflow-auto">
           <Table>
-            <TableHeader className="sticky top-0 bg-background z-10">
+            <TableHeader className="sticky top-0 bg-background z-20 border-b">
               <TableRow>
-                <TableHead className="w-[250px]">Was</TableHead>
-                <TableHead className="w-[150px]">Kategorie</TableHead>
-                <TableHead className="w-[120px]">Transport</TableHead>
-                <TableHead className="w-[100px]">Gewicht</TableHead>
-                <TableHead className="w-[80px]">Anzahl</TableHead>
-                <TableHead className="w-[120px]">Status</TableHead>
-                <TableHead className="w-[150px]">Tags</TableHead>
-                <TableHead className="w-[100px]">Aktionen</TableHead>
+                <TableHead className="min-w-[200px]">Was</TableHead>
+                <TableHead className="min-w-[100px]">Transport</TableHead>
+                <TableHead className="min-w-[100px]">Gewicht</TableHead>
+                <TableHead className="min-w-[80px]">Anzahl</TableHead>
+                <TableHead className="min-w-[120px]">Status</TableHead>
+                <TableHead className="min-w-[200px] max-w-[300px]">Details</TableHead>
+                <TableHead className="min-w-[150px]">Tags</TableHead>
+                <TableHead className="min-w-[60px]">Links</TableHead>
+                <TableHead className="min-w-[80px] sticky right-0 bg-background">Aktionen</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {groupedItems.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
                     Keine Ausrüstungsgegenstände gefunden
                   </TableCell>
                 </TableRow>
               ) : (
-                groupedItems.map(group => (
+                groupedItems.map(mainGroup => (
                   <>
-                    {/* Category Header */}
-                    <TableRow key={`header-${group.categoryName}`} className="bg-muted/50">
-                      <TableCell colSpan={8} className="font-semibold">
-                        {group.categoryName} ({group.items?.length || 0})
+                    {/* Main Category Header - Sticky */}
+                    <TableRow 
+                      key={`main-${mainGroup.mainCategoryName}`} 
+                      className="bg-[rgb(45,79,30)] text-white sticky z-10"
+                      style={{ top: '40px' }}
+                    >
+                      <TableCell colSpan={9} className="font-bold text-base py-3">
+                        {mainGroup.mainCategoryName}
                       </TableCell>
                     </TableRow>
-                    {/* Items */}
-                    {group.items?.map(item => (
-                      <TableRow key={item.id} className="hover:bg-muted/30">
-                        <TableCell className="font-medium">
-                          <div className="flex items-center gap-2">
-                            {item.is_standard && (
-                              <Star className="h-4 w-4 text-yellow-500 fill-yellow-500" />
-                            )}
-                            <span>{item.was}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-sm text-muted-foreground">
-                          {getMainCategoryName(item.kategorie_id)}
-                        </TableCell>
-                        <TableCell className="text-sm">
-                          {getTransportName(item.transport_id)}
-                        </TableCell>
-                        <TableCell className="text-sm">
-                          {item.einzelgewicht ? `${item.einzelgewicht}g` : '-'}
-                        </TableCell>
-                        <TableCell className="text-sm">
-                          {item.standard_anzahl}
-                        </TableCell>
-                        <TableCell>
-                          <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(item.status)}`}>
-                            {item.status}
-                          </span>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex flex-wrap gap-1">
-                            {getTagNames(item).map((tagName, idx) => (
-                              <span
-                                key={idx}
-                                className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-blue-100 text-blue-800"
-                              >
-                                {tagName}
+                    {mainGroup.categories.map(group => (
+                      <>
+                        {/* Category Header - Sticky below main category */}
+                        <TableRow 
+                          key={`header-${group.categoryName}`} 
+                          className="bg-muted/70 sticky z-10"
+                          style={{ top: '80px' }}
+                        >
+                          <TableCell colSpan={9} className="font-semibold py-2">
+                            {group.categoryName} ({group.items?.length || 0})
+                          </TableCell>
+                        </TableRow>
+                        {/* Items */}
+                        {group.items?.map(item => (
+                          <TableRow key={item.id} className="hover:bg-muted/30">
+                            <TableCell className="font-medium">
+                              <div className="flex items-center gap-2">
+                                {item.is_standard ? (
+                                  <Star className="h-4 w-4 text-yellow-500 fill-yellow-500 flex-shrink-0" />
+                                ) : (
+                                  <span className="w-4" /> 
+                                )}
+                                <span>{item.was}</span>
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-sm">
+                              {getTransportName(item.transport_id)}
+                            </TableCell>
+                            <TableCell className="text-sm">
+                              {formatWeight(item.einzelgewicht)}
+                            </TableCell>
+                            <TableCell className="text-sm">
+                              {item.standard_anzahl}
+                            </TableCell>
+                            <TableCell>
+                              <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(item.status)}`}>
+                                {item.status}
                               </span>
-                            ))}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex gap-1">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => onEdit(item)}
-                            >
-                              <Pencil className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => onDelete(item.id)}
-                            >
-                              <Trash2 className="h-4 w-4 text-destructive" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
+                            </TableCell>
+                            <TableCell className="text-sm text-muted-foreground max-w-[300px]">
+                              <div className="truncate" title={item.details || ''}>
+                                {item.details || '-'}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex flex-wrap gap-1">
+                                {getTagNames(item).map((tagName, idx) => (
+                                  <span
+                                    key={idx}
+                                    className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-blue-100 text-blue-800"
+                                  >
+                                    {tagName}
+                                  </span>
+                                ))}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              {item.links && item.links.length > 0 && (
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                                      <ExternalLink className="h-4 w-4 text-blue-600" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end">
+                                    {item.links.map((link, idx) => (
+                                      <DropdownMenuItem
+                                        key={idx}
+                                        onClick={() => window.open(link.url, '_blank')}
+                                        className="cursor-pointer"
+                                      >
+                                        <ExternalLink className="h-3 w-3 mr-2" />
+                                        {link.url.length > 40 ? link.url.substring(0, 40) + '...' : link.url}
+                                      </DropdownMenuItem>
+                                    ))}
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              )}
+                            </TableCell>
+                            <TableCell className="sticky right-0 bg-background">
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                                    <MoreVertical className="h-4 w-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem onClick={() => onEdit(item)}>
+                                    <Pencil className="h-4 w-4 mr-2" />
+                                    Bearbeiten
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem 
+                                    onClick={() => onDelete(item.id)}
+                                    className="text-destructive"
+                                  >
+                                    <Trash2 className="h-4 w-4 mr-2" />
+                                    Löschen
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </>
                     ))}
                   </>
                 ))
