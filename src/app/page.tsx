@@ -13,6 +13,34 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
+import { useSearchParams } from 'next/navigation'
+
+// Helper function to find the next vacation - FIXED
+const findNextVacation = (vacations: Vacation[]): Vacation | null => {
+  if (vacations.length === 0) return null
+  
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  
+  // Find vacations that start today or in the future
+  const upcomingVacations = vacations.filter(v => {
+    const startDate = new Date(v.startdatum)
+    startDate.setHours(0, 0, 0, 0)
+    return startDate >= today
+  })
+  
+  if (upcomingVacations.length === 0) {
+    // No upcoming vacations, return the most recent one
+    return vacations.sort((a, b) => 
+      new Date(b.startdatum).getTime() - new Date(a.startdatum).getTime()
+    )[0] || null
+  }
+  
+  // Return the vacation with the earliest start date (closest to today)
+  return upcomingVacations.sort((a, b) => 
+    new Date(a.startdatum).getTime() - new Date(b.startdatum).getTime()
+  )[0] || null
+}
 
 export default function Home() {
   // Data state
@@ -43,7 +71,11 @@ export default function Home() {
     transportId: ''
   })
 
-  // Fetch Vacations
+  // Get URL parameters
+  const searchParams = useSearchParams()
+  const urlVacationId = searchParams.get('vacation')
+
+  // Fetch Vacations and select vacation from URL or next vacation
   useEffect(() => {
     const fetchVacations = async () => {
       try {
@@ -51,8 +83,17 @@ export default function Home() {
         const data = await res.json()
         if (data.success) {
           setVacations(data.data)
-          if (data.data.length > 0 && !selectedVacationId) {
-            setSelectedVacationId(data.data[0].id)
+          
+          // Priority 1: URL parameter
+          if (urlVacationId && data.data.some((v: Vacation) => v.id === urlVacationId)) {
+            setSelectedVacationId(urlVacationId)
+          }
+          // Priority 2: Auto-select next vacation if no vacation is selected
+          else if (!selectedVacationId && data.data.length > 0) {
+            const nextVacation = findNextVacation(data.data)
+            if (nextVacation) {
+              setSelectedVacationId(nextVacation.id)
+            }
           }
         }
       } catch (error) {
@@ -60,7 +101,7 @@ export default function Home() {
       }
     }
     fetchVacations()
-  }, [selectedVacationId])
+  }, [urlVacationId]) // Run when URL parameter changes
 
   // Fetch Packing Items for selected vacation
   useEffect(() => {
@@ -384,11 +425,17 @@ export default function Home() {
   // Computed values
   const currentVacation = vacations.find(v => v.id === selectedVacationId)
 
-  // Note: equipmentItems will be fetched in the add item dialog when needed
-  // to avoid loading all equipment on page load
+  // Get initials for pack profile button
+  const getInitials = (name: string) => {
+    const parts = name.split(' ')
+    if (parts.length >= 2) {
+      return ((parts[0]?.[0] ?? '') + (parts[1]?.[0] ?? '')).toUpperCase()
+    }
+    return name.substring(0, 2).toUpperCase()
+  }
 
   return (
-    <div className="min-h-screen bg-background flex">
+    <div className="min-h-screen bg-[rgb(250,250,249)] flex">
       {/* Navigation Sidebar (Links) */}
       <NavigationSidebar
         isOpen={showNavSidebar}
@@ -400,46 +447,85 @@ export default function Home() {
         "flex-1 transition-all duration-300",
         "lg:ml-[280px]" // Platz für permanente Sidebar auf Desktop
       )}>
-        <div className="container mx-auto p-4 md:p-6 space-y-6">
-          {/* Header mit Toggle-Buttons */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              {/* Mobile Menu Toggle */}
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={() => setShowNavSidebar(true)}
-                className="lg:hidden"
-              >
-                <Menu className="h-5 w-5" />
-              </Button>
-              
-              <div>
-                <h1 className="text-3xl font-bold tracking-tight">
-                  Aktuelle Packliste
-                </h1>
-                <p className="text-muted-foreground mt-1">
-                  {currentVacation?.titel || 'Kein Urlaub ausgewählt'}
-                </p>
+        <div className="container mx-auto p-4 md:p-6">
+          {/* Unified White Header Container */}
+          {currentVacation && (
+            <div className="bg-white rounded-xl border border-gray-200 mb-6">
+              {/* Title Bar with Pack Profile Button */}
+              <div className="p-6 border-b border-gray-200">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    {/* Mobile Menu Toggle */}
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={() => setShowNavSidebar(true)}
+                      className="lg:hidden"
+                    >
+                      <Menu className="h-5 w-5" />
+                    </Button>
+                    
+                    <div>
+                      <h1 className="text-2xl font-bold tracking-tight text-gray-900">
+                        {currentVacation.titel}
+                      </h1>
+                    </div>
+                  </div>
+
+                  {/* Pack Profile Toggle - Only visible when there are packing items */}
+                  {packingItems.length > 0 && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowPackSettings(true)}
+                      className="flex items-center gap-2 h-10 px-3 rounded-full border-2 border-gray-900 bg-gray-900 text-white hover:bg-gray-800 font-semibold"
+                    >
+                      <span className="text-sm">
+                        {selectedPackProfile 
+                          ? getInitials(vacationMitreisende.find(m => m.id === selectedPackProfile)?.name || 'AL')
+                          : 'AL'}
+                      </span>
+                      <Users2 className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
               </div>
+
+              {/* Packing List Content - includes progress, tabs, and items */}
+              {packingItems.length > 0 ? (
+                <div className="p-6">
+                  <PackingList
+                    items={packingItems}
+                    onToggle={handleToggleItem}
+                    onToggleMitreisender={handleToggleMitreisender}
+                    onToggleMultipleMitreisende={handleToggleMultipleMitreisende}
+                    onEdit={handleEditPackingItem}
+                    onDelete={handleDeletePackingItem}
+                    selectedProfile={selectedPackProfile}
+                    hidePackedItems={hidePackedItems}
+                    onOpenSettings={() => setShowPackSettings(true)}
+                  />
+                </div>
+              ) : (
+                <div className="p-6 text-center">
+                  <p className="text-muted-foreground mb-4">
+                    Ihre Packliste ist leer. Generieren Sie automatisch Vorschläge oder fügen Sie manuell Gegenstände hinzu.
+                  </p>
+                  <Button 
+                    size="lg" 
+                    variant="outline"
+                    onClick={() => setShowGeneratorDialog(true)}
+                  >
+                    <Sparkles className="h-4 w-4 mr-2" />
+                    Automatisch generieren
+                  </Button>
+                </div>
+              )}
             </div>
+          )}
 
-            {/* Pack Profile Toggle */}
-            {currentVacation && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowPackSettings(true)}
-                className="flex items-center gap-2"
-              >
-                <Users2 className="h-4 w-4" />
-                <span className="hidden sm:inline">Pack-Profil</span>
-              </Button>
-            )}
-          </div>
-
-          {/* Packliste Content */}
-          {!currentVacation ? (
+          {/* No Vacation Selected */}
+          {!currentVacation && (
             <Card>
               <CardContent className="pt-6">
                 <p className="text-muted-foreground text-center">
@@ -447,79 +533,43 @@ export default function Home() {
                 </p>
               </CardContent>
             </Card>
-          ) : (
-            <div className="space-y-6">
-              {/* Automatisch generieren Button - nur wenn Liste leer */}
-              {packingItems.length === 0 && (
-                <Card className="border-dashed">
-                  <CardContent className="pt-6 text-center">
-                    <p className="text-muted-foreground mb-4">
-                      Ihre Packliste ist leer. Generieren Sie automatisch Vorschläge oder fügen Sie manuell Gegenstände hinzu.
-                    </p>
-                    <Button 
-                      size="lg" 
-                      variant="outline"
-                      onClick={() => setShowGeneratorDialog(true)}
-                    >
-                      <Sparkles className="h-4 w-4 mr-2" />
-                      Automatisch generieren
-                    </Button>
-                  </CardContent>
-                </Card>
-              )}
-
-              {/* Packing List */}
-              {packingItems.length > 0 && (
-                <PackingList
-                  items={packingItems}
-                  onToggle={handleToggleItem}
-                  onToggleMitreisender={handleToggleMitreisender}
-                  onToggleMultipleMitreisende={handleToggleMultipleMitreisende}
-                  onEdit={handleEditPackingItem}
-                  onDelete={handleDeletePackingItem}
-                  selectedProfile={selectedPackProfile}
-                  hidePackedItems={hidePackedItems}
-                  onOpenSettings={() => setShowPackSettings(true)}
-                />
-              )}
-
-              {/* Edit Item Dialog */}
-              <Dialog open={showEditItemDialog} onOpenChange={setShowEditItemDialog}>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Packlisten-Eintrag bearbeiten</DialogTitle>
-                    <DialogDescription>
-                      Anzahl und Bemerkung anpassen
-                    </DialogDescription>
-                  </DialogHeader>
-                  <div className="space-y-4">
-                    <div>
-                      <Label htmlFor="edit-anzahl">Anzahl</Label>
-                      <Input
-                        id="edit-anzahl"
-                        type="number"
-                        min="1"
-                        value={packingItemForm.anzahl}
-                        onChange={(e) => setPackingItemForm({ ...packingItemForm, anzahl: e.target.value })}
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="edit-bemerkung">Bemerkung (optional)</Label>
-                      <Input
-                        id="edit-bemerkung"
-                        placeholder="z.B. nur für Wanderungen"
-                        value={packingItemForm.bemerkung}
-                        onChange={(e) => setPackingItemForm({ ...packingItemForm, bemerkung: e.target.value })}
-                      />
-                    </div>
-                    <Button onClick={handleUpdatePackingItem} disabled={isLoading} className="w-full">
-                      {isLoading ? 'Wird aktualisiert...' : 'Aktualisieren'}
-                    </Button>
-                  </div>
-                </DialogContent>
-              </Dialog>
-            </div>
           )}
+
+          {/* Edit Item Dialog */}
+          <Dialog open={showEditItemDialog} onOpenChange={setShowEditItemDialog}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Packlisten-Eintrag bearbeiten</DialogTitle>
+                <DialogDescription>
+                  Anzahl und Bemerkung anpassen
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div>
+                  <Label htmlFor="edit-anzahl">Anzahl</Label>
+                  <Input
+                    id="edit-anzahl"
+                    type="number"
+                    min="1"
+                    value={packingItemForm.anzahl}
+                    onChange={(e) => setPackingItemForm({ ...packingItemForm, anzahl: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="edit-bemerkung">Bemerkung (optional)</Label>
+                  <Input
+                    id="edit-bemerkung"
+                    placeholder="z.B. nur für Wanderungen"
+                    value={packingItemForm.bemerkung}
+                    onChange={(e) => setPackingItemForm({ ...packingItemForm, bemerkung: e.target.value })}
+                  />
+                </div>
+                <Button onClick={handleUpdatePackingItem} disabled={isLoading} className="w-full">
+                  {isLoading ? 'Wird aktualisiert...' : 'Aktualisieren'}
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
 
@@ -540,14 +590,14 @@ export default function Home() {
           <Button
             size="lg"
             onClick={() => setShowAddItemDialog(true)}
-            className="h-14 w-14 rounded-full shadow-lg hover:shadow-xl transition-shadow"
+            className="h-14 w-14 rounded-full shadow-lg hover:shadow-xl transition-shadow bg-[rgb(45,79,30)] hover:bg-[rgb(45,79,30)]/90"
           >
             <Plus className="h-6 w-6" />
           </Button>
         </div>
       )}
 
-      {/* Add Item Dialog - Simplified version, will be enhanced later */}
+      {/* Add Item Dialog */}
       <Dialog open={showAddItemDialog} onOpenChange={setShowAddItemDialog}>
         <DialogContent>
           <DialogHeader>

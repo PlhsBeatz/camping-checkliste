@@ -435,19 +435,20 @@ export function PackingList({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 bg-[rgb(250,250,249)] -mx-6 px-6 pb-6">
       {/* Progress Bar */}
       {totalCount > 0 && (
         <div className="space-y-2 px-1">
-          <div className="flex justify-between text-sm">
-            <span className="sr-only">Packfortschritt</span>
-            <span className="text-muted-foreground font-medium">{packedCount}/{totalCount} ({progressPercentage}%)</span>
-          </div>
-          <div className="h-2.5 bg-muted rounded-full overflow-hidden border border-border/50">
-            <div
-              className="h-full bg-primary transition-all duration-500 ease-out"
-              style={{ width: `${progressPercentage}%` }}
-            />
+          <div className="relative">
+            <div className="h-2.5 bg-gray-200 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-[rgb(45,79,30)] transition-all duration-500 ease-out"
+                style={{ width: `${progressPercentage}%` }}
+              />
+            </div>
+            <div className="absolute -top-1 right-0 text-xs font-medium text-gray-600">
+              {progressPercentage}%
+            </div>
           </div>
         </div>
       )}
