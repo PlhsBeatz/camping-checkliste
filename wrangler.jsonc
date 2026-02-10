@@ -14,7 +14,7 @@
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "camping-checkliste",
+      "database_name": "camping-db",
       "database_id": "4858773e-e50d-4655-8bb3-5396c623ca2d"
     }
   ],

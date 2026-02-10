@@ -5,6 +5,7 @@
  */
 
 import { D1Database } from '@cloudflare/workers-types'
+import { getCloudflareContext } from '@opennextjs/cloudflare'
 
 export interface Vacation {
   id: string
@@ -115,11 +116,29 @@ export interface CloudflareEnv {
 /**
  * Hilfsfunktion zum Abrufen der D1-Datenbank aus dem Kontext
  */
-export function getDB(env: CloudflareEnv): D1Database {
-  if (!env.DB) {
-    throw new Error('D1 Database binding not found. Make sure DB is bound in wrangler.toml')
+export function getDB(env?: CloudflareEnv): D1Database {
+  // Versuche die DB aus dem OpenNext RequestContext zu erhalten (empfohlen für OpenNext)
+  try {
+    const ctx = getCloudflareContext();
+    if (ctx?.env?.DB) {
+      return ctx.env.DB as unknown as D1Database;
+    }
+  } catch (e) {
+    // Falls getRequestContext fehlschlägt (z.B. lokal ohne OpenNext), fahre mit env fort
   }
-  return env.DB
+
+  // Fallback auf das übergebene env Objekt
+  if (env?.DB) {
+    return env.DB;
+  }
+
+  // Letzter Versuch: process.env (manchmal von Cloudflare injiziert)
+  const processEnv = process.env as unknown as CloudflareEnv;
+  if (processEnv?.DB) {
+    return processEnv.DB;
+  }
+
+  throw new Error('D1 Database binding "DB" not found. Bitte stellen Sie sicher, dass die Datenbank im Cloudflare Dashboard korrekt an den Worker gebunden ist.');
 }
 
 /**
