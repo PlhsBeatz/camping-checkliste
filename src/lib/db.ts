@@ -292,7 +292,7 @@ export async function updateVacation(
   }
 }
 
-/**
+/***
  * Löschen einer Urlaubsreise
  */
 export async function deleteVacation(db: D1Database, id: string): Promise<boolean> {
