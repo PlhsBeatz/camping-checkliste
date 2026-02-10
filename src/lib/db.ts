@@ -117,14 +117,14 @@ export interface CloudflareEnv {
  * Hilfsfunktion zum Abrufen der D1-Datenbank aus dem Kontext
  */
 export function getDB(env?: CloudflareEnv): D1Database {
-  // Versuche die DB aus dem OpenNext RequestContext zu erhalten (empfohlen für OpenNext)
+  // Versuche die DB aus dem OpenNext CloudflareContext zu erhalten (empfohlen für OpenNext)
   try {
-    const ctx = getCloudflareContext();
-    if (ctx?.env?.DB) {
-      return ctx.env.DB as unknown as D1Database;
+    const { env: cloudflareEnv } = getCloudflareContext();
+    if (cloudflareEnv?.DB) {
+      return cloudflareEnv.DB as unknown as D1Database;
     }
   } catch (e) {
-    // Falls getRequestContext fehlschlägt (z.B. lokal ohne OpenNext), fahre mit env fort
+    // Falls getCloudflareContext fehlschlägt (z.B. lokal ohne OpenNext), fahre mit env fort
   }
 
   // Fallback auf das übergebene env Objekt
