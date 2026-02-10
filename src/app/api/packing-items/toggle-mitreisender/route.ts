@@ -1,8 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getDB, CloudflareEnv } from '@/lib/db'
 
-export const runtime = 'edge'
-
 export async function PUT(request: Request) {
   try {
     const env = process.env as unknown as CloudflareEnv

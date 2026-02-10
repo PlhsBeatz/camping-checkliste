@@ -2,8 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getTransportVehicles } from '@/lib/db'
 import { CloudflareEnv } from '@/lib/db'
 
-export const runtime = 'edge'
-
 export async function GET(_request: NextRequest) {
   try {
     const env = process.env as unknown as CloudflareEnv

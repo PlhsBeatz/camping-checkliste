@@ -10,8 +10,6 @@ import {
   CloudflareEnv
 } from '@/lib/db'
 
-export const runtime = 'edge'
-
 /**
  * GET /api/mitreisende
  * Abrufen aller Mitreisenden oder Mitreisenden für einen bestimmten Urlaub

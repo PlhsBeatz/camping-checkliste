@@ -8,8 +8,6 @@ import {
   CloudflareEnv 
 } from '@/lib/db'
 
-export const runtime = 'edge'
-
 export async function GET() {
   try {
     const env = process.env as unknown as CloudflareEnv
