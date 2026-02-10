@@ -2,7 +2,6 @@
   "name": "camping-packliste-app",
   "version": "0.1.0",
   "private": true,
-
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -68,7 +67,7 @@
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250109.0",
     "@eslint/eslintrc": "^3",
-    "@opennextjs/cloudflare": "^0.3.8",
+    "@opennextjs/cloudflare": "^1.16.4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
