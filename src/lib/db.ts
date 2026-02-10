@@ -123,7 +123,7 @@ export function getDB(env?: CloudflareEnv): D1Database {
     if (cloudflareEnv?.DB) {
       return cloudflareEnv.DB as unknown as D1Database;
     }
-  } catch (_e) {
+  } catch {
     // Falls getCloudflareContext fehlschlägt (z.B. lokal ohne OpenNext), fahre mit env fort
   }
 
