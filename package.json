@@ -2,18 +2,15 @@
   "name": "camping-packliste-app",
   "version": "0.1.0",
   "private": true,
-  "workspaces": [
-    ".",
-    "worker"
-  ],
+
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "build:worker": "opennextjs-cloudflare build",
-    "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
-    "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
+    "build:worker": "opennextjs-cloudflare",
+    "deploy": "opennextjs-cloudflare && opennextjs-cloudflare deploy",
+    "preview": "opennextjs-cloudflare && opennextjs-cloudflare preview",
     "cf-typegen": "wrangler types --env-interface CloudflareEnv env.d.ts"
   },
   "dependencies": {
