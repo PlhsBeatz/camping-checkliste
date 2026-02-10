@@ -83,9 +83,11 @@ export function EquipmentTable({
   // Get tag names by IDs
   const getTagNames = (item: EquipmentItem) => {
     if (!item.tags || item.tags.length === 0) return []
-    return item.tags.map(tagId => {
-      const tag = tags.find(t => t.id === tagId.id)
-      return tag?.titel || ''
+    return item.tags.map(tag => {
+      // Check if tag is an object with id or just a string ID
+      const tagId = typeof tag === 'object' ? tag.id : tag
+      const foundTag = tags.find(t => t.id === tagId)
+      return foundTag?.titel || ''
     }).filter(Boolean)
   }
 

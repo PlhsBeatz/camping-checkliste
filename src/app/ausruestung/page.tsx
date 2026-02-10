@@ -185,7 +185,7 @@ export default function AusruestungPage() {
         status: formData.status,
         details: formData.details || null,
         is_standard: formData.is_standard,
-        links: formData.links.filter(link => link.url.trim() !== '')
+        links: formData.links.filter(link => link.url.trim() !== '').map(link => link.url)
       }
 
       const res = await fetch('/api/equipment-items', {
@@ -233,7 +233,7 @@ export default function AusruestungPage() {
         status: formData.status,
         details: formData.details || null,
         is_standard: formData.is_standard,
-        links: formData.links.filter(link => link.url.trim() !== '')
+        links: formData.links.filter(link => link.url.trim() !== '').map(link => link.url)
       }
 
       const res = await fetch('/api/equipment-items', {
@@ -271,10 +271,8 @@ export default function AusruestungPage() {
 
     setIsLoading(true)
     try {
-      const res = await fetch('/api/equipment-items', {
+      const res = await fetch(`/api/equipment-items?id=${equipmentId}`, {
         method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: equipmentId }),
       })
       const data = await res.json()
       if (data.success) {

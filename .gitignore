@@ -1,3 +1,6 @@
 
 node_modules
 .next/cache/eslint/.cache_pyxh00
+
+.open-next
+.dev.vars
