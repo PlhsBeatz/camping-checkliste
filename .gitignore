@@ -1,6 +1,25 @@
+# --- Next.js ---
+.next/
+out/
+build/
 
-node_modules
-.next/cache/eslint/.cache_pyxh00
+# --- OpenNext (Cloudflare Adapter) ---
+.open-next/
 
-.open-next
+# --- Cloudflare Wrangler ---
+# Enthält lokale Datenbanken und Caches
+.wrangler/
+
+# --- Abhängigkeiten ---
+node_modules/
+
+# --- Environment Variablen (WICHTIG!) ---
+# Niemals Secrets hochladen
+.env
+.env.local
+.env.*.local
 .dev.vars
+
+# --- DB SQL Dumps ---
+backup.sql
+data.sql
