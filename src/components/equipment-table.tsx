@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, useCallback } from 'react'
+import React, { useState, useMemo, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -38,7 +38,7 @@ interface EquipmentTableProps {
   onDelete: (id: string) => void
 }
 
-export function EquipmentTable({
+export const EquipmentTable = React.memo(({
   equipmentItems,
   categories,
   mainCategories,
@@ -46,11 +46,14 @@ export function EquipmentTable({
   tags,
   onEdit,
   onDelete,
-}: EquipmentTableProps) {
+}: EquipmentTableProps) => {
   const [searchTerm, setSearchTerm] = useState('')
   const [filterMainCategory, setFilterMainCategory] = useState<string>('all')
+  const [filterCategory, setFilterCategory] = useState<string>('all')
   const [filterTransport, setFilterTransport] = useState<string>('all')
-  const [filterStatus, setFilterStatus] = useState<string>('all')
+  const [filterStatus, setFilterStatus] = useState<string[]>(['Immer gepackt', 'Immer dabei', 'Optional'])
+  const [filterTag, setFilterTag] = useState<string>('all')
+  const [filterStandard, setFilterStandard] = useState<string>('all')
   const [showFilters, setShowFilters] = useState(false)
 
   // Get category name by ID
@@ -92,10 +95,9 @@ export function EquipmentTable({
   }
 
   // Format weight in kg with German decimal format
-  const formatWeight = (weightInGrams: number | null) => {
-    if (!weightInGrams) return '-'
-    const kg = weightInGrams / 1000
-    return `${kg.toFixed(3).replace('.', ',')} kg`
+  const formatWeight = (weightInKg: number | null) => {
+    if (weightInKg === null || weightInKg === undefined) return '-'
+    return `${weightInKg.toFixed(3).replace('.', ',')} kg`
   }
 
   // Filter and search logic
@@ -123,6 +125,11 @@ export function EquipmentTable({
         }
       }
 
+      // Category filter
+      if (filterCategory !== 'all' && item.kategorie_id !== filterCategory) {
+        return false
+      }
+
       // Transport filter
       if (filterTransport !== 'all') {
         if (filterTransport === 'none' && item.transport_id !== null) {
@@ -133,17 +140,34 @@ export function EquipmentTable({
         }
       }
 
-      // Status filter
-      if (filterStatus !== 'all' && item.status !== filterStatus) {
+      // Status filter (Multiple Choice)
+      if (filterStatus.length > 0 && !filterStatus.includes(item.status)) {
         return false
+      }
+
+      // Tag filter
+      if (filterTag !== 'all') {
+        const itemTagIds = item.tags?.map(t => typeof t === 'object' ? t.id : t) || []
+        if (!itemTagIds.includes(filterTag)) {
+          return false
+        }
+      }
+
+      // Standard filter
+      if (filterStandard !== 'all') {
+        const isStandard = item.is_standard ? 'true' : 'false'
+        if (isStandard !== filterStandard) {
+          return false
+        }
       }
 
       return true
     })
-  }, [equipmentItems, searchTerm, filterMainCategory, filterTransport, filterStatus, getMainCategoryId])
+  }, [equipmentItems, searchTerm, filterMainCategory, filterCategory, filterTransport, filterStatus, filterTag, filterStandard, getMainCategoryId])
 
   // Group by main category and then by category with sticky headers
   const groupedItems = useMemo(() => {
+    if (filteredItems.length === 0) return []
     const mainCategoryGroups: Record<string, Record<string, EquipmentItem[]>> = {}
     
     filteredItems.forEach(item => {
@@ -183,15 +207,15 @@ export function EquipmentTable({
     switch (status) {
       case 'Immer gepackt': return 'bg-green-100 text-green-800'
       case 'Immer dabei': return 'bg-blue-100 text-blue-800'
-      case 'Optional': return 'bg-gray-100 text-gray-800'
+      case 'Optional': return 'bg-yellow-100 text-yellow-800'
       case 'Ausgemustert': return 'bg-red-100 text-red-800'
+      case 'Fest Installiert': return 'bg-purple-100 text-purple-800'
       default: return 'bg-gray-100 text-gray-800'
     }
   }
-
   return (
     <div className="space-y-4">
-      {/* Search and Filter Controls */}
+      {/* Search and Filters */}
       <div className="space-y-4 border rounded-lg p-4 bg-muted/30">
         {/* Search Bar */}
         <div className="flex gap-2">
@@ -252,41 +276,103 @@ export function EquipmentTable({
             </div>
 
             <div>
-              <Label>Status</Label>
-              <Select value={filterStatus} onValueChange={setFilterStatus}>
+              <Label>Kategorie</Label>
+              <Select value={filterCategory} onValueChange={setFilterCategory}>
                 <SelectTrigger>
                   <SelectValue placeholder="Alle" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Alle</SelectItem>
-                  <SelectItem value="Immer gepackt">Immer gepackt</SelectItem>
-                  <SelectItem value="Immer dabei">Immer dabei</SelectItem>
-                  <SelectItem value="Optional">Optional</SelectItem>
-                  <SelectItem value="Ausgemustert">Ausgemustert</SelectItem>
+                  {categories
+                    .filter(c => filterMainCategory === 'all' || c.hauptkategorie_id === filterMainCategory)
+                    .map(c => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {c.titel}
+                      </SelectItem>
+                    ))}
                 </SelectContent>
               </Select>
+            </div>
+
+            <div>
+              <Label>Tags</Label>
+              <Select value={filterTag} onValueChange={setFilterTag}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Alle" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Alle</SelectItem>
+                  {tags.map(t => (
+                    <SelectItem key={t.id} value={t.id}>
+                      {t.titel}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label>Standard (⭐)</Label>
+              <Select value={filterStandard} onValueChange={setFilterStandard}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Alle" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Alle</SelectItem>
+                  <SelectItem value="true">Nur Standard</SelectItem>
+                  <SelectItem value="false">Kein Standard</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="md:col-span-3">
+              <Label>Status (Mehrfachauswahl)</Label>
+              <div className="flex flex-wrap gap-3 mt-2">
+                {['Immer gepackt', 'Immer dabei', 'Optional', 'Ausgemustert', 'Fest Installiert'].map(status => (
+                  <label key={status} className="flex items-center gap-2 cursor-pointer text-sm bg-background border rounded-md px-3 py-1.5 hover:bg-muted/50">
+                    <input
+                      type="checkbox"
+                      checked={filterStatus.includes(status)}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setFilterStatus([...filterStatus, status])
+                        } else {
+                          setFilterStatus(filterStatus.filter(s => s !== status))
+                        }
+                      }}
+                      className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                    />
+                    {status}
+                  </label>
+                ))}
+              </div>
             </div>
           </div>
         )}
 
         {/* Results Count */}
-        <div className="text-sm text-muted-foreground">
-          {filteredItems.length} von {equipmentItems.length} Einträgen
-          {(searchTerm || filterMainCategory !== 'all' || filterTransport !== 'all' || filterStatus !== 'all') && (
-            <Button
-              variant="link"
-              size="sm"
-              className="ml-2 h-auto p-0"
-              onClick={() => {
-                setSearchTerm('')
-                setFilterMainCategory('all')
-                setFilterTransport('all')
-                setFilterStatus('all')
-              }}
-            >
-              Filter zurücksetzen
-            </Button>
-          )}
+        <div className="text-sm text-muted-foreground flex items-center justify-between">
+          <div>
+            {filteredItems.length} von {equipmentItems.length} Einträgen
+            {(searchTerm || filterMainCategory !== 'all' || filterCategory !== 'all' || filterTransport !== 'all' || filterStatus.length !== 3 || filterTag !== 'all' || filterStandard !== 'all') && (
+              <Button
+                variant="link"
+                size="sm"
+                className="ml-2 h-auto p-0"
+                onClick={() => {
+                  setSearchTerm('')
+                  setFilterMainCategory('all')
+                  setFilterCategory('all')
+                  setFilterTransport('all')
+                  setFilterStatus(['Immer gepackt', 'Immer dabei', 'Optional'])
+                  setFilterTag('all')
+                  setFilterStandard('all')
+                }}
+              >
+                Filter zurücksetzen
+              </Button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -294,17 +380,18 @@ export function EquipmentTable({
       <div className="border rounded-lg overflow-hidden">
         <div className="max-h-[600px] overflow-auto">
           <Table>
-            <TableHeader className="sticky top-0 bg-background z-20 border-b">
+            <TableHeader className="sticky top-0 bg-background z-30 border-b">
               <TableRow>
                 <TableHead className="min-w-[200px]">Was</TableHead>
                 <TableHead className="min-w-[100px]">Transport</TableHead>
                 <TableHead className="min-w-[100px]">Gewicht</TableHead>
-                <TableHead className="min-w-[80px]">Anzahl</TableHead>
+                <TableHead className="min-w-[60px]">#</TableHead>
                 <TableHead className="min-w-[120px]">Status</TableHead>
+                <TableHead className="min-w-[150px]">Gepackt für</TableHead>
                 <TableHead className="min-w-[200px] max-w-[300px]">Details</TableHead>
                 <TableHead className="min-w-[150px]">Tags</TableHead>
                 <TableHead className="min-w-[60px]">Links</TableHead>
-                <TableHead className="min-w-[80px] sticky right-0 bg-background">Aktionen</TableHead>
+                <TableHead className="min-w-[80px] sticky right-0 bg-background"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -320,22 +407,22 @@ export function EquipmentTable({
                     {/* Main Category Header - Sticky */}
                     <TableRow 
                       key={`main-${mainGroup.mainCategoryName}`} 
-                      className="bg-[rgb(45,79,30)] text-white sticky z-10"
-                      style={{ top: '40px' }}
+                      className="bg-[rgb(45,79,30)] text-white sticky z-40"
+                      style={{ top: '39px' }}
                     >
-                      <TableCell colSpan={9} className="font-bold text-base py-3">
+                      <TableCell colSpan={10} className="font-bold text-base py-3">
                         {mainGroup.mainCategoryName}
                       </TableCell>
                     </TableRow>
                     {mainGroup.categories.map(group => (
-                      <>
+                      <React.Fragment key={`group-${group.categoryName}`}>
                         {/* Category Header - Sticky below main category */}
                         <TableRow 
                           key={`header-${group.categoryName}`} 
-                          className="bg-muted/70 sticky z-10"
-                          style={{ top: '80px' }}
+                          className="bg-muted/70 sticky z-30"
+                          style={{ top: '87px' }}
                         >
-                          <TableCell colSpan={9} className="font-semibold py-2">
+                          <TableCell colSpan={10} className="font-semibold py-2">
                             {group.categoryName} ({group.items?.length || 0})
                           </TableCell>
                         </TableRow>
@@ -366,6 +453,15 @@ export function EquipmentTable({
                                 {item.status}
                               </span>
                             </TableCell>
+                            <TableCell className="text-sm">
+                              {item.mitreisenden_typ === 'pauschal' ? (
+                                <span title="Pauschal">📦 Pauschal</span>
+                              ) : item.mitreisenden_typ === 'alle' ? (
+                                <span title="Für alle">👥 Alle</span>
+                              ) : (
+                                <span title="Individuell">👤 Individuell</span>
+                              )}
+                            </TableCell>
                             <TableCell className="text-sm text-muted-foreground max-w-[300px]">
                               <div className="truncate" title={item.details || ''}>
                                 {item.details || '-'}
@@ -395,7 +491,10 @@ export function EquipmentTable({
                                     {item.links.map((link, idx) => (
                                       <DropdownMenuItem
                                         key={idx}
-                                        onClick={() => window.open(link.url, '_blank')}
+                                        onSelect={(e) => {
+                                          e.preventDefault();
+                                          window.open(link.url, '_blank');
+                                        }}
                                         className="cursor-pointer"
                                       >
                                         <ExternalLink className="h-3 w-3 mr-2" />
@@ -414,12 +513,18 @@ export function EquipmentTable({
                                   </Button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end">
-                                  <DropdownMenuItem onClick={() => onEdit(item)}>
+                                  <DropdownMenuItem onSelect={(e) => {
+                                    e.preventDefault();
+                                    onEdit(item);
+                                  }}>
                                     <Pencil className="h-4 w-4 mr-2" />
                                     Bearbeiten
                                   </DropdownMenuItem>
                                   <DropdownMenuItem 
-                                    onClick={() => onDelete(item.id)}
+                                    onSelect={(e) => {
+                                      e.preventDefault();
+                                      onDelete(item.id);
+                                    }}
                                     className="text-destructive"
                                   >
                                     <Trash2 className="h-4 w-4 mr-2" />
@@ -430,7 +535,7 @@ export function EquipmentTable({
                             </TableCell>
                           </TableRow>
                         ))}
-                      </>
+                      </React.Fragment>
                     ))}
                   </>
                 ))
@@ -441,4 +546,6 @@ export function EquipmentTable({
       </div>
     </div>
   )
-}
+})
+
+EquipmentTable.displayName = 'EquipmentTable'

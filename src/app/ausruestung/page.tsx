@@ -48,6 +48,8 @@ export default function AusruestungPage() {
     status: 'Optional',
     details: '',
     is_standard: false,
+    mitreisenden_typ: 'alle' as 'pauschal' | 'alle' | 'individuell',
+    tags: [] as string[],
     links: [] as { url: string }[]
   })
 
@@ -143,6 +145,8 @@ export default function AusruestungPage() {
       status: 'Optional',
       details: '',
       is_standard: false,
+      mitreisenden_typ: 'alle',
+      tags: [],
       links: []
     })
   }
@@ -163,6 +167,8 @@ export default function AusruestungPage() {
       status: item.status,
       details: item.details || '',
       is_standard: item.is_standard || false,
+      mitreisenden_typ: item.mitreisenden_typ || 'alle',
+      tags: item.tags?.map(t => typeof t === 'object' ? t.id : t) || [],
       links: item.links || []
     })
     setShowEditDialog(true)
@@ -180,11 +186,13 @@ export default function AusruestungPage() {
         was: formData.was,
         kategorie_id: formData.kategorie_id,
         transport_id: formData.transport_id || null,
-        einzelgewicht: formData.einzelgewicht ? parseInt(formData.einzelgewicht) : null,
+        einzelgewicht: formData.einzelgewicht ? parseFloat(formData.einzelgewicht.replace(',', '.')) : null,
         standard_anzahl: parseInt(formData.standard_anzahl) || 1,
         status: formData.status,
         details: formData.details || null,
         is_standard: formData.is_standard,
+        mitreisenden_typ: formData.mitreisenden_typ,
+        tags: formData.tags,
         links: formData.links.filter(link => link.url.trim() !== '').map(link => link.url)
       }
 
@@ -228,11 +236,13 @@ export default function AusruestungPage() {
         was: formData.was,
         kategorie_id: formData.kategorie_id,
         transport_id: formData.transport_id || null,
-        einzelgewicht: formData.einzelgewicht ? parseInt(formData.einzelgewicht) : null,
+        einzelgewicht: formData.einzelgewicht ? parseFloat(formData.einzelgewicht.replace(',', '.')) : null,
         standard_anzahl: parseInt(formData.standard_anzahl) || 1,
         status: formData.status,
         details: formData.details || null,
         is_standard: formData.is_standard,
+        mitreisenden_typ: formData.mitreisenden_typ,
+        tags: formData.tags,
         links: formData.links.filter(link => link.url.trim() !== '').map(link => link.url)
       }
 
@@ -364,8 +374,9 @@ export default function AusruestungPage() {
             </CardHeader>
             <CardContent>
               {isLoading ? (
-                <div className="flex items-center justify-center py-12">
-                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[rgb(45,79,30)]"></div>
+                <div className="flex flex-col items-center justify-center py-20 gap-4">
+                  <div className="animate-spin rounded-full h-12 w-12 border-4 border-[rgb(45,79,30)] border-t-transparent"></div>
+                  <p className="text-muted-foreground animate-pulse">Ausrüstung wird geladen...</p>
                 </div>
               ) : (
                 <EquipmentTable
@@ -421,13 +432,12 @@ export default function AusruestungPage() {
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="gewicht">Gewicht (g)</Label>
+                <Label htmlFor="gewicht">Gewicht (kg)</Label>
                 <Input
                   id="gewicht"
-                  type="number"
                   value={formData.einzelgewicht}
                   onChange={(e) => setFormData({ ...formData, einzelgewicht: e.target.value })}
-                  placeholder="z.B. 2500"
+                  placeholder="z.B. 0,234"
                 />
               </div>
 
@@ -472,8 +482,48 @@ export default function AusruestungPage() {
                     <SelectItem value="Immer dabei">Immer dabei</SelectItem>
                     <SelectItem value="Optional">Optional</SelectItem>
                     <SelectItem value="Ausgemustert">Ausgemustert</SelectItem>
+                    <SelectItem value="Fest Installiert">Fest Installiert</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="mitreisenden_typ">Gepackt für</Label>
+                <Select value={formData.mitreisenden_typ} onValueChange={(value: any) => setFormData({ ...formData, mitreisenden_typ: value })}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="alle">👥 Alle</SelectItem>
+                    <SelectItem value="pauschal">📦 Pauschal</SelectItem>
+                    <SelectItem value="individuell">👤 Individuell</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div>
+                <Label>Tags</Label>
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {tags.map(tag => (
+                    <label key={tag.id} className="flex items-center gap-1 text-xs bg-muted px-2 py-1 rounded cursor-pointer hover:bg-muted/80">
+                      <input
+                        type="checkbox"
+                        checked={formData.tags.includes(tag.id)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setFormData({ ...formData, tags: [...formData.tags, tag.id] })
+                          } else {
+                            setFormData({ ...formData, tags: formData.tags.filter(id => id !== tag.id) })
+                          }
+                        }}
+                        className="h-3 w-3"
+                      />
+                      {tag.titel}
+                    </label>
+                  ))}
+                </div>
               </div>
             </div>
 
@@ -581,13 +631,12 @@ export default function AusruestungPage() {
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="edit-gewicht">Gewicht (g)</Label>
+                <Label htmlFor="edit-gewicht">Gewicht (kg)</Label>
                 <Input
                   id="edit-gewicht"
-                  type="number"
                   value={formData.einzelgewicht}
                   onChange={(e) => setFormData({ ...formData, einzelgewicht: e.target.value })}
-                  placeholder="z.B. 2500"
+                  placeholder="z.B. 0,234"
                 />
               </div>
 
@@ -632,8 +681,48 @@ export default function AusruestungPage() {
                     <SelectItem value="Immer dabei">Immer dabei</SelectItem>
                     <SelectItem value="Optional">Optional</SelectItem>
                     <SelectItem value="Ausgemustert">Ausgemustert</SelectItem>
+                    <SelectItem value="Fest Installiert">Fest Installiert</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="edit-mitreisenden_typ">Gepackt für</Label>
+                <Select value={formData.mitreisenden_typ} onValueChange={(value: any) => setFormData({ ...formData, mitreisenden_typ: value })}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="alle">👥 Alle</SelectItem>
+                    <SelectItem value="pauschal">📦 Pauschal</SelectItem>
+                    <SelectItem value="individuell">👤 Individuell</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div>
+                <Label>Tags</Label>
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {tags.map(tag => (
+                    <label key={tag.id} className="flex items-center gap-1 text-xs bg-muted px-2 py-1 rounded cursor-pointer hover:bg-muted/80">
+                      <input
+                        type="checkbox"
+                        checked={formData.tags.includes(tag.id)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setFormData({ ...formData, tags: [...formData.tags, tag.id] })
+                          } else {
+                            setFormData({ ...formData, tags: formData.tags.filter(id => id !== tag.id) })
+                          }
+                        }}
+                        className="h-3 w-3"
+                      />
+                      {tag.titel}
+                    </label>
+                  ))}
+                </div>
               </div>
             </div>
 

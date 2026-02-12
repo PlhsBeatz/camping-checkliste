@@ -28,7 +28,7 @@ export interface PackingItem {
   bemerkung?: string | null
   transport_id?: string | null
   transport_name?: string
-  mitreisenden_typ: 'pauschal' | 'alle' | 'ausgewaehlte'
+  mitreisenden_typ: 'pauschal' | 'alle' | 'individuell'
   mitreisende?: PackingItemMitreisender[] // Zugeordnete Mitreisende mit Gepackt-Status
   was: string // Gejoint aus ausruestungsgegenstaende
   kategorie: string // Gejoint
@@ -65,7 +65,7 @@ export interface EquipmentItem {
   status: string
   details: string
   is_standard: boolean // Immer dabei
-  mitreisenden_typ: 'pauschal' | 'alle' | 'ausgewaehlte'
+  mitreisenden_typ: 'pauschal' | 'alle' | 'individuell'
   standard_mitreisende?: string[] // IDs der standardmäßig zugeordneten Mitreisenden
   tags?: Tag[] // Zugeordnete Tags
   links?: EquipmentLink[]
@@ -365,7 +365,7 @@ export async function getPackingItems(db: D1Database, vacationId: string): Promi
           bemerkung: item.bemerkung ? String(item.bemerkung) : null,
           transport_id: item.transport_id ? String(item.transport_id) : undefined,
           transport_name: item.transport_name ? String(item.transport_name) : undefined,
-          mitreisenden_typ: String(item.mitreisenden_typ || 'pauschal') as 'pauschal' | 'alle' | 'ausgewaehlte',
+          mitreisenden_typ: String(item.mitreisenden_typ || 'pauschal') as 'pauschal' | 'alle' | 'individuell',
           mitreisende: (mitreisende.results || []).map(m => ({
             mitreisender_id: m.mitreisender_id,
             mitreisender_name: m.mitreisender_name,
@@ -525,7 +525,7 @@ export async function createEquipmentItem(
     status?: string
     details?: string
     is_standard?: boolean
-    mitreisenden_typ?: 'pauschal' | 'alle' | 'ausgewaehlte'
+    mitreisenden_typ?: 'pauschal' | 'alle' | 'individuell'
     standard_mitreisende?: string[]
     tags?: string[]
     links?: string[]
@@ -599,7 +599,7 @@ export async function updateEquipmentItem(
     status?: string
     details?: string
     is_standard?: boolean
-    mitreisenden_typ?: 'pauschal' | 'alle' | 'ausgewaehlte'
+    mitreisenden_typ?: 'pauschal' | 'alle' | 'individuell'
     standard_mitreisende?: string[]
     tags?: string[]
     links?: string[]
