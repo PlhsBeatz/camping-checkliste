@@ -491,7 +491,7 @@ export default function AusruestungPage() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="mitreisenden_typ">Gepackt für</Label>
-                <Select value={formData.mitreisenden_typ} onValueChange={(value: any) => setFormData({ ...formData, mitreisenden_typ: value })}>
+                <Select value={formData.mitreisenden_typ} onValueChange={(value: 'pauschal' | 'alle' | 'individuell') => setFormData({ ...formData, mitreisenden_typ: value })}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
@@ -690,7 +690,7 @@ export default function AusruestungPage() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="edit-mitreisenden_typ">Gepackt für</Label>
-                <Select value={formData.mitreisenden_typ} onValueChange={(value: any) => setFormData({ ...formData, mitreisenden_typ: value })}>
+                <Select value={formData.mitreisenden_typ} onValueChange={(value: 'pauschal' | 'alle' | 'individuell') => setFormData({ ...formData, mitreisenden_typ: value })}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>

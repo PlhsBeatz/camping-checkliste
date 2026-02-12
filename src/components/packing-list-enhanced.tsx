@@ -24,7 +24,7 @@ interface PackingItemProps {
   gepackt: boolean;
   bemerkung?: string | null;
   transport_name?: string | null;
-  mitreisenden_typ: 'pauschal' | 'alle' | 'ausgewaehlte';
+  mitreisenden_typ: 'pauschal' | 'alle' | 'individuell';
   mitreisende?: Array<{ mitreisender_id: string; mitreisender_name: string; gepackt: boolean }>;
   onToggle: (id: string) => void;
   onToggleMitreisender: (packingItemId: string, mitreisenderId: string, currentStatus: boolean) => void;

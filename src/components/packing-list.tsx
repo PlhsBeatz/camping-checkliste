@@ -14,7 +14,7 @@ interface PackingItemProps {
   gepackt: boolean;
   bemerkung?: string | null;
   transport_name?: string | null;
-  mitreisenden_typ: 'pauschal' | 'alle' | 'ausgewaehlte';
+  mitreisenden_typ: 'pauschal' | 'alle' | 'individuell';
   mitreisende?: Array<{ mitreisender_id: string; mitreisender_name: string; gepackt: boolean }>;
   onToggle: (id: string) => void;
   onToggleMitreisender: (packingItemId: string, mitreisenderId: string, currentStatus: boolean) => void;
@@ -78,7 +78,7 @@ const PackingItem: React.FC<PackingItemProps> = ({
           {details && <p className="text-xs text-muted-foreground mt-1">{details}</p>}
           {bemerkung && <p className="text-xs text-blue-600 mt-1">📝 {bemerkung}</p>}
           
-          {(mitreisenden_typ === 'alle' || mitreisenden_typ === 'ausgewaehlte') && mitreisende && mitreisende.length > 0 && (
+          {(mitreisenden_typ === 'alle' || mitreisenden_typ === 'individuell') && mitreisende && mitreisende.length > 0 && (
             <div className="mt-2 space-y-1">
               {mitreisende.map((m) => (
                 <div key={m.mitreisender_id} className="flex items-center space-x-2">
