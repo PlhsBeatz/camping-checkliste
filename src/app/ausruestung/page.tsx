@@ -224,14 +224,15 @@ export default function AusruestungPage() {
       const data = await res.json()
       
       if (data.success) {
-        // Refresh equipment items
+        // Close modal and reset form immediately
+        setShowAddDialog(false)
+        resetForm()
+        // Refresh equipment items in background
         const itemsRes = await fetch('/api/equipment-items')
         const itemsData = await itemsRes.json()
         if (itemsData.success) {
           setEquipmentItems(itemsData.data)
         }
-        setShowAddDialog(false)
-        resetForm()
       } else {
         alert('Fehler beim Speichern: ' + data.error)
       }
@@ -275,15 +276,16 @@ export default function AusruestungPage() {
       const data = await res.json()
       
       if (data.success) {
-        // Refresh equipment items
+        // Close modal and reset form immediately
+        setShowEditDialog(false)
+        setEditingItem(null)
+        resetForm()
+        // Refresh equipment items in background
         const itemsRes = await fetch('/api/equipment-items')
         const itemsData = await itemsRes.json()
         if (itemsData.success) {
           setEquipmentItems(itemsData.data)
         }
-        setShowEditDialog(false)
-        setEditingItem(null)
-        resetForm()
       } else {
         alert('Fehler beim Aktualisieren: ' + data.error)
       }

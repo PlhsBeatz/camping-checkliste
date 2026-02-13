@@ -51,7 +51,7 @@ export const EquipmentTable = React.memo(({
   const [filterMainCategory, setFilterMainCategory] = useState<string>('all')
   const [filterCategory, setFilterCategory] = useState<string>('all')
   const [filterTransport, setFilterTransport] = useState<string>('all')
-  const [filterStatus, setFilterStatus] = useState<string[]>(['Immer gepackt', 'Immer dabei', 'Optional'])
+  const [filterStatus, setFilterStatus] = useState<string[]>(['Normal', 'Immer gepackt'])
   const [filterTag, setFilterTag] = useState<string>('all')
   const [filterStandard, setFilterStandard] = useState<string>('all')
   const [showFilters, setShowFilters] = useState(false)
@@ -205,11 +205,10 @@ export const EquipmentTable = React.memo(({
   // Status badge colors
   const getStatusColor = (status: string) => {
     switch (status) {
+      case 'Normal': return 'bg-gray-100 text-gray-800'
       case 'Immer gepackt': return 'bg-green-100 text-green-800'
-      case 'Immer dabei': return 'bg-blue-100 text-blue-800'
-      case 'Optional': return 'bg-yellow-100 text-yellow-800'
-      case 'Ausgemustert': return 'bg-red-100 text-red-800'
       case 'Fest Installiert': return 'bg-purple-100 text-purple-800'
+      case 'Ausgemustert': return 'bg-red-100 text-red-800'
       default: return 'bg-gray-100 text-gray-800'
     }
   }
@@ -328,7 +327,7 @@ export const EquipmentTable = React.memo(({
             <div className="md:col-span-3">
               <Label>Status (Mehrfachauswahl)</Label>
               <div className="flex flex-wrap gap-3 mt-2">
-                {['Immer gepackt', 'Immer dabei', 'Optional', 'Ausgemustert', 'Fest Installiert'].map(status => (
+                {['Normal', 'Immer gepackt', 'Fest Installiert', 'Ausgemustert'].map(status => (
                   <label key={status} className="flex items-center gap-2 cursor-pointer text-sm bg-background border rounded-md px-3 py-1.5 hover:bg-muted/50">
                     <input
                       type="checkbox"
@@ -364,7 +363,7 @@ export const EquipmentTable = React.memo(({
                   setFilterMainCategory('all')
                   setFilterCategory('all')
                   setFilterTransport('all')
-                  setFilterStatus(['Immer gepackt', 'Immer dabei', 'Optional'])
+                  setFilterStatus(['Normal', 'Immer gepackt'])
                   setFilterTag('all')
                   setFilterStandard('all')
                 }}
