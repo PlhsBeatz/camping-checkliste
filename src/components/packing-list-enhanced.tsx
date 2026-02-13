@@ -118,11 +118,11 @@ const PackingItem: React.FC<PackingItemProps> = ({
 
   // Handle individual toggle (for selected profile)
   const handleIndividualToggle = () => {
-    if (selectedProfile && selectedTravelerItem) {
-      const wasUnpacked = !selectedTravelerItem.gepackt;
+    if (selectedProfile) {
+      const wasUnpacked = !(selectedTravelerItem?.gepackt ?? false);
       const itemId = id;
       const profileId = selectedProfile;
-      const currentStatus = selectedTravelerItem.gepackt;
+      const currentStatus = selectedTravelerItem?.gepackt ?? false;
       onToggleMitreisender(itemId, profileId, currentStatus);
       if (hidePackedItems && wasUnpacked && onShowToast) {
         // Create undo action - use setTimeout to ensure state has updated
@@ -131,7 +131,7 @@ const PackingItem: React.FC<PackingItemProps> = ({
             onToggleMitreisender(itemId, profileId, !currentStatus);
           }, 0);
         };
-        onShowToast(was, selectedTravelerItem.mitreisender_name, undoAction);
+        onShowToast(was, selectedTravelerItem?.mitreisender_name, undoAction);
       }
     }
   };
@@ -172,10 +172,10 @@ const PackingItem: React.FC<PackingItemProps> = ({
             />
           )}
           
-          {mitreisenden_typ !== 'pauschal' && selectedProfile !== null && selectedTravelerItem && (
+          {mitreisenden_typ !== 'pauschal' && selectedProfile !== null && (
             <Checkbox
               id={`item-${id}`}
-              checked={selectedTravelerItem.gepackt}
+              checked={selectedTravelerItem?.gepackt ?? false}
               onCheckedChange={handleIndividualToggle}
               className="mt-0.5 h-6 w-6 rounded-md border-2 border-gray-300 data-[state=checked]:bg-[rgb(45,79,30)] data-[state=checked]:border-[rgb(45,79,30)]"
             />
