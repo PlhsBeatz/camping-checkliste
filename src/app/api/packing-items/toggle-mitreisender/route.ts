@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getDB, CloudflareEnv } from '@/lib/db'
+import { getDB, CloudflareEnv, togglePackingItemForMitreisender } from '@/lib/db'
 
 export async function PUT(request: Request) {
   try {
@@ -9,21 +9,22 @@ export async function PUT(request: Request) {
     const body = await request.json()
     const { packingItemId, mitreisenderId, gepackt } = body
 
-    if (!packingItemId || !mitreisenderId) {
+    if (!packingItemId || !mitreisenderId || gepackt === undefined) {
       return NextResponse.json(
         { success: false, error: 'Missing required fields' },
         { status: 400 }
       )
     }
 
-    // Update the gepackt status for this specific mitreisender
-    const result = await db.prepare(`
-      UPDATE packlisten_eintrag_mitreisende
-      SET gepackt = ?
-      WHERE packlisten_eintrag_id = ? AND mitreisender_id = ?
-    `).bind(gepackt ? 1 : 0, packingItemId, mitreisenderId).run()
+    // Use the DB function which handles both INSERT and UPDATE
+    const success = await togglePackingItemForMitreisender(
+      db,
+      packingItemId,
+      mitreisenderId,
+      gepackt
+    )
 
-    if (!result.success) {
+    if (!success) {
       return NextResponse.json(
         { success: false, error: 'Failed to update status' },
         { status: 500 }

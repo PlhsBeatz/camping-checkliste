@@ -90,9 +90,10 @@ const PackingItem: React.FC<PackingItemProps> = ({
   // Check if item should be hidden in individual profile view
   const shouldHideInProfileView = useMemo(() => {
     if (!hidePackedItems) return false;
-    if (selectedProfile && selectedTravelerItem) {
+    if (selectedProfile) {
       // In individual profile view, hide if packed for THIS profile
-      return selectedTravelerItem.gepackt;
+      // If no entry exists yet for this traveler, don't hide it
+      return selectedTravelerItem?.gepackt ?? false;
     }
     // In Zentral/Alle view, hide if fully packed
     return isFullyPacked;

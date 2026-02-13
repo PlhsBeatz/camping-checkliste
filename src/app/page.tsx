@@ -315,12 +315,19 @@ function HomeContent() {
     }
   }
 
-  const handleToggleMitreisender = async (itemId: string, mitreisenderId: string) => {
+  const handleToggleMitreisender = async (itemId: string, mitreisenderId: string, currentStatus: boolean) => {
     try {
+      // Toggle the status: if currently packed, unpack it, otherwise pack it
+      const newStatus = !currentStatus
+      
       const res = await fetch('/api/packing-items/toggle-mitreisender', {
-        method: 'POST',
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ packingItemId: itemId, mitreisenderId }),
+        body: JSON.stringify({ 
+          packingItemId: itemId, 
+          mitreisenderId, 
+          gepackt: newStatus 
+        }),
       })
       const data = await res.json()
       if (data.success && selectedVacationId) {
