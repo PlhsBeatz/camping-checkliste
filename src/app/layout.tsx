@@ -18,6 +18,10 @@ export const metadata: Metadata = {
   manifest: '/manifest.json',
   keywords: ['camping', 'packliste', 'offline', 'pwa'],
   authors: [{ name: 'Camping App Team' }],
+  icons: {
+    icon: [{ url: '/icon?id=32', sizes: '32x32', type: 'image/png' }],
+    apple: '/apple-icon',
+  },
   openGraph: {
     title: 'Camping Packliste App',
     description: 'Organisieren Sie Ihre Campingausrüstung intelligent',
@@ -30,7 +34,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 5,
   userScalable: true,
-  themeColor: '#3b82f6',
+  themeColor: '#2d4f1e',
 }
 
 export default function RootLayout({
@@ -44,7 +48,6 @@ export default function RootLayout({
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <meta name="apple-mobile-web-app-title" content="Packliste" />
-        <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
         <link
           href="https://fonts.googleapis.com/icon?family=Material+Icons"
           rel="stylesheet"

@@ -532,32 +532,32 @@ function HomeContent() {
 
       {/* Main Content Area */}
       <div className={cn(
-        "flex-1 transition-all duration-300",
+        "flex-1 transition-all duration-300 min-w-0",
         "lg:ml-[280px]"
       )}>
-        <div className="h-full">
+        <div className="h-full min-w-0">
           {/* Vacation Selected */}
           {currentVacation && (
-            <div className="h-full flex flex-col">
+            <div className="h-full flex flex-col min-w-0">
               {/* Header - White background */}
-              <div className="bg-white border-b">
-                <div className="px-4 py-4 flex items-center justify-between">
-                  <div className="flex items-center gap-4">
+              <div className="bg-white border-b min-w-0">
+                <div className="px-4 py-3 flex items-center justify-between gap-3 min-w-0">
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
                     {/* Mobile Menu Toggle */}
                     <Button
                       variant="ghost"
                       size="icon"
                       onClick={() => setShowNavSidebar(true)}
-                      className="lg:hidden"
+                      className="lg:hidden flex-shrink-0"
                     >
                       <Menu className="h-5 w-5" />
                     </Button>
                     
-                    <div>
-                      <h1 className="text-2xl font-bold text-[rgb(45,79,30)]">
+                    <div className="min-w-0 flex-1">
+                      <h1 className="text-lg sm:text-xl font-bold text-[rgb(45,79,30)] truncate">
                         {currentVacation.titel}
                       </h1>
-                      <p className="text-sm text-muted-foreground">
+                      <p className="text-xs sm:text-sm text-muted-foreground truncate">
                         {new Date(currentVacation.startdatum).toLocaleDateString('de-DE')} - {new Date(currentVacation.enddatum).toLocaleDateString('de-DE')}
                       </p>
                     </div>
@@ -569,7 +569,7 @@ function HomeContent() {
                       variant="outline"
                       size="sm"
                       onClick={() => setShowPackSettings(true)}
-                      className="gap-2"
+                      className="gap-2 flex-shrink-0"
                     >
                       <div className="h-8 w-8 rounded-full bg-[rgb(45,79,30)] text-white flex items-center justify-center text-xs font-bold">
                         {selectedPackProfile ? getInitials(vacationMitreisende.find(m => m.id === selectedPackProfile)?.name || 'AL') : 'AL'}

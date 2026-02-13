@@ -455,7 +455,7 @@ export function PackingList({
   };
 
   return (
-    <div className="space-y-6 bg-[rgb(250,250,249)] -mx-6 px-6 pb-6 max-w-full overflow-x-hidden">
+    <div className="space-y-6 bg-[rgb(250,250,249)] -mx-6 px-6 pb-6 min-w-0 max-w-full overflow-x-hidden">
       {/* Progress Bar */}
       {totalCount > 0 && (
         <div className="space-y-2 px-1">
