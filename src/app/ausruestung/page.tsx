@@ -45,10 +45,10 @@ export default function AusruestungPage() {
     transport_id: 'none',
     einzelgewicht: '',
     standard_anzahl: '1',
-    status: 'Optional',
+    status: 'Normal',
     details: '',
     is_standard: false,
-    mitreisenden_typ: 'alle' as 'pauschal' | 'alle' | 'individuell',
+    mitreisenden_typ: 'alle' as 'pauschal' | 'alle' | 'ausgewaehlte',
     tags: [] as string[],
     links: [] as { url: string }[]
   })
@@ -142,7 +142,7 @@ export default function AusruestungPage() {
       transport_id: 'none',
       einzelgewicht: '',
       standard_anzahl: '1',
-      status: 'Optional',
+      status: 'Normal',
       details: '',
       is_standard: false,
       mitreisenden_typ: 'alle',
@@ -478,11 +478,10 @@ export default function AusruestungPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="Normal">Normal</SelectItem>
                     <SelectItem value="Immer gepackt">Immer gepackt</SelectItem>
-                    <SelectItem value="Immer dabei">Immer dabei</SelectItem>
-                    <SelectItem value="Optional">Optional</SelectItem>
-                    <SelectItem value="Ausgemustert">Ausgemustert</SelectItem>
                     <SelectItem value="Fest Installiert">Fest Installiert</SelectItem>
+                    <SelectItem value="Ausgemustert">Ausgemustert</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -491,14 +490,14 @@ export default function AusruestungPage() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="mitreisenden_typ">Gepackt für</Label>
-                <Select value={formData.mitreisenden_typ} onValueChange={(value: 'pauschal' | 'alle' | 'individuell') => setFormData({ ...formData, mitreisenden_typ: value })}>
+                <Select value={formData.mitreisenden_typ} onValueChange={(value: 'pauschal' | 'alle' | 'ausgewaehlte') => setFormData({ ...formData, mitreisenden_typ: value })}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="alle">👥 Alle</SelectItem>
                     <SelectItem value="pauschal">📦 Pauschal</SelectItem>
-                    <SelectItem value="individuell">👤 Individuell</SelectItem>
+                    <SelectItem value="ausgewaehlte">👤 Individuell</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -677,11 +676,10 @@ export default function AusruestungPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="Normal">Normal</SelectItem>
                     <SelectItem value="Immer gepackt">Immer gepackt</SelectItem>
-                    <SelectItem value="Immer dabei">Immer dabei</SelectItem>
-                    <SelectItem value="Optional">Optional</SelectItem>
-                    <SelectItem value="Ausgemustert">Ausgemustert</SelectItem>
                     <SelectItem value="Fest Installiert">Fest Installiert</SelectItem>
+                    <SelectItem value="Ausgemustert">Ausgemustert</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -690,14 +688,14 @@ export default function AusruestungPage() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="edit-mitreisenden_typ">Gepackt für</Label>
-                <Select value={formData.mitreisenden_typ} onValueChange={(value: 'pauschal' | 'alle' | 'individuell') => setFormData({ ...formData, mitreisenden_typ: value })}>
+                <Select value={formData.mitreisenden_typ} onValueChange={(value: 'pauschal' | 'alle' | 'ausgewaehlte') => setFormData({ ...formData, mitreisenden_typ: value })}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="alle">👥 Alle</SelectItem>
                     <SelectItem value="pauschal">📦 Pauschal</SelectItem>
-                    <SelectItem value="individuell">👤 Individuell</SelectItem>
+                    <SelectItem value="ausgewaehlte">👤 Individuell</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
