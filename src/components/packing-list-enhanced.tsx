@@ -283,6 +283,7 @@ interface PackingListProps {
   selectedProfile: string | null;
   hidePackedItems: boolean;
   onOpenSettings: () => void;
+  vacationMitreisende?: Array<{ id: string; name: string }>;
 }
 
 export function PackingList({
@@ -294,7 +295,8 @@ export function PackingList({
   onDelete,
   selectedProfile,
   hidePackedItems,
-  onOpenSettings: _onOpenSettings
+  onOpenSettings: _onOpenSettings,
+  vacationMitreisende = []
 }: PackingListProps) {
   const [undoToast, setUndoToast] = useState<{ visible: boolean; itemName: string; action: () => void } | null>(null);
   const [activeMainCategory, setActiveMainCategory] = useState<string>('');
@@ -346,48 +348,65 @@ export function PackingList({
 
   // Handle mark all or unmark all for an item
   const handleMarkAllForItem = (item: DBPackingItem) => {
-    if (item.mitreisende) {
-      // Check if all are already packed
-      const allPacked = item.mitreisende.every(m => m.gepackt);
+    // Get the list of mitreisende to work with
+    let mitreisendeToProcess = item.mitreisende || [];
+    
+    // If mitreisende array is empty but mitreisenden_typ is 'alle', use all vacation mitreisende
+    if (mitreisendeToProcess.length === 0 && item.mitreisenden_typ === 'alle' && vacationMitreisende.length > 0) {
+      mitreisendeToProcess = vacationMitreisende.map(m => ({
+        mitreisender_id: m.id,
+        mitreisender_name: m.name,
+        gepackt: false
+      }));
+    }
+    
+    if (mitreisendeToProcess.length === 0) {
+      console.warn('handleMarkAllForItem: No mitreisende found for item', item.id, item.mitreisenden_typ);
+      return;
+    }
+    
+    // Check if all are already packed
+    const allPacked = mitreisendeToProcess.every(m => m.gepackt);
+    
+    if (allPacked) {
+      // Unmark all
+      const travelerNames: string[] = [];
+      const updates: Array<{ mitreisenderId: string; newStatus: boolean }> = [];
       
-      if (allPacked) {
-        // Unmark all
-        const travelerNames: string[] = [];
-        const updates: Array<{ mitreisenderId: string; newStatus: boolean }> = [];
-        
-        item.mitreisende.forEach(m => {
-          updates.push({ mitreisenderId: m.mitreisender_id, newStatus: false });
-          travelerNames.push(m.mitreisender_name);
-        });
+      mitreisendeToProcess.forEach(m => {
+        updates.push({ mitreisenderId: m.mitreisender_id, newStatus: false });
+        travelerNames.push(m.mitreisender_name);
+      });
 
-        // Unmark all travelers in a single batch
-        onToggleMultipleMitreisende(item.id, updates);
+      // Unmark all travelers in a single batch
+      onToggleMultipleMitreisende(item.id, updates);
 
-        // Show undo toast only if hidePackedItems is active
-        if (hidePackedItems && travelerNames.length > 0) {
-          setUndoToast({
-            visible: true,
-            itemName: `${item.was} (${travelerNames.join(', ')})`,
-            action: () => {
-              // Undo: mark all that were just unmarked
-              const undoUpdates = updates.map(u => ({ ...u, newStatus: true }));
-              onToggleMultipleMitreisende(item.id, undoUpdates);
-            }
-          });
-        }
-      } else {
-        // Mark all unpacked travelers
-        const travelerNames: string[] = [];
-        const updates: Array<{ mitreisenderId: string; newStatus: boolean }> = [];
-        
-        item.mitreisende.forEach(m => {
-          if (!m.gepackt) {
-            updates.push({ mitreisenderId: m.mitreisender_id, newStatus: true });
-            travelerNames.push(m.mitreisender_name);
+      // Show undo toast only if hidePackedItems is active
+      if (hidePackedItems && travelerNames.length > 0) {
+        setUndoToast({
+          visible: true,
+          itemName: `${item.was} (${travelerNames.join(', ')})`,
+          action: () => {
+            // Undo: mark all that were just unmarked
+            const undoUpdates = updates.map(u => ({ ...u, newStatus: true }));
+            onToggleMultipleMitreisende(item.id, undoUpdates);
           }
         });
+      }
+    } else {
+      // Mark all unpacked travelers
+      const travelerNames: string[] = [];
+      const updates: Array<{ mitreisenderId: string; newStatus: boolean }> = [];
+      
+      mitreisendeToProcess.forEach(m => {
+        if (!m.gepackt) {
+          updates.push({ mitreisenderId: m.mitreisender_id, newStatus: true });
+          travelerNames.push(m.mitreisender_name);
+        }
+      });
 
-        // Mark all travelers in a single batch
+      // Mark all travelers in a single batch
+      if (updates.length > 0) {
         onToggleMultipleMitreisende(item.id, updates);
 
         // Show undo toast only if hidePackedItems is active

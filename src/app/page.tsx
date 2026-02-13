@@ -523,7 +523,7 @@ function HomeContent() {
   }
 
   return (
-    <div className="min-h-screen bg-[rgb(250,250,249)] flex">
+    <div className="min-h-screen bg-[rgb(250,250,249)] flex max-w-full overflow-x-hidden">
       {/* Navigation Sidebar (Links) */}
       <NavigationSidebar
         isOpen={showNavSidebar}
@@ -590,6 +590,7 @@ function HomeContent() {
                   selectedProfile={selectedPackProfile}
                   hidePackedItems={hidePackedItems}
                   onOpenSettings={() => setShowPackSettings(true)}
+                  vacationMitreisende={vacationMitreisende}
                 />
               </div>
 
