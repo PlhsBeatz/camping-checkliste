@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getTransportVehicles } from '@/lib/db'
-import { CloudflareEnv } from '@/lib/db'
+import { getTransportVehicles, getDB } from '@/lib/db'
 
 export async function GET(_request: NextRequest) {
   try {
-    const env = process.env as unknown as CloudflareEnv
-    const vehicles = await getTransportVehicles(env.DB)
+    const db = getDB()
+    const vehicles = await getTransportVehicles(db)
 
     return NextResponse.json({
       success: true,

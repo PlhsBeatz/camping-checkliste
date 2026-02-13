@@ -30,6 +30,7 @@ export default function AusruestungPage() {
   const [mainCategories, setMainCategories] = useState<MainCategory[]>([])
   const [transportVehicles, setTransportVehicles] = useState<TransportVehicle[]>([])
   const [tags, setTags] = useState<Tag[]>([])
+  const [mitreisende, setMitreisende] = useState<{ id: string; name: string }[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   
@@ -50,7 +51,8 @@ export default function AusruestungPage() {
     is_standard: false,
     mitreisenden_typ: 'alle' as 'pauschal' | 'alle' | 'ausgewaehlte',
     tags: [] as string[],
-    links: [] as { url: string }[]
+    links: [] as { url: string }[],
+    standard_mitreisende: [] as string[]
   })
 
   // Load equipment items
@@ -128,11 +130,27 @@ export default function AusruestungPage() {
         }
       } catch (error) {
         console.error('Failed to fetch tags:', error)
+      }
+    }
+    fetchTags()
+  }, [])
+
+  // Fetch Mitreisende
+  useEffect(() => {
+    const fetchMitreisende = async () => {
+      try {
+        const res = await fetch('/api/mitreisende')
+        const data = await res.json()
+        if (data.success) {
+          setMitreisende(data.data)
+        }
+      } catch (error) {
+        console.error('Failed to fetch mitreisende:', error)
       } finally {
         setIsLoading(false)
       }
     }
-    fetchTags()
+    fetchMitreisende()
   }, [])
 
   const resetForm = () => {
@@ -147,7 +165,8 @@ export default function AusruestungPage() {
       is_standard: false,
       mitreisenden_typ: 'alle',
       tags: [],
-      links: []
+      links: [],
+      standard_mitreisende: []
     })
   }
 
@@ -169,7 +188,8 @@ export default function AusruestungPage() {
       is_standard: item.is_standard || false,
       mitreisenden_typ: item.mitreisenden_typ || 'alle',
       tags: item.tags?.map(t => typeof t === 'object' ? t.id : t) || [],
-      links: item.links || []
+      links: item.links || [],
+      standard_mitreisende: item.standard_mitreisende || []
     })
     setShowEditDialog(true)
   }
@@ -192,6 +212,7 @@ export default function AusruestungPage() {
         details: formData.details || null,
         is_standard: formData.is_standard,
         mitreisenden_typ: formData.mitreisenden_typ,
+        standard_mitreisende: formData.standard_mitreisende,
         tags: formData.tags,
         links: formData.links.filter(link => link.url.trim() !== '').map(link => link.url)
       }
@@ -242,6 +263,7 @@ export default function AusruestungPage() {
         details: formData.details || null,
         is_standard: formData.is_standard,
         mitreisenden_typ: formData.mitreisenden_typ,
+        standard_mitreisende: formData.standard_mitreisende,
         tags: formData.tags,
         links: formData.links.filter(link => link.url.trim() !== '').map(link => link.url)
       }
@@ -501,6 +523,31 @@ export default function AusruestungPage() {
                   </SelectContent>
                 </Select>
               </div>
+
+              {formData.mitreisenden_typ === 'ausgewaehlte' && (
+                <div>
+                  <Label>Mitreisende</Label>
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {mitreisende.map(m => (
+                      <label key={m.id} className="flex items-center gap-1 text-xs bg-muted px-2 py-1 rounded cursor-pointer hover:bg-muted/80">
+                        <input
+                          type="checkbox"
+                          checked={formData.standard_mitreisende.includes(m.id)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setFormData({ ...formData, standard_mitreisende: [...formData.standard_mitreisende, m.id] })
+                            } else {
+                              setFormData({ ...formData, standard_mitreisende: formData.standard_mitreisende.filter(id => id !== m.id) })
+                            }
+                          }}
+                          className="h-3 w-3"
+                        />
+                        {m.name}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
               
               <div>
                 <Label>Tags</Label>
@@ -699,6 +746,31 @@ export default function AusruestungPage() {
                   </SelectContent>
                 </Select>
               </div>
+
+              {formData.mitreisenden_typ === 'ausgewaehlte' && (
+                <div>
+                  <Label>Mitreisende</Label>
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {mitreisende.map(m => (
+                      <label key={m.id} className="flex items-center gap-1 text-xs bg-muted px-2 py-1 rounded cursor-pointer hover:bg-muted/80">
+                        <input
+                          type="checkbox"
+                          checked={formData.standard_mitreisende.includes(m.id)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setFormData({ ...formData, standard_mitreisende: [...formData.standard_mitreisende, m.id] })
+                            } else {
+                              setFormData({ ...formData, standard_mitreisende: formData.standard_mitreisende.filter(id => id !== m.id) })
+                            }
+                          }}
+                          className="h-3 w-3"
+                        />
+                        {m.name}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
               
               <div>
                 <Label>Tags</Label>
