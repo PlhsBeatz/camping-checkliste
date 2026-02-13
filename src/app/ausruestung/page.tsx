@@ -55,7 +55,7 @@ export default function AusruestungPage() {
     standard_mitreisende: [] as string[]
   })
 
-  // Load equipment items
+  // Fetch Equipment Items
   useEffect(() => {
     const fetchEquipmentItems = async () => {
       try {
@@ -66,11 +66,12 @@ export default function AusruestungPage() {
         }
       } catch (error) {
         console.error('Failed to fetch equipment items:', error)
+      } finally {
+        setIsLoading(false)
       }
     }
     fetchEquipmentItems()
   }, [])
-
   // Fetch Categories
   useEffect(() => {
     const fetchCategories = async () => {
@@ -146,8 +147,6 @@ export default function AusruestungPage() {
         }
       } catch (error) {
         console.error('Failed to fetch mitreisende:', error)
-      } finally {
-        setIsLoading(false)
       }
     }
     fetchMitreisende()
@@ -510,44 +509,46 @@ export default function AusruestungPage() {
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="mitreisenden_typ">Gepackt für</Label>
-                <Select value={formData.mitreisenden_typ} onValueChange={(value: 'pauschal' | 'alle' | 'ausgewaehlte') => setFormData({ ...formData, mitreisenden_typ: value })}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="alle">👥 Alle</SelectItem>
-                    <SelectItem value="pauschal">📦 Pauschal</SelectItem>
-                    <SelectItem value="ausgewaehlte">👤 Individuell</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {formData.mitreisenden_typ === 'ausgewaehlte' && (
+              <div className="space-y-4">
                 <div>
-                  <Label>Mitreisende</Label>
-                  <div className="flex flex-wrap gap-2 mt-2">
-                    {mitreisende.map(m => (
-                      <label key={m.id} className="flex items-center gap-1 text-xs bg-muted px-2 py-1 rounded cursor-pointer hover:bg-muted/80">
-                        <input
-                          type="checkbox"
-                          checked={formData.standard_mitreisende.includes(m.id)}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setFormData({ ...formData, standard_mitreisende: [...formData.standard_mitreisende, m.id] })
-                            } else {
-                              setFormData({ ...formData, standard_mitreisende: formData.standard_mitreisende.filter(id => id !== m.id) })
-                            }
-                          }}
-                          className="h-3 w-3"
-                        />
-                        {m.name}
-                      </label>
-                    ))}
-                  </div>
+                  <Label htmlFor="mitreisenden_typ">Gepackt für</Label>
+                  <Select value={formData.mitreisenden_typ} onValueChange={(value: 'pauschal' | 'alle' | 'ausgewaehlte') => setFormData({ ...formData, mitreisenden_typ: value })}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="alle">👥 Alle</SelectItem>
+                      <SelectItem value="pauschal">📦 Pauschal</SelectItem>
+                      <SelectItem value="ausgewaehlte">👤 Individuell</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
-              )}
+
+                {formData.mitreisenden_typ === 'ausgewaehlte' && (
+                  <div>
+                    <Label>Mitreisende</Label>
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {mitreisende.map(m => (
+                        <label key={m.id} className="flex items-center gap-1 text-xs bg-muted px-2 py-1 rounded cursor-pointer hover:bg-muted/80">
+                          <input
+                            type="checkbox"
+                            checked={formData.standard_mitreisende.includes(m.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setFormData({ ...formData, standard_mitreisende: [...formData.standard_mitreisende, m.id] })
+                              } else {
+                                setFormData({ ...formData, standard_mitreisende: formData.standard_mitreisende.filter(id => id !== m.id) })
+                              }
+                            }}
+                            className="h-3 w-3"
+                          />
+                          {m.name}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
               
               <div>
                 <Label>Tags</Label>
@@ -733,44 +734,46 @@ export default function AusruestungPage() {
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="edit-mitreisenden_typ">Gepackt für</Label>
-                <Select value={formData.mitreisenden_typ} onValueChange={(value: 'pauschal' | 'alle' | 'ausgewaehlte') => setFormData({ ...formData, mitreisenden_typ: value })}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="alle">👥 Alle</SelectItem>
-                    <SelectItem value="pauschal">📦 Pauschal</SelectItem>
-                    <SelectItem value="ausgewaehlte">👤 Individuell</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {formData.mitreisenden_typ === 'ausgewaehlte' && (
+              <div className="space-y-4">
                 <div>
-                  <Label>Mitreisende</Label>
-                  <div className="flex flex-wrap gap-2 mt-2">
-                    {mitreisende.map(m => (
-                      <label key={m.id} className="flex items-center gap-1 text-xs bg-muted px-2 py-1 rounded cursor-pointer hover:bg-muted/80">
-                        <input
-                          type="checkbox"
-                          checked={formData.standard_mitreisende.includes(m.id)}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setFormData({ ...formData, standard_mitreisende: [...formData.standard_mitreisende, m.id] })
-                            } else {
-                              setFormData({ ...formData, standard_mitreisende: formData.standard_mitreisende.filter(id => id !== m.id) })
-                            }
-                          }}
-                          className="h-3 w-3"
-                        />
-                        {m.name}
-                      </label>
-                    ))}
-                  </div>
+                  <Label htmlFor="edit-mitreisenden_typ">Gepackt für</Label>
+                  <Select value={formData.mitreisenden_typ} onValueChange={(value: 'pauschal' | 'alle' | 'ausgewaehlte') => setFormData({ ...formData, mitreisenden_typ: value })}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="alle">👥 Alle</SelectItem>
+                      <SelectItem value="pauschal">📦 Pauschal</SelectItem>
+                      <SelectItem value="ausgewaehlte">👤 Individuell</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
-              )}
+
+                {formData.mitreisenden_typ === 'ausgewaehlte' && (
+                  <div>
+                    <Label>Mitreisende</Label>
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {mitreisende.map(m => (
+                        <label key={m.id} className="flex items-center gap-1 text-xs bg-muted px-2 py-1 rounded cursor-pointer hover:bg-muted/80">
+                          <input
+                            type="checkbox"
+                            checked={formData.standard_mitreisende.includes(m.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setFormData({ ...formData, standard_mitreisende: [...formData.standard_mitreisende, m.id] })
+                              } else {
+                                setFormData({ ...formData, standard_mitreisende: formData.standard_mitreisende.filter(id => id !== m.id) })
+                              }
+                            }}
+                            className="h-3 w-3"
+                          />
+                          {m.name}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
               
               <div>
                 <Label>Tags</Label>
