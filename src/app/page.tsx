@@ -6,12 +6,13 @@ import { PackingList } from '@/components/packing-list-enhanced'
 import { PackingListGenerator } from '@/components/packing-list-generator'
 import { NavigationSidebar } from '@/components/navigation-sidebar'
 import { PackingSettingsSidebar } from '@/components/packing-settings-sidebar'
-import { Plus, Sparkles, Menu, Users2 } from 'lucide-react'
-import { useState, useEffect, Suspense } from 'react'
-import { Vacation, PackingItem, TransportVehicle, Mitreisender } from '@/lib/db'
+import { Plus, Sparkles, Menu, Users2, Search } from 'lucide-react'
+import { useState, useEffect, Suspense, useMemo } from 'react'
+import { Vacation, PackingItem, TransportVehicle, Mitreisender, EquipmentItem, Category, MainCategory } from '@/lib/db'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Checkbox } from '@/components/ui/checkbox'
 import { cn } from '@/lib/utils'
 import { useSearchParams } from 'next/navigation'
 
@@ -42,6 +43,10 @@ const findNextVacation = (vacations: Vacation[]): Vacation | null => {
   )[0] || null
 }
 
+interface CategoryWithMain extends Category {
+  hauptkategorie_titel: string
+}
+
 function HomeContent() {
   // Data state
   const [vacations, setVacations] = useState<Vacation[]>([])
@@ -51,6 +56,11 @@ function HomeContent() {
   const [selectedVacationId, setSelectedVacationId] = useState<string | null>(null)
   const [packedItems, setPackedItems] = useState<Set<string>>(new Set())
   const [isLoading, setIsLoading] = useState(false)
+  
+  // Equipment data for FAB modal
+  const [equipmentItems, setEquipmentItems] = useState<EquipmentItem[]>([])
+  const [categories, setCategories] = useState<CategoryWithMain[]>([])
+  const [mainCategories, setMainCategories] = useState<MainCategory[]>([])
   
   // UI state
   const [showNavSidebar, setShowNavSidebar] = useState(false)
@@ -62,6 +72,10 @@ function HomeContent() {
   const [_equipmentSearchTerm, _setEquipmentSearchTerm] = useState('')
   const [selectedPackProfile, setSelectedPackProfile] = useState<string | null>(null)
   const [hidePackedItems, setHidePackedItems] = useState(false)
+  
+  // FAB modal state
+  const [searchTerm, setSearchTerm] = useState('')
+  const [selectedEquipmentIds, setSelectedEquipmentIds] = useState<Set<string>>(new Set())
   
   // Form state
   const [packingItemForm, setPackingItemForm] = useState({
@@ -101,228 +115,251 @@ function HomeContent() {
       }
     }
     fetchVacations()
-  }, [urlVacationId, selectedVacationId]) // Added selectedVacationId to dependencies
+  }, [urlVacationId, selectedVacationId])
 
-  // Fetch Packing Items for selected vacation
+  // Fetch Packing Items when vacation changes
   useEffect(() => {
+    if (!selectedVacationId) return
+
     const fetchPackingItems = async () => {
-      if (selectedVacationId) {
-        try {
-          const res = await fetch(`/api/packing-items?vacationId=${selectedVacationId}`)
-          const data = await res.json()
-          if (data.success) {
-            setPackingItems(data.data)
-            const initialPacked = new Set<string>()
-            data.data.forEach((item: PackingItem) => {
-              if (item.gepackt) {
-                initialPacked.add(item.id)
-              }
-            })
-            setPackedItems(initialPacked)
-          }
-        } catch (error) {
-          console.error('Failed to fetch packing items:', error)
+      try {
+        const res = await fetch(`/api/packing-items?vacationId=${selectedVacationId}`)
+        const data = await res.json()
+        if (data.success) {
+          setPackingItems(data.data)
+          const packed = new Set<string>(data.data.filter((item: PackingItem) => item.gepackt).map((item: PackingItem) => item.id))
+          setPackedItems(packed)
         }
+      } catch (error) {
+        console.error('Failed to fetch packing items:', error)
       }
     }
     fetchPackingItems()
-   }, [selectedVacationId])
+  }, [selectedVacationId])
 
-  // Load mitreisende for selected vacation
+  // Fetch Mitreisende for vacation
   useEffect(() => {
+    if (!selectedVacationId) return
+
     const fetchVacationMitreisende = async () => {
-      if (selectedVacationId) {
-        try {
-          const res = await fetch(`/api/mitreisende?vacationId=${selectedVacationId}`)
-          const data = await res.json()
-          if (data.success) {
-            setVacationMitreisende(data.data)
-          }
-        } catch (error) {
-          console.error('Failed to fetch vacation mitreisende:', error)
+      try {
+        const res = await fetch(`/api/vacations/${selectedVacationId}/mitreisende`)
+        const data = await res.json()
+        if (data.success) {
+          setVacationMitreisende(data.data)
         }
-      } else {
-        setVacationMitreisende([])
+      } catch (error) {
+        console.error('Failed to fetch vacation mitreisende:', error)
       }
     }
     fetchVacationMitreisende()
   }, [selectedVacationId])
 
-  // Fetch Transport Vehicles
+  // Fetch Equipment Items for FAB modal
   useEffect(() => {
-    const fetchTransportVehicles = async () => {
+    const fetchEquipmentItems = async () => {
       try {
-        const res = await fetch('/api/transport-vehicles')
+        const res = await fetch('/api/equipment-items')
         const data = await res.json()
         if (data.success) {
-          _setTransportVehicles(data.data)
+          setEquipmentItems(data.data)
         }
       } catch (error) {
-        console.error('Failed to fetch transport vehicles:', error)
+        console.error('Failed to fetch equipment items:', error)
       }
     }
-    fetchTransportVehicles()
+    fetchEquipmentItems()
   }, [])
 
-  const handleToggleItem = async (id: string) => {
-    const isCurrentlyPacked = packedItems.has(id)
-    const newPacked = new Set(packedItems)
-
-    // Update state immediately for visual feedback
-    if (isCurrentlyPacked) {
-      newPacked.delete(id)
-    } else {
-      newPacked.add(id)
-    }
-    setPackedItems(newPacked)
-
-    // Update packingItems array to reflect the change
-    const updatedPackingItems = packingItems.map(item =>
-      item.id === id ? { ...item, gepackt: !isCurrentlyPacked } : item
-    )
-    setPackingItems(updatedPackingItems)
-
-    try {
-      const res = await fetch('/api/packing-items', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, gepackt: !isCurrentlyPacked }),
-      })
-      const data = await res.json()
-      if (!data.success) {
-        console.error('Failed to update packing item:', data.error)
-        // Revert on error
-        setPackedItems(packedItems)
-        setPackingItems(packingItems)
-      }
-    } catch (error) {
-      console.error('Failed to update packing item:', error)
-      // Revert on error
-      setPackedItems(packedItems)
-      setPackingItems(packingItems)
-    }
-  }
-
-  const handleToggleMitreisender = async (packingItemId: string, mitreisenderId: string, currentStatus: boolean) => {
-    const newStatus = !currentStatus
-
-    // Optimistically update UI
-    const updatedPackingItems = packingItems.map(item => {
-      if (item.id === packingItemId && item.mitreisende) {
-        return {
-          ...item,
-          mitreisende: item.mitreisende.map(m => 
-            m.mitreisender_id === mitreisenderId 
-              ? { ...m, gepackt: newStatus }
-              : m
-          )
+  // Fetch Categories
+  useEffect(() => {
+    const fetchCategories = async () => {
+      try {
+        const res = await fetch('/api/categories')
+        const data = await res.json()
+        if (data.success) {
+          setCategories(data.data)
         }
+      } catch (error) {
+        console.error('Failed to fetch categories:', error)
       }
-      return item
-    })
-    setPackingItems(updatedPackingItems)
-
-    try {
-      const res = await fetch('/api/packing-items/toggle-mitreisender', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          packingItemId, 
-          mitreisenderId, 
-          gepackt: newStatus 
-        }),
-      })
-      const data = await res.json()
-      if (!data.success) {
-        console.error('Failed to update mitreisender status:', data.error)
-        // Revert on error
-        setPackingItems(packingItems)
-      }
-    } catch (error) {
-      console.error('Failed to update mitreisender status:', error)
-      // Revert on error
-      setPackingItems(packingItems)
     }
-  }
+    fetchCategories()
+  }, [])
 
-  // Handle toggling multiple mitreisende at once (for mark-all/unmark-all)
-  const handleToggleMultipleMitreisende = async (packingItemId: string, updates: Array<{ mitreisenderId: string; newStatus: boolean }>) => {
-    // Optimistically update UI in a single batch
-    const updatedPackingItems = packingItems.map(item => {
-      if (item.id === packingItemId && item.mitreisende) {
-        return {
-          ...item,
-          mitreisende: item.mitreisende.map(m => {
-            const update = updates.find(u => u.mitreisenderId === m.mitreisender_id)
-            return update ? { ...m, gepackt: update.newStatus } : m
-          })
+  // Fetch Main Categories
+  useEffect(() => {
+    const fetchMainCategories = async () => {
+      try {
+        const res = await fetch('/api/main-categories')
+        const data = await res.json()
+        if (data.success) {
+          setMainCategories(data.data)
         }
+      } catch (error) {
+        console.error('Failed to fetch main categories:', error)
       }
-      return item
+    }
+    fetchMainCategories()
+  }, [])
+
+  // Get available equipment (not on packing list)
+  const availableEquipment = useMemo(() => {
+    const packingItemEquipmentIds = new Set(packingItems.map(item => item.gegenstand_id))
+    return equipmentItems.filter(eq => !packingItemEquipmentIds.has(eq.id))
+  }, [equipmentItems, packingItems])
+
+  // Filter and group available equipment
+  const groupedAvailableEquipment = useMemo(() => {
+    const filtered = availableEquipment.filter(item => {
+      if (!searchTerm) return true
+      return item.was.toLowerCase().includes(searchTerm.toLowerCase())
     })
-    setPackingItems(updatedPackingItems)
 
-    // Send all updates to the server
-    try {
-      await Promise.all(updates.map(({ mitreisenderId, newStatus }) =>
-        fetch('/api/packing-items/toggle-mitreisender', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            packingItemId, 
-            mitreisenderId, 
-            gepackt: newStatus 
-          }),
-        })
-      ))
-    } catch (error) {
-      console.error('Failed to update mitreisende:', error)
-      // Revert on error
-      setPackingItems(packingItems)
-    }
-  }
+    const mainCategoryGroups: Record<string, Record<string, EquipmentItem[]>> = {}
+    
+    filtered.forEach(item => {
+      const category = categories.find(c => c.id === item.kategorie_id)
+      if (!category) return
+      
+      const mainCategory = mainCategories.find(mc => mc.id === category.hauptkategorie_id)
+      if (!mainCategory) return
+      
+      const mainCategoryName = mainCategory.titel
+      const categoryName = category.titel
+      
+      if (!mainCategoryGroups[mainCategoryName]) {
+        mainCategoryGroups[mainCategoryName] = {}
+      }
+      if (!mainCategoryGroups[mainCategoryName][categoryName]) {
+        mainCategoryGroups[mainCategoryName][categoryName] = []
+      }
+      mainCategoryGroups[mainCategoryName][categoryName].push(item)
+    })
 
-  const _handleAddPackingItem = async () => {
-    if (!packingItemForm.gegenstandId || !selectedVacationId) {
-      alert('Bitte wählen Sie einen Gegenstand aus')
-      return
-    }
-
-    setIsLoading(true)
-    try {
-      const res = await fetch('/api/packing-items', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          vacationId: selectedVacationId,
-          gegenstandId: packingItemForm.gegenstandId,
-          anzahl: parseInt(packingItemForm.anzahl) || 1,
-          bemerkung: packingItemForm.bemerkung || null,
-          transportId: packingItemForm.transportId || null,
-          mitreisende: []
-        })
+    // Sort by main category order, then category order
+    const sortedMainCategories = mainCategories
+      .filter(mc => mainCategoryGroups[mc.titel])
+      .map(mc => {
+        const mainCatGroup = mainCategoryGroups[mc.titel]
+        if (!mainCatGroup) return null
+        
+        return {
+          id: mc.id,
+          name: mc.titel,
+          order: mc.reihenfolge || 0,
+          categories: categories
+            .filter(c => c.hauptkategorie_id === mc.id && mainCatGroup[c.titel])
+            .sort((a, b) => (a.reihenfolge || 0) - (b.reihenfolge || 0))
+            .map(c => ({
+              id: c.id,
+              name: c.titel,
+              items: mainCatGroup[c.titel] || []
+            }))
+        }
       })
+      .filter((mc): mc is NonNullable<typeof mc> => mc !== null)
+      .sort((a, b) => a.order - b.order)
+
+    return sortedMainCategories
+  }, [availableEquipment, searchTerm, categories, mainCategories])
+
+  const currentVacation = vacations.find(v => v.id === selectedVacationId)
+
+  const handleGeneratePackingList = async () => {
+    if (!selectedVacationId) return
+    
+    // Refresh packing items after generation
+    try {
+      const res = await fetch(`/api/packing-items?vacationId=${selectedVacationId}`)
       const data = await res.json()
       if (data.success) {
+        setPackingItems(data.data)
+        const packed = new Set<string>(data.data.filter((item: PackingItem) => item.gepackt).map((item: PackingItem) => item.id))
+        setPackedItems(packed)
+      }
+    } catch (error) {
+      console.error('Failed to refresh packing items:', error)
+    }
+  }
+
+  const handleTogglePacked = async (itemId: string) => {
+    const isPacked = packedItems.has(itemId)
+    const newPackedState = !isPacked
+
+    // Optimistic update
+    const newPackedItems = new Set(packedItems)
+    if (newPackedState) {
+      newPackedItems.add(itemId)
+    } else {
+      newPackedItems.delete(itemId)
+    }
+    setPackedItems(newPackedItems)
+
+    try {
+      const res = await fetch('/api/packing-items', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: itemId, gepackt: newPackedState }),
+      })
+      const data = await res.json()
+      if (!data.success) {
+        // Revert on error
+        setPackedItems(packedItems)
+        alert('Fehler beim Aktualisieren')
+      }
+    } catch (error) {
+      console.error('Failed to toggle packed:', error)
+      setPackedItems(packedItems)
+      alert('Fehler beim Aktualisieren')
+    }
+  }
+
+  const handleToggleMitreisender = async (itemId: string, mitreisenderId: string) => {
+    try {
+      const res = await fetch('/api/packing-items/toggle-mitreisender', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ packingItemId: itemId, mitreisenderId }),
+      })
+      const data = await res.json()
+      if (data.success && selectedVacationId) {
         // Refresh packing items
         const itemsRes = await fetch(`/api/packing-items?vacationId=${selectedVacationId}`)
         const itemsData = await itemsRes.json()
         if (itemsData.success) {
           setPackingItems(itemsData.data)
-          const packed = new Set<string>(itemsData.data.filter((item: PackingItem) => item.gepackt).map((item: PackingItem) => item.id))
-          setPackedItems(packed)
         }
-        setShowAddItemDialog(false)
-        setPackingItemForm({ gegenstandId: '', anzahl: '1', bemerkung: '', transportId: '' })
-        _setEquipmentSearchTerm('')
-      } else {
-        alert('Fehler beim Hinzufügen: ' + data.error)
       }
     } catch (error) {
-      console.error('Failed to add packing item:', error)
-      alert('Fehler beim Hinzufügen')
-    } finally {
-      setIsLoading(false)
+      console.error('Failed to toggle mitreisender:', error)
+    }
+  }
+
+  const handleToggleMultipleMitreisende = async (packingItemId: string, updates: Array<{ mitreisenderId: string; newStatus: boolean }>) => {
+    try {
+      // Process each update
+      for (const update of updates) {
+        await fetch('/api/packing-items/toggle-mitreisender', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            packingItemId, 
+            mitreisenderId: update.mitreisenderId 
+          }),
+        })
+      }
+      
+      if (selectedVacationId) {
+        // Refresh packing items
+        const itemsRes = await fetch(`/api/packing-items?vacationId=${selectedVacationId}`)
+        const itemsData = await itemsRes.json()
+        if (itemsData.success) {
+          setPackingItems(itemsData.data)
+        }
+      }
+    } catch (error) {
+      console.error('Failed to toggle multiple mitreisende:', error)
     }
   }
 
@@ -348,8 +385,8 @@ function HomeContent() {
         body: JSON.stringify({
           id: editingPackingItemId,
           anzahl: parseInt(packingItemForm.anzahl) || 1,
-          bemerkung: packingItemForm.bemerkung || null
-        })
+          bemerkung: packingItemForm.bemerkung || null,
+        }),
       })
       const data = await res.json()
       if (data.success && selectedVacationId) {
@@ -358,12 +395,9 @@ function HomeContent() {
         const itemsData = await itemsRes.json()
         if (itemsData.success) {
           setPackingItems(itemsData.data)
-          const packed = new Set<string>(itemsData.data.filter((item: PackingItem) => item.gepackt).map((item: PackingItem) => item.id))
-          setPackedItems(packed)
         }
         setShowEditItemDialog(false)
         setEditingPackingItemId(null)
-        setPackingItemForm({ gegenstandId: '', anzahl: '1', bemerkung: '', transportId: '' })
       } else {
         alert('Fehler beim Aktualisieren: ' + data.error)
       }
@@ -375,6 +409,7 @@ function HomeContent() {
     }
   }
 
+  // FIXED: Change from body to URL parameter
   const handleDeletePackingItem = async (id: string) => {
     if (!confirm('Möchten Sie diesen Eintrag wirklich aus der Packliste entfernen?')) {
       return
@@ -382,10 +417,8 @@ function HomeContent() {
 
     setIsLoading(true)
     try {
-      const res = await fetch('/api/packing-items', {
+      const res = await fetch(`/api/packing-items?id=${id}`, {
         method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id }),
       })
       const data = await res.json()
       if (data.success && selectedVacationId) {
@@ -408,30 +441,67 @@ function HomeContent() {
     }
   }
 
-  const handleGeneratePackingList = async () => {
-    if (!selectedVacationId) return
-    
-    // Refresh packing items after generation
-    const itemsRes = await fetch(`/api/packing-items?vacationId=${selectedVacationId}`)
-    const itemsData = await itemsRes.json()
-    if (itemsData.success) {
-      setPackingItems(itemsData.data)
-      const packed = new Set<string>(itemsData.data.filter((item: PackingItem) => item.gepackt).map((item: PackingItem) => item.id))
-      setPackedItems(packed)
+  const handleToggleEquipmentSelection = (equipmentId: string) => {
+    const newSelection = new Set(selectedEquipmentIds)
+    if (newSelection.has(equipmentId)) {
+      newSelection.delete(equipmentId)
+    } else {
+      newSelection.add(equipmentId)
     }
-    setShowGeneratorDialog(false)
+    setSelectedEquipmentIds(newSelection)
   }
 
-  // Computed values
-  const currentVacation = vacations.find(v => v.id === selectedVacationId)
+  const handleAddSelectedEquipment = async () => {
+    if (selectedEquipmentIds.size === 0 || !selectedVacationId) return
 
-  // Get initials for pack profile button
-  const getInitials = (name: string) => {
-    const parts = name.split(' ')
-    if (parts.length >= 2) {
-      return ((parts[0]?.[0] ?? '') + (parts[1]?.[0] ?? '')).toUpperCase()
+    setIsLoading(true)
+    try {
+      // Add all selected equipment items
+      const promises = Array.from(selectedEquipmentIds).map(equipmentId => 
+        fetch('/api/packing-items', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            vacationId: selectedVacationId,
+            gegenstandId: equipmentId,
+            anzahl: 1,
+            bemerkung: null,
+            transportId: null,
+            mitreisende: []
+          }),
+        })
+      )
+
+      await Promise.all(promises)
+
+      // Refresh packing items
+      const itemsRes = await fetch(`/api/packing-items?vacationId=${selectedVacationId}`)
+      const itemsData = await itemsRes.json()
+      if (itemsData.success) {
+        setPackingItems(itemsData.data)
+        const packed = new Set<string>(itemsData.data.filter((item: PackingItem) => item.gepackt).map((item: PackingItem) => item.id))
+        setPackedItems(packed)
+      }
+
+      // Close dialog and reset
+      setShowAddItemDialog(false)
+      setSelectedEquipmentIds(new Set())
+      setSearchTerm('')
+    } catch (error) {
+      console.error('Failed to add equipment items:', error)
+      alert('Fehler beim Hinzufügen der Gegenstände')
+    } finally {
+      setIsLoading(false)
     }
-    return name.substring(0, 2).toUpperCase()
+  }
+
+  const getInitials = (name: string) => {
+    return name
+      .split(' ')
+      .map(n => n[0])
+      .join('')
+      .toUpperCase()
+      .substring(0, 2)
   }
 
   return (
@@ -445,19 +515,19 @@ function HomeContent() {
       {/* Main Content Area */}
       <div className={cn(
         "flex-1 transition-all duration-300",
-        "lg:ml-[280px]" // Platz für permanente Sidebar auf Desktop
+        "lg:ml-[280px]"
       )}>
-        <div className="container mx-auto p-4 md:p-6">
-          {/* Unified White Header Container */}
+        <div className="h-full">
+          {/* Vacation Selected */}
           {currentVacation && (
-            <div className="bg-white rounded-xl border border-gray-200 mb-6">
-              {/* Title Bar with Pack Profile Button */}
-              <div className="p-6 border-b border-gray-200">
-                <div className="flex items-center justify-between">
+            <div className="h-full flex flex-col">
+              {/* Header - White background */}
+              <div className="bg-white border-b">
+                <div className="px-4 py-4 flex items-center justify-between">
                   <div className="flex items-center gap-4">
                     {/* Mobile Menu Toggle */}
                     <Button
-                      variant="outline"
+                      variant="ghost"
                       size="icon"
                       onClick={() => setShowNavSidebar(true)}
                       className="lg:hidden"
@@ -466,55 +536,55 @@ function HomeContent() {
                     </Button>
                     
                     <div>
-                      <h1 className="text-2xl font-bold tracking-tight text-gray-900">
+                      <h1 className="text-2xl font-bold text-[rgb(45,79,30)]">
                         {currentVacation.titel}
                       </h1>
+                      <p className="text-sm text-muted-foreground">
+                        {new Date(currentVacation.startdatum).toLocaleDateString('de-DE')} - {new Date(currentVacation.enddatum).toLocaleDateString('de-DE')}
+                      </p>
                     </div>
                   </div>
 
-                  {/* Pack Profile Toggle - Only visible when there are packing items */}
+                  {/* Pack Profile Button - Only visible if items exist */}
                   {packingItems.length > 0 && (
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={() => setShowPackSettings(true)}
-                      className="flex items-center gap-2 h-10 px-3 rounded-full border-2 border-gray-900 bg-gray-900 text-white hover:bg-gray-800 font-semibold"
+                      className="gap-2"
                     >
-                      <span className="text-sm">
-                        {selectedPackProfile 
-                          ? getInitials(vacationMitreisende.find(m => m.id === selectedPackProfile)?.name || 'AL')
-                          : 'AL'}
-                      </span>
-                      <Users2 className="h-4 w-4" />
+                      <div className="h-8 w-8 rounded-full bg-[rgb(45,79,30)] text-white flex items-center justify-center text-xs font-bold">
+                        {selectedPackProfile ? getInitials(vacationMitreisende.find(m => m.id === selectedPackProfile)?.name || 'AL') : 'AL'}
+                      </div>
+                      <span className="hidden sm:inline">Profil</span>
                     </Button>
                   )}
                 </div>
+
+                {/* Packing List Component includes progress and tabs */}
+                <PackingList
+                  items={packingItems}
+                  onToggle={handleTogglePacked}
+                  onToggleMitreisender={handleToggleMitreisender}
+                  onToggleMultipleMitreisende={handleToggleMultipleMitreisende}
+                  onEdit={handleEditPackingItem}
+                  onDelete={handleDeletePackingItem}
+                  selectedProfile={selectedPackProfile}
+                  hidePackedItems={hidePackedItems}
+                  onOpenSettings={() => setShowPackSettings(true)}
+                />
               </div>
 
-              {/* Packing List Content - includes progress, tabs, and items */}
-              {packingItems.length > 0 ? (
-                <div className="p-6">
-                  <PackingList
-                    items={packingItems}
-                    onToggle={handleToggleItem}
-                    onToggleMitreisender={handleToggleMitreisender}
-                    onToggleMultipleMitreisende={handleToggleMultipleMitreisende}
-                    onEdit={handleEditPackingItem}
-                    onDelete={handleDeletePackingItem}
-                    selectedProfile={selectedPackProfile}
-                    hidePackedItems={hidePackedItems}
-                    onOpenSettings={() => setShowPackSettings(true)}
-                  />
-                </div>
-              ) : (
+              {/* Auto-generate button - Only when list is empty */}
+              {packingItems.length === 0 && (
                 <div className="p-6 text-center">
                   <p className="text-muted-foreground mb-4">
                     Ihre Packliste ist leer. Generieren Sie automatisch Vorschläge oder fügen Sie manuell Gegenstände hinzu.
                   </p>
                   <Button 
-                    size="lg" 
-                    variant="outline"
                     onClick={() => setShowGeneratorDialog(true)}
+                    size="lg"
+                    className="bg-[rgb(45,79,30)] hover:bg-[rgb(45,79,30)]/90"
                   >
                     <Sparkles className="h-4 w-4 mr-2" />
                     Automatisch generieren
@@ -597,18 +667,115 @@ function HomeContent() {
         </div>
       )}
 
-      {/* Add Item Dialog */}
-      <Dialog open={showAddItemDialog} onOpenChange={setShowAddItemDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Gegenstand hinzufügen</DialogTitle>
+      {/* Add Equipment Dialog - NEW */}
+      <Dialog open={showAddItemDialog} onOpenChange={(open) => {
+        setShowAddItemDialog(open)
+        if (!open) {
+          setSelectedEquipmentIds(new Set())
+          setSearchTerm('')
+        }
+      }}>
+        <DialogContent className="max-w-4xl max-h-[90vh] sm:max-h-[90vh] h-[100vh] sm:h-auto flex flex-col p-0">
+          <DialogHeader className="px-6 pt-6 pb-4 border-b">
+            <DialogTitle>Gegenstände hinzufügen</DialogTitle>
             <DialogDescription>
-              Diese Funktion wird über die Ausrüstungsseite verfügbar sein
+              Wählen Sie Ausrüstungsgegenstände aus, die zur Packliste hinzugefügt werden sollen
             </DialogDescription>
           </DialogHeader>
-          <p className="text-sm text-muted-foreground">
-            Bitte navigieren Sie zur Ausrüstungsseite, um Gegenstände zur Packliste hinzuzufügen.
-          </p>
+
+          {/* Search Bar */}
+          <div className="px-6 py-4 border-b">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Suche nach Gegenständen..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+            <div className="mt-2 text-sm text-muted-foreground">
+              {selectedEquipmentIds.size} ausgewählt · {availableEquipment.length} verfügbar
+            </div>
+          </div>
+
+          {/* Equipment List - Scrollable */}
+          <div className="flex-1 overflow-y-auto px-6 py-4">
+            {groupedAvailableEquipment.length === 0 ? (
+              <div className="text-center py-12 text-muted-foreground">
+                {searchTerm ? 'Keine Gegenstände gefunden' : 'Alle Gegenstände sind bereits auf der Packliste'}
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {groupedAvailableEquipment.map(mainGroup => (
+                  <div key={mainGroup.id}>
+                    {/* Main Category Header */}
+                    <div className="bg-[rgb(45,79,30)] text-white px-4 py-2 rounded-t-lg font-bold">
+                      {mainGroup.name}
+                    </div>
+                    
+                    {/* Categories */}
+                    {mainGroup.categories.map(category => (
+                      <div key={category.id} className="border-x border-b last:rounded-b-lg">
+                        {/* Category Header */}
+                        <div className="bg-muted/50 px-4 py-2 font-semibold text-sm">
+                          {category.name} ({category.items.length})
+                        </div>
+                        
+                        {/* Items */}
+                        <div className="divide-y">
+                          {category.items.map(item => (
+                            <div
+                              key={item.id}
+                              className="flex items-center gap-3 px-4 py-3 hover:bg-muted/30 cursor-pointer"
+                              onClick={() => handleToggleEquipmentSelection(item.id)}
+                            >
+                              <Checkbox
+                                checked={selectedEquipmentIds.has(item.id)}
+                                onCheckedChange={() => handleToggleEquipmentSelection(item.id)}
+                                onClick={(e) => e.stopPropagation()}
+                              />
+                              <div className="flex-1">
+                                <div className="font-medium">{item.was}</div>
+                                {item.details && (
+                                  <div className="text-sm text-muted-foreground truncate">
+                                    {item.details}
+                                  </div>
+                                )}
+                              </div>
+                              {item.einzelgewicht && (
+                                <div className="text-sm text-muted-foreground">
+                                  {(item.einzelgewicht / 1000).toFixed(2)} kg
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Footer - Sticky */}
+          <div className="px-6 py-4 border-t bg-white flex gap-2">
+            <Button
+              onClick={handleAddSelectedEquipment}
+              disabled={selectedEquipmentIds.size === 0 || isLoading}
+              className="flex-1 bg-[rgb(45,79,30)] hover:bg-[rgb(45,79,30)]/90"
+            >
+              {isLoading ? 'Wird hinzugefügt...' : `${selectedEquipmentIds.size} Gegenstand${selectedEquipmentIds.size !== 1 ? 'e' : ''} hinzufügen`}
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => setShowAddItemDialog(false)}
+              disabled={isLoading}
+            >
+              Abbrechen
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
 
@@ -623,7 +790,6 @@ function HomeContent() {
   )
 }
 
-// Wrap in Suspense boundary for useSearchParams
 export default function Home() {
   return (
     <Suspense fallback={
