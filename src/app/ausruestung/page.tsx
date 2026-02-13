@@ -42,7 +42,7 @@ export default function AusruestungPage() {
   const [formData, setFormData] = useState({
     was: '',
     kategorie_id: '',
-    transport_id: '',
+    transport_id: 'none',
     einzelgewicht: '',
     standard_anzahl: '1',
     status: 'Optional',
@@ -139,7 +139,7 @@ export default function AusruestungPage() {
     setFormData({
       was: '',
       kategorie_id: '',
-      transport_id: '',
+      transport_id: 'none',
       einzelgewicht: '',
       standard_anzahl: '1',
       status: 'Optional',
@@ -161,7 +161,7 @@ export default function AusruestungPage() {
     setFormData({
       was: item.was,
       kategorie_id: item.kategorie_id,
-      transport_id: item.transport_id || '',
+      transport_id: item.transport_id || 'none',
       einzelgewicht: item.einzelgewicht ? String(item.einzelgewicht) : '',
       standard_anzahl: String(item.standard_anzahl),
       status: item.status,
@@ -185,7 +185,7 @@ export default function AusruestungPage() {
       const payload = {
         was: formData.was,
         kategorie_id: formData.kategorie_id,
-        transport_id: formData.transport_id || null,
+        transport_id: formData.transport_id === 'none' ? null : formData.transport_id || null,
         einzelgewicht: formData.einzelgewicht ? parseFloat(formData.einzelgewicht.replace(',', '.')) : null,
         standard_anzahl: parseInt(formData.standard_anzahl) || 1,
         status: formData.status,
@@ -235,7 +235,7 @@ export default function AusruestungPage() {
         id: editingItem.id,
         was: formData.was,
         kategorie_id: formData.kategorie_id,
-        transport_id: formData.transport_id || null,
+        transport_id: formData.transport_id === 'none' ? null : formData.transport_id || null,
         einzelgewicht: formData.einzelgewicht ? parseFloat(formData.einzelgewicht.replace(',', '.')) : null,
         standard_anzahl: parseInt(formData.standard_anzahl) || 1,
         status: formData.status,
@@ -461,7 +461,7 @@ export default function AusruestungPage() {
                     <SelectValue placeholder="Kein Transport" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Kein Transport</SelectItem>
+                    <SelectItem value="none">Kein Transport</SelectItem>
                     {transportVehicles.map(tv => (
                       <SelectItem key={tv.id} value={tv.id}>
                         {tv.name}
@@ -660,7 +660,7 @@ export default function AusruestungPage() {
                     <SelectValue placeholder="Kein Transport" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Kein Transport</SelectItem>
+                    <SelectItem value="none">Kein Transport</SelectItem>
                     {transportVehicles.map(tv => (
                       <SelectItem key={tv.id} value={tv.id}>
                         {tv.name}
