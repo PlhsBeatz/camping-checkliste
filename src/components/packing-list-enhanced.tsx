@@ -456,17 +456,19 @@ export function PackingList({
 
       {/* Main Category Tabs */}
       <Tabs value={activeMainCategory} onValueChange={setActiveMainCategory} className="w-full">
-        <TabsList className="w-full justify-start overflow-x-auto bg-white border-b border-gray-200 p-0 h-auto rounded-none">
-          {mainCategories.map(mainCat => (
-            <TabsTrigger 
-              key={mainCat} 
-              value={mainCat}
-              className="uppercase text-xs font-semibold tracking-wide px-6 py-3 rounded-none border-b-4 border-transparent data-[state=active]:border-[#e67e22] data-[state=active]:text-[rgb(45,79,30)] data-[state=inactive]:text-[rgb(168,162,158)] hover:text-gray-900 transition-colors relative data-[state=active]:bg-transparent data-[state=inactive]:bg-transparent"
-            >
-              {mainCat}
-            </TabsTrigger>
-          ))}
-        </TabsList>
+        <div className="overflow-x-auto overflow-y-hidden -mx-6 px-6">
+          <TabsList className="inline-flex min-w-full justify-start bg-white border-b border-gray-200 p-0 h-auto rounded-none">
+            {mainCategories.map(mainCat => (
+              <TabsTrigger 
+                key={mainCat} 
+                value={mainCat}
+                className="flex-shrink-0 uppercase text-xs font-semibold tracking-wide px-6 py-3 rounded-none border-b-4 border-transparent data-[state=active]:border-[#e67e22] data-[state=active]:text-[rgb(45,79,30)] data-[state=inactive]:text-[rgb(168,162,158)] hover:text-gray-900 transition-colors relative data-[state=active]:bg-transparent data-[state=inactive]:bg-transparent"
+              >
+                {mainCat}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </div>
 
         {mainCategories.map(mainCat => (
           <TabsContent key={mainCat} value={mainCat} className="space-y-6 mt-6">
@@ -483,29 +485,49 @@ export function PackingList({
                   {/* Items in this category */}
                   <Card className="border-border/50 shadow-sm overflow-hidden">
                     <CardContent className="p-0">
-                      {categoryItems.map(item => (
-                        <PackingItem
-                          key={item.id}
-                          id={item.id}
-                          was={item.was}
-                          anzahl={item.anzahl}
-                          gepackt={item.gepackt}
-                          bemerkung={item.bemerkung}
-                          transport_name={item.transport_name}
-                          mitreisenden_typ={item.mitreisenden_typ}
-                          mitreisende={item.mitreisende}
-                          onToggle={onToggle}
-                          onToggleMitreisender={onToggleMitreisender}
-                          onEdit={onEdit}
-                          onDelete={onDelete}
-                          details={item.details}
-                          fullItem={item}
-                          selectedProfile={selectedProfile}
-                          hidePackedItems={hidePackedItems}
-                          onMarkAllConfirm={() => handleMarkAllForItem(item)}
-                          onShowToast={showToast}
-                        />
-                      ))}
+                      {categoryItems
+                        .filter(item => {
+                          // Filter logic for individual profile view
+                          if (selectedProfile) {
+                            // Pauschale Einträge: immer anzeigen
+                            if (item.mitreisenden_typ === 'pauschal') {
+                              return true;
+                            }
+                            // Alle: immer anzeigen
+                            if (item.mitreisenden_typ === 'alle') {
+                              return true;
+                            }
+                            // Ausgewählte: nur anzeigen, wenn dieser Mitreisende zugeordnet ist
+                            if (item.mitreisenden_typ === 'ausgewaehlte') {
+                              return item.mitreisende?.some(m => m.mitreisender_id === selectedProfile) ?? false;
+                            }
+                          }
+                          // In "Alle" Modus: alle Einträge anzeigen
+                          return true;
+                        })
+                        .map(item => (
+                          <PackingItem
+                            key={item.id}
+                            id={item.id}
+                            was={item.was}
+                            anzahl={item.anzahl}
+                            gepackt={item.gepackt}
+                            bemerkung={item.bemerkung}
+                            transport_name={item.transport_name}
+                            mitreisenden_typ={item.mitreisenden_typ}
+                            mitreisende={item.mitreisende}
+                            onToggle={onToggle}
+                            onToggleMitreisender={onToggleMitreisender}
+                            onEdit={onEdit}
+                            onDelete={onDelete}
+                            details={item.details}
+                            fullItem={item}
+                            selectedProfile={selectedProfile}
+                            hidePackedItems={hidePackedItems}
+                            onMarkAllConfirm={() => handleMarkAllForItem(item)}
+                            onShowToast={showToast}
+                          />
+                        ))}
                     </CardContent>
                   </Card>
                 </div>

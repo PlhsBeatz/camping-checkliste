@@ -348,11 +348,12 @@ function HomeContent() {
       // Process each update
       for (const update of updates) {
         await fetch('/api/packing-items/toggle-mitreisender', {
-          method: 'POST',
+          method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ 
             packingItemId, 
-            mitreisenderId: update.mitreisenderId 
+            mitreisenderId: update.mitreisenderId,
+            gepackt: update.newStatus
           }),
         })
       }
