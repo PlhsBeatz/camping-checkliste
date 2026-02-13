@@ -143,7 +143,7 @@ function HomeContent() {
 
     const fetchVacationMitreisende = async () => {
       try {
-        const res = await fetch(`/api/vacations/${selectedVacationId}/mitreisende`)
+        const res = await fetch(`/api/mitreisende?vacationId=${selectedVacationId}`)
         const data = await res.json()
         if (data.success) {
           setVacationMitreisende(data.data)
