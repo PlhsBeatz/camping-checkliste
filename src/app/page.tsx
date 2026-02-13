@@ -284,7 +284,8 @@ function HomeContent() {
   }
 
   const handleTogglePacked = async (itemId: string) => {
-    const isPacked = packedItems.has(itemId)
+    const item = packingItems.find(p => p.id === itemId)
+    const isPacked = item?.gepackt ?? false
     const newPackedState = !isPacked
 
     // Optimistic update
@@ -303,7 +304,16 @@ function HomeContent() {
         body: JSON.stringify({ id: itemId, gepackt: newPackedState }),
       })
       const data = await res.json()
-      if (!data.success) {
+      if (data.success && selectedVacationId) {
+        // Refresh packing items to get updated state
+        const itemsRes = await fetch(`/api/packing-items?vacationId=${selectedVacationId}`)
+        const itemsData = await itemsRes.json()
+        if (itemsData.success) {
+          setPackingItems(itemsData.data)
+          const packed = new Set<string>(itemsData.data.filter((item: PackingItem) => item.gepackt).map((item: PackingItem) => item.id))
+          setPackedItems(packed)
+        }
+      } else if (!data.success) {
         // Revert on error
         setPackedItems(packedItems)
         alert('Fehler beim Aktualisieren')
