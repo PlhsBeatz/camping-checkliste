@@ -13,7 +13,7 @@ interface PackingListGeneratorProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   vacationId: string
-  onGenerate: (equipmentIds: string[]) => void
+  onGenerate: (equipmentItems: EquipmentItem[]) => Promise<void>
 }
 
 export function PackingListGenerator({ 
@@ -92,9 +92,7 @@ export function PackingListGenerator({
 
     setIsLoading(true)
     try {
-      // Create packing items for each equipment item
-      const equipmentIds = previewItems.map(item => item.id)
-      await onGenerate(equipmentIds)
+      await onGenerate(previewItems)
       onOpenChange(false)
       setSelectedTags([])
       setIncludeStandard(true)

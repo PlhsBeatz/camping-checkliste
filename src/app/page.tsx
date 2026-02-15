@@ -203,10 +203,15 @@ function HomeContent() {
     fetchMainCategories()
   }, [])
 
-  // Get available equipment (not on packing list)
+  // Statuses that should not appear in packlist selection (add/generate dialogs)
+  const PACKABLE_STATUSES = ['Normal', 'Immer gepackt']
+
+  // Get available equipment (not on packing list, only packable status)
   const availableEquipment = useMemo(() => {
     const packingItemEquipmentIds = new Set(packingItems.map(item => item.gegenstand_id))
-    return equipmentItems.filter(eq => !packingItemEquipmentIds.has(eq.id))
+    return equipmentItems.filter(
+      eq => !packingItemEquipmentIds.has(eq.id) && PACKABLE_STATUSES.includes(eq.status)
+    )
   }, [equipmentItems, packingItems])
 
   // Filter and group available equipment
@@ -266,11 +271,47 @@ function HomeContent() {
 
   const currentVacation = vacations.find(v => v.id === selectedVacationId)
 
-  const handleGeneratePackingList = async () => {
-    if (!selectedVacationId) return
-    
-    // Refresh packing items after generation
+  const handleGeneratePackingList = async (equipmentItems: EquipmentItem[]) => {
+    if (!selectedVacationId || equipmentItems.length === 0) return
+
+    const packlisteGegenstandIds = new Set(packingItems.map(p => p.gegenstand_id))
+    const toAdd = equipmentItems.filter(eq => !packlisteGegenstandIds.has(eq.id))
+
+    if (toAdd.length === 0) {
+      alert('Alle ausgewählten Gegenstände sind bereits in der Packliste.')
+      return
+    }
+
+    const vacationMitreisendeIds = vacationMitreisende.map(m => m.id)
+
     try {
+      const results = await Promise.allSettled(
+        toAdd.map((item) => {
+          let mitreisendeIds: string[] | undefined
+          if (item.mitreisenden_typ === 'alle') {
+            mitreisendeIds = vacationMitreisendeIds
+          } else if (item.mitreisenden_typ === 'ausgewaehlte' && item.standard_mitreisende?.length) {
+            mitreisendeIds = item.standard_mitreisende
+          }
+          return fetch('/api/packing-items', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              vacationId: selectedVacationId,
+              gegenstandId: item.id,
+              anzahl: item.standard_anzahl ?? 1,
+              transportId: item.transport_id || null,
+              mitreisende: mitreisendeIds,
+            }),
+          })
+        })
+      )
+
+      const failed = results.filter((r) => r.status === 'rejected' || (r.status === 'fulfilled' && !r.value.ok))
+      if (failed.length > 0) {
+        console.error('Some items failed to add:', failed)
+      }
+
       const res = await fetch(`/api/packing-items?vacationId=${selectedVacationId}`)
       const data = await res.json()
       if (data.success) {
@@ -279,7 +320,8 @@ function HomeContent() {
         setPackedItems(packed)
       }
     } catch (error) {
-      console.error('Failed to refresh packing items:', error)
+      console.error('Failed to generate packing list:', error)
+      throw error
     }
   }
 

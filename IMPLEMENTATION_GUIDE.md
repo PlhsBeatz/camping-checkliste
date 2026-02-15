@@ -29,9 +29,8 @@ camping-packliste-app/
 │   ├── app/                   # Next.js App Router
 │   ├── components/            # React-Komponenten
 │   │   ├── ui/                # Basis-UI-Komponenten
-│   │   ├── equipment-list.tsx # Ausrüstungslisten-Komponente
-│   │   ├── layout.tsx         # Layout-Komponente
-│   │   └── packing-list.tsx   # Packlisten-Komponente
+│   │   ├── equipment-table.tsx    # Ausrüstungslisten-Komponente
+│   │   ├── packing-list-enhanced.tsx # Packlisten-Komponente
 │   ├── hooks/                 # Custom React Hooks
 │   └── lib/                   # Hilfsfunktionen
 │       └── utils.ts           # Utility-Funktionen

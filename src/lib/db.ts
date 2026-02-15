@@ -1428,7 +1428,7 @@ export async function getEquipmentByTags(
       `
     }
     
-    query += ') ORDER BY h.reihenfolge, k.reihenfolge, a.was'
+    query += `) AND a.status NOT IN ('Ausgemustert', 'Fest Installiert') ORDER BY h.reihenfolge, k.reihenfolge, a.was`
     
     const stmt = db.prepare(query)
     const result = await stmt.bind(...tagIds).all<EquipmentItem>()

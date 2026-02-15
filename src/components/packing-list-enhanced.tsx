@@ -383,13 +383,13 @@ export function PackingList({
 
       // Show undo toast only if hidePackedItems is active
       if (hidePackedItems && travelerNames.length > 0) {
+        const itemId = item.id
         setUndoToast({
           visible: true,
           itemName: `${item.was} (${travelerNames.join(', ')})`,
           action: () => {
-            // Undo: mark all that were just unmarked
-            const undoUpdates = updates.map(u => ({ ...u, newStatus: true }));
-            onToggleMultipleMitreisende(item.id, undoUpdates);
+            const undoUpdates = updates.map(u => ({ ...u, newStatus: true }))
+            setTimeout(() => onToggleMultipleMitreisende(itemId, undoUpdates), 100)
           }
         });
       }
@@ -411,13 +411,13 @@ export function PackingList({
 
         // Show undo toast only if hidePackedItems is active
         if (hidePackedItems && travelerNames.length > 0) {
+          const itemId = item.id
           setUndoToast({
             visible: true,
             itemName: `${item.was} (${travelerNames.join(', ')})`,
             action: () => {
-              // Undo: unmark all that were just marked
-              const undoUpdates = updates.map(u => ({ ...u, newStatus: false }));
-              onToggleMultipleMitreisende(item.id, undoUpdates);
+              const undoUpdates = updates.map(u => ({ ...u, newStatus: false }))
+              setTimeout(() => onToggleMultipleMitreisende(itemId, undoUpdates), 100)
             }
           });
         }

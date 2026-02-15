@@ -1,4 +1,5 @@
 -- Migration 0002: Transport und Mitreisenden-Verwaltung
+-- DEPRECATED: Für Cloudflare D1 bitte 0002_transport_mitreisenden_v2.sql verwenden
 -- Dieses Skript erweitert das Schema um Funktionen für Transport-Verwaltung und Mitreisenden-spezifisches Abhaken
 
 -- 1. Füge transport_id zu packlisten_eintraege hinzu

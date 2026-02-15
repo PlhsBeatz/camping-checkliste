@@ -21,7 +21,7 @@ Diese Migration erweitert das Datenbankschema um Funktionen für:
 
 2. **Migration auf die D1-Datenbank anwenden:**
    ```bash
-   wrangler d1 execute camping-checkliste-db --file=migrations/0002_transport_mitreisenden.sql
+   wrangler d1 execute camping-checkliste-db --file=migrations/0002_transport_mitreisenden_v2.sql
    ```
 
 3. **Erfolg überprüfen:**
@@ -34,7 +34,7 @@ Diese Migration erweitert das Datenbankschema um Funktionen für:
 
 4. **Migration auf die Remote-Datenbank anwenden (Produktion):**
    ```bash
-   wrangler d1 execute camping-checkliste-db --remote --file=migrations/0002_transport_mitreisenden.sql
+   wrangler d1 execute camping-checkliste-db --remote --file=migrations/0002_transport_mitreisenden_v2.sql
    ```
 
 ### Änderungen im Detail
