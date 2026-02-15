@@ -164,7 +164,7 @@ const PackingItem: React.FC<PackingItemProps> = ({
   return (
     <>
       <div className={cn(
-        "p-4 mb-3 bg-transparent rounded-xl border border-gray-200 shadow-sm transition-all duration-200",
+        "p-4 mb-3 bg-white rounded-xl border border-gray-200 shadow-sm transition-all duration-200",
         isFullyPacked ? 'opacity-60' : 'hover:shadow-md'
       )}>
         <div className="flex items-start space-x-3">
