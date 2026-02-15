@@ -16,6 +16,8 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { cn } from '@/lib/utils'
 import { useSearchParams } from 'next/navigation'
 
+const PACKABLE_STATUSES: readonly string[] = ['Normal', 'Immer gepackt']
+
 // Helper function to find the next vacation - FIXED
 const findNextVacation = (vacations: Vacation[]): Vacation | null => {
   if (vacations.length === 0) return null
@@ -202,9 +204,6 @@ function HomeContent() {
     }
     fetchMainCategories()
   }, [])
-
-  // Statuses that should not appear in packlist selection (add/generate dialogs)
-  const PACKABLE_STATUSES = ['Normal', 'Immer gepackt']
 
   // Get available equipment (not on packing list, only packable status)
   const availableEquipment = useMemo(() => {

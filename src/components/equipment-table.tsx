@@ -1,7 +1,6 @@
 'use client'
 
-import React, { useState, useMemo, useCallback, useRef } from 'react'
-import { useVirtualizer } from '@tanstack/react-virtual'
+import React, { useState, useMemo, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -28,11 +27,6 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Search, Filter, Star, MoreVertical, Pencil, Trash2, ExternalLink } from 'lucide-react'
 import { EquipmentItem, Category, MainCategory, TransportVehicle, Tag } from '@/lib/db'
-
-type VirtualRow =
-  | { type: 'main-category'; id: string; name: string }
-  | { type: 'category'; id: string; name: string; count: number }
-  | { type: 'item'; id: string; item: EquipmentItem }
 
 interface EquipmentTableProps {
   equipmentItems: EquipmentItem[]
@@ -207,45 +201,6 @@ export const EquipmentTable = React.memo(({
       })
   }, [filteredItems, getCategoryName, getMainCategoryName])
 
-  // Flatten für Virtualisierung (nur sichtbare Zeilen rendern)
-  const flatRows = useMemo((): VirtualRow[] => {
-    const rows: VirtualRow[] = []
-    for (const mainGroup of groupedItems) {
-      rows.push({
-        type: 'main-category',
-        id: `main-${mainGroup.mainCategoryName}`,
-        name: mainGroup.mainCategoryName,
-      })
-      for (const group of mainGroup.categories) {
-        rows.push({
-          type: 'category',
-          id: `cat-${group.categoryName}`,
-          name: group.categoryName,
-          count: group.items?.length || 0,
-        })
-        for (const item of group.items || []) {
-          rows.push({ type: 'item', id: item.id, item })
-        }
-      }
-    }
-    return rows
-  }, [groupedItems])
-
-  const parentRef = useRef<HTMLDivElement>(null)
-  const ROW_HEIGHTS = { mainCategory: 52, category: 40, item: 56 }
-  const virtualizer = useVirtualizer({
-    count: flatRows.length,
-    getScrollElement: () => parentRef.current,
-    estimateSize: (index) => {
-      const row = flatRows[index]
-      if (!row) return ROW_HEIGHTS.item
-      if (row.type === 'main-category') return ROW_HEIGHTS.mainCategory
-      if (row.type === 'category') return ROW_HEIGHTS.category
-      return ROW_HEIGHTS.item
-    },
-    overscan: 5,
-  })
-
   // Status badge colors
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -419,105 +374,54 @@ export const EquipmentTable = React.memo(({
         </div>
       </div>
 
-      {/* Table - Virtualisiert für 500+ Zeilen (nur ~20 DOM-Knoten statt 500+) */}
+      {/* Table - horizontales Scrollen bei vielen Spalten */}
       <div className="border rounded-lg overflow-hidden">
-        <div ref={parentRef} className="max-h-[600px] overflow-auto">
-          <div
-            style={{
-              height: `${virtualizer.getTotalSize()}px`,
-              position: 'relative',
-              width: '100%',
-            }}
-          >
+        <div className="max-h-[600px] overflow-auto">
           <Table className="w-full">
             <TableHeader className="sticky top-0 bg-background z-30 border-b">
               <TableRow>
-                <TableHead className="min-w-[200px] w-[200px]">Was</TableHead>
-                <TableHead className="min-w-[100px] w-[100px]">Transport</TableHead>
-                <TableHead className="min-w-[100px] w-[100px]">Gewicht</TableHead>
-                <TableHead className="min-w-[60px] w-[60px]">#</TableHead>
-                <TableHead className="min-w-[120px] w-[120px]">Status</TableHead>
-                <TableHead className="min-w-[150px] w-[150px]">Gepackt für</TableHead>
-                <TableHead className="min-w-[200px] max-w-[300px] w-[250px]">Details</TableHead>
-                <TableHead className="min-w-[150px] w-[150px]">Tags</TableHead>
-                <TableHead className="min-w-[60px] w-[60px]">Links</TableHead>
-                <TableHead className="min-w-[80px] w-[80px] sticky right-0 bg-background"></TableHead>
+                <TableHead className="min-w-[200px]">Was</TableHead>
+                <TableHead className="min-w-[100px]">Transport</TableHead>
+                <TableHead className="min-w-[100px]">Gewicht</TableHead>
+                <TableHead className="min-w-[60px]">#</TableHead>
+                <TableHead className="min-w-[120px]">Status</TableHead>
+                <TableHead className="min-w-[150px]">Gepackt für</TableHead>
+                <TableHead className="min-w-[200px] max-w-[300px]">Details</TableHead>
+                <TableHead className="min-w-[150px]">Tags</TableHead>
+                <TableHead className="min-w-[60px]">Links</TableHead>
+                <TableHead className="min-w-[80px] sticky right-0 bg-background"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {flatRows.length === 0 ? (
+              {groupedItems.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
                     Keine Ausrüstungsgegenstände gefunden
                   </TableCell>
                 </TableRow>
               ) : (
-                virtualizer.getVirtualItems().map((virtualRow) => {
-                  const row = flatRows[virtualRow.index]
-                  if (!row) return null
-                  const size = virtualRow.size
-                  const translateY = virtualRow.start
-
-                  if (row.type === 'main-category') {
-                    return (
-                      <TableRow
-                        key={row.id}
-                        className="bg-[rgb(45,79,30)] text-white"
-                        style={{
-                          position: 'absolute',
-                          top: 0,
-                          left: 0,
-                          right: 0,
-                          height: `${size}px`,
-                          transform: `translateY(${translateY}px)`,
-                        }}
-                      >
-                        <TableCell colSpan={10} className="font-bold text-base py-3">
-                          {row.name}
-                        </TableCell>
-                      </TableRow>
-                    )
-                  }
-                  if (row.type === 'category') {
-                    return (
-                      <TableRow
-                        key={row.id}
-                        className="bg-muted/70"
-                        style={{
-                          position: 'absolute',
-                          top: 0,
-                          left: 0,
-                          right: 0,
-                          height: `${size}px`,
-                          transform: `translateY(${translateY}px)`,
-                        }}
-                      >
-                        <TableCell colSpan={10} className="font-semibold py-2">
-                          {row.name} ({row.count})
-                        </TableCell>
-                      </TableRow>
-                    )
-                  }
-                  const item = row.item
-                  return (
-                    <TableRow
-                      key={row.id}
-                      className="hover:bg-muted/30"
-                      style={{
-                        position: 'absolute',
-                        top: 0,
-                        left: 0,
-                        right: 0,
-                        height: `${size}px`,
-                        transform: `translateY(${translateY}px)`,
-                      }}
-                    >
+                groupedItems.map((mainGroup) => (
+                  <React.Fragment key={`main-${mainGroup.mainCategoryName}`}>
+                    <TableRow className="bg-[rgb(45,79,30)] text-white">
+                      <TableCell colSpan={10} className="font-bold text-base py-3">
+                        {mainGroup.mainCategoryName}
+                      </TableCell>
+                    </TableRow>
+                    {mainGroup.categories.map((group) => (
+                      <React.Fragment key={`group-${group.categoryName}`}>
+                        <TableRow className="bg-muted/70">
+                          <TableCell colSpan={10} className="font-semibold py-2">
+                            {group.categoryName} ({group.items?.length || 0})
+                          </TableCell>
+                        </TableRow>
+                        {group.items?.map((item) => (
+                          <TableRow key={item.id} className="hover:bg-muted/30">
                             <TableCell className="font-medium">
                               <div className="flex items-center gap-2">
                                 {item.is_standard ? (
                                   <Star className="h-4 w-4 text-yellow-500 fill-yellow-500 flex-shrink-0" />
                                 ) : (
-                                  <span className="w-4" /> 
+                                  <span className="w-4" />
                                 )}
                                 <span>{item.was}</span>
                               </div>
@@ -563,7 +467,7 @@ export const EquipmentTable = React.memo(({
                               </div>
                             </TableCell>
                             <TableCell>
-                              {item.links && item.links.length > 0 && (
+                              {item.links && item.links.length > 0 ? (
                                 <DropdownMenu>
                                   <DropdownMenuTrigger asChild>
                                     <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
@@ -575,8 +479,8 @@ export const EquipmentTable = React.memo(({
                                       <DropdownMenuItem
                                         key={idx}
                                         onSelect={(e) => {
-                                          e.preventDefault();
-                                          window.open(link.url, '_blank');
+                                          e.preventDefault()
+                                          window.open(link.url, '_blank')
                                         }}
                                         className="cursor-pointer"
                                       >
@@ -586,7 +490,7 @@ export const EquipmentTable = React.memo(({
                                     ))}
                                   </DropdownMenuContent>
                                 </DropdownMenu>
-                              )}
+                              ) : null}
                             </TableCell>
                             <TableCell className="sticky right-0 bg-background">
                               <DropdownMenu>
@@ -596,17 +500,19 @@ export const EquipmentTable = React.memo(({
                                   </Button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end">
-                                  <DropdownMenuItem onSelect={(e) => {
-                                    e.preventDefault();
-                                    onEdit(item);
-                                  }}>
+                                  <DropdownMenuItem
+                                    onSelect={(e) => {
+                                      e.preventDefault()
+                                      onEdit(item)
+                                    }}
+                                  >
                                     <Pencil className="h-4 w-4 mr-2" />
                                     Bearbeiten
                                   </DropdownMenuItem>
-                                  <DropdownMenuItem 
+                                  <DropdownMenuItem
                                     onSelect={(e) => {
-                                      e.preventDefault();
-                                      onDelete(item.id);
+                                      e.preventDefault()
+                                      onDelete(item.id)
                                     }}
                                     className="text-destructive"
                                   >
@@ -616,13 +522,15 @@ export const EquipmentTable = React.memo(({
                                 </DropdownMenuContent>
                               </DropdownMenu>
                             </TableCell>
-                    </TableRow>
-                  )
-                })
+                          </TableRow>
+                        ))}
+                      </React.Fragment>
+                    ))}
+                  </React.Fragment>
+                ))
               )}
             </TableBody>
           </Table>
-          </div>
         </div>
       </div>
     </div>
