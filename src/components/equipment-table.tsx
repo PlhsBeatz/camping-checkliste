@@ -234,6 +234,20 @@ export const EquipmentTable = React.memo(({
 
   const gridCols = 'minmax(200px,1fr) minmax(100px,auto) minmax(100px,auto) 60px minmax(120px,auto) minmax(150px,auto) minmax(200px,1fr) minmax(150px,auto) 60px 80px'
 
+  // Spalten-Ausrichtung für saubere vertikale Linien (Header und Body identisch)
+  const colAlign = {
+    was: 'text-left',
+    transport: 'text-left',
+    gewicht: 'text-right', // Zahlen rechts
+    anzahl: 'text-center',
+    status: 'text-left',
+    gepacktFuer: 'text-left',
+    details: 'text-left',
+    tags: 'text-left',
+    links: 'text-left',
+    actions: 'text-left',
+  }
+
   // Status badge colors
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -414,16 +428,16 @@ export const EquipmentTable = React.memo(({
           className="grid gap-px bg-border border-b bg-background"
           style={{ gridTemplateColumns: gridCols }}
         >
-          <div className="px-4 py-3 font-medium">Was</div>
-          <div className="px-4 py-3 font-medium">Transport</div>
-          <div className="px-4 py-3 font-medium">Gewicht</div>
-          <div className="px-4 py-3 font-medium">#</div>
-          <div className="px-4 py-3 font-medium">Status</div>
-          <div className="px-4 py-3 font-medium">Gepackt für</div>
-          <div className="px-4 py-3 font-medium">Details</div>
-          <div className="px-4 py-3 font-medium">Tags</div>
-          <div className="px-4 py-3 font-medium">Links</div>
-          <div className="px-4 py-3 font-medium"></div>
+          <div className={`px-4 py-3 font-medium ${colAlign.was}`}>Was</div>
+          <div className={`px-4 py-3 font-medium ${colAlign.transport}`}>Transport</div>
+          <div className={`px-4 py-3 font-medium ${colAlign.gewicht}`}>Gewicht</div>
+          <div className={`px-4 py-3 font-medium ${colAlign.anzahl}`}>#</div>
+          <div className={`px-4 py-3 font-medium ${colAlign.status}`}>Status</div>
+          <div className={`px-4 py-3 font-medium ${colAlign.gepacktFuer}`}>Gepackt für</div>
+          <div className={`px-4 py-3 font-medium ${colAlign.details}`}>Details</div>
+          <div className={`px-4 py-3 font-medium ${colAlign.tags}`}>Tags</div>
+          <div className={`px-4 py-3 font-medium ${colAlign.links}`}>Links</div>
+          <div className={`px-4 py-3 font-medium ${colAlign.actions}`}></div>
         </div>
         <div ref={parentRef} className="h-[600px] overflow-auto">
           {flatRows.length === 0 ? (
@@ -475,7 +489,7 @@ export const EquipmentTable = React.memo(({
                       gridTemplateColumns: gridCols
                     }}
                   >
-                    <div className="px-4 py-2 font-medium flex items-center gap-2">
+                    <div className={`px-4 py-2 font-medium flex items-center gap-2 ${colAlign.was}`}>
                       {item.is_standard ? (
                         <Star className="h-4 w-4 text-yellow-500 fill-yellow-500 flex-shrink-0" />
                       ) : (
@@ -483,15 +497,15 @@ export const EquipmentTable = React.memo(({
                       )}
                       <span>{item.was}</span>
                     </div>
-                    <div className="px-4 py-2 text-sm">{getTransportName(item.transport_id)}</div>
-                    <div className="px-4 py-2 text-sm">{formatWeight(item.einzelgewicht)}</div>
-                    <div className="px-4 py-2 text-sm">{item.standard_anzahl}</div>
-                    <div className="px-4 py-2">
+                    <div className={`px-4 py-2 text-sm ${colAlign.transport}`}>{getTransportName(item.transport_id)}</div>
+                    <div className={`px-4 py-2 text-sm ${colAlign.gewicht}`}>{formatWeight(item.einzelgewicht)}</div>
+                    <div className={`px-4 py-2 text-sm ${colAlign.anzahl}`}>{item.standard_anzahl}</div>
+                    <div className={`px-4 py-2 ${colAlign.status}`}>
                       <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(item.status)}`}>
                         {item.status}
                       </span>
                     </div>
-                    <div className="px-4 py-2 text-sm">
+                    <div className={`px-4 py-2 text-sm ${colAlign.gepacktFuer}`}>
                       {item.mitreisenden_typ === 'pauschal' ? (
                         <span title="Pauschal">📦 Pauschal</span>
                       ) : item.mitreisenden_typ === 'alle' ? (
@@ -500,10 +514,10 @@ export const EquipmentTable = React.memo(({
                         <span title="Individuell">👤 Individuell</span>
                       )}
                     </div>
-                    <div className="px-4 py-2 text-sm text-muted-foreground max-w-[300px] truncate" title={item.details || ''}>
+                    <div className={`px-4 py-2 text-sm text-muted-foreground max-w-[300px] truncate ${colAlign.details}`} title={item.details || ''}>
                       {item.details || '-'}
                     </div>
-                    <div className="px-4 py-2">
+                    <div className={`px-4 py-2 ${colAlign.tags}`}>
                       <div className="flex flex-wrap gap-1">
                         {getTagNames(item).map((tagName, idx) => (
                           <span key={idx} className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-blue-100 text-blue-800">
@@ -512,7 +526,7 @@ export const EquipmentTable = React.memo(({
                         ))}
                       </div>
                     </div>
-                    <div className="px-4 py-2">
+                    <div className={`px-4 py-2 flex items-center ${colAlign.links}`}>
                       {item.links && item.links.length > 0 ? (
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
@@ -538,7 +552,7 @@ export const EquipmentTable = React.memo(({
                         </DropdownMenu>
                       ) : null}
                     </div>
-                    <div className="px-4 py-2 sticky right-0 bg-background">
+                    <div className={`px-4 py-2 sticky right-0 bg-background flex items-center ${colAlign.actions}`}>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
