@@ -318,10 +318,10 @@ export async function deleteVacation(db: D1Database, id: string): Promise<boolea
 
 /**
  * Abrufen aller Packartikel für eine Urlaubsreise
+ * Optimiert: Mitreisende in 1 Zusatz-Query statt N+1
  */
 export async function getPackingItems(db: D1Database, vacationId: string): Promise<PackingItem[]> {
   try {
-    // Wir müssen über die packlisten Tabelle gehen
     const query = `
       SELECT 
         pe.id, pe.packliste_id, pe.gegenstand_id, pe.anzahl, pe.gepackt, pe.bemerkung, pe.transport_id,
@@ -340,48 +340,56 @@ export async function getPackingItems(db: D1Database, vacationId: string): Promi
       ORDER BY hk.reihenfolge, k.reihenfolge, ag.was
     `
     const result = await db.prepare(query).bind(vacationId).all<Record<string, unknown>>()
-    
-    // Konvertiere 0/1 zu boolean für gepackt und lade Mitreisende
-    const items = await Promise.all(
-      (result.results || []).map(async (item) => {
-        // Lade zugeordnete Mitreisende mit Gepackt-Status
-        const mitreisende = await db
-          .prepare(`
-            SELECT m.id as mitreisender_id, m.name as mitreisender_name, pem.gepackt
-            FROM packlisten_eintrag_mitreisende pem
-            JOIN mitreisende m ON pem.mitreisender_id = m.id
-            WHERE pem.packlisten_eintrag_id = ?
-            ORDER BY m.name
-          `)
-          .bind(item.id)
-          .all<{ mitreisender_id: string; mitreisender_name: string; gepackt: number }>()
-        
-        return {
-          id: String(item.id),
-          packliste_id: String(item.packliste_id),
-          gegenstand_id: String(item.gegenstand_id),
-          anzahl: Number(item.anzahl),
-          gepackt: !!item.gepackt,
-          bemerkung: item.bemerkung ? String(item.bemerkung) : null,
-          transport_id: item.transport_id ? String(item.transport_id) : undefined,
-          transport_name: item.transport_name ? String(item.transport_name) : undefined,
-          mitreisenden_typ: String(item.mitreisenden_typ || 'pauschal') as 'pauschal' | 'alle' | 'ausgewaehlte',
-          mitreisende: (mitreisende.results || []).map(m => ({
-            mitreisender_id: m.mitreisender_id,
-            mitreisender_name: m.mitreisender_name,
-            gepackt: !!m.gepackt
-          })),
-          was: String(item.was),
-          kategorie: String(item.kategorie),
-          hauptkategorie: String(item.hauptkategorie),
-          details: item.details ? String(item.details) : undefined,
-          einzelgewicht: item.einzelgewicht ? Number(item.einzelgewicht) : undefined,
-          created_at: String(item.created_at || '')
-        }
-      })
-    )
-    
-    return items
+    const rows = result.results || []
+    if (rows.length === 0) return []
+
+    const ids = rows.map((r) => String(r.id))
+
+    // 1 Query für alle Mitreisende aller Packlisten-Einträge
+    const mitreisendeByEintrag = new Map<string, Array<{ mitreisender_id: string; mitreisender_name: string; gepackt: boolean }>>()
+    const batchSize = 400
+    for (let i = 0; i < ids.length; i += batchSize) {
+      const batch = ids.slice(i, i + batchSize)
+      const placeholders = batch.map(() => '?').join(',')
+      const pemResult = await db
+        .prepare(`
+          SELECT pem.packlisten_eintrag_id, m.id as mitreisender_id, m.name as mitreisender_name, pem.gepackt
+          FROM packlisten_eintrag_mitreisende pem
+          JOIN mitreisende m ON pem.mitreisender_id = m.id
+          WHERE pem.packlisten_eintrag_id IN (${placeholders})
+          ORDER BY pem.packlisten_eintrag_id, m.name
+        `)
+        .bind(...batch)
+        .all<{ packlisten_eintrag_id: string; mitreisender_id: string; mitreisender_name: string; gepackt: number }>()
+      for (const m of pemResult.results || []) {
+        const list = mitreisendeByEintrag.get(m.packlisten_eintrag_id) || []
+        list.push({
+          mitreisender_id: m.mitreisender_id,
+          mitreisender_name: m.mitreisender_name,
+          gepackt: !!m.gepackt,
+        })
+        mitreisendeByEintrag.set(m.packlisten_eintrag_id, list)
+      }
+    }
+
+    return rows.map((item) => ({
+      id: String(item.id),
+      packliste_id: String(item.packliste_id),
+      gegenstand_id: String(item.gegenstand_id),
+      anzahl: Number(item.anzahl),
+      gepackt: !!item.gepackt,
+      bemerkung: item.bemerkung ? String(item.bemerkung) : null,
+      transport_id: item.transport_id ? String(item.transport_id) : undefined,
+      transport_name: item.transport_name ? String(item.transport_name) : undefined,
+      mitreisenden_typ: String(item.mitreisenden_typ || 'pauschal') as 'pauschal' | 'alle' | 'ausgewaehlte',
+      mitreisende: mitreisendeByEintrag.get(String(item.id)) || [],
+      was: String(item.was),
+      kategorie: String(item.kategorie),
+      hauptkategorie: String(item.hauptkategorie),
+      details: item.details ? String(item.details) : undefined,
+      einzelgewicht: item.einzelgewicht ? Number(item.einzelgewicht) : undefined,
+      created_at: String(item.created_at || ''),
+    }))
   } catch (error) {
     console.error('Error fetching packing items:', error)
     return []
@@ -427,6 +435,7 @@ export async function updatePackingItem(
 
 /**
  * Abrufen aller Ausrüstungsgegenstände
+ * Optimiert: Links und Standard-Mitreisende in 2 Zusatz-Queries statt N+1
  */
 export async function getEquipmentItems(db: D1Database): Promise<EquipmentItem[]> {
   try {
@@ -443,27 +452,51 @@ export async function getEquipmentItems(db: D1Database): Promise<EquipmentItem[]
       ORDER BY hk.reihenfolge, k.reihenfolge, ag.was
     `
     const items = await db.prepare(query).all<EquipmentItem>()
-    
-    // Fetch links and standard mitreisende for all equipment items
-    const itemsWithDetails = await Promise.all(
-      (items.results || []).map(async (item) => {
-        const links = await db.prepare(
-          'SELECT * FROM ausruestungsgegenstaende_links WHERE gegenstand_id = ?'
-        ).bind(item.id).all<EquipmentLink>()
-        
-        const standardMitreisende = await db.prepare(
-          'SELECT mitreisender_id FROM ausruestungsgegenstaende_standard_mitreisende WHERE gegenstand_id = ?'
-        ).bind(item.id).all<{ mitreisender_id: string }>()
-        
-        return { 
-          ...item, 
-          links: links.results || [],
-          standard_mitreisende: standardMitreisende.results?.map(m => m.mitreisender_id) || []
-        }
-      })
-    )
-    
-    return itemsWithDetails
+    const results = items.results || []
+    if (results.length === 0) return []
+
+    const ids = results.map((r) => r.id)
+
+    // 1 Query für alle Links (gebatched bei >400 IDs wegen SQLite-Limit)
+    const linksByGegenstand = new Map<string, EquipmentLink[]>()
+    const batchSize = 400
+    for (let i = 0; i < ids.length; i += batchSize) {
+      const batch = ids.slice(i, i + batchSize)
+      const placeholders = batch.map(() => '?').join(',')
+      const linksResult = await db
+        .prepare(`SELECT * FROM ausruestungsgegenstaende_links WHERE gegenstand_id IN (${placeholders})`)
+        .bind(...batch)
+        .all<EquipmentLink>()
+      for (const link of linksResult.results || []) {
+        const list = linksByGegenstand.get(link.gegenstand_id) || []
+        list.push(link)
+        linksByGegenstand.set(link.gegenstand_id, list)
+      }
+    }
+
+    // 1 Query für alle Standard-Mitreisende
+    const mitreisendeByGegenstand = new Map<string, string[]>()
+    for (let i = 0; i < ids.length; i += batchSize) {
+      const batch = ids.slice(i, i + batchSize)
+      const placeholders = batch.map(() => '?').join(',')
+      const smResult = await db
+        .prepare(
+          `SELECT gegenstand_id, mitreisender_id FROM ausruestungsgegenstaende_standard_mitreisende WHERE gegenstand_id IN (${placeholders})`
+        )
+        .bind(...batch)
+        .all<{ gegenstand_id: string; mitreisender_id: string }>()
+      for (const row of smResult.results || []) {
+        const list = mitreisendeByGegenstand.get(row.gegenstand_id) || []
+        list.push(row.mitreisender_id)
+        mitreisendeByGegenstand.set(row.gegenstand_id, list)
+      }
+    }
+
+    return results.map((item) => ({
+      ...item,
+      links: linksByGegenstand.get(item.id) || [],
+      standard_mitreisende: mitreisendeByGegenstand.get(item.id) || [],
+    }))
   } catch (error) {
     console.error('Error fetching equipment items:', error)
     return []
