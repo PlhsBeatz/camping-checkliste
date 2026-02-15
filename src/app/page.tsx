@@ -325,13 +325,13 @@ function HomeContent() {
   }
 
   const handleSetPacked = async (itemId: string, gepackt: boolean) => {
-    const newPackedItems = new Set(packedItems)
-    if (gepackt) {
-      newPackedItems.add(itemId)
-    } else {
-      newPackedItems.delete(itemId)
-    }
-    setPackedItems(newPackedItems)
+    const prevItems = packingItems
+    // Optimistic update: packingItems direkt aktualisieren → sofortige UI-Aktualisierung
+    setPackingItems(prev =>
+      prev.map(item =>
+        item.id === itemId ? { ...item, gepackt } : item
+      )
+    )
     try {
       const res = await fetch('/api/packing-items', {
         method: 'PUT',
@@ -339,21 +339,13 @@ function HomeContent() {
         body: JSON.stringify({ id: itemId, gepackt }),
       })
       const data = await res.json()
-      if (data.success && selectedVacationId) {
-        const itemsRes = await fetch(`/api/packing-items?vacationId=${selectedVacationId}`)
-        const itemsData = await itemsRes.json()
-        if (itemsData.success) {
-          setPackingItems(itemsData.data)
-          const packed = new Set<string>(itemsData.data.filter((item: PackingItem) => item.gepackt).map((item: PackingItem) => item.id))
-          setPackedItems(packed)
-        }
-      } else if (!data.success) {
-        setPackedItems(packedItems)
+      if (!data.success) {
+        setPackingItems(prevItems)
         alert('Fehler beim Aktualisieren')
       }
     } catch (error) {
       console.error('Failed to set packed:', error)
-      setPackedItems(packedItems)
+      setPackingItems(prevItems)
       alert('Fehler beim Aktualisieren')
     }
   }
@@ -362,15 +354,14 @@ function HomeContent() {
     const item = packingItems.find(p => p.id === itemId)
     const isPacked = item?.gepackt ?? false
     const newPackedState = !isPacked
+    const prevItems = packingItems
 
-    // Optimistic update
-    const newPackedItems = new Set(packedItems)
-    if (newPackedState) {
-      newPackedItems.add(itemId)
-    } else {
-      newPackedItems.delete(itemId)
-    }
-    setPackedItems(newPackedItems)
+    // Optimistic update: packingItems direkt aktualisieren → Checkbox/Ausblenden sofort
+    setPackingItems(prev =>
+      prev.map(p =>
+        p.id === itemId ? { ...p, gepackt: newPackedState } : p
+      )
+    )
 
     try {
       const res = await fetch('/api/packing-items', {
@@ -379,80 +370,106 @@ function HomeContent() {
         body: JSON.stringify({ id: itemId, gepackt: newPackedState }),
       })
       const data = await res.json()
-      if (data.success && selectedVacationId) {
-        // Refresh packing items to get updated state
-        const itemsRes = await fetch(`/api/packing-items?vacationId=${selectedVacationId}`)
-        const itemsData = await itemsRes.json()
-        if (itemsData.success) {
-          setPackingItems(itemsData.data)
-          const packed = new Set<string>(itemsData.data.filter((item: PackingItem) => item.gepackt).map((item: PackingItem) => item.id))
-          setPackedItems(packed)
-        }
-      } else if (!data.success) {
-        // Revert on error
-        setPackedItems(packedItems)
+      if (!data.success) {
+        setPackingItems(prevItems)
         alert('Fehler beim Aktualisieren')
       }
     } catch (error) {
       console.error('Failed to toggle packed:', error)
-      setPackedItems(packedItems)
+      setPackingItems(prevItems)
       alert('Fehler beim Aktualisieren')
     }
   }
 
   const handleToggleMitreisender = async (itemId: string, mitreisenderId: string, currentStatus: boolean) => {
+    const newStatus = !currentStatus
+    const prevItems = packingItems
+
+    // Optimistic update: mitreisende-Eintrag in packingItems sofort aktualisieren
+    setPackingItems(prev =>
+      prev.map(p => {
+        if (p.id !== itemId) return p
+        const mitreisende = p.mitreisende ?? []
+        const existingIdx = mitreisende.findIndex(m => m.mitreisender_id === mitreisenderId)
+        let updatedMitreisende: typeof mitreisende
+        if (existingIdx >= 0) {
+          updatedMitreisende = mitreisende.map((m, i) =>
+            i === existingIdx ? { ...m, gepackt: newStatus } : m
+          )
+        } else if (newStatus) {
+          const name = vacationMitreisende.find(m => m.id === mitreisenderId)?.name ?? ''
+          updatedMitreisende = [...mitreisende, { mitreisender_id: mitreisenderId, mitreisender_name: name, gepackt: true }]
+        } else {
+          return p
+        }
+        return { ...p, mitreisende: updatedMitreisende }
+      })
+    )
+
     try {
-      // Toggle the status: if currently packed, unpack it, otherwise pack it
-      const newStatus = !currentStatus
-      
       const res = await fetch('/api/packing-items/toggle-mitreisender', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          packingItemId: itemId, 
-          mitreisenderId, 
-          gepackt: newStatus 
+        body: JSON.stringify({
+          packingItemId: itemId,
+          mitreisenderId,
+          gepackt: newStatus
         }),
       })
       const data = await res.json()
-      if (data.success && selectedVacationId) {
-        // Refresh packing items
-        const itemsRes = await fetch(`/api/packing-items?vacationId=${selectedVacationId}`)
-        const itemsData = await itemsRes.json()
-        if (itemsData.success) {
-          setPackingItems(itemsData.data)
-        }
+      if (!data.success) {
+        setPackingItems(prevItems)
       }
     } catch (error) {
       console.error('Failed to toggle mitreisender:', error)
+      setPackingItems(prevItems)
     }
   }
 
   const handleToggleMultipleMitreisende = async (packingItemId: string, updates: Array<{ mitreisenderId: string; newStatus: boolean }>) => {
+    const prevItems = packingItems
+
+    // Optimistic update für alle Änderungen
+    setPackingItems(prev =>
+      prev.map(p => {
+        if (p.id !== packingItemId) return p
+        const mitreisende = [...(p.mitreisende ?? [])]
+        const updateMap = new Map(updates.map(u => [u.mitreisenderId, u.newStatus]))
+        const updated = mitreisende.map(m => {
+          const newStatus = updateMap.get(m.mitreisender_id)
+          if (newStatus === undefined) return m
+          return { ...m, gepackt: newStatus }
+        })
+        updates.forEach(u => {
+          if (!updated.some(m => m.mitreisender_id === u.mitreisenderId) && u.newStatus) {
+            const name = vacationMitreisende.find(m => m.id === u.mitreisenderId)?.name ?? ''
+            updated.push({ mitreisender_id: u.mitreisenderId, mitreisender_name: name, gepackt: true })
+          }
+        })
+        return { ...p, mitreisende: updated }
+      })
+    )
+
     try {
-      // Process each update
       for (const update of updates) {
-        await fetch('/api/packing-items/toggle-mitreisender', {
+        const res = await fetch('/api/packing-items/toggle-mitreisender', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            packingItemId, 
+          body: JSON.stringify({
+            packingItemId,
             mitreisenderId: update.mitreisenderId,
             gepackt: update.newStatus
           }),
         })
-      }
-      
-      if (selectedVacationId) {
-        // Refresh packing items
-        const itemsRes = await fetch(`/api/packing-items?vacationId=${selectedVacationId}`)
-        const itemsData = await itemsRes.json()
-        if (itemsData.success) {
-          setPackingItems(itemsData.data)
+        const data = await res.json()
+        if (!data.success) {
+          setPackingItems(prevItems)
+          return
         }
       }
     } catch (error) {
       console.error('Failed to toggle multiple mitreisende:', error)
+      setPackingItems(prevItems)
     }
   }
 
