@@ -29,6 +29,8 @@ interface EquipmentTableProps {
   tags: Tag[]
   onEdit: (item: EquipmentItem) => void
   onDelete: (id: string) => void
+  /** Dynamische Höhe bis zum unteren Bildschirmrand */
+  dynamicHeight?: boolean
 }
 
 export const EquipmentTable = React.memo(({
@@ -39,6 +41,7 @@ export const EquipmentTable = React.memo(({
   tags,
   onEdit,
   onDelete,
+  dynamicHeight = false,
 }: EquipmentTableProps) => {
   const [searchTerm, setSearchTerm] = useState('')
   const [filterMainCategory, setFilterMainCategory] = useState<string>('all')
@@ -439,7 +442,11 @@ export const EquipmentTable = React.memo(({
           <div className={`px-4 py-3 font-medium ${colAlign.links}`}>Links</div>
           <div className={`px-4 py-3 font-medium ${colAlign.actions}`}></div>
         </div>
-        <div ref={parentRef} className="h-[600px] overflow-auto">
+        <div
+          ref={parentRef}
+          className={dynamicHeight ? 'min-h-[200px] overflow-auto' : 'h-[600px] overflow-auto'}
+          style={dynamicHeight ? { height: 'calc(100dvh - 11rem)' } : undefined}
+        >
           {flatRows.length === 0 ? (
             <div className="py-16 text-center text-muted-foreground">
               Keine Ausrüstungsgegenstände gefunden

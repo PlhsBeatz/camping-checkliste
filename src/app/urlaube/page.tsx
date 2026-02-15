@@ -7,7 +7,7 @@ import { MitreisendeManager } from '@/components/mitreisende-manager'
 import { Plus, Menu, Edit2, Trash2 } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { Vacation, Mitreisender } from '@/lib/db'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
@@ -47,6 +47,22 @@ export default function UrlaubePage() {
     }
     fetchVacations()
   }, [])
+
+  // Sortieren nach Startdatum (chronologisch), vergangene ausblenden (Enddatum > 7 Tage zurück)
+  const displayedVacations = (() => {
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const cutoffDate = new Date(today)
+    cutoffDate.setDate(cutoffDate.getDate() - 7)
+
+    return [...vacations]
+      .filter(v => {
+        const endDate = new Date(v.enddatum)
+        endDate.setHours(0, 0, 0, 0)
+        return endDate >= cutoffDate
+      })
+      .sort((a, b) => new Date(a.startdatum).getTime() - new Date(b.startdatum).getTime())
+  })()
 
   const handleCreateVacation = async () => {
     if (!newVacationForm.titel || !newVacationForm.startdatum || !newVacationForm.enddatum || !newVacationForm.reiseziel_name) {
@@ -184,7 +200,7 @@ export default function UrlaubePage() {
         "lg:ml-[280px]"
       )}>
         <div className="container mx-auto p-4 md:p-6 space-y-6">
-          {/* Header */}
+          {/* Header - wie Packliste: text-lg sm:text-xl */}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               {/* Mobile Menu Toggle */}
@@ -198,29 +214,21 @@ export default function UrlaubePage() {
               </Button>
               
               <div>
-                <h1 className="text-3xl font-bold tracking-tight">
+                <h1 className="text-lg sm:text-xl font-bold tracking-tight text-[rgb(45,79,30)]">
                   Meine Urlaube
                 </h1>
-                <p className="text-muted-foreground mt-1">
-                  Planen und verwalten Sie Ihre Reisen
-                </p>
               </div>
             </div>
+          </div>
 
-            {/* Add Vacation Button */}
-            <Dialog open={showNewVacationDialog} onOpenChange={(open) => {
-              if (!open) {
-                handleCloseVacationDialog()
-              } else {
-                setShowNewVacationDialog(true)
-              }
-            }}>
-              <DialogTrigger asChild>
-                <Button size="lg">
-                  <Plus className="h-4 w-4 mr-2" />
-                  Neuer Urlaub
-                </Button>
-              </DialogTrigger>
+          {/* Dialog für Neuer Urlaub - wird per FAB geöffnet */}
+          <Dialog open={showNewVacationDialog} onOpenChange={(open) => {
+            if (!open) {
+              handleCloseVacationDialog()
+            } else {
+              setShowNewVacationDialog(true)
+            }
+          }}>
               <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                   <DialogTitle>
@@ -311,12 +319,11 @@ export default function UrlaubePage() {
                   </Button>
                 </div>
               </DialogContent>
-            </Dialog>
-          </div>
+          </Dialog>
 
           {/* Vacations List */}
           <div className="grid gap-4">
-            {vacations.length === 0 ? (
+            {displayedVacations.length === 0 ? (
               <Card>
                 <CardContent className="pt-6">
                   <p className="text-muted-foreground text-center">
@@ -325,7 +332,7 @@ export default function UrlaubePage() {
                 </CardContent>
               </Card>
             ) : (
-              vacations.map((vacation) => (
+              displayedVacations.map((vacation) => (
                 <Card
                   key={vacation.id}
                   className="cursor-pointer hover:shadow-md transition-shadow"
@@ -386,6 +393,30 @@ export default function UrlaubePage() {
               ))
             )}
           </div>
+        </div>
+
+        {/* FAB: Neuer Urlaub */}
+        <div className="fixed bottom-6 right-6 z-30">
+          <Button
+            size="lg"
+            onClick={() => {
+              setEditingVacationId(null)
+              setNewVacationForm({
+                titel: '',
+                startdatum: '',
+                abfahrtdatum: '',
+                enddatum: '',
+                reiseziel_name: '',
+                reiseziel_adresse: '',
+                land_region: ''
+              })
+              setVacationMitreisende([])
+              setShowNewVacationDialog(true)
+            }}
+            className="h-14 w-14 rounded-full shadow-lg hover:shadow-xl transition-shadow bg-[rgb(45,79,30)] hover:bg-[rgb(45,79,30)]/90"
+          >
+            <Plus className="h-6 w-6" />
+          </Button>
         </div>
       </div>
     </div>

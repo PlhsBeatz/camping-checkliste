@@ -164,7 +164,7 @@ const PackingItem: React.FC<PackingItemProps> = ({
   return (
     <>
       <div className={cn(
-        "p-4 mb-3 bg-white rounded-xl border border-gray-200 shadow-sm transition-all duration-200",
+        "p-4 mb-3 bg-transparent rounded-xl border border-gray-200 shadow-sm transition-all duration-200",
         isFullyPacked ? 'opacity-60' : 'hover:shadow-md'
       )}>
         <div className="flex items-start space-x-3">
@@ -462,7 +462,7 @@ export function PackingList({
   };
 
   return (
-    <div className="space-y-6 bg-[rgb(250,250,249)] -mx-6 px-6 pb-6 min-w-0 max-w-full overflow-x-hidden">
+    <div className="space-y-6 bg-[rgb(250,250,249)] px-4 sm:px-6 pb-6 min-w-0 max-w-full overflow-x-hidden">
       {/* Progress Bar */}
       {totalCount > 0 && (
         <div className="space-y-2 px-1">
@@ -482,8 +482,8 @@ export function PackingList({
 
       {/* Main Category Tabs */}
       <Tabs value={activeMainCategory} onValueChange={setActiveMainCategory} className="w-full max-w-full">
-        <div className="overflow-x-auto overflow-y-hidden -mx-6 px-6" style={{ WebkitOverflowScrolling: 'touch' }}>
-          <TabsList className="inline-flex w-max justify-start bg-white border-b border-gray-200 p-0 h-auto rounded-none">
+        <div className="overflow-x-auto overflow-y-hidden -mx-4 sm:-mx-6 pl-4 pr-4 sm:pl-6 sm:pr-6" style={{ WebkitOverflowScrolling: 'touch' }}>
+          <TabsList className="inline-flex w-max justify-start bg-transparent border-b border-gray-200 p-0 h-auto rounded-none">
             {mainCategories.map(mainCat => (
               <TabsTrigger 
                 key={mainCat} 
@@ -508,9 +508,9 @@ export function PackingList({
                     {category}
                   </h3>
                   
-                  {/* Items in this category */}
-                  <Card className="border-border/50 shadow-sm overflow-hidden">
-                    <CardContent className="p-0">
+                  {/* Items in this category - transparenter Hintergrund für beige Sichtbarkeit */}
+                  <Card className="border-border/50 shadow-sm overflow-hidden bg-transparent">
+                    <CardContent className="p-0 bg-transparent">
                       {categoryItems
                         .filter(item => {
                           // Filter logic for individual profile view

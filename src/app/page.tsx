@@ -73,7 +73,7 @@ function HomeContent() {
   const [editingPackingItemId, setEditingPackingItemId] = useState<string | null>(null)
   const [_equipmentSearchTerm, _setEquipmentSearchTerm] = useState('')
   const [selectedPackProfile, setSelectedPackProfile] = useState<string | null>(null)
-  const [hidePackedItems, setHidePackedItems] = useState(false)
+  const [hidePackedItems, setHidePackedItems] = useState(true)
   
   // FAB modal state
   const [searchTerm, setSearchTerm] = useState('')
@@ -614,9 +614,9 @@ function HomeContent() {
           {/* Vacation Selected */}
           {currentVacation && (
             <div className="h-full flex flex-col min-w-0">
-              {/* Header - White background */}
-              <div className="bg-white border-b min-w-0">
-                <div className="px-4 py-3 flex items-center justify-between gap-3 min-w-0">
+              {/* Header - White background, horizontale Ränder für Mobile */}
+              <div className="bg-white border-b min-w-0 px-4 sm:px-6">
+                <div className="py-3 flex items-center justify-between gap-3 min-w-0 w-full">
                   <div className="flex items-center gap-3 min-w-0 flex-1">
                     {/* Mobile Menu Toggle */}
                     <Button

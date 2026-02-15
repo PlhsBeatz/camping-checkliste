@@ -1,5 +1,4 @@
 'use client'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { NavigationSidebar } from '@/components/navigation-sidebar'
 import { EquipmentTable } from '@/components/equipment-table'
@@ -367,35 +366,15 @@ export default function AusruestungPage() {
               </Button>
               
               <div>
-                <h1 className="text-3xl font-bold tracking-tight">
+                <h1 className="text-lg sm:text-xl font-bold tracking-tight text-[rgb(45,79,30)]">
                   Ausrüstung
                 </h1>
-                <p className="text-muted-foreground mt-1">
-                  Verwalten Sie Ihre Camping-Ausrüstung
-                </p>
               </div>
             </div>
-
-            {/* Add Equipment Button */}
-            <Button 
-              size="lg"
-              onClick={handleAddEquipment}
-              className="bg-[rgb(45,79,30)] hover:bg-[rgb(45,79,30)]/90"
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              Neuer Gegenstand
-            </Button>
           </div>
 
-          {/* Equipment Table */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Ausrüstungsgegenstände</CardTitle>
-              <CardDescription>
-                {isLoading ? 'Lädt...' : `${equipmentItems.length} Gegenstände in Ihrer Ausrüstung`}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
+          {/* Equipment Table - direkt unter Header, dynamische Höhe bis Bildschirmrand */}
+          <div className="mt-4">
               {isLoading ? (
                 <div className="flex flex-col items-center justify-center py-20 gap-4">
                   <div className="animate-spin rounded-full h-12 w-12 border-4 border-[rgb(45,79,30)] border-t-transparent"></div>
@@ -410,10 +389,21 @@ export default function AusruestungPage() {
                   tags={tags}
                   onEdit={handleEditEquipment}
                   onDelete={handleDeleteEquipment}
+                  dynamicHeight
                 />
               )}
-            </CardContent>
-          </Card>
+          </div>
+
+          {/* FAB: Neuer Gegenstand */}
+          <div className="fixed bottom-6 right-6 z-30">
+            <Button
+              size="lg"
+              onClick={handleAddEquipment}
+              className="h-14 w-14 rounded-full shadow-lg hover:shadow-xl transition-shadow bg-[rgb(45,79,30)] hover:bg-[rgb(45,79,30)]/90"
+            >
+              <Plus className="h-6 w-6" />
+            </Button>
+          </div>
         </div>
       </div>
 
