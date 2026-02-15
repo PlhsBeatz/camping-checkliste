@@ -7,7 +7,7 @@ import { MitreisendeManager } from '@/components/mitreisende-manager'
 import { Plus, Menu, Edit2, Trash2 } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { Vacation, Mitreisender } from '@/lib/db'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { ResponsiveModal } from '@/components/ui/responsive-modal'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
@@ -221,24 +221,18 @@ export default function UrlaubePage() {
             </div>
           </div>
 
-          {/* Dialog für Neuer Urlaub - wird per FAB geöffnet */}
-          <Dialog open={showNewVacationDialog} onOpenChange={(open) => {
-            if (!open) {
-              handleCloseVacationDialog()
-            } else {
-              setShowNewVacationDialog(true)
-            }
-          }}>
-              <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-                <DialogHeader>
-                  <DialogTitle>
-                    {editingVacationId ? 'Urlaub bearbeiten' : 'Neuen Urlaub erstellen'}
-                  </DialogTitle>
-                  <DialogDescription>
-                    {editingVacationId ? 'Bearbeiten Sie die Details des Urlaubs' : 'Geben Sie die Details für Ihren neuen Urlaub ein'}
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="space-y-4">
+          {/* Dialog für Neuer Urlaub - Drawer auf Mobile */}
+          <ResponsiveModal
+            open={showNewVacationDialog}
+            onOpenChange={(open) => {
+              if (!open) handleCloseVacationDialog()
+              else setShowNewVacationDialog(true)
+            }}
+            title={editingVacationId ? 'Urlaub bearbeiten' : 'Neuen Urlaub erstellen'}
+            description={editingVacationId ? 'Bearbeiten Sie die Details des Urlaubs' : 'Geben Sie die Details für Ihren neuen Urlaub ein'}
+            contentClassName="max-w-2xl max-h-[90vh] overflow-y-auto"
+          >
+            <div className="space-y-4">
                   <div>
                     <Label htmlFor="titel">Titel *</Label>
                     <Input
@@ -318,8 +312,7 @@ export default function UrlaubePage() {
                     {isLoading ? 'Wird gespeichert...' : editingVacationId ? 'Urlaub aktualisieren' : 'Urlaub erstellen'}
                   </Button>
                 </div>
-              </DialogContent>
-          </Dialog>
+          </ResponsiveModal>
 
           {/* Vacations List */}
           <div className="grid gap-4">

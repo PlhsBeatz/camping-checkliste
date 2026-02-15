@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { ResponsiveModal } from '@/components/ui/responsive-modal'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -238,19 +238,15 @@ export function TagManager({ tags, onRefresh }: TagManagerProps) {
       </Card>
 
       {/* Create/Edit Dialog */}
-      <Dialog open={showDialog} onOpenChange={setShowDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
-              {editingTag ? 'Tag bearbeiten' : 'Neuer Tag'}
-            </DialogTitle>
-            <DialogDescription>
-              {editingTag 
-                ? 'Ändern Sie die Details des Tags' 
-                : 'Erstellen Sie einen neuen Tag für die Packlisten-Generierung'}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
+      <ResponsiveModal
+        open={showDialog}
+        onOpenChange={setShowDialog}
+        title={editingTag ? 'Tag bearbeiten' : 'Neuer Tag'}
+        description={editingTag 
+          ? 'Ändern Sie die Details des Tags' 
+          : 'Erstellen Sie einen neuen Tag für die Packlisten-Generierung'}
+      >
+        <div className="space-y-4">
             <div>
               <Label htmlFor="tag-titel">Titel *</Label>
               <Input
@@ -319,8 +315,7 @@ export function TagManager({ tags, onRefresh }: TagManagerProps) {
               {isLoading ? 'Wird gespeichert...' : editingTag ? 'Aktualisieren' : 'Erstellen'}
             </Button>
           </div>
-        </DialogContent>
-      </Dialog>
+      </ResponsiveModal>
     </div>
   )
 }

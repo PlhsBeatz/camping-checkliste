@@ -9,7 +9,7 @@ import { PackingSettingsSidebar } from '@/components/packing-settings-sidebar'
 import { Plus, Sparkles, Menu, Search, Users } from 'lucide-react'
 import { useState, useEffect, Suspense, useMemo } from 'react'
 import { Vacation, PackingItem, TransportVehicle, Mitreisender, EquipmentItem, Category, MainCategory } from '@/lib/db'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { ResponsiveModal } from '@/components/ui/responsive-modal'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -716,40 +716,37 @@ function HomeContent() {
           )}
 
           {/* Edit Item Dialog */}
-          <Dialog open={showEditItemDialog} onOpenChange={setShowEditItemDialog}>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Packlisten-Eintrag bearbeiten</DialogTitle>
-                <DialogDescription>
-                  Anzahl und Bemerkung anpassen
-                </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-4">
-                <div>
-                  <Label htmlFor="edit-anzahl">Anzahl</Label>
-                  <Input
-                    id="edit-anzahl"
-                    type="number"
-                    min="1"
-                    value={packingItemForm.anzahl}
-                    onChange={(e) => setPackingItemForm({ ...packingItemForm, anzahl: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="edit-bemerkung">Bemerkung (optional)</Label>
-                  <Input
-                    id="edit-bemerkung"
-                    placeholder="z.B. nur für Wanderungen"
-                    value={packingItemForm.bemerkung}
-                    onChange={(e) => setPackingItemForm({ ...packingItemForm, bemerkung: e.target.value })}
-                  />
-                </div>
-                <Button onClick={handleUpdatePackingItem} disabled={isLoading} className="w-full">
-                  {isLoading ? 'Wird aktualisiert...' : 'Aktualisieren'}
-                </Button>
+          <ResponsiveModal
+            open={showEditItemDialog}
+            onOpenChange={setShowEditItemDialog}
+            title="Packlisten-Eintrag bearbeiten"
+            description="Anzahl und Bemerkung anpassen"
+          >
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="edit-anzahl">Anzahl</Label>
+                <Input
+                  id="edit-anzahl"
+                  type="number"
+                  min="1"
+                  value={packingItemForm.anzahl}
+                  onChange={(e) => setPackingItemForm({ ...packingItemForm, anzahl: e.target.value })}
+                />
               </div>
-            </DialogContent>
-          </Dialog>
+              <div>
+                <Label htmlFor="edit-bemerkung">Bemerkung (optional)</Label>
+                <Input
+                  id="edit-bemerkung"
+                  placeholder="z.B. nur für Wanderungen"
+                  value={packingItemForm.bemerkung}
+                  onChange={(e) => setPackingItemForm({ ...packingItemForm, bemerkung: e.target.value })}
+                />
+              </div>
+              <Button onClick={handleUpdatePackingItem} disabled={isLoading} className="w-full">
+                {isLoading ? 'Wird aktualisiert...' : 'Aktualisieren'}
+              </Button>
+            </div>
+          </ResponsiveModal>
         </div>
       </div>
 
@@ -777,29 +774,30 @@ function HomeContent() {
         </div>
       )}
 
-      {/* Add Equipment Dialog - NEW */}
-      <Dialog open={showAddItemDialog} onOpenChange={(open) => {
-        setShowAddItemDialog(open)
-        if (!open) {
-          setSelectedEquipmentIds(new Set())
-          setSearchTerm('')
-        }
-      }}>
-        <DialogContent
-          className="max-w-4xl max-h-[90vh] sm:max-h-[90vh] h-[100vh] sm:h-auto flex flex-col p-0"
-          onOpenAutoFocus={(e) => {
-            if (typeof window !== 'undefined' && window.innerWidth < 640) e.preventDefault()
-          }}
-        >
-          <DialogHeader className="px-6 pt-6 pb-4 border-b">
-            <DialogTitle>Gegenstände hinzufügen</DialogTitle>
-            <DialogDescription>
+      {/* Add Equipment Dialog - Drawer auf Mobile, Dialog auf Desktop */}
+      <ResponsiveModal
+        open={showAddItemDialog}
+        onOpenChange={(open) => {
+          setShowAddItemDialog(open)
+          if (!open) {
+            setSelectedEquipmentIds(new Set())
+            setSearchTerm('')
+          }
+        }}
+        title=""
+        customContent
+        contentClassName="max-w-4xl max-h-[90vh] sm:max-h-[90vh] h-[85vh] sm:h-auto flex flex-col"
+      >
+        <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+          <div className="px-6 pt-6 pb-4 border-b flex-shrink-0">
+            <h2 className="text-lg font-semibold">Gegenstände hinzufügen</h2>
+            <p className="text-sm text-muted-foreground mt-1">
               Wählen Sie Ausrüstungsgegenstände aus, die zur Packliste hinzugefügt werden sollen
-            </DialogDescription>
-          </DialogHeader>
+            </p>
+          </div>
 
-          {/* Search Bar - auf Mobile kein Auto-Fokus (verhindert Tastatur) */}
-          <div className="px-6 py-4 border-b">
+          {/* Search Bar */}
+          <div className="px-6 py-4 border-b flex-shrink-0">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
@@ -814,7 +812,7 @@ function HomeContent() {
             </div>
           </div>
 
-          {/* Equipment List - Scrollable, overflow verhindert Breitenänderung */}
+          {/* Equipment List - Scrollable */}
           <div className="flex-1 overflow-y-auto overflow-x-hidden px-6 py-4 min-w-0">
             {groupedAvailableEquipment.length === 0 ? (
               <div className="text-center py-12 text-muted-foreground">
@@ -876,7 +874,7 @@ function HomeContent() {
           </div>
 
           {/* Footer - Sticky */}
-          <div className="px-6 py-4 border-t bg-white flex gap-2">
+          <div className="px-6 py-4 border-t bg-white flex gap-2 flex-shrink-0">
             <Button
               onClick={handleAddSelectedEquipment}
               disabled={selectedEquipmentIds.size === 0 || isLoading}
@@ -892,8 +890,8 @@ function HomeContent() {
               Abbrechen
             </Button>
           </div>
-        </DialogContent>
-      </Dialog>
+        </div>
+      </ResponsiveModal>
 
       {/* Packing List Generator Dialog */}
       <PackingListGenerator

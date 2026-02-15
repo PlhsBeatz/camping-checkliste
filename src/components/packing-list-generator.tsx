@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { ResponsiveModal } from '@/components/ui/responsive-modal'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
@@ -114,19 +114,19 @@ export function PackingListGenerator({
   }, {} as Record<string, EquipmentItem[]>)
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Sparkles className="h-5 w-5" />
-            Packliste automatisch generieren
-          </DialogTitle>
-          <DialogDescription>
-            Wählen Sie Tags aus, um passende Ausrüstungsgegenstände zur Packliste hinzuzufügen
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="space-y-6">
+    <ResponsiveModal
+      open={open}
+      onOpenChange={onOpenChange}
+      title={
+        <span className="flex items-center gap-2">
+          <Sparkles className="h-5 w-5" />
+          Packliste automatisch generieren
+        </span>
+      }
+      description="Wählen Sie Tags aus, um passende Ausrüstungsgegenstände zur Packliste hinzuzufügen"
+      contentClassName="max-w-3xl max-h-[90vh] overflow-y-auto"
+    >
+      <div className="space-y-6">
           {/* Standard Items Toggle */}
           <Card>
             <CardHeader className="pb-3">
@@ -262,7 +262,6 @@ export function PackingListGenerator({
             </Button>
           </div>
         </div>
-      </DialogContent>
-    </Dialog>
+    </ResponsiveModal>
   )
 }

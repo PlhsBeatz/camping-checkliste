@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { ResponsiveModal } from '@/components/ui/responsive-modal'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -392,21 +392,16 @@ export function CategoryManager({ categories, mainCategories, onRefresh }: Categ
               {isLoading ? 'Wird gespeichert...' : editingMainCategory ? 'Aktualisieren' : 'Erstellen'}
             </Button>
           </div>
-        </DialogContent>
-      </Dialog>
+      </ResponsiveModal>
 
       {/* Category Dialog */}
-      <Dialog open={showCategoryDialog} onOpenChange={setShowCategoryDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
-              {editingCategory ? 'Kategorie bearbeiten' : 'Neue Kategorie'}
-            </DialogTitle>
-            <DialogDescription>
-              {editingCategory ? 'Ändern Sie die Kategorie-Details' : 'Erstellen Sie eine neue Kategorie'}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
+      <ResponsiveModal
+        open={showCategoryDialog}
+        onOpenChange={setShowCategoryDialog}
+        title={editingCategory ? 'Kategorie bearbeiten' : 'Neue Kategorie'}
+        description={editingCategory ? 'Ändern Sie die Kategorie-Details' : 'Erstellen Sie eine neue Kategorie'}
+      >
+        <div className="space-y-4">
             <div>
               <Label htmlFor="cat-titel">Titel *</Label>
               <Input
@@ -452,8 +447,7 @@ export function CategoryManager({ categories, mainCategories, onRefresh }: Categ
               {isLoading ? 'Wird gespeichert...' : editingCategory ? 'Aktualisieren' : 'Erstellen'}
             </Button>
           </div>
-        </DialogContent>
-      </Dialog>
+      </ResponsiveModal>
     </div>
   )
 }

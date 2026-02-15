@@ -5,7 +5,7 @@ import { EquipmentTable } from '@/components/equipment-table'
 import { Plus, Menu } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { EquipmentItem, Category, MainCategory, TransportVehicle, Tag } from '@/lib/db'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { ResponsiveModal } from '@/components/ui/responsive-modal'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
@@ -408,15 +408,14 @@ export default function AusruestungPage() {
       </div>
 
       {/* Add Equipment Dialog */}
-      <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Neuen Gegenstand hinzufügen</DialogTitle>
-            <DialogDescription>
-              Fügen Sie einen neuen Ausrüstungsgegenstand hinzu
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
+      <ResponsiveModal
+        open={showAddDialog}
+        onOpenChange={setShowAddDialog}
+        title="Neuen Gegenstand hinzufügen"
+        description="Fügen Sie einen neuen Ausrüstungsgegenstand hinzu"
+        contentClassName="max-w-2xl max-h-[90vh] overflow-y-auto"
+      >
+        <div className="space-y-4">
             <div>
               <Label htmlFor="was">Was *</Label>
               <Input
@@ -629,19 +628,17 @@ export default function AusruestungPage() {
               </Button>
             </div>
           </div>
-        </DialogContent>
-      </Dialog>
+      </ResponsiveModal>
 
       {/* Edit Equipment Dialog */}
-      <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Gegenstand bearbeiten</DialogTitle>
-            <DialogDescription>
-              Bearbeiten Sie die Details des Ausrüstungsgegenstands
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
+      <ResponsiveModal
+        open={showEditDialog}
+        onOpenChange={setShowEditDialog}
+        title="Gegenstand bearbeiten"
+        description="Bearbeiten Sie die Details des Ausrüstungsgegenstands"
+        contentClassName="max-w-2xl max-h-[90vh] overflow-y-auto"
+      >
+        <div className="space-y-4">
             <div>
               <Label htmlFor="edit-was">Was *</Label>
               <Input
@@ -854,8 +851,7 @@ export default function AusruestungPage() {
               </Button>
             </div>
           </div>
-        </DialogContent>
-      </Dialog>
+      </ResponsiveModal>
     </div>
   )
 }

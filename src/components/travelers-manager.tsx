@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { ResponsiveModal } from '@/components/ui/responsive-modal'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -288,19 +288,15 @@ export function TravelersManager({ travelers, onRefresh }: TravelersManagerProps
       </Card>
 
       {/* Create/Edit Dialog */}
-      <Dialog open={showDialog} onOpenChange={setShowDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
-              {editingTraveler ? 'Mitreisenden bearbeiten' : 'Neuer Mitreisender'}
-            </DialogTitle>
-            <DialogDescription>
-              {editingTraveler 
-                ? 'Ändern Sie die Details des Mitreisenden' 
-                : 'Erstellen Sie einen neuen Mitreisenden'}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
+      <ResponsiveModal
+        open={showDialog}
+        onOpenChange={setShowDialog}
+        title={editingTraveler ? 'Mitreisenden bearbeiten' : 'Neuer Mitreisender'}
+        description={editingTraveler 
+          ? 'Ändern Sie die Details des Mitreisenden' 
+          : 'Erstellen Sie einen neuen Mitreisenden'}
+      >
+        <div className="space-y-4">
             <div>
               <Label htmlFor="traveler-name">Name *</Label>
               <Input
@@ -349,8 +345,7 @@ export function TravelersManager({ travelers, onRefresh }: TravelersManagerProps
               {isLoading ? 'Wird gespeichert...' : editingTraveler ? 'Aktualisieren' : 'Erstellen'}
             </Button>
           </div>
-        </DialogContent>
-      </Dialog>
+      </ResponsiveModal>
     </div>
   )
 }
