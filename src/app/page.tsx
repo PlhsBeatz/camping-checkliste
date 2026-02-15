@@ -56,7 +56,6 @@ function HomeContent() {
   const [_transportVehicles, _setTransportVehicles] = useState<TransportVehicle[]>([])
   const [vacationMitreisende, setVacationMitreisende] = useState<Mitreisender[]>([])
   const [selectedVacationId, setSelectedVacationId] = useState<string | null>(null)
-  const [packedItems, setPackedItems] = useState<Set<string>>(new Set())
   const [isLoading, setIsLoading] = useState(false)
   
   // Equipment data for FAB modal
@@ -129,8 +128,6 @@ function HomeContent() {
         const data = await res.json()
         if (data.success) {
           setPackingItems(data.data)
-          const packed = new Set<string>(data.data.filter((item: PackingItem) => item.gepackt).map((item: PackingItem) => item.id))
-          setPackedItems(packed)
         }
       } catch (error) {
         console.error('Failed to fetch packing items:', error)
@@ -315,8 +312,6 @@ function HomeContent() {
       const data = await res.json()
       if (data.success) {
         setPackingItems(data.data)
-        const packed = new Set<string>(data.data.filter((item: PackingItem) => item.gepackt).map((item: PackingItem) => item.id))
-        setPackedItems(packed)
       }
     } catch (error) {
       console.error('Failed to generate packing list:', error)
@@ -537,8 +532,6 @@ function HomeContent() {
         const itemsData = await itemsRes.json()
         if (itemsData.success) {
           setPackingItems(itemsData.data)
-          const packed = new Set<string>(itemsData.data.filter((item: PackingItem) => item.gepackt).map((item: PackingItem) => item.id))
-          setPackedItems(packed)
         }
       } else {
         alert('Fehler beim Löschen: ' + data.error)
@@ -589,8 +582,6 @@ function HomeContent() {
       const itemsData = await itemsRes.json()
       if (itemsData.success) {
         setPackingItems(itemsData.data)
-        const packed = new Set<string>(itemsData.data.filter((item: PackingItem) => item.gepackt).map((item: PackingItem) => item.id))
-        setPackedItems(packed)
       }
 
       // Close dialog and reset
