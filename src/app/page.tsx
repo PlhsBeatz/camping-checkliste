@@ -615,7 +615,7 @@ function HomeContent() {
           {currentVacation && (
             <div className="h-full flex flex-col min-w-0">
               {/* Header - White background, horizontale Ränder für Mobile */}
-              <div className="bg-white border-b min-w-0 px-4 sm:px-6">
+              <div className="bg-white border-b min-w-0">
                 <div className="py-3 flex items-center justify-between gap-3 min-w-0 w-full">
                   <div className="flex items-center gap-3 min-w-0 flex-1">
                     {/* Mobile Menu Toggle */}
