@@ -465,7 +465,7 @@ export function PackingList({
     <div className="space-y-6 bg-[rgb(250,250,249)] px-4 sm:px-6 pb-6 min-w-0 max-w-full overflow-x-hidden">
       {/* Progress Bar */}
       {totalCount > 0 && (
-        <div className="space-y-2 px-1">
+        <div className="space-y-2 bg-white px-1">
           <div className="relative">
             <div className="h-2.5 bg-gray-200 rounded-full overflow-hidden">
               <div
@@ -482,7 +482,7 @@ export function PackingList({
 
       {/* Main Category Tabs */}
       <Tabs value={activeMainCategory} onValueChange={setActiveMainCategory} className="w-full max-w-full">
-        <div className="overflow-x-auto overflow-y-hidden -mx-4 sm:-mx-6 pl-4 pr-4 sm:pl-6 sm:pr-6" style={{ WebkitOverflowScrolling: 'touch' }}>
+        <div className="bg-white overflow-x-auto overflow-y-hidden -mx-4 sm:-mx-6 pl-4 pr-4 sm:pl-6 sm:pr-6" style={{ WebkitOverflowScrolling: 'touch' }}>
           <TabsList className="inline-flex w-max justify-start bg-transparent border-b border-gray-200 p-0 h-auto rounded-none">
             {mainCategories.map(mainCat => (
               <TabsTrigger 
