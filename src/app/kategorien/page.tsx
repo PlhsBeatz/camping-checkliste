@@ -88,24 +88,15 @@ export default function KategorienPage() {
               </Button>
               
               <div>
-                <h1 className="text-3xl font-bold tracking-tight">
+                <h1 className="text-lg sm:text-xl font-bold tracking-tight text-[rgb(45,79,30)]">
                   Kategorien
                 </h1>
-                <p className="text-muted-foreground mt-1">
-                  Verwalten Sie Hauptkategorien und Kategorien für Ihre Ausrüstung
-                </p>
               </div>
             </div>
           </div>
 
           {/* Category Manager */}
           <Card>
-            <CardHeader>
-              <CardTitle>Kategorieverwaltung</CardTitle>
-              <CardDescription>
-                Organisieren Sie Ihre Ausrüstungsgegenstände mit Kategorien
-              </CardDescription>
-            </CardHeader>
             <CardContent>
               <CategoryManager
                 categories={categories}

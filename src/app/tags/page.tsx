@@ -67,12 +67,9 @@ export default function TagsPage() {
               </Button>
               
               <div>
-                <h1 className="text-3xl font-bold tracking-tight">
+                <h1 className="text-lg sm:text-xl font-bold tracking-tight text-[rgb(45,79,30)]">
                   Tags & Labels
                 </h1>
-                <p className="text-muted-foreground mt-1">
-                  Verwalten Sie Tags für Ihre Ausrüstungsgegenstände
-                </p>
               </div>
             </div>
           </div>

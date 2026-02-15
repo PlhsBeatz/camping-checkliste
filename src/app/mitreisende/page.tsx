@@ -63,12 +63,9 @@ export default function MitreisendePage() {
               </Button>
               
               <div>
-                <h1 className="text-3xl font-bold tracking-tight">
+                <h1 className="text-lg sm:text-xl font-bold tracking-tight text-[rgb(45,79,30)]">
                   Mitreisende
                 </h1>
-                <p className="text-muted-foreground mt-1">
-                  Verwalten Sie Ihre Mitreisenden zentral
-                </p>
               </div>
             </div>
           </div>
