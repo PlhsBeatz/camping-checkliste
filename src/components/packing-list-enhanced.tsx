@@ -27,6 +27,8 @@ interface PackingItemProps {
   mitreisenden_typ: 'pauschal' | 'alle' | 'ausgewaehlte';
   mitreisende?: Array<{ mitreisender_id: string; mitreisender_name: string; gepackt: boolean }>;
   onToggle: (id: string) => void;
+  /** Explizites Setzen des Gepackt-Status (für Undo bei Pauschal – vermeidet Stale-Closure) */
+  onSetPacked?: (id: string, gepackt: boolean) => void;
   onToggleMitreisender: (packingItemId: string, mitreisenderId: string, currentStatus: boolean) => void;
   onEdit: (item: DBPackingItem) => void;
   onDelete: (id: string) => void;
@@ -48,6 +50,7 @@ const PackingItem: React.FC<PackingItemProps> = ({
   mitreisenden_typ,
   mitreisende,
   onToggle,
+  onSetPacked,
   onToggleMitreisender,
   onEdit,
   onDelete,
@@ -106,11 +109,13 @@ const PackingItem: React.FC<PackingItemProps> = ({
       const itemId = id; // Capture id in closure
       onToggle(itemId);
       if (hidePackedItems && wasUnpacked && onShowToast) {
-        // Create undo action - use setTimeout to ensure state has updated
+        // Undo: explizit auf false setzen (nicht togglen) – vermeidet Stale-Closure-Bug
         const undoAction = () => {
-          setTimeout(() => {
-            onToggle(itemId); // Toggle back
-          }, 0);
+          if (onSetPacked) {
+            onSetPacked(itemId, false);
+          } else {
+            setTimeout(() => onToggle(itemId), 0);
+          }
         };
         onShowToast(was, undefined, undoAction);
       }
@@ -276,6 +281,7 @@ const PackingItem: React.FC<PackingItemProps> = ({
 interface PackingListProps {
   items: DBPackingItem[];
   onToggle: (id: string) => void;
+  onSetPacked?: (id: string, gepackt: boolean) => void;
   onToggleMitreisender: (packingItemId: string, mitreisenderId: string, currentStatus: boolean) => void;
   onToggleMultipleMitreisende: (packingItemId: string, updates: Array<{ mitreisenderId: string; newStatus: boolean }>) => void;
   onEdit: (item: DBPackingItem) => void;
@@ -289,6 +295,7 @@ interface PackingListProps {
 export function PackingList({
   items,
   onToggle,
+  onSetPacked,
   onToggleMitreisender,
   onToggleMultipleMitreisende,
   onEdit,
@@ -536,6 +543,7 @@ export function PackingList({
                             mitreisenden_typ={item.mitreisenden_typ}
                             mitreisende={item.mitreisende}
                             onToggle={onToggle}
+                            onSetPacked={onSetPacked}
                             onToggleMitreisender={onToggleMitreisender}
                             onEdit={onEdit}
                             onDelete={onDelete}

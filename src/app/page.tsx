@@ -325,6 +325,40 @@ function HomeContent() {
     }
   }
 
+  const handleSetPacked = async (itemId: string, gepackt: boolean) => {
+    const newPackedItems = new Set(packedItems)
+    if (gepackt) {
+      newPackedItems.add(itemId)
+    } else {
+      newPackedItems.delete(itemId)
+    }
+    setPackedItems(newPackedItems)
+    try {
+      const res = await fetch('/api/packing-items', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: itemId, gepackt }),
+      })
+      const data = await res.json()
+      if (data.success && selectedVacationId) {
+        const itemsRes = await fetch(`/api/packing-items?vacationId=${selectedVacationId}`)
+        const itemsData = await itemsRes.json()
+        if (itemsData.success) {
+          setPackingItems(itemsData.data)
+          const packed = new Set<string>(itemsData.data.filter((item: PackingItem) => item.gepackt).map((item: PackingItem) => item.id))
+          setPackedItems(packed)
+        }
+      } else if (!data.success) {
+        setPackedItems(packedItems)
+        alert('Fehler beim Aktualisieren')
+      }
+    } catch (error) {
+      console.error('Failed to set packed:', error)
+      setPackedItems(packedItems)
+      alert('Fehler beim Aktualisieren')
+    }
+  }
+
   const handleTogglePacked = async (itemId: string) => {
     const item = packingItems.find(p => p.id === itemId)
     const isPacked = item?.gepackt ?? false
@@ -625,6 +659,7 @@ function HomeContent() {
                 <PackingList
                   items={packingItems}
                   onToggle={handleTogglePacked}
+                  onSetPacked={handleSetPacked}
                   onToggleMitreisender={handleToggleMitreisender}
                   onToggleMultipleMitreisende={handleToggleMultipleMitreisende}
                   onEdit={handleEditPackingItem}
