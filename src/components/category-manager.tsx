@@ -354,17 +354,13 @@ export function CategoryManager({ categories, mainCategories, onRefresh }: Categ
       </Card>
 
       {/* Main Category Dialog */}
-      <Dialog open={showMainCategoryDialog} onOpenChange={setShowMainCategoryDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
-              {editingMainCategory ? 'Hauptkategorie bearbeiten' : 'Neue Hauptkategorie'}
-            </DialogTitle>
-            <DialogDescription>
-              {editingMainCategory ? 'Ändern Sie die Hauptkategorie-Details' : 'Erstellen Sie eine neue Hauptkategorie'}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
+      <ResponsiveModal
+        open={showMainCategoryDialog}
+        onOpenChange={setShowMainCategoryDialog}
+        title={editingMainCategory ? 'Hauptkategorie bearbeiten' : 'Neue Hauptkategorie'}
+        description={editingMainCategory ? 'Ändern Sie die Hauptkategorie-Details' : 'Erstellen Sie eine neue Hauptkategorie'}
+      >
+        <div className="space-y-4">
             <div>
               <Label htmlFor="main-cat-titel">Titel *</Label>
               <Input
