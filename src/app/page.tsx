@@ -6,14 +6,14 @@ import { PackingList } from '@/components/packing-list-enhanced'
 import { PackingListGenerator } from '@/components/packing-list-generator'
 import { NavigationSidebar } from '@/components/navigation-sidebar'
 import { PackingSettingsSidebar } from '@/components/packing-settings-sidebar'
-import { Plus, Sparkles, Menu, Search } from 'lucide-react'
+import { Plus, Sparkles, Menu, Search, Users } from 'lucide-react'
 import { useState, useEffect, Suspense, useMemo } from 'react'
 import { Vacation, PackingItem, TransportVehicle, Mitreisender, EquipmentItem, Category, MainCategory } from '@/lib/db'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
-import { cn } from '@/lib/utils'
+import { cn, formatWeight } from '@/lib/utils'
 import { useSearchParams } from 'next/navigation'
 
 const PACKABLE_STATUSES: readonly string[] = ['Normal', 'Immer gepackt']
@@ -596,13 +596,18 @@ function HomeContent() {
     }
   }
 
+  // Initialen: Bei Duplikaten (z.B. Luisa, Luca) 1.+3. Buchstabe nutzen
   const getInitials = (name: string) => {
-    return name
-      .split(' ')
-      .map(n => n[0])
-      .join('')
-      .toUpperCase()
-      .substring(0, 2)
+    const getFirstTwo = (n: string) =>
+      n.split(' ').map(p => p[0]).join('').toUpperCase().substring(0, 2)
+    const firstTwo = getFirstTwo(name)
+    const sameInitialsCount = vacationMitreisende.filter(
+      m => getFirstTwo(m.name) === firstTwo
+    ).length
+    if (sameInitialsCount >= 2 && name.length >= 3) {
+      return (name[0] ?? '').toUpperCase() + (name[2] ?? '').toUpperCase()
+    }
+    return firstTwo
   }
 
   return (
@@ -646,18 +651,21 @@ function HomeContent() {
                     </div>
                   </div>
 
-                  {/* Pack Profile Button - Only visible if items exist */}
+                  {/* Pack Profile Button - Nur runder Kreis mit Initialen oder Alle-Symbol */}
                   {packingItems.length > 0 && (
-                    <Button
-                      variant="outline"
-                      size="sm"
+                    <button
+                      type="button"
                       onClick={() => setShowPackSettings(true)}
-                      className="gap-2 flex-shrink-0"
+                      className="flex-shrink-0 p-0 border-0 bg-transparent cursor-pointer focus:outline-none focus:ring-2 focus:ring-[rgb(45,79,30)] focus:ring-offset-2 rounded-full"
                     >
                       <div className="h-8 w-8 rounded-full bg-[rgb(45,79,30)] text-white flex items-center justify-center text-xs font-bold">
-                        {selectedPackProfile ? getInitials(vacationMitreisende.find(m => m.id === selectedPackProfile)?.name || 'AL') : 'AL'}
+                        {selectedPackProfile ? (
+                          getInitials(vacationMitreisende.find(m => m.id === selectedPackProfile)?.name ?? '?')
+                        ) : (
+                          <Users className="h-4 w-4" />
+                        )}
                       </div>
-                    </Button>
+                    </button>
                   )}
                 </div>
 
@@ -756,15 +764,15 @@ function HomeContent() {
         onHidePackedChange={setHidePackedItems}
       />
 
-      {/* FAB Button für Gegenstand hinzufügen */}
+      {/* FAB Button für Gegenstand hinzufügen - Kreisrund mit weißem Plus */}
       {currentVacation && (
         <div className="fixed bottom-6 right-6 z-30">
           <Button
-            size="lg"
+            size="icon"
             onClick={() => setShowAddItemDialog(true)}
-            className="h-14 w-14 rounded-full shadow-lg hover:shadow-xl transition-shadow bg-[rgb(45,79,30)] hover:bg-[rgb(45,79,30)]/90"
+            className="h-14 w-14 rounded-full shadow-lg hover:shadow-xl transition-shadow bg-[rgb(45,79,30)] hover:bg-[rgb(45,79,30)]/90 text-white aspect-square p-0"
           >
-            <Plus className="h-6 w-6" />
+            <Plus className="h-6 w-6" strokeWidth={2.5} />
           </Button>
         </div>
       )}
@@ -777,7 +785,12 @@ function HomeContent() {
           setSearchTerm('')
         }
       }}>
-        <DialogContent className="max-w-4xl max-h-[90vh] sm:max-h-[90vh] h-[100vh] sm:h-auto flex flex-col p-0">
+        <DialogContent
+          className="max-w-4xl max-h-[90vh] sm:max-h-[90vh] h-[100vh] sm:h-auto flex flex-col p-0"
+          onOpenAutoFocus={(e) => {
+            if (typeof window !== 'undefined' && window.innerWidth < 640) e.preventDefault()
+          }}
+        >
           <DialogHeader className="px-6 pt-6 pb-4 border-b">
             <DialogTitle>Gegenstände hinzufügen</DialogTitle>
             <DialogDescription>
@@ -785,7 +798,7 @@ function HomeContent() {
             </DialogDescription>
           </DialogHeader>
 
-          {/* Search Bar */}
+          {/* Search Bar - auf Mobile kein Auto-Fokus (verhindert Tastatur) */}
           <div className="px-6 py-4 border-b">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -801,8 +814,8 @@ function HomeContent() {
             </div>
           </div>
 
-          {/* Equipment List - Scrollable */}
-          <div className="flex-1 overflow-y-auto px-6 py-4">
+          {/* Equipment List - Scrollable, overflow verhindert Breitenänderung */}
+          <div className="flex-1 overflow-y-auto overflow-x-hidden px-6 py-4 min-w-0">
             {groupedAvailableEquipment.length === 0 ? (
               <div className="text-center py-12 text-muted-foreground">
                 {searchTerm ? 'Keine Gegenstände gefunden' : 'Alle Gegenstände sind bereits auf der Packliste'}
@@ -825,29 +838,30 @@ function HomeContent() {
                         </div>
                         
                         {/* Items */}
-                        <div className="divide-y">
+                        <div className="divide-y divide-gray-200 bg-white">
                           {category.items.map(item => (
                             <div
                               key={item.id}
-                              className="flex items-center gap-3 px-4 py-3 hover:bg-muted/30 cursor-pointer"
+                              className="flex items-center gap-3 px-4 py-3 bg-white hover:bg-gray-50 cursor-pointer min-w-0"
                               onClick={() => handleToggleEquipmentSelection(item.id)}
                             >
                               <Checkbox
                                 checked={selectedEquipmentIds.has(item.id)}
                                 onCheckedChange={() => handleToggleEquipmentSelection(item.id)}
                                 onClick={(e) => e.stopPropagation()}
+                                className="flex-shrink-0"
                               />
-                              <div className="flex-1">
-                                <div className="font-medium">{item.was}</div>
+                              <div className="flex-1 min-w-0 overflow-hidden">
+                                <div className="font-medium truncate">{item.was}</div>
                                 {item.details && (
                                   <div className="text-sm text-muted-foreground truncate">
                                     {item.details}
                                   </div>
                                 )}
                               </div>
-                              {item.einzelgewicht && (
-                                <div className="text-sm text-muted-foreground">
-                                  {(item.einzelgewicht / 1000).toFixed(2)} kg
+                              {item.einzelgewicht != null && (
+                                <div className="text-sm text-muted-foreground flex-shrink-0">
+                                  {formatWeight(item.einzelgewicht)}
                                 </div>
                               )}
                             </div>

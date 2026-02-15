@@ -10,7 +10,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { MoreVertical, Edit2, Trash2, Truck } from "lucide-react";
+import { MoreVertical, Edit2, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { PackingItem as DBPackingItem } from "@/lib/db";
 import { MarkAllConfirmationDialog } from "./mark-all-confirmation-dialog";
@@ -168,32 +168,38 @@ const PackingItem: React.FC<PackingItemProps> = ({
         isFullyPacked ? 'opacity-60' : 'hover:shadow-md'
       )}>
         <div className="flex items-start space-x-3">
-          {/* Checkbox logic based on mode */}
+          {/* Checkbox logic based on mode - feste Größe mit flex-shrink-0 */}
           {mitreisenden_typ === 'pauschal' && (
-            <Checkbox
-              id={`item-${id}`}
-              checked={gepackt}
-              onCheckedChange={handlePauschalToggle}
-              className="mt-0.5 h-6 w-6 rounded-md border-2 border-gray-300 data-[state=checked]:bg-[rgb(45,79,30)] data-[state=checked]:border-[rgb(45,79,30)]"
-            />
+            <div className="mt-0.5 flex-shrink-0">
+              <Checkbox
+                id={`item-${id}`}
+                checked={gepackt}
+                onCheckedChange={handlePauschalToggle}
+                className="h-6 w-6 min-h-6 min-w-6 rounded-md border-2 border-gray-300 data-[state=checked]:bg-[rgb(45,79,30)] data-[state=checked]:border-[rgb(45,79,30)]"
+              />
+            </div>
           )}
           
           {mitreisenden_typ !== 'pauschal' && selectedProfile !== null && (
-            <Checkbox
-              id={`item-${id}`}
-              checked={selectedTravelerItem?.gepackt ?? false}
-              onCheckedChange={handleIndividualToggle}
-              className="mt-0.5 h-6 w-6 rounded-md border-2 border-gray-300 data-[state=checked]:bg-[rgb(45,79,30)] data-[state=checked]:border-[rgb(45,79,30)]"
-            />
+            <div className="mt-0.5 flex-shrink-0">
+              <Checkbox
+                id={`item-${id}`}
+                checked={selectedTravelerItem?.gepackt ?? false}
+                onCheckedChange={handleIndividualToggle}
+                className="h-6 w-6 min-h-6 min-w-6 rounded-md border-2 border-gray-300 data-[state=checked]:bg-[rgb(45,79,30)] data-[state=checked]:border-[rgb(45,79,30)]"
+              />
+            </div>
           )}
 
           {mitreisenden_typ !== 'pauschal' && selectedProfile === null && (
-            <Checkbox
-              id={`item-${id}`}
-              checked={isFullyPacked}
-              onCheckedChange={handleMarkAllToggle}
-              className="mt-0.5 h-6 w-6 rounded-md border-2 border-gray-300 data-[state=checked]:bg-[rgb(45,79,30)] data-[state=checked]:border-[rgb(45,79,30)]"
-            />
+            <div className="mt-0.5 flex-shrink-0">
+              <Checkbox
+                id={`item-${id}`}
+                checked={isFullyPacked}
+                onCheckedChange={handleMarkAllToggle}
+                className="h-6 w-6 min-h-6 min-w-6 rounded-md border-2 border-gray-300 data-[state=checked]:bg-[rgb(45,79,30)] data-[state=checked]:border-[rgb(45,79,30)]"
+              />
+            </div>
           )}
           
           <div className="flex-grow min-w-0">
@@ -207,12 +213,6 @@ const PackingItem: React.FC<PackingItemProps> = ({
               >
                 {was} {anzahl > 1 ? `(${anzahl}x)` : ''}
               </label>
-              {transport_name && (
-                <span className="inline-flex items-center gap-1 text-xs bg-[rgb(45,79,30)]/10 text-[rgb(45,79,30)] px-2 py-0.5 rounded-md border border-[rgb(45,79,30)]/20">
-                  <Truck className="h-3 w-3" />
-                  {transport_name}
-                </span>
-              )}
             </div>
             
             {details && <p className="text-xs text-muted-foreground mt-1.5">{details}</p>}
@@ -235,8 +235,14 @@ const PackingItem: React.FC<PackingItemProps> = ({
             )}
           </div>
 
-          {/* Three-dot menu for edit/delete */}
-          <DropdownMenu>
+          {/* Transport-Pill und Three-dot menu */}
+          <div className="flex items-center gap-1 flex-shrink-0">
+            {transport_name && (
+              <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-md">
+                {transport_name}
+              </span>
+            )}
+            <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
                 variant="ghost"
@@ -260,6 +266,7 @@ const PackingItem: React.FC<PackingItemProps> = ({
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          </div>
         </div>
       </div>
 
@@ -467,16 +474,16 @@ export function PackingList({
         {/* Progress Bar */}
         {totalCount > 0 && (
           <div className="space-y-2 bg-white px-1">
-            <div className="relative">
-              <div className="h-2.5 bg-gray-200 rounded-full overflow-hidden">
+            <div className="flex items-center gap-2">
+              <div className="flex-1 min-w-0 h-2.5 bg-gray-200 rounded-full overflow-hidden">
                 <div
                   className="h-full bg-[rgb(45,79,30)] transition-all duration-500 ease-out"
                   style={{ width: `${progressPercentage}%` }}
                 />
               </div>
-              <div className="absolute -top-1 right-0 text-xs font-medium text-gray-600">
+              <span className="text-xs font-medium text-accent flex-shrink-0">
                 {progressPercentage}%
-              </div>
+              </span>
             </div>
           </div>
         )}
