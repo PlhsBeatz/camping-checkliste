@@ -1,6 +1,7 @@
 'use client'
 
-import React, { useState, useMemo, useCallback } from 'react'
+import React, { useState, useMemo, useCallback, useRef } from 'react'
+import { useVirtualizer } from '@tanstack/react-virtual'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -11,14 +12,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -201,6 +194,46 @@ export const EquipmentTable = React.memo(({
       })
   }, [filteredItems, getCategoryName, getMainCategoryName])
 
+  // Flache Zeilenliste für Virtualisierung (Hauptkategorie → Kategorie → Items)
+  const flatRows = useMemo(() => {
+    const rows: Array<
+      | { type: 'main-category'; id: string; name: string }
+      | { type: 'category'; id: string; name: string; count: number }
+      | { type: 'item'; id: string; item: EquipmentItem }
+    > = []
+    for (const mainGroup of groupedItems) {
+      rows.push({ type: 'main-category', id: `main-${mainGroup.mainCategoryName}`, name: mainGroup.mainCategoryName })
+      for (const group of mainGroup.categories) {
+        rows.push({
+          type: 'category',
+          id: `group-${mainGroup.mainCategoryName}-${group.categoryName}`,
+          name: group.categoryName,
+          count: group.items?.length ?? 0
+        })
+        for (const item of group.items ?? []) {
+          rows.push({ type: 'item', id: item.id, item })
+        }
+      }
+    }
+    return rows
+  }, [groupedItems])
+
+  const parentRef = useRef<HTMLDivElement>(null)
+  const virtualizer = useVirtualizer({
+    count: flatRows.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: (index) => {
+      const row = flatRows[index]
+      if (!row) return 52
+      if (row.type === 'main-category') return 48
+      if (row.type === 'category') return 40
+      return 52
+    },
+    overscan: 10
+  })
+
+  const gridCols = 'minmax(200px,1fr) minmax(100px,auto) minmax(100px,auto) 60px minmax(120px,auto) minmax(150px,auto) minmax(200px,1fr) minmax(150px,auto) 60px 80px'
+
   // Status badge colors
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -374,163 +407,172 @@ export const EquipmentTable = React.memo(({
         </div>
       </div>
 
-      {/* Table - horizontales Scrollen bei vielen Spalten */}
+      {/* Tabelle - virtualisiert für 500+ Zeilen (nur ~20 sichtbare DOM-Zeilen) */}
       <div className="border rounded-lg overflow-hidden">
-        <div className="max-h-[600px] overflow-auto">
-          <Table className="w-full">
-            <TableHeader className="sticky top-0 bg-background z-30 border-b">
-              <TableRow>
-                <TableHead className="min-w-[200px]">Was</TableHead>
-                <TableHead className="min-w-[100px]">Transport</TableHead>
-                <TableHead className="min-w-[100px]">Gewicht</TableHead>
-                <TableHead className="min-w-[60px]">#</TableHead>
-                <TableHead className="min-w-[120px]">Status</TableHead>
-                <TableHead className="min-w-[150px]">Gepackt für</TableHead>
-                <TableHead className="min-w-[200px] max-w-[300px]">Details</TableHead>
-                <TableHead className="min-w-[150px]">Tags</TableHead>
-                <TableHead className="min-w-[60px]">Links</TableHead>
-                <TableHead className="min-w-[80px] sticky right-0 bg-background"></TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {groupedItems.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
-                    Keine Ausrüstungsgegenstände gefunden
-                  </TableCell>
-                </TableRow>
-              ) : (
-                groupedItems.map((mainGroup) => (
-                  <React.Fragment key={`main-${mainGroup.mainCategoryName}`}>
-                    <TableRow className="bg-[rgb(45,79,30)] text-white">
-                      <TableCell colSpan={10} className="font-bold text-base py-3">
-                        {mainGroup.mainCategoryName}
-                      </TableCell>
-                    </TableRow>
-                    {mainGroup.categories.map((group) => (
-                      <React.Fragment key={`group-${group.categoryName}`}>
-                        <TableRow className="bg-muted/70">
-                          <TableCell colSpan={10} className="font-semibold py-2">
-                            {group.categoryName} ({group.items?.length || 0})
-                          </TableCell>
-                        </TableRow>
-                        {group.items?.map((item) => (
-                          <TableRow key={item.id} className="hover:bg-muted/30">
-                            <TableCell className="font-medium">
-                              <div className="flex items-center gap-2">
-                                {item.is_standard ? (
-                                  <Star className="h-4 w-4 text-yellow-500 fill-yellow-500 flex-shrink-0" />
-                                ) : (
-                                  <span className="w-4" />
-                                )}
-                                <span>{item.was}</span>
-                              </div>
-                            </TableCell>
-                            <TableCell className="text-sm">
-                              {getTransportName(item.transport_id)}
-                            </TableCell>
-                            <TableCell className="text-sm">
-                              {formatWeight(item.einzelgewicht)}
-                            </TableCell>
-                            <TableCell className="text-sm">
-                              {item.standard_anzahl}
-                            </TableCell>
-                            <TableCell>
-                              <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(item.status)}`}>
-                                {item.status}
-                              </span>
-                            </TableCell>
-                            <TableCell className="text-sm">
-                              {item.mitreisenden_typ === 'pauschal' ? (
-                                <span title="Pauschal">📦 Pauschal</span>
-                              ) : item.mitreisenden_typ === 'alle' ? (
-                                <span title="Für alle">👥 Alle</span>
-                              ) : (
-                                <span title="Individuell">👤 Individuell</span>
-                              )}
-                            </TableCell>
-                            <TableCell className="text-sm text-muted-foreground max-w-[300px]">
-                              <div className="truncate" title={item.details || ''}>
-                                {item.details || '-'}
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex flex-wrap gap-1">
-                                {getTagNames(item).map((tagName, idx) => (
-                                  <span
-                                    key={idx}
-                                    className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-blue-100 text-blue-800"
-                                  >
-                                    {tagName}
-                                  </span>
-                                ))}
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              {item.links && item.links.length > 0 ? (
-                                <DropdownMenu>
-                                  <DropdownMenuTrigger asChild>
-                                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                                      <ExternalLink className="h-4 w-4 text-blue-600" />
-                                    </Button>
-                                  </DropdownMenuTrigger>
-                                  <DropdownMenuContent align="end">
-                                    {item.links.map((link, idx) => (
-                                      <DropdownMenuItem
-                                        key={idx}
-                                        onSelect={(e) => {
-                                          e.preventDefault()
-                                          window.open(link.url, '_blank')
-                                        }}
-                                        className="cursor-pointer"
-                                      >
-                                        <ExternalLink className="h-3 w-3 mr-2" />
-                                        {link.url.length > 40 ? link.url.substring(0, 40) + '...' : link.url}
-                                      </DropdownMenuItem>
-                                    ))}
-                                  </DropdownMenuContent>
-                                </DropdownMenu>
-                              ) : null}
-                            </TableCell>
-                            <TableCell className="sticky right-0 bg-background">
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                                    <MoreVertical className="h-4 w-4" />
-                                  </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end">
-                                  <DropdownMenuItem
-                                    onSelect={(e) => {
-                                      e.preventDefault()
-                                      onEdit(item)
-                                    }}
-                                  >
-                                    <Pencil className="h-4 w-4 mr-2" />
-                                    Bearbeiten
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem
-                                    onSelect={(e) => {
-                                      e.preventDefault()
-                                      onDelete(item.id)
-                                    }}
-                                    className="text-destructive"
-                                  >
-                                    <Trash2 className="h-4 w-4 mr-2" />
-                                    Löschen
-                                  </DropdownMenuItem>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
-                            </TableCell>
-                          </TableRow>
+        {/* Header - fest oberhalb der Scroll-Area */}
+        <div
+          className="grid gap-px bg-border border-b bg-background"
+          style={{ gridTemplateColumns: gridCols }}
+        >
+          <div className="px-4 py-3 font-medium">Was</div>
+          <div className="px-4 py-3 font-medium">Transport</div>
+          <div className="px-4 py-3 font-medium">Gewicht</div>
+          <div className="px-4 py-3 font-medium">#</div>
+          <div className="px-4 py-3 font-medium">Status</div>
+          <div className="px-4 py-3 font-medium">Gepackt für</div>
+          <div className="px-4 py-3 font-medium">Details</div>
+          <div className="px-4 py-3 font-medium">Tags</div>
+          <div className="px-4 py-3 font-medium">Links</div>
+          <div className="px-4 py-3 font-medium"></div>
+        </div>
+        <div ref={parentRef} className="h-[600px] overflow-auto">
+          {flatRows.length === 0 ? (
+            <div className="py-16 text-center text-muted-foreground">
+              Keine Ausrüstungsgegenstände gefunden
+            </div>
+          ) : (
+            <div
+              className="relative w-full"
+              style={{ height: `${virtualizer.getTotalSize()}px` }}
+            >
+              {virtualizer.getVirtualItems().map((virtualRow) => {
+                const row = flatRows[virtualRow.index]
+                if (!row) return null
+                const size = virtualRow.size
+                const translateY = virtualRow.start
+
+                if (row.type === 'main-category') {
+                  return (
+                    <div
+                      key={row.id}
+                      className="absolute left-0 right-0 flex items-center bg-[rgb(45,79,30)] text-white font-bold text-base px-4"
+                      style={{ height: size, top: 0, transform: `translateY(${translateY}px)` }}
+                    >
+                      {row.name}
+                    </div>
+                  )
+                }
+                if (row.type === 'category') {
+                  return (
+                    <div
+                      key={row.id}
+                      className="absolute left-0 right-0 flex items-center bg-muted/70 font-semibold px-4"
+                      style={{ height: size, top: 0, transform: `translateY(${translateY}px)` }}
+                    >
+                      {row.name} ({row.count})
+                    </div>
+                  )
+                }
+                const item = row.item
+                return (
+                  <div
+                    key={row.id}
+                    className="absolute left-0 right-0 grid gap-px hover:bg-muted/30 border-b border-border/50"
+                    style={{
+                      height: size,
+                      top: 0,
+                      transform: `translateY(${translateY}px)`,
+                      gridTemplateColumns: gridCols
+                    }}
+                  >
+                    <div className="px-4 py-2 font-medium flex items-center gap-2">
+                      {item.is_standard ? (
+                        <Star className="h-4 w-4 text-yellow-500 fill-yellow-500 flex-shrink-0" />
+                      ) : (
+                        <span className="w-4" />
+                      )}
+                      <span>{item.was}</span>
+                    </div>
+                    <div className="px-4 py-2 text-sm">{getTransportName(item.transport_id)}</div>
+                    <div className="px-4 py-2 text-sm">{formatWeight(item.einzelgewicht)}</div>
+                    <div className="px-4 py-2 text-sm">{item.standard_anzahl}</div>
+                    <div className="px-4 py-2">
+                      <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(item.status)}`}>
+                        {item.status}
+                      </span>
+                    </div>
+                    <div className="px-4 py-2 text-sm">
+                      {item.mitreisenden_typ === 'pauschal' ? (
+                        <span title="Pauschal">📦 Pauschal</span>
+                      ) : item.mitreisenden_typ === 'alle' ? (
+                        <span title="Für alle">👥 Alle</span>
+                      ) : (
+                        <span title="Individuell">👤 Individuell</span>
+                      )}
+                    </div>
+                    <div className="px-4 py-2 text-sm text-muted-foreground max-w-[300px] truncate" title={item.details || ''}>
+                      {item.details || '-'}
+                    </div>
+                    <div className="px-4 py-2">
+                      <div className="flex flex-wrap gap-1">
+                        {getTagNames(item).map((tagName, idx) => (
+                          <span key={idx} className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-blue-100 text-blue-800">
+                            {tagName}
+                          </span>
                         ))}
-                      </React.Fragment>
-                    ))}
-                  </React.Fragment>
-                ))
-              )}
-            </TableBody>
-          </Table>
+                      </div>
+                    </div>
+                    <div className="px-4 py-2">
+                      {item.links && item.links.length > 0 ? (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                              <ExternalLink className="h-4 w-4 text-blue-600" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            {item.links.map((link, idx) => (
+                              <DropdownMenuItem
+                                key={idx}
+                                onSelect={(e) => {
+                                  e.preventDefault()
+                                  window.open(link.url, '_blank')
+                                }}
+                                className="cursor-pointer"
+                              >
+                                <ExternalLink className="h-3 w-3 mr-2" />
+                                {link.url.length > 40 ? link.url.substring(0, 40) + '...' : link.url}
+                              </DropdownMenuItem>
+                            ))}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      ) : null}
+                    </div>
+                    <div className="px-4 py-2 sticky right-0 bg-background">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                            <MoreVertical className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem
+                            onSelect={(e) => {
+                              e.preventDefault()
+                              onEdit(item)
+                            }}
+                          >
+                            <Pencil className="h-4 w-4 mr-2" />
+                            Bearbeiten
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onSelect={(e) => {
+                              e.preventDefault()
+                              onDelete(item.id)
+                            }}
+                            className="text-destructive"
+                          >
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Löschen
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </div>
       </div>
     </div>
