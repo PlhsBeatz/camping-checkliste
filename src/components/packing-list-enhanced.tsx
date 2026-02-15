@@ -462,117 +462,121 @@ export function PackingList({
   };
 
   return (
-    <div className="space-y-6 bg-[rgb(250,250,249)] px-4 sm:px-6 pb-6 min-w-0 max-w-full overflow-x-hidden">
-      {/* Progress Bar */}
-      {totalCount > 0 && (
-        <div className="space-y-2 bg-white px-1">
-          <div className="relative">
-            <div className="h-2.5 bg-gray-200 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-[rgb(45,79,30)] transition-all duration-500 ease-out"
-                style={{ width: `${progressPercentage}%` }}
-              />
-            </div>
-            <div className="absolute -top-1 right-0 text-xs font-medium text-gray-600">
-              {progressPercentage}%
+    <>
+      <div className="px-4 bg-white">
+        {/* Progress Bar */}
+        {totalCount > 0 && (
+          <div className="space-y-2 bg-white px-1">
+            <div className="relative">
+              <div className="h-2.5 bg-gray-200 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-[rgb(45,79,30)] transition-all duration-500 ease-out"
+                  style={{ width: `${progressPercentage}%` }}
+                />
+              </div>
+              <div className="absolute -top-1 right-0 text-xs font-medium text-gray-600">
+                {progressPercentage}%
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
+      <div className="space-y-6 bg-[rgb(250,250,249)] px-4 sm:px-6 pb-6 min-w-0 max-w-full overflow-x-hidden">
+        
+        {/* Main Category Tabs */}
+        <Tabs value={activeMainCategory} onValueChange={setActiveMainCategory} className="w-full max-w-full">
+          <div className="bg-white overflow-x-auto overflow-y-hidden -mx-4 sm:-mx-6 pl-4 pr-4 sm:pl-6 sm:pr-6" style={{ WebkitOverflowScrolling: 'touch' }}>
+            <TabsList className="inline-flex w-max justify-start bg-transparent border-b border-gray-200 p-0 h-auto rounded-none">
+              {mainCategories.map(mainCat => (
+                <TabsTrigger 
+                  key={mainCat} 
+                  value={mainCat}
+                  className="flex-shrink-0 uppercase text-xs font-semibold tracking-wide px-6 py-3 rounded-none border-b-4 border-transparent data-[state=active]:border-[#e67e22] data-[state=active]:text-[rgb(45,79,30)] data-[state=inactive]:text-[rgb(168,162,158)] hover:text-gray-900 transition-colors relative data-[state=active]:bg-transparent data-[state=inactive]:bg-transparent"
+                >
+                  {mainCat}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </div>
 
-      {/* Main Category Tabs */}
-      <Tabs value={activeMainCategory} onValueChange={setActiveMainCategory} className="w-full max-w-full">
-        <div className="bg-white overflow-x-auto overflow-y-hidden -mx-4 sm:-mx-6 pl-4 pr-4 sm:pl-6 sm:pr-6" style={{ WebkitOverflowScrolling: 'touch' }}>
-          <TabsList className="inline-flex w-max justify-start bg-transparent border-b border-gray-200 p-0 h-auto rounded-none">
-            {mainCategories.map(mainCat => (
-              <TabsTrigger 
-                key={mainCat} 
-                value={mainCat}
-                className="flex-shrink-0 uppercase text-xs font-semibold tracking-wide px-6 py-3 rounded-none border-b-4 border-transparent data-[state=active]:border-[#e67e22] data-[state=active]:text-[rgb(45,79,30)] data-[state=inactive]:text-[rgb(168,162,158)] hover:text-gray-900 transition-colors relative data-[state=active]:bg-transparent data-[state=inactive]:bg-transparent"
-              >
-                {mainCat}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </div>
+          {mainCategories.map(mainCat => (
+            <TabsContent key={mainCat} value={mainCat} className="space-y-6 mt-6">
+              {Object.entries(itemsByMainCategory[mainCat] ?? {}).map(([category, categoryItems]) => {
+                if (!shouldShowCategory(categoryItems)) return null;
+                
+                return (
+                  <div key={category}>
+                    {/* Category Subheading */}
+                    <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-3 px-1">
+                      {category}
+                    </h3>
+                    
+                    {/* Items in this category - transparenter Hintergrund für beige Sichtbarkeit */}
+                    <Card className="border-none shadow-none overflow-hidden bg-transparent">
+                      <CardContent className="p-0 bg-transparent">
+                        {categoryItems
+                          .filter(item => {
+                            // Filter logic for individual profile view
+                            if (selectedProfile) {
+                              // Pauschale Einträge: immer anzeigen
+                              if (item.mitreisenden_typ === 'pauschal') {
+                                return true;
+                              }
+                              // Alle: immer anzeigen
+                              if (item.mitreisenden_typ === 'alle') {
+                                return true;
+                              }
+                              // Ausgewählte: nur anzeigen, wenn dieser Mitreisende zugeordnet ist
+                              if (item.mitreisenden_typ === 'ausgewaehlte') {
+                                return item.mitreisende?.some(m => m.mitreisender_id === selectedProfile) ?? false;
+                              }
+                            }
+                            // In "Alle" Modus: alle Einträge anzeigen
+                            return true;
+                          })
+                          .map(item => (
+                            <PackingItem
+                              key={item.id}
+                              id={item.id}
+                              was={item.was}
+                              anzahl={item.anzahl}
+                              gepackt={item.gepackt}
+                              bemerkung={item.bemerkung}
+                              transport_name={item.transport_name}
+                              mitreisenden_typ={item.mitreisenden_typ}
+                              mitreisende={item.mitreisende}
+                              onToggle={onToggle}
+                              onSetPacked={onSetPacked}
+                              onToggleMitreisender={onToggleMitreisender}
+                              onEdit={onEdit}
+                              onDelete={onDelete}
+                              details={item.details}
+                              fullItem={item}
+                              selectedProfile={selectedProfile}
+                              hidePackedItems={hidePackedItems}
+                              onMarkAllConfirm={() => handleMarkAllForItem(item)}
+                              onShowToast={showToast}
+                            />
+                          ))}
+                      </CardContent>
+                    </Card>
+                  </div>
+                );
+              })}
+            </TabsContent>
+          ))}
+        </Tabs>
 
-        {mainCategories.map(mainCat => (
-          <TabsContent key={mainCat} value={mainCat} className="space-y-6 mt-6">
-            {Object.entries(itemsByMainCategory[mainCat] ?? {}).map(([category, categoryItems]) => {
-              if (!shouldShowCategory(categoryItems)) return null;
-              
-              return (
-                <div key={category}>
-                  {/* Category Subheading */}
-                  <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-3 px-1">
-                    {category}
-                  </h3>
-                  
-                  {/* Items in this category - transparenter Hintergrund für beige Sichtbarkeit */}
-                  <Card className="border-none shadow-none overflow-hidden bg-transparent">
-                    <CardContent className="p-0 bg-transparent">
-                      {categoryItems
-                        .filter(item => {
-                          // Filter logic for individual profile view
-                          if (selectedProfile) {
-                            // Pauschale Einträge: immer anzeigen
-                            if (item.mitreisenden_typ === 'pauschal') {
-                              return true;
-                            }
-                            // Alle: immer anzeigen
-                            if (item.mitreisenden_typ === 'alle') {
-                              return true;
-                            }
-                            // Ausgewählte: nur anzeigen, wenn dieser Mitreisende zugeordnet ist
-                            if (item.mitreisenden_typ === 'ausgewaehlte') {
-                              return item.mitreisende?.some(m => m.mitreisender_id === selectedProfile) ?? false;
-                            }
-                          }
-                          // In "Alle" Modus: alle Einträge anzeigen
-                          return true;
-                        })
-                        .map(item => (
-                          <PackingItem
-                            key={item.id}
-                            id={item.id}
-                            was={item.was}
-                            anzahl={item.anzahl}
-                            gepackt={item.gepackt}
-                            bemerkung={item.bemerkung}
-                            transport_name={item.transport_name}
-                            mitreisenden_typ={item.mitreisenden_typ}
-                            mitreisende={item.mitreisende}
-                            onToggle={onToggle}
-                            onSetPacked={onSetPacked}
-                            onToggleMitreisender={onToggleMitreisender}
-                            onEdit={onEdit}
-                            onDelete={onDelete}
-                            details={item.details}
-                            fullItem={item}
-                            selectedProfile={selectedProfile}
-                            hidePackedItems={hidePackedItems}
-                            onMarkAllConfirm={() => handleMarkAllForItem(item)}
-                            onShowToast={showToast}
-                          />
-                        ))}
-                    </CardContent>
-                  </Card>
-                </div>
-              );
-            })}
-          </TabsContent>
-        ))}
-      </Tabs>
-
-      {/* Undo Toast */}
-      {undoToast && (
-        <UndoToast
-          isVisible={undoToast.visible}
-          itemName={undoToast.itemName}
-          onUndo={undoToast.action}
-          onDismiss={() => setUndoToast(null)}
-        />
-      )}
-    </div>
+        {/* Undo Toast */}
+        {undoToast && (
+          <UndoToast
+            isVisible={undoToast.visible}
+            itemName={undoToast.itemName}
+            onUndo={undoToast.action}
+            onDismiss={() => setUndoToast(null)}
+          />
+        )}
+      </div>
+      </>
   );
 }

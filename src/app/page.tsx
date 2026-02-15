@@ -624,7 +624,7 @@ function HomeContent() {
             <div className="h-full flex flex-col min-w-0">
               {/* Header - White background, horizontale Ränder für Mobile */}
               <div className="bg-white border-b min-w-0">
-                <div className="py-3 flex items-center justify-between gap-3 min-w-0 w-full">
+                <div className="py-3 px-4 flex items-center justify-between gap-3 min-w-0 w-full">
                   <div className="flex items-center gap-3 min-w-0 flex-1">
                     {/* Mobile Menu Toggle */}
                     <Button
@@ -657,7 +657,6 @@ function HomeContent() {
                       <div className="h-8 w-8 rounded-full bg-[rgb(45,79,30)] text-white flex items-center justify-center text-xs font-bold">
                         {selectedPackProfile ? getInitials(vacationMitreisende.find(m => m.id === selectedPackProfile)?.name || 'AL') : 'AL'}
                       </div>
-                      <span className="hidden sm:inline">Profil</span>
                     </Button>
                   )}
                 </div>
