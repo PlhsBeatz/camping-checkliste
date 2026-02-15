@@ -509,7 +509,7 @@ export function PackingList({
                   </h3>
                   
                   {/* Items in this category - transparenter Hintergrund für beige Sichtbarkeit */}
-                  <Card className="overflow-hidden bg-transparent">
+                  <Card className="border-none shadow-none overflow-hidden bg-transparent">
                     <CardContent className="p-0 bg-transparent">
                       {categoryItems
                         .filter(item => {
