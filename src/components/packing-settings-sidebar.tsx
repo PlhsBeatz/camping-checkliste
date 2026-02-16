@@ -20,6 +20,8 @@ interface PackingSettingsSidebarProps {
   onProfileChange: (profileId: string | null) => void
   hidePackedItems: boolean
   onHidePackedChange: (hide: boolean) => void
+  listDisplayMode: 'alles' | 'packliste'
+  onListDisplayModeChange: (mode: 'alles' | 'packliste') => void
 }
 
 export function PackingSettingsSidebar({
@@ -29,7 +31,9 @@ export function PackingSettingsSidebar({
   selectedProfile,
   onProfileChange,
   hidePackedItems,
-  onHidePackedChange
+  onHidePackedChange,
+  listDisplayMode,
+  onListDisplayModeChange
 }: PackingSettingsSidebarProps) {
   // Generate avatar initials and colors
   const getInitials = (name: string) => {
@@ -89,6 +93,44 @@ export function PackingSettingsSidebar({
 
         {/* Content - White Background */}
         <div className="p-6 space-y-4">
+          {/* Anzeige-Modus: Alles / Packliste */}
+          <div>
+            <div className="text-xs font-medium text-gray-600 uppercase tracking-wide mb-2">
+              Anzeige
+            </div>
+            <div className="flex rounded-lg border-2 border-gray-200 p-0.5 bg-gray-100 overflow-hidden">
+              <button
+                type="button"
+                onClick={() => onListDisplayModeChange('alles')}
+                className={cn(
+                  'flex-1 py-2.5 text-sm font-medium transition-colors',
+                  listDisplayMode === 'alles'
+                    ? 'bg-white text-[rgb(45,79,30)] shadow-sm rounded-md'
+                    : 'text-gray-600 hover:text-gray-900'
+                )}
+              >
+                Alles
+              </button>
+              <button
+                type="button"
+                onClick={() => onListDisplayModeChange('packliste')}
+                className={cn(
+                  'flex-1 py-2.5 text-sm font-medium transition-colors',
+                  listDisplayMode === 'packliste'
+                    ? 'bg-white text-[rgb(45,79,30)] shadow-sm rounded-md'
+                    : 'text-gray-600 hover:text-gray-900'
+                )}
+              >
+                Packliste
+              </button>
+            </div>
+            <p className="text-xs text-gray-500 mt-1.5">
+              {listDisplayMode === 'alles'
+                ? 'Alle Einträge inkl. „Immer gepackt"'
+                : 'Ohne „Immer gepackt" (Wohnwagen-Dauerausstattung)'}
+            </p>
+          </div>
+
           {/* Zentral / Alle Option */}
           <button
             onClick={() => onProfileChange(null)}

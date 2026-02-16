@@ -304,6 +304,7 @@ interface PackingListProps {
   onDelete: (id: string, forMitreisenderId?: string | null) => void;
   selectedProfile: string | null;
   hidePackedItems: boolean;
+  listDisplayMode: 'alles' | 'packliste';
   onOpenSettings: () => void;
   vacationMitreisende?: Array<{ id: string; name: string }>;
 }
@@ -318,16 +319,32 @@ export function PackingList({
   onDelete,
   selectedProfile,
   hidePackedItems,
+  listDisplayMode,
   onOpenSettings: _onOpenSettings,
   vacationMitreisende = []
 }: PackingListProps) {
   const [undoToast, setUndoToast] = useState<{ visible: boolean; itemName: string; action: () => void } | null>(null);
   const [activeMainCategory, setActiveMainCategory] = useState<string>('');
 
-  // Group items by main category and category
+  // Prüft ob ein Eintrag im aktuellen Profil sichtbar ist
+  const isItemVisibleForProfile = (item: DBPackingItem) => {
+    if (!selectedProfile) return true;
+    if (item.mitreisenden_typ === 'pauschal') return true;
+    return item.mitreisende?.some(m => m.mitreisender_id === selectedProfile) ?? false;
+  };
+
+  // Gefilterte Einträge: Anzeige-Modus + Profil
+  const visibleItems = useMemo(() => {
+    return items.filter(item => {
+      if (listDisplayMode === 'packliste' && item.status === 'Immer gepackt') return false;
+      return isItemVisibleForProfile(item);
+    });
+  }, [items, listDisplayMode, selectedProfile]);
+
+  // Group items by main category and category (nur sichtbare)
   const itemsByMainCategory = useMemo(() => {
     const grouped: Record<string, Record<string, DBPackingItem[]>> = {};
-    items.forEach(item => {
+    visibleItems.forEach(item => {
       const mainCat = item.hauptkategorie ?? 'Sonstiges';
       const cat = item.kategorie ?? 'Allgemein';
       if (!grouped[mainCat]) {
@@ -339,7 +356,7 @@ export function PackingList({
       grouped[mainCat][cat].push(item);
     });
     return grouped;
-  }, [items]);
+  }, [visibleItems]);
 
   const mainCategories = Object.keys(itemsByMainCategory);
 
@@ -353,9 +370,9 @@ export function PackingList({
     }
   }, [mainCategories, activeMainCategory]);
 
-  // Calculate progress
+  // Fortschritt abhängig von sichtbaren Einträgen (Anzeige-Modus + Profil)
   const { packedCount, totalCount } = useMemo(() => {
-    return items.reduce((acc, item) => {
+    return visibleItems.reduce((acc, item) => {
       if (item.mitreisenden_typ === 'pauschal') {
         acc.totalCount += 1;
         if (item.gepackt) acc.packedCount += 1;
@@ -365,7 +382,7 @@ export function PackingList({
       }
       return acc;
     }, { packedCount: 0, totalCount: 0 });
-  }, [items]);
+  }, [visibleItems]);
 
   const progressPercentage = totalCount > 0 ? Math.round((packedCount / totalCount) * 100) : 0;
 
@@ -457,29 +474,15 @@ export function PackingList({
     });
   };
 
-  // Prüft ob ein Eintrag im aktuellen Profil sichtbar ist
-  const isItemVisibleForProfile = (item: DBPackingItem) => {
-    if (!selectedProfile) return true;
-    if (item.mitreisenden_typ === 'pauschal') return true;
-    return item.mitreisende?.some(m => m.mitreisender_id === selectedProfile) ?? false;
-  };
-
-  // Check if a category should be shown - für Profil-Ansicht nur Einträge des Mitreisenden berücksichtigen
+  // Kategorien anzeigen: wenn hidePackedItems, nur wenn mind. ein Eintrag ungepackt
   const shouldShowCategory = (categoryItems: DBPackingItem[]) => {
-    if (!hidePackedItems) {
-      if (selectedProfile) {
-        return categoryItems.some(isItemVisibleForProfile);
-      }
-      return true;
-    }
-
+    if (!hidePackedItems) return true;
     return categoryItems.some(item => {
-      if (!isItemVisibleForProfile(item)) return false;
       if (item.mitreisenden_typ === 'pauschal') return !item.gepackt;
-      if (selectedProfile) {
-        const travelerItem = item.mitreisende?.find(m => m.mitreisender_id === selectedProfile);
-        return travelerItem ? !travelerItem.gepackt : false;
-      }
+      const travelerItem = selectedProfile
+        ? item.mitreisende?.find(m => m.mitreisender_id === selectedProfile)
+        : null;
+      if (travelerItem) return !travelerItem.gepackt;
       return item.mitreisende?.some(m => !m.gepackt) ?? false;
     });
   };
@@ -537,9 +540,7 @@ export function PackingList({
                     {/* Items in this category - transparenter Hintergrund für beige Sichtbarkeit */}
                     <Card className="border-none shadow-none overflow-hidden bg-transparent">
                       <CardContent className="p-0 bg-transparent">
-                        {categoryItems
-                          .filter(isItemVisibleForProfile)
-                          .map(item => (
+                        {categoryItems.map(item => (
                             <PackingItem
                               key={item.id}
                               id={item.id}

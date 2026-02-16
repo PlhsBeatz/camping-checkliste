@@ -85,6 +85,7 @@ function HomeContent() {
   const [_equipmentSearchTerm, _setEquipmentSearchTerm] = useState('')
   const [selectedPackProfile, setSelectedPackProfile] = useState<string | null>(null)
   const [hidePackedItems, setHidePackedItems] = useState(true)
+  const [listDisplayMode, setListDisplayMode] = useState<'alles' | 'packliste'>('packliste')
   
   // FAB modal state
   const [searchTerm, setSearchTerm] = useState('')
@@ -825,6 +826,7 @@ function HomeContent() {
                   onDelete={handleDeletePackingItem}
                   selectedProfile={selectedPackProfile}
                   hidePackedItems={hidePackedItems}
+                  listDisplayMode={listDisplayMode}
                   onOpenSettings={() => setShowPackSettings(true)}
                   vacationMitreisende={vacationMitreisende}
                 />
@@ -932,6 +934,8 @@ function HomeContent() {
         onProfileChange={setSelectedPackProfile}
         hidePackedItems={hidePackedItems}
         onHidePackedChange={setHidePackedItems}
+        listDisplayMode={listDisplayMode}
+        onListDisplayModeChange={setListDisplayMode}
       />
 
       {/* FAB Button für Gegenstand hinzufügen - Kreisrund mit weißem Plus */}

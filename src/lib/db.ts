@@ -35,6 +35,8 @@ export interface PackingItem {
   hauptkategorie: string // Gejoint
   details?: string
   einzelgewicht?: number
+  /** Status des Ausrüstungsgegenstands (z.B. "Normal", "Immer gepackt") */
+  status?: string
   created_at: string
 }
 
@@ -328,7 +330,7 @@ export async function getPackingItems(db: D1Database, vacationId: string): Promi
     const query = `
       SELECT 
         pe.id, pe.packliste_id, pe.gegenstand_id, pe.anzahl, pe.gepackt, pe.bemerkung, pe.transport_id,
-        ag.was, ag.einzelgewicht, ag.details, ag.mitreisenden_typ,
+        ag.was, ag.einzelgewicht, ag.details, ag.mitreisenden_typ, ag.status,
         k.titel as kategorie,
         hk.titel as hauptkategorie,
         t.name as transport_name,
@@ -380,6 +382,7 @@ export async function getPackingItems(db: D1Database, vacationId: string): Promi
         hauptkategorie: String(item.hauptkategorie),
         details: item.details ? String(item.details) : undefined,
         einzelgewicht: item.einzelgewicht ? Number(item.einzelgewicht) : undefined,
+        status: item.status ? String(item.status) : undefined,
         created_at: String(item.created_at || ''),
       })
     }
