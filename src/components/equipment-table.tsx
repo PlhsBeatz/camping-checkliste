@@ -265,7 +265,7 @@ export const EquipmentTable = React.memo(({
   return (
     <div className={cn(
       "space-y-4",
-      dynamicHeight && "flex flex-col h-full min-h-0"
+      dynamicHeight && "flex flex-col h-full min-h-0 min-w-0"
     )}>
       {/* Search and Filters */}
       <div className={cn(
@@ -433,11 +433,11 @@ export const EquipmentTable = React.memo(({
 
       {/* Tabelle - virtualisiert für 500+ Zeilen (nur ~20 sichtbare DOM-Zeilen) */}
       <div className={cn(
-        "border rounded-lg overflow-hidden",
+        "border rounded-lg overflow-hidden min-w-0",
         dynamicHeight && "flex-1 min-h-0 flex flex-col"
       )}>
-        {/* Horizontal scrollbar auf Mobile - Tabelle bleibt voll breit, kein Seitenüberlauf */}
-        <div className="overflow-x-auto flex-1 min-h-0 flex flex-col">
+        {/* Horizontal scrollbar auf Mobile - min-w-0 erlaubt Schrumpfen, overflow-x-auto ermöglicht Scroll */}
+        <div className="overflow-x-auto flex-1 min-h-0 min-w-0 flex flex-col">
           <div className="min-w-[1200px] flex flex-col flex-1 min-h-0">
             {/* Header - fest oberhalb der Scroll-Area */}
             <div
