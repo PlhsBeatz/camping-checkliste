@@ -342,6 +342,7 @@ export async function getPackingItems(db: D1Database, vacationId: string): Promi
       JOIN hauptkategorien hk ON k.hauptkategorie_id = hk.id
       LEFT JOIN transportmittel t ON pe.transport_id = t.id
       WHERE p.urlaub_id = ?
+        AND ag.status NOT IN ('Ausgemustert', 'Fest Installiert')
       ORDER BY hk.reihenfolge, k.reihenfolge, ag.was
     `
     const result = await db.prepare(query).bind(vacationId).all<Record<string, unknown>>()
