@@ -162,41 +162,55 @@ export const EquipmentTable = React.memo(({
     })
   }, [equipmentItems, searchTerm, filterMainCategory, filterCategory, filterTransport, filterStatus, filterTag, filterStandard, getMainCategoryId])
 
-  // Group by main category and then by category
+  // Group by main category and then by category, sortiert nach reihenfolge (nicht alphabetisch)
   const groupedItems = useMemo(() => {
     if (filteredItems.length === 0) return []
     const mainCategoryGroups: Record<string, Record<string, EquipmentItem[]>> = {}
     
     filteredItems.forEach(item => {
-      const mainCategoryName = getMainCategoryName(item.kategorie_id)
-      const categoryName = getCategoryName(item.kategorie_id)
+      const mainCategoryId = getMainCategoryId(item.kategorie_id)
+      const categoryId = item.kategorie_id
+      const mainId = mainCategoryId ?? 'unknown'
       
-      if (!mainCategoryGroups[mainCategoryName]) {
-        mainCategoryGroups[mainCategoryName] = {}
+      if (!mainCategoryGroups[mainId]) {
+        mainCategoryGroups[mainId] = {}
       }
-      if (!mainCategoryGroups[mainCategoryName][categoryName]) {
-        mainCategoryGroups[mainCategoryName][categoryName] = []
+      if (!mainCategoryGroups[mainId][categoryId]) {
+        mainCategoryGroups[mainId][categoryId] = []
       }
-      mainCategoryGroups[mainCategoryName][categoryName].push(item)
+      mainCategoryGroups[mainId][categoryId].push(item)
     })
 
-    return Object.keys(mainCategoryGroups)
-      .sort()
-      .map(mainCategoryName => {
-        const categoryGroup = mainCategoryGroups[mainCategoryName]
-        if (!categoryGroup) return { mainCategoryName, categories: [] }
-        
-        return {
-          mainCategoryName,
-          categories: Object.keys(categoryGroup)
-            .sort()
-            .map(categoryName => ({
-              categoryName,
-              items: categoryGroup[categoryName] || []
-            }))
-        }
+    const mainCategoryIds = Object.keys(mainCategoryGroups)
+    mainCategoryIds.sort((a, b) => {
+      const orderA = mainCategories.find(mc => mc.id === a)?.reihenfolge ?? 999
+      const orderB = mainCategories.find(mc => mc.id === b)?.reihenfolge ?? 999
+      return orderA - orderB
+    })
+
+    return mainCategoryIds.map(mainCategoryId => {
+      const categoryGroup = mainCategoryGroups[mainCategoryId]
+      if (!categoryGroup) return { mainCategoryName: 'Unbekannt', categories: [] }
+      
+      const mainCategory = mainCategories.find(mc => mc.id === mainCategoryId)
+      const mainCategoryName = mainCategory?.titel ?? 'Unbekannt'
+      
+      const categoryIds = Object.keys(categoryGroup)
+      categoryIds.sort((a, b) => {
+        const orderA = categories.find(c => c.id === a)?.reihenfolge ?? 999
+        const orderB = categories.find(c => c.id === b)?.reihenfolge ?? 999
+        return orderA - orderB
       })
-  }, [filteredItems, getCategoryName, getMainCategoryName])
+
+      return {
+        mainCategoryName,
+        categories: categoryIds.map(categoryId => ({
+          categoryName: getCategoryName(categoryId),
+          items: categoryGroup[categoryId] || []
+        }))
+      }
+    })
+  }, [filteredItems, getCategoryName, getMainCategoryId, mainCategories, categories])
 
   // Flache Zeilenliste für Virtualisierung (Hauptkategorie → Kategorie → Items)
   const flatRows = useMemo(() => {

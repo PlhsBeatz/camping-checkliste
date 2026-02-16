@@ -392,14 +392,14 @@ export default function AusruestungPage() {
               )}
           </div>
 
-          {/* FAB: Neuer Gegenstand */}
+          {/* FAB: Neuer Gegenstand - Kreisrund mit Plus (wie bei Packliste) */}
           <div className="fixed bottom-6 right-6 z-30">
             <Button
-              size="lg"
+              size="icon"
               onClick={handleAddEquipment}
-              className="h-14 w-14 rounded-full shadow-lg hover:shadow-xl transition-shadow bg-[rgb(45,79,30)] hover:bg-[rgb(45,79,30)]/90"
+              className="h-14 w-14 rounded-full shadow-lg hover:shadow-xl transition-shadow bg-[rgb(45,79,30)] hover:bg-[rgb(45,79,30)]/90 text-white aspect-square p-0"
             >
-              <Plus className="h-6 w-6" />
+              <Plus className="h-6 w-6" strokeWidth={2.5} />
             </Button>
           </div>
         </div>
