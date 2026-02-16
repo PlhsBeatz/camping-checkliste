@@ -343,14 +343,15 @@ export default function AusruestungPage() {
         onClose={() => setShowNavSidebar(false)}
       />
 
-      {/* Main Content Area */}
+      {/* Main Content Area - auf Mobile: volle Viewport-Höhe, Flex-Layout für dynamische Tabellenhöhe */}
       <div className={cn(
-        "flex-1 transition-all duration-300",
-        "lg:ml-[280px]"
+        "flex-1 flex flex-col min-h-0 transition-all duration-300",
+        "lg:ml-[280px]",
+        "max-md:h-dvh max-md:min-h-dvh"
       )}>
-        <div className="container mx-auto p-4 md:p-6 space-y-6">
-          {/* Header */}
-          <div className="flex items-center justify-between">
+        <div className="flex flex-col flex-1 min-h-0 container mx-auto p-4 md:p-6 overflow-hidden">
+          {/* Header - fixe Höhe */}
+          <div className="flex-shrink-0 flex items-center justify-between">
             <div className="flex items-center gap-4">
               {/* Mobile Menu Toggle */}
               <Button
@@ -370,8 +371,8 @@ export default function AusruestungPage() {
             </div>
           </div>
 
-          {/* Equipment Table - direkt unter Header, dynamische Höhe bis Bildschirmrand */}
-          <div className="mt-4">
+          {/* Equipment Table - füllt verbleibende Höhe auf Mobile, dynamische Höhe */}
+          <div className="flex-1 min-h-0 mt-4 md:mt-6 overflow-hidden">
               {isLoading ? (
                 <div className="flex flex-col items-center justify-center py-20 gap-4">
                   <div className="animate-spin rounded-full h-12 w-12 border-4 border-[rgb(45,79,30)] border-t-transparent"></div>

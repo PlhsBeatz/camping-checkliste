@@ -20,6 +20,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Search, Filter, Star, MoreVertical, Pencil, Trash2, ExternalLink } from 'lucide-react'
 import { EquipmentItem, Category, MainCategory, TransportVehicle, Tag } from '@/lib/db'
+import { cn } from '@/lib/utils'
 
 interface EquipmentTableProps {
   equipmentItems: EquipmentItem[]
@@ -262,9 +263,15 @@ export const EquipmentTable = React.memo(({
     }
   }
   return (
-    <div className="space-y-4">
+    <div className={cn(
+      "space-y-4",
+      dynamicHeight && "flex flex-col h-full min-h-0"
+    )}>
       {/* Search and Filters */}
-      <div className="space-y-4 border rounded-lg p-4 bg-muted/30">
+      <div className={cn(
+        "space-y-4 border rounded-lg p-4 bg-muted/30",
+        dynamicHeight && "flex-shrink-0"
+      )}>
         {/* Search Bar */}
         <div className="flex gap-2">
           <div className="flex-1 relative">
@@ -425,12 +432,18 @@ export const EquipmentTable = React.memo(({
       </div>
 
       {/* Tabelle - virtualisiert für 500+ Zeilen (nur ~20 sichtbare DOM-Zeilen) */}
-      <div className="border rounded-lg overflow-hidden">
-        {/* Header - fest oberhalb der Scroll-Area */}
-        <div
-          className="grid gap-px bg-border border-b bg-background"
-          style={{ gridTemplateColumns: gridCols }}
-        >
+      <div className={cn(
+        "border rounded-lg overflow-hidden",
+        dynamicHeight && "flex-1 min-h-0 flex flex-col"
+      )}>
+        {/* Horizontal scrollbar auf Mobile - Tabelle bleibt voll breit, kein Seitenüberlauf */}
+        <div className="overflow-x-auto flex-1 min-h-0 flex flex-col">
+          <div className="min-w-[1200px] flex flex-col flex-1 min-h-0">
+            {/* Header - fest oberhalb der Scroll-Area */}
+            <div
+              className="grid gap-px bg-border border-b bg-background flex-shrink-0"
+              style={{ gridTemplateColumns: gridCols }}
+            >
           <div className={`px-4 py-3 font-medium ${colAlign.was}`}>Was</div>
           <div className={`px-4 py-3 font-medium ${colAlign.transport}`}>Transport</div>
           <div className={`px-4 py-3 font-medium ${colAlign.gewicht}`}>Gewicht</div>
@@ -441,12 +454,15 @@ export const EquipmentTable = React.memo(({
           <div className={`px-4 py-3 font-medium ${colAlign.tags}`}>Tags</div>
           <div className={`px-4 py-3 font-medium ${colAlign.links}`}>Links</div>
           <div className={`px-4 py-3 font-medium ${colAlign.actions}`}></div>
-        </div>
-        <div
-          ref={parentRef}
-          className={dynamicHeight ? 'min-h-[200px] overflow-auto' : 'h-[600px] overflow-auto'}
-          style={dynamicHeight ? { height: 'calc(100dvh - 11rem)' } : undefined}
-        >
+            </div>
+            <div
+              ref={parentRef}
+              className={cn(
+                'overflow-auto',
+                dynamicHeight ? 'flex-1 min-h-0' : 'h-[600px]',
+                !dynamicHeight && 'min-h-[200px]'
+              )}
+            >
           {flatRows.length === 0 ? (
             <div className="py-16 text-center text-muted-foreground">
               Keine Ausrüstungsgegenstände gefunden
@@ -594,6 +610,8 @@ export const EquipmentTable = React.memo(({
               })}
             </div>
           )}
+            </div>
+          </div>
         </div>
       </div>
     </div>
