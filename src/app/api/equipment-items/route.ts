@@ -1,14 +1,38 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { 
-  getDB, 
+import {
+  getDB,
   getEquipmentItems,
   getEquipmentItem,
-  createEquipmentItem, 
-  updateEquipmentItem, 
+  createEquipmentItem,
+  updateEquipmentItem,
   deleteEquipmentItem,
   getTagsForEquipment,
-  CloudflareEnv 
+  CloudflareEnv,
 } from '@/lib/db'
+
+interface EquipmentItemBody {
+  was?: string
+  kategorie_id?: string
+  transport_id?: string | null
+  einzelgewicht?: number
+  standard_anzahl?: number
+  status?: string
+  details?: string
+  is_standard?: boolean
+  mitreisenden_typ?: 'pauschal' | 'alle' | 'ausgewaehlte'
+  standard_mitreisende?: string[]
+  tags?: string[]
+  links?: string[]
+}
+
+interface PostEquipmentBody extends EquipmentItemBody {
+  was: string
+  kategorie_id: string
+}
+
+interface PutEquipmentBody extends EquipmentItemBody {
+  id: string
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -51,8 +75,8 @@ export async function POST(request: NextRequest) {
   try {
     const env = process.env as unknown as CloudflareEnv
     const db = getDB(env)
-    const body = await request.json()
-    
+    const body = (await request.json()) as PostEquipmentBody
+
     const {
       was,
       kategorie_id,
@@ -65,7 +89,7 @@ export async function POST(request: NextRequest) {
       mitreisenden_typ,
       standard_mitreisende,
       tags,
-      links
+      links,
     } = body
 
     if (!was || !kategorie_id) {
@@ -106,8 +130,8 @@ export async function PUT(request: NextRequest) {
   try {
     const env = process.env as unknown as CloudflareEnv
     const db = getDB(env)
-    const body = await request.json()
-    
+    const body = (await request.json()) as PutEquipmentBody
+
     const {
       id,
       was,
@@ -121,7 +145,7 @@ export async function PUT(request: NextRequest) {
       mitreisenden_typ,
       standard_mitreisende,
       tags,
-      links
+      links,
     } = body
 
     if (!id) {
