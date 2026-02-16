@@ -116,9 +116,10 @@ export async function getCachedPackingItems(
   return rows.map(stripMeta)
 }
 
-function stripMeta<T extends Record<string, unknown>>(row: T): T {
-  const { _cachedAt, _updatedAt, _vacationId, ...rest } = row
-  return rest as T
+function stripMeta<T extends object>(row: T): Omit<T, '_cachedAt' | '_updatedAt' | '_vacationId'> {
+  const { _cachedAt, _updatedAt, _vacationId, ...rest } = row as T &
+    { _cachedAt?: unknown; _updatedAt?: unknown; _vacationId?: unknown }
+  return rest as Omit<T, '_cachedAt' | '_updatedAt' | '_vacationId'>
 }
 
 /** Cache-Funktionen für jede Entität */
