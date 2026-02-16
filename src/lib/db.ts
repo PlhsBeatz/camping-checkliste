@@ -111,6 +111,7 @@ export interface Tag {
 
 export interface CloudflareEnv {
   DB: D1Database
+  PACKING_SYNC_DO?: DurableObjectNamespace
 }
 
 /**
@@ -392,11 +393,16 @@ export async function getPackingItems(db: D1Database, vacationId: string): Promi
 export async function updatePackingItem(
   db: D1Database,
   id: string,
-  updates: { gepackt?: boolean; anzahl?: number; bemerkung?: string | null }
+  updates: {
+    gepackt?: boolean
+    anzahl?: number
+    bemerkung?: string | null
+    transport_id?: string | null
+  }
 ): Promise<boolean> {
   try {
     const fields: string[] = []
-    const values: (string | number)[] = []
+    const values: (string | number | null)[] = []
 
     if (updates.gepackt !== undefined) {
       fields.push('gepackt = ?')
@@ -409,6 +415,10 @@ export async function updatePackingItem(
     if (updates.bemerkung !== undefined) {
       fields.push('bemerkung = ?')
       values.push(updates.bemerkung || '')
+    }
+    if (updates.transport_id !== undefined) {
+      fields.push('transport_id = ?')
+      values.push(updates.transport_id || null)
     }
 
     if (fields.length === 0) return true
@@ -824,6 +834,29 @@ export async function deletePackingItem(db: D1Database, id: string): Promise<boo
   } catch (error) {
     console.error('Error deleting packing item:', error)
     return false
+  }
+}
+
+/**
+ * Abrufen der Urlaubs-ID zu einem Packlisten-Eintrag
+ */
+export async function getVacationIdFromPackingItem(
+  db: D1Database,
+  packingItemId: string
+): Promise<string | null> {
+  try {
+    const result = await db
+      .prepare(
+        `SELECT p.urlaub_id FROM packlisten p
+         JOIN packlisten_eintraege pe ON pe.packliste_id = p.id
+         WHERE pe.id = ?`
+      )
+      .bind(packingItemId)
+      .first<{ urlaub_id: string }>()
+    return result?.urlaub_id ?? null
+  } catch (error) {
+    console.error('Error fetching vacation id from packing item:', error)
+    return null
   }
 }
 

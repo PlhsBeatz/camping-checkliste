@@ -3,4 +3,5 @@
 interface CloudflareEnv {
 	DB: D1Database;
 	ASSETS: Fetcher;
+	PACKING_SYNC_DO?: DurableObjectNamespace;
 }

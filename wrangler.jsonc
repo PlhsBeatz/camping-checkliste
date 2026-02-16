@@ -1,12 +1,9 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "camping-packliste-app",
-  "main": ".open-next/worker.js",
+  "main": "worker.ts",
   "compatibility_date": "2026-02-11",
-  "compatibility_flags": [
-    "nodejs_compat",
-    "global_fetch_strictly_public"
-  ],
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
   "assets": {
     "directory": ".open-next/assets",
     "binding": "ASSETS"
@@ -16,6 +13,20 @@
       "binding": "DB",
       "database_name": "camping-db",
       "database_id": "4858773e-e50d-4655-8bb3-5396c623ca2d"
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "PACKING_SYNC_DO",
+        "class_name": "PackingSyncDO"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["PackingSyncDO"]
     }
   ],
   "vars": {

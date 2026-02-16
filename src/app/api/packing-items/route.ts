@@ -1,5 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getDB, getPackingItems, updatePackingItem, addPackingItem, deletePackingItem, getPacklisteId, CloudflareEnv } from '@/lib/db'
+import { getCloudflareContext } from '@opennextjs/cloudflare'
+import {
+  getDB,
+  getPackingItems,
+  updatePackingItem,
+  addPackingItem,
+  deletePackingItem,
+  getPacklisteId,
+  getVacationIdFromPackingItem,
+  CloudflareEnv,
+} from '@/lib/db'
+import { notifyPackingSyncChange } from '@/lib/packing-sync'
 
 export async function GET(request: NextRequest) {
   try {
@@ -43,6 +54,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to add packing item' }, { status: 400 })
     }
 
+    const cfEnv = getCloudflareContext().env as unknown as CloudflareEnv
+    await notifyPackingSyncChange(cfEnv, vacationId)
+
     return NextResponse.json({ success: true }, { status: 201 })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error)
@@ -55,13 +69,26 @@ export async function PUT(request: NextRequest) {
     const env = process.env as unknown as CloudflareEnv
     const db = getDB(env)
     const body = await request.json()
-    const { id, gepackt, anzahl, bemerkung } = body
+    const { id, gepackt, anzahl, bemerkung, transport_id } = body
 
     if (!id) {
       return NextResponse.json({ error: 'id is required' }, { status: 400 })
     }
 
-    const success = await updatePackingItem(db, id, { gepackt, anzahl, bemerkung })
+    const success = await updatePackingItem(db, id, {
+      gepackt,
+      anzahl,
+      bemerkung,
+      transport_id: transport_id ?? undefined,
+    })
+
+    if (success) {
+      const vacationId = await getVacationIdFromPackingItem(db, id)
+      if (vacationId) {
+        const cfEnv = getCloudflareContext().env as unknown as CloudflareEnv
+        await notifyPackingSyncChange(cfEnv, vacationId)
+      }
+    }
 
     return NextResponse.json({ success: true, data: success })
   } catch (error: unknown) {
@@ -81,10 +108,16 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'id is required' }, { status: 400 })
     }
 
+    const vacationId = await getVacationIdFromPackingItem(db, id)
     const success = await deletePackingItem(db, id)
 
     if (!success) {
       return NextResponse.json({ error: 'Failed to delete packing item' }, { status: 400 })
+    }
+
+    if (vacationId) {
+      const env = getCloudflareContext().env as unknown as CloudflareEnv
+      await notifyPackingSyncChange(env, vacationId)
     }
 
     return NextResponse.json({ success: true })

@@ -7,14 +7,24 @@ import { PackingListGenerator } from '@/components/packing-list-generator'
 import { NavigationSidebar } from '@/components/navigation-sidebar'
 import { PackingSettingsSidebar } from '@/components/packing-settings-sidebar'
 import { Plus, Sparkles, Menu, Search, Users } from 'lucide-react'
-import { useState, useEffect, Suspense, useMemo } from 'react'
+import { useState, useEffect, Suspense, useMemo, useCallback } from 'react'
 import { Vacation, PackingItem, TransportVehicle, Mitreisender, EquipmentItem, Category, MainCategory } from '@/lib/db'
 import { ResponsiveModal } from '@/components/ui/responsive-modal'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { cn, formatWeight } from '@/lib/utils'
 import { useSearchParams } from 'next/navigation'
+import { usePackingSync } from '@/hooks/use-packing-sync'
+import { getCachedPackingItems, subscribeToOnlineStatus } from '@/lib/offline-sync'
+import { cachePackingItems } from '@/lib/offline-db'
 
 const PACKABLE_STATUSES: readonly string[] = ['Normal', 'Immer gepackt']
 
@@ -53,7 +63,7 @@ function HomeContent() {
   // Data state
   const [vacations, setVacations] = useState<Vacation[]>([])
   const [packingItems, setPackingItems] = useState<PackingItem[]>([])
-  const [_transportVehicles, _setTransportVehicles] = useState<TransportVehicle[]>([])
+  const [transportVehicles, setTransportVehicles] = useState<TransportVehicle[]>([])
   const [vacationMitreisende, setVacationMitreisende] = useState<Mitreisender[]>([])
   const [selectedVacationId, setSelectedVacationId] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
@@ -118,23 +128,41 @@ function HomeContent() {
     fetchVacations()
   }, [urlVacationId, selectedVacationId])
 
-  // Fetch Packing Items when vacation changes
-  useEffect(() => {
+  // Fetch Packing Items when vacation changes (mit Offline-Cache)
+  const fetchPackingItems = useCallback(async () => {
     if (!selectedVacationId) return
-
-    const fetchPackingItems = async () => {
-      try {
-        const res = await fetch(`/api/packing-items?vacationId=${selectedVacationId}`)
-        const data = await res.json()
-        if (data.success) {
-          setPackingItems(data.data)
-        }
-      } catch (error) {
-        console.error('Failed to fetch packing items:', error)
+    try {
+      const res = await fetch(`/api/packing-items?vacationId=${selectedVacationId}`)
+      const data = await res.json()
+      if (data.success) {
+        setPackingItems(data.data)
+        await cachePackingItems(selectedVacationId, data.data)
+      }
+    } catch (error) {
+      console.error('Failed to fetch packing items:', error)
+      const cached = await getCachedPackingItems(selectedVacationId)
+      if (cached.length > 0) {
+        setPackingItems(cached)
       }
     }
-    fetchPackingItems()
   }, [selectedVacationId])
+
+  useEffect(() => {
+    if (!selectedVacationId) return
+    fetchPackingItems()
+  }, [selectedVacationId, fetchPackingItems])
+
+  // WebSocket für Echtzeit-Sync: andere Clients benachrichtigen
+  usePackingSync(selectedVacationId, fetchPackingItems)
+
+  // Bei Reconnect: Packliste neu laden
+  useEffect(() => {
+    return subscribeToOnlineStatus((online) => {
+      if (online && selectedVacationId) {
+        fetchPackingItems()
+      }
+    })
+  }, [selectedVacationId, fetchPackingItems])
 
   // Fetch Mitreisende for vacation
   useEffect(() => {
@@ -200,6 +228,22 @@ function HomeContent() {
       }
     }
     fetchMainCategories()
+  }, [])
+
+  // Fetch Transport Vehicles
+  useEffect(() => {
+    const fetchTransportVehicles = async () => {
+      try {
+        const res = await fetch('/api/transport-vehicles')
+        const data = await res.json()
+        if (data.success) {
+          setTransportVehicles(data.data)
+        }
+      } catch (error) {
+        console.error('Failed to fetch transport vehicles:', error)
+      }
+    }
+    fetchTransportVehicles()
   }, [])
 
   // Get available equipment (not on packing list, only packable status)
@@ -491,6 +535,7 @@ function HomeContent() {
           id: editingPackingItemId,
           anzahl: parseInt(packingItemForm.anzahl) || 1,
           bemerkung: packingItemForm.bemerkung || null,
+          transport_id: packingItemForm.transportId || null,
         }),
       })
       const data = await res.json()
@@ -560,20 +605,21 @@ function HomeContent() {
     setIsLoading(true)
     try {
       // Add all selected equipment items
-      const promises = Array.from(selectedEquipmentIds).map(equipmentId => 
-        fetch('/api/packing-items', {
+      const promises = Array.from(selectedEquipmentIds).map(equipmentId => {
+        const eq = equipmentItems.find(e => e.id === equipmentId)
+        return fetch('/api/packing-items', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             vacationId: selectedVacationId,
             gegenstandId: equipmentId,
-            anzahl: 1,
+            anzahl: eq?.standard_anzahl ?? 1,
             bemerkung: null,
-            transportId: null,
+            transportId: eq?.transport_id ?? null,
             mitreisende: []
           }),
         })
-      )
+      })
 
       await Promise.all(promises)
 
@@ -741,6 +787,30 @@ function HomeContent() {
                   value={packingItemForm.bemerkung}
                   onChange={(e) => setPackingItemForm({ ...packingItemForm, bemerkung: e.target.value })}
                 />
+              </div>
+              <div>
+                <Label htmlFor="edit-transport">Transport</Label>
+                <Select
+                  value={packingItemForm.transportId || 'none'}
+                  onValueChange={(v) =>
+                    setPackingItemForm({
+                      ...packingItemForm,
+                      transportId: v === 'none' ? '' : v,
+                    })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Kein Transport" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Kein Transport</SelectItem>
+                    {transportVehicles.map((tv) => (
+                      <SelectItem key={tv.id} value={tv.id}>
+                        {tv.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <Button onClick={handleUpdatePackingItem} disabled={isLoading} className="w-full">
                 {isLoading ? 'Wird aktualisiert...' : 'Aktualisieren'}
