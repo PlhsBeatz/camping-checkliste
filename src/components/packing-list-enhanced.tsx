@@ -457,22 +457,29 @@ export function PackingList({
     });
   };
 
-  // Check if a category should be shown - FIXED for individual profile view
+  // Prüft ob ein Eintrag im aktuellen Profil sichtbar ist
+  const isItemVisibleForProfile = (item: DBPackingItem) => {
+    if (!selectedProfile) return true;
+    if (item.mitreisenden_typ === 'pauschal') return true;
+    return item.mitreisende?.some(m => m.mitreisender_id === selectedProfile) ?? false;
+  };
+
+  // Check if a category should be shown - für Profil-Ansicht nur Einträge des Mitreisenden berücksichtigen
   const shouldShowCategory = (categoryItems: DBPackingItem[]) => {
-    if (!hidePackedItems) return true;
-    
-    return categoryItems.some(item => {
-      if (item.mitreisenden_typ === 'pauschal') {
-        return !item.gepackt;
+    if (!hidePackedItems) {
+      if (selectedProfile) {
+        return categoryItems.some(isItemVisibleForProfile);
       }
-      
-      // If in individual profile view, check only for that profile
+      return true;
+    }
+
+    return categoryItems.some(item => {
+      if (!isItemVisibleForProfile(item)) return false;
+      if (item.mitreisenden_typ === 'pauschal') return !item.gepackt;
       if (selectedProfile) {
         const travelerItem = item.mitreisende?.find(m => m.mitreisender_id === selectedProfile);
         return travelerItem ? !travelerItem.gepackt : false;
       }
-      
-      // In Zentral/Alle view, check if any traveler hasn't packed
       return item.mitreisende?.some(m => !m.gepackt) ?? false;
     });
   };
@@ -531,25 +538,7 @@ export function PackingList({
                     <Card className="border-none shadow-none overflow-hidden bg-transparent">
                       <CardContent className="p-0 bg-transparent">
                         {categoryItems
-                          .filter(item => {
-                            // Filter logic for individual profile view
-                            if (selectedProfile) {
-                              // Pauschale Einträge: immer anzeigen
-                              if (item.mitreisenden_typ === 'pauschal') {
-                                return true;
-                              }
-                              // Alle: immer anzeigen
-                              if (item.mitreisenden_typ === 'alle') {
-                                return true;
-                              }
-                              // Ausgewählte: nur anzeigen, wenn dieser Mitreisende zugeordnet ist
-                              if (item.mitreisenden_typ === 'ausgewaehlte') {
-                                return item.mitreisende?.some(m => m.mitreisender_id === selectedProfile) ?? false;
-                              }
-                            }
-                            // In "Alle" Modus: alle Einträge anzeigen
-                            return true;
-                          })
+                          .filter(isItemVisibleForProfile)
                           .map(item => (
                             <PackingItem
                               key={item.id}
