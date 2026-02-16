@@ -35,7 +35,12 @@ export class PackingSyncDO extends DurableObject<PackingSyncEnv> {
     }
 
     const webSocketPair = new WebSocketPair()
-    const [client, server] = Object.values(webSocketPair)
+    const client = webSocketPair[0]
+    const server = webSocketPair[1]
+
+    if (!client || !server) {
+      return new Response('Invalid WebSocket pair', { status: 500 })
+    }
 
     server.accept()
 
