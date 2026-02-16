@@ -12,10 +12,16 @@ export { PackingSyncDO }
 
 const PACKING_SYNC_WS_PATH = '/api/packing-sync/ws'
 
+interface WorkerEnv {
+  PACKING_SYNC_DO: DurableObjectNamespace
+  DB?: unknown
+  ASSETS?: Fetcher
+}
+
 export default {
   async fetch(
     request: Request,
-    env: { PACKING_SYNC_DO: DurableObjectNamespace; DB?: unknown; ASSETS?: Fetcher },
+    env: WorkerEnv,
     ctx: ExecutionContext
   ): Promise<Response> {
     const url = new URL(request.url)
@@ -34,4 +40,4 @@ export default {
 
     return handler.fetch(request, env, ctx)
   },
-} satisfies ExportedHandler
+} satisfies ExportedHandler<WorkerEnv>
