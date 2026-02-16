@@ -7,6 +7,7 @@ import { TravelersManager } from '@/components/travelers-manager'
 import { Menu } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { Mitreisender } from '@/lib/db'
+import type { ApiResponse } from '@/lib/api-types'
 import { cn } from '@/lib/utils'
 
 export default function MitreisendePage() {
@@ -18,8 +19,8 @@ export default function MitreisendePage() {
     const fetchAllMitreisende = async () => {
       try {
         const res = await fetch('/api/mitreisende')
-        const data = await res.json()
-        if (data.success) {
+        const data = (await res.json()) as ApiResponse<Mitreisender[]>
+        if (data.success && data.data) {
           setAllMitreisende(data.data)
         }
       } catch (error) {
@@ -31,8 +32,8 @@ export default function MitreisendePage() {
 
   const handleRefresh = async () => {
     const res = await fetch('/api/mitreisende')
-    const data = await res.json()
-    if (data.success) setAllMitreisende(data.data)
+    const data = (await res.json()) as ApiResponse<Mitreisender[]>
+    if (data.success && data.data) setAllMitreisende(data.data)
   }
 
   return (

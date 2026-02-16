@@ -9,6 +9,7 @@ import { PackingSettingsSidebar } from '@/components/packing-settings-sidebar'
 import { Plus, Sparkles, Menu, Search, Users } from 'lucide-react'
 import { useState, useEffect, Suspense, useMemo, useCallback } from 'react'
 import { Vacation, PackingItem, TransportVehicle, Mitreisender, EquipmentItem, Category, MainCategory } from '@/lib/db'
+import type { ApiResponse } from '@/lib/api-types'
 import { ResponsiveModal } from '@/components/ui/responsive-modal'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -105,8 +106,8 @@ function HomeContent() {
     const fetchVacations = async () => {
       try {
         const res = await fetch('/api/vacations')
-        const data = await res.json()
-        if (data.success) {
+        const data = (await res.json()) as ApiResponse<Vacation[]>
+        if (data.success && data.data) {
           setVacations(data.data)
           
           // Priority 1: URL parameter
@@ -133,8 +134,8 @@ function HomeContent() {
     if (!selectedVacationId) return
     try {
       const res = await fetch(`/api/packing-items?vacationId=${selectedVacationId}`)
-      const data = await res.json()
-      if (data.success) {
+      const data = (await res.json()) as ApiResponse<PackingItem[]>
+      if (data.success && data.data) {
         setPackingItems(data.data)
         await cachePackingItems(selectedVacationId, data.data)
       }
@@ -171,8 +172,8 @@ function HomeContent() {
     const fetchVacationMitreisende = async () => {
       try {
         const res = await fetch(`/api/mitreisende?vacationId=${selectedVacationId}`)
-        const data = await res.json()
-        if (data.success) {
+        const data = (await res.json()) as ApiResponse<Mitreisender[]>
+        if (data.success && data.data) {
           setVacationMitreisende(data.data)
         }
       } catch (error) {
@@ -187,8 +188,8 @@ function HomeContent() {
     const fetchEquipmentItems = async () => {
       try {
         const res = await fetch('/api/equipment-items')
-        const data = await res.json()
-        if (data.success) {
+        const data = (await res.json()) as ApiResponse<EquipmentItem[]>
+        if (data.success && data.data) {
           setEquipmentItems(data.data)
         }
       } catch (error) {
@@ -203,8 +204,8 @@ function HomeContent() {
     const fetchCategories = async () => {
       try {
         const res = await fetch('/api/categories')
-        const data = await res.json()
-        if (data.success) {
+        const data = (await res.json()) as ApiResponse<CategoryWithMain[]>
+        if (data.success && data.data) {
           setCategories(data.data)
         }
       } catch (error) {
@@ -219,8 +220,8 @@ function HomeContent() {
     const fetchMainCategories = async () => {
       try {
         const res = await fetch('/api/main-categories')
-        const data = await res.json()
-        if (data.success) {
+        const data = (await res.json()) as ApiResponse<MainCategory[]>
+        if (data.success && data.data) {
           setMainCategories(data.data)
         }
       } catch (error) {
@@ -235,8 +236,8 @@ function HomeContent() {
     const fetchTransportVehicles = async () => {
       try {
         const res = await fetch('/api/transport-vehicles')
-        const data = await res.json()
-        if (data.success) {
+        const data = (await res.json()) as ApiResponse<TransportVehicle[]>
+        if (data.success && data.data) {
           setTransportVehicles(data.data)
         }
       } catch (error) {
@@ -353,8 +354,8 @@ function HomeContent() {
       }
 
       const res = await fetch(`/api/packing-items?vacationId=${selectedVacationId}`)
-      const data = await res.json()
-      if (data.success) {
+      const data = (await res.json()) as ApiResponse<PackingItem[]>
+      if (data.success && data.data) {
         setPackingItems(data.data)
       }
     } catch (error) {
@@ -377,7 +378,7 @@ function HomeContent() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: itemId, gepackt }),
       })
-      const data = await res.json()
+      const data = (await res.json()) as ApiResponse<boolean>
       if (!data.success) {
         setPackingItems(prevItems)
         alert('Fehler beim Aktualisieren')
@@ -408,7 +409,7 @@ function HomeContent() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: itemId, gepackt: newPackedState }),
       })
-      const data = await res.json()
+      const data = (await res.json()) as ApiResponse<boolean>
       if (!data.success) {
         setPackingItems(prevItems)
         alert('Fehler beim Aktualisieren')
@@ -455,7 +456,7 @@ function HomeContent() {
           gepackt: newStatus
         }),
       })
-      const data = await res.json()
+      const data = (await res.json()) as ApiResponse<boolean>
       if (!data.success) {
         setPackingItems(prevItems)
       }
@@ -500,7 +501,7 @@ function HomeContent() {
             gepackt: update.newStatus
           }),
         })
-        const data = await res.json()
+        const data = (await res.json()) as ApiResponse<boolean>
         if (!data.success) {
           setPackingItems(prevItems)
           return
@@ -538,12 +539,11 @@ function HomeContent() {
           transport_id: packingItemForm.transportId || null,
         }),
       })
-      const data = await res.json()
+      const data = (await res.json()) as ApiResponse<boolean>
       if (data.success && selectedVacationId) {
-        // Refresh packing items
         const itemsRes = await fetch(`/api/packing-items?vacationId=${selectedVacationId}`)
-        const itemsData = await itemsRes.json()
-        if (itemsData.success) {
+        const itemsData = (await itemsRes.json()) as ApiResponse<PackingItem[]>
+        if (itemsData.success && itemsData.data) {
           setPackingItems(itemsData.data)
         }
         setShowEditItemDialog(false)
@@ -570,16 +570,15 @@ function HomeContent() {
       const res = await fetch(`/api/packing-items?id=${id}`, {
         method: 'DELETE',
       })
-      const data = await res.json()
+      const data = (await res.json()) as ApiResponse<boolean>
       if (data.success && selectedVacationId) {
-        // Refresh packing items
         const itemsRes = await fetch(`/api/packing-items?vacationId=${selectedVacationId}`)
-        const itemsData = await itemsRes.json()
-        if (itemsData.success) {
+        const itemsData = (await itemsRes.json()) as ApiResponse<PackingItem[]>
+        if (itemsData.success && itemsData.data) {
           setPackingItems(itemsData.data)
         }
-      } else {
-        alert('Fehler beim Löschen: ' + data.error)
+      } else if (!data.success) {
+        alert('Fehler beim Löschen: ' + (data.error ?? 'Unbekannt'))
       }
     } catch (error) {
       console.error('Failed to delete packing item:', error)
@@ -623,10 +622,9 @@ function HomeContent() {
 
       await Promise.all(promises)
 
-      // Refresh packing items
       const itemsRes = await fetch(`/api/packing-items?vacationId=${selectedVacationId}`)
-      const itemsData = await itemsRes.json()
-      if (itemsData.success) {
+      const itemsData = (await itemsRes.json()) as ApiResponse<PackingItem[]>
+      if (itemsData.success && itemsData.data) {
         setPackingItems(itemsData.data)
       }
 

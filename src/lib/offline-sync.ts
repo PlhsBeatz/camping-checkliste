@@ -56,7 +56,7 @@ export async function fetchAndCache<T>(
   if (online) {
     try {
       const res = await fetch(url)
-      const json = await res.json()
+      const json = (await res.json()) as { success: boolean; data?: T }
       if (json.success && json.data) {
         await cacheFn(json.data)
         return { data: json.data, fromCache: false }

@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Sparkles, Tag as TagIcon } from 'lucide-react'
 import { Tag, EquipmentItem } from '@/lib/db'
+import type { ApiResponse } from '@/lib/api-types'
 
 interface PackingListGeneratorProps {
   open: boolean
@@ -44,8 +45,8 @@ export function PackingListGenerator({
   const fetchTags = async () => {
     try {
       const res = await fetch('/api/tags')
-      const data = await res.json()
-      if (data.success) {
+      const data = (await res.json()) as ApiResponse<Tag[]>
+      if (data.success && data.data) {
         setTags(data.data)
       }
     } catch (error) {
@@ -67,8 +68,8 @@ export function PackingListGenerator({
       selectedTags.forEach(tagId => params.append('tagIds', tagId))
 
       const res = await fetch(`/api/equipment-by-tags?${params.toString()}`)
-      const data = await res.json()
-      if (data.success) {
+      const data = (await res.json()) as ApiResponse<EquipmentItem[]>
+      if (data.success && data.data) {
         setPreviewItems(data.data)
       }
     } catch (error) {

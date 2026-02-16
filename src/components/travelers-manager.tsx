@@ -7,6 +7,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Edit2, Trash2, Plus, User, Star } from 'lucide-react'
 import { Mitreisender } from '@/lib/db'
+import type { ApiResponse } from '@/lib/api-types'
 
 interface TravelersManagerProps {
   travelers: Mitreisender[]
@@ -41,13 +42,13 @@ export function TravelersManager({ travelers, onRefresh }: TravelersManagerProps
           isDefaultMember: form.isDefaultMember
         })
       })
-      const data = await res.json()
+      const data = (await res.json()) as ApiResponse<unknown>
       if (data.success) {
         setShowDialog(false)
         setForm({ name: '', userId: '', isDefaultMember: false })
         onRefresh()
       } else {
-        alert('Fehler: ' + data.error)
+        alert('Fehler: ' + (data.error ?? 'Unbekannt'))
       }
     } catch (error) {
       console.error('Failed to create traveler:', error)
@@ -75,14 +76,14 @@ export function TravelersManager({ travelers, onRefresh }: TravelersManagerProps
           isDefaultMember: form.isDefaultMember
         })
       })
-      const data = await res.json()
+      const data = (await res.json()) as ApiResponse<unknown>
       if (data.success) {
         setShowDialog(false)
         setEditingTraveler(null)
         setForm({ name: '', userId: '', isDefaultMember: false })
         onRefresh()
       } else {
-        alert('Fehler: ' + data.error)
+        alert('Fehler: ' + (data.error ?? 'Unbekannt'))
       }
     } catch (error) {
       console.error('Failed to update traveler:', error)
@@ -102,11 +103,11 @@ export function TravelersManager({ travelers, onRefresh }: TravelersManagerProps
       const res = await fetch(`/api/mitreisende?id=${id}`, {
         method: 'DELETE'
       })
-      const data = await res.json()
+      const data = (await res.json()) as ApiResponse<unknown>
       if (data.success) {
         onRefresh()
       } else {
-        alert('Fehler: ' + data.error)
+        alert('Fehler: ' + (data.error ?? 'Unbekannt'))
       }
     } catch (error) {
       console.error('Failed to delete traveler:', error)

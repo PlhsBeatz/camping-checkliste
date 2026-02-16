@@ -5,6 +5,7 @@ import { EquipmentTable } from '@/components/equipment-table'
 import { Plus, Menu } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { EquipmentItem, Category, MainCategory, TransportVehicle, Tag } from '@/lib/db'
+import type { ApiResponse } from '@/lib/api-types'
 import { ResponsiveModal } from '@/components/ui/responsive-modal'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -59,8 +60,8 @@ export default function AusruestungPage() {
     const fetchEquipmentItems = async () => {
       try {
         const res = await fetch('/api/equipment-items')
-        const data = await res.json()
-        if (data.success) {
+        const data = (await res.json()) as ApiResponse<EquipmentItem[]>
+        if (data.success && data.data) {
           setEquipmentItems(data.data)
         }
       } catch (error) {
@@ -76,8 +77,8 @@ export default function AusruestungPage() {
     const fetchCategories = async () => {
       try {
         const res = await fetch('/api/categories')
-        const data = await res.json()
-        if (data.success) {
+        const data = (await res.json()) as ApiResponse<CategoryWithMain[]>
+        if (data.success && data.data) {
           setCategories(data.data)
         }
       } catch (error) {
@@ -92,8 +93,8 @@ export default function AusruestungPage() {
     const fetchMainCategories = async () => {
       try {
         const res = await fetch('/api/main-categories')
-        const data = await res.json()
-        if (data.success) {
+        const data = (await res.json()) as ApiResponse<MainCategory[]>
+        if (data.success && data.data) {
           setMainCategories(data.data)
         }
       } catch (error) {
@@ -108,8 +109,8 @@ export default function AusruestungPage() {
     const fetchTransportVehicles = async () => {
       try {
         const res = await fetch('/api/transport-vehicles')
-        const data = await res.json()
-        if (data.success) {
+        const data = (await res.json()) as ApiResponse<TransportVehicle[]>
+        if (data.success && data.data) {
           setTransportVehicles(data.data)
         }
       } catch (error) {
@@ -124,8 +125,8 @@ export default function AusruestungPage() {
     const fetchTags = async () => {
       try {
         const res = await fetch('/api/tags')
-        const data = await res.json()
-        if (data.success) {
+        const data = (await res.json()) as ApiResponse<Tag[]>
+        if (data.success && data.data) {
           setTags(data.data)
         }
       } catch (error) {
@@ -140,8 +141,8 @@ export default function AusruestungPage() {
     const fetchMitreisende = async () => {
       try {
         const res = await fetch('/api/mitreisende')
-        const data = await res.json()
-        if (data.success) {
+        const data = (await res.json()) as ApiResponse<{ id: string; name: string }[]>
+        if (data.success && data.data) {
           setMitreisende(data.data)
         }
       } catch (error) {
@@ -220,20 +221,18 @@ export default function AusruestungPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       })
-      const data = await res.json()
+      const data = (await res.json()) as ApiResponse<EquipmentItem>
       
       if (data.success) {
-        // Close modal and reset form immediately
         setShowAddDialog(false)
         resetForm()
-        // Refresh equipment items in background
         const itemsRes = await fetch('/api/equipment-items')
-        const itemsData = await itemsRes.json()
-        if (itemsData.success) {
+        const itemsData = (await itemsRes.json()) as ApiResponse<EquipmentItem[]>
+        if (itemsData.success && itemsData.data) {
           setEquipmentItems(itemsData.data)
         }
       } else {
-        alert('Fehler beim Speichern: ' + data.error)
+        alert('Fehler beim Speichern: ' + (data.error ?? 'Unbekannt'))
       }
     } catch (error) {
       console.error('Failed to save equipment:', error)
@@ -272,21 +271,19 @@ export default function AusruestungPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       })
-      const data = await res.json()
+      const data = (await res.json()) as ApiResponse<EquipmentItem>
       
       if (data.success) {
-        // Close modal and reset form immediately
         setShowEditDialog(false)
         setEditingItem(null)
         resetForm()
-        // Refresh equipment items in background
         const itemsRes = await fetch('/api/equipment-items')
-        const itemsData = await itemsRes.json()
-        if (itemsData.success) {
+        const itemsData = (await itemsRes.json()) as ApiResponse<EquipmentItem[]>
+        if (itemsData.success && itemsData.data) {
           setEquipmentItems(itemsData.data)
         }
       } else {
-        alert('Fehler beim Aktualisieren: ' + data.error)
+        alert('Fehler beim Aktualisieren: ' + (data.error ?? 'Unbekannt'))
       }
     } catch (error) {
       console.error('Failed to update equipment:', error)
@@ -306,11 +303,11 @@ export default function AusruestungPage() {
       const res = await fetch(`/api/equipment-items?id=${equipmentId}`, {
         method: 'DELETE',
       })
-      const data = await res.json()
+      const data = (await res.json()) as ApiResponse<boolean>
       if (data.success) {
         setEquipmentItems(equipmentItems.filter(item => item.id !== equipmentId))
       } else {
-        alert('Fehler beim Löschen des Gegenstands: ' + data.error)
+        alert('Fehler beim Löschen des Gegenstands: ' + (data.error ?? 'Unbekannt'))
       }
     } catch (error) {
       console.error('Failed to delete equipment:', error)

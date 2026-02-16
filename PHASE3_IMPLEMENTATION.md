@@ -74,7 +74,13 @@ Phase 3 wurde umgesetzt mit **Option C** (Cloudflare-Stack bleibt):
 
 ---
 
-## 7. Offene Punkte (Optional)
+## 7. Wichtig: env.d.ts und cloudflare-workers.d.ts
+
+- **cloudflare-workers.d.ts** (Projektroot) enthält die Moduldeklaration für `cloudflare:workers`
+- Nach `pnpm cf-typegen` (wrangler types) wird **env.d.ts** überschrieben – die cloudflare-workers.d.ts bleibt erhalten
+- Falls TypeScript das Modul nicht findet: In PackingSyncDO.ts ist `/// <reference path="../../cloudflare-workers.d.ts" />` gesetzt
+
+## 8. Offene Punkte (Optional)
 
 - **Andere Module (Urlaube, Ausrüstung, etc.):** Offline-Cache und Sync-Queue sind vorbereitet (`offline-db.ts`, `offline-sync.ts`). Vollständige Nutzung erfordert Anpassungen in den jeweiligen Seiten.
 - **Sync-Queue:** `processSyncQueue()` ist Stub; Offline-Mutationen müssen noch auf die passenden API-Endpunkte gemappt werden.
@@ -82,7 +88,7 @@ Phase 3 wurde umgesetzt mit **Option C** (Cloudflare-Stack bleibt):
 
 ---
 
-## 8. Lokale Tests
+## 9. Lokale Tests
 
 - **Next.js:** `pnpm dev` – WebSocket-Verbindung nur über Worker möglich
 - **Worker:** `pnpm run preview` – Worker + DO werden lokal ausgeführt

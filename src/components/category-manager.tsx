@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Edit2, Trash2, Plus, FolderOpen } from 'lucide-react'
 import { Category, MainCategory } from '@/lib/db'
+import type { ApiResponse } from '@/lib/api-types'
 
 interface CategoryWithMain extends Category {
   hauptkategorie_titel: string
@@ -52,13 +53,13 @@ export function CategoryManager({ categories, mainCategories, onRefresh }: Categ
           reihenfolge: mainCategoryForm.reihenfolge ? parseInt(mainCategoryForm.reihenfolge) : undefined
         })
       })
-      const data = await res.json()
+      const data = (await res.json()) as ApiResponse<unknown>
       if (data.success) {
         setShowMainCategoryDialog(false)
         setMainCategoryForm({ titel: '', reihenfolge: '' })
         onRefresh()
       } else {
-        alert('Fehler: ' + data.error)
+        alert('Fehler: ' + (data.error ?? 'Unbekannt'))
       }
     } catch (error) {
       console.error('Failed to create main category:', error)
@@ -85,14 +86,14 @@ export function CategoryManager({ categories, mainCategories, onRefresh }: Categ
           reihenfolge: mainCategoryForm.reihenfolge ? parseInt(mainCategoryForm.reihenfolge) : undefined
         })
       })
-      const data = await res.json()
+      const data = (await res.json()) as ApiResponse<unknown>
       if (data.success) {
         setShowMainCategoryDialog(false)
         setEditingMainCategory(null)
         setMainCategoryForm({ titel: '', reihenfolge: '' })
         onRefresh()
       } else {
-        alert('Fehler: ' + data.error)
+        alert('Fehler: ' + (data.error ?? 'Unbekannt'))
       }
     } catch (error) {
       console.error('Failed to update main category:', error)
@@ -112,11 +113,11 @@ export function CategoryManager({ categories, mainCategories, onRefresh }: Categ
       const res = await fetch(`/api/main-categories?id=${id}`, {
         method: 'DELETE'
       })
-      const data = await res.json()
+      const data = (await res.json()) as ApiResponse<unknown>
       if (data.success) {
         onRefresh()
       } else {
-        alert('Fehler: ' + data.error)
+        alert('Fehler: ' + (data.error ?? 'Unbekannt'))
       }
     } catch (error) {
       console.error('Failed to delete main category:', error)
@@ -143,13 +144,13 @@ export function CategoryManager({ categories, mainCategories, onRefresh }: Categ
           reihenfolge: categoryForm.reihenfolge ? parseInt(categoryForm.reihenfolge) : undefined
         })
       })
-      const data = await res.json()
+      const data = (await res.json()) as ApiResponse<unknown>
       if (data.success) {
         setShowCategoryDialog(false)
         setCategoryForm({ titel: '', hauptkategorieId: '', reihenfolge: '' })
         onRefresh()
       } else {
-        alert('Fehler: ' + data.error)
+        alert('Fehler: ' + (data.error ?? 'Unbekannt'))
       }
     } catch (error) {
       console.error('Failed to create category:', error)
@@ -177,14 +178,14 @@ export function CategoryManager({ categories, mainCategories, onRefresh }: Categ
           reihenfolge: categoryForm.reihenfolge ? parseInt(categoryForm.reihenfolge) : undefined
         })
       })
-      const data = await res.json()
+      const data = (await res.json()) as ApiResponse<unknown>
       if (data.success) {
         setShowCategoryDialog(false)
         setEditingCategory(null)
         setCategoryForm({ titel: '', hauptkategorieId: '', reihenfolge: '' })
         onRefresh()
       } else {
-        alert('Fehler: ' + data.error)
+        alert('Fehler: ' + (data.error ?? 'Unbekannt'))
       }
     } catch (error) {
       console.error('Failed to update category:', error)
@@ -204,11 +205,11 @@ export function CategoryManager({ categories, mainCategories, onRefresh }: Categ
       const res = await fetch(`/api/categories?id=${id}`, {
         method: 'DELETE'
       })
-      const data = await res.json()
+      const data = (await res.json()) as ApiResponse<unknown>
       if (data.success) {
         onRefresh()
       } else {
-        alert('Fehler: ' + data.error)
+        alert('Fehler: ' + (data.error ?? 'Unbekannt'))
       }
     } catch (error) {
       console.error('Failed to delete category:', error)

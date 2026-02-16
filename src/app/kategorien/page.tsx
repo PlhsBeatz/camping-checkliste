@@ -7,6 +7,7 @@ import { CategoryManager } from '@/components/category-manager'
 import { Menu } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { Category, MainCategory } from '@/lib/db'
+import type { ApiResponse } from '@/lib/api-types'
 import { cn } from '@/lib/utils'
 
 interface CategoryWithMain extends Category {
@@ -23,8 +24,8 @@ export default function KategorienPage() {
     const fetchCategories = async () => {
       try {
         const res = await fetch('/api/categories')
-        const data = await res.json()
-        if (data.success) {
+        const data = (await res.json()) as ApiResponse<CategoryWithMain[]>
+        if (data.success && data.data) {
           setCategories(data.data)
         }
       } catch (error) {
@@ -39,8 +40,8 @@ export default function KategorienPage() {
     const fetchMainCategories = async () => {
       try {
         const res = await fetch('/api/main-categories')
-        const data = await res.json()
-        if (data.success) {
+        const data = (await res.json()) as ApiResponse<MainCategory[]>
+        if (data.success && data.data) {
           setMainCategories(data.data)
         }
       } catch (error) {
@@ -52,12 +53,12 @@ export default function KategorienPage() {
 
   const handleRefresh = async () => {
     const catRes = await fetch('/api/categories')
-    const catData = await catRes.json()
-    if (catData.success) setCategories(catData.data)
+    const catData = (await catRes.json()) as ApiResponse<CategoryWithMain[]>
+    if (catData.success && catData.data) setCategories(catData.data)
     
     const mainCatRes = await fetch('/api/main-categories')
-    const mainCatData = await mainCatRes.json()
-    if (mainCatData.success) setMainCategories(mainCatData.data)
+    const mainCatData = (await mainCatRes.json()) as ApiResponse<MainCategory[]>
+    if (mainCatData.success && mainCatData.data) setMainCategories(mainCatData.data)
   }
 
   return (

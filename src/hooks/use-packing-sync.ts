@@ -29,7 +29,7 @@ export function usePackingSync(
         ws = new WebSocket(wsUrl)
         ws.onmessage = (event) => {
           try {
-            const data = JSON.parse(event.data as string)
+            const data = JSON.parse(event.data as string) as { type?: string }
             if (data?.type === 'packing-list-changed') {
               onUpdateRef.current()
             }

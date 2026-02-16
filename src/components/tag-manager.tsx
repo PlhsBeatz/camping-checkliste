@@ -7,6 +7,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Edit2, Trash2, Plus, Tag as TagIcon } from 'lucide-react'
 import { Tag } from '@/lib/db'
+import type { ApiResponse } from '@/lib/api-types'
 
 interface TagManagerProps {
   tags: Tag[]
@@ -54,13 +55,13 @@ export function TagManager({ tags, onRefresh }: TagManagerProps) {
           beschreibung: form.beschreibung || null
         })
       })
-      const data = await res.json()
+      const data = (await res.json()) as ApiResponse<unknown>
       if (data.success) {
         setShowDialog(false)
         setForm({ titel: '', farbe: '#3b82f6', icon: '', beschreibung: '' })
         onRefresh()
       } else {
-        alert('Fehler: ' + data.error)
+        alert('Fehler: ' + (data.error ?? 'Unbekannt'))
       }
     } catch (error) {
       console.error('Failed to create tag:', error)
@@ -89,14 +90,14 @@ export function TagManager({ tags, onRefresh }: TagManagerProps) {
           beschreibung: form.beschreibung || null
         })
       })
-      const data = await res.json()
+      const data = (await res.json()) as ApiResponse<unknown>
       if (data.success) {
         setShowDialog(false)
         setEditingTag(null)
         setForm({ titel: '', farbe: '#3b82f6', icon: '', beschreibung: '' })
         onRefresh()
       } else {
-        alert('Fehler: ' + data.error)
+        alert('Fehler: ' + (data.error ?? 'Unbekannt'))
       }
     } catch (error) {
       console.error('Failed to update tag:', error)
@@ -116,11 +117,11 @@ export function TagManager({ tags, onRefresh }: TagManagerProps) {
       const res = await fetch(`/api/tags?id=${id}`, {
         method: 'DELETE'
       })
-      const data = await res.json()
+      const data = (await res.json()) as ApiResponse<unknown>
       if (data.success) {
         onRefresh()
       } else {
-        alert('Fehler: ' + data.error)
+        alert('Fehler: ' + (data.error ?? 'Unbekannt'))
       }
     } catch (error) {
       console.error('Failed to delete tag:', error)

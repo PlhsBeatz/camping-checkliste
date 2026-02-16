@@ -7,6 +7,7 @@ import { MitreisendeManager } from '@/components/mitreisende-manager'
 import { Plus, Menu, Edit2, Trash2 } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { Vacation, Mitreisender } from '@/lib/db'
+import type { ApiResponse } from '@/lib/api-types'
 import { ResponsiveModal } from '@/components/ui/responsive-modal'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -37,8 +38,8 @@ export default function UrlaubePage() {
     const fetchVacations = async () => {
       try {
         const res = await fetch('/api/vacations')
-        const data = await res.json()
-        if (data.success) {
+        const data = (await res.json()) as ApiResponse<Vacation[]>
+        if (data.success && data.data) {
           setVacations(data.data)
         }
       } catch (error) {
@@ -82,12 +83,11 @@ export default function UrlaubePage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body)
       })
-      const data = await res.json()
-      if (data.success) {
+      const data = (await res.json()) as ApiResponse<Vacation>
+      if (data.success && data.data) {
         if (editingVacationId) {
-          setVacations(vacations.map(v => v.id === editingVacationId ? data.data : v))
+          setVacations(vacations.map(v => v.id === editingVacationId ? data.data! : v))
         } else {
-          // New vacation created - assign selected travelers
           const newVacationId = data.data.id
           
           if (vacationMitreisende.length > 0) {
@@ -103,7 +103,7 @@ export default function UrlaubePage() {
             })
           }
           
-          setVacations([...vacations, data.data])
+          setVacations([...vacations, data.data!])
         }
         setShowNewVacationDialog(false)
         setEditingVacationId(null)
@@ -118,7 +118,7 @@ export default function UrlaubePage() {
         })
         setVacationMitreisende([])
       } else {
-        alert('Fehler beim Speichern des Urlaubs: ' + data.error)
+        alert('Fehler beim Speichern des Urlaubs: ' + (data.error ?? 'Unbekannt'))
       }
     } catch (error) {
       console.error('Failed to save vacation:', error)
@@ -167,11 +167,11 @@ export default function UrlaubePage() {
       const res = await fetch(`/api/vacations?id=${vacationId}`, {
         method: 'DELETE'
       })
-      const data = await res.json()
+      const data = (await res.json()) as ApiResponse<boolean>
       if (data.success) {
         setVacations(vacations.filter(v => v.id !== vacationId))
       } else {
-        alert('Fehler beim Löschen des Urlaubs: ' + data.error)
+        alert('Fehler beim Löschen des Urlaubs: ' + (data.error ?? 'Unbekannt'))
       }
     } catch (error) {
       console.error('Failed to delete vacation:', error)

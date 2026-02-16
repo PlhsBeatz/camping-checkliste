@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Plus, Users } from 'lucide-react'
 import { Mitreisender } from '@/lib/db'
+import type { ApiResponse } from '@/lib/api-types'
 
 interface MitreisendeManagerProps {
   vacationId: string | null
@@ -26,18 +27,18 @@ export function MitreisendeManager({ vacationId, onMitreisendeChange }: Mitreise
     const fetchAllMitreisende = async () => {
       try {
         const res = await fetch('/api/mitreisende')
-        const data = await res.json()
-        if (data.success) {
+        const data = (await res.json()) as ApiResponse<Mitreisender[]>
+        if (data.success && data.data) {
           setAllMitreisende(data.data)
           
           // Wenn kein vacationId (= Erstell-Modus), wähle Standard-Mitreisende vor
-          if (!vacationId && !initialLoadDone) {
+          if (!vacationId && !initialLoadDone && data.data) {
             const defaultIds = data.data
-              .filter((m: Mitreisender) => m.is_default_member)
-              .map((m: Mitreisender) => m.id)
+              .filter((m) => m.is_default_member)
+              .map((m) => m.id)
             setVacationMitreisende(defaultIds)
             if (onMitreisendeChange) {
-              const defaultMitreisende = data.data.filter((m: Mitreisender) => m.is_default_member)
+              const defaultMitreisende = data.data.filter((m) => m.is_default_member)
               onMitreisendeChange(defaultMitreisende)
             }
             setInitialLoadDone(true)
@@ -57,9 +58,9 @@ export function MitreisendeManager({ vacationId, onMitreisendeChange }: Mitreise
     const fetchVacationMitreisende = async () => {
       try {
         const res = await fetch(`/api/mitreisende?vacationId=${vacationId}`)
-        const data = await res.json()
-        if (data.success) {
-          const ids = data.data.map((m: Mitreisender) => m.id)
+        const data = (await res.json()) as ApiResponse<Mitreisender[]>
+        if (data.success && data.data) {
+          const ids = data.data.map((m) => m.id)
           setVacationMitreisende(ids)
           if (onMitreisendeChange) {
             onMitreisendeChange(data.data)
@@ -90,7 +91,7 @@ export function MitreisendeManager({ vacationId, onMitreisendeChange }: Mitreise
             mitreisendeIds: newSelection
           })
         })
-        const data = await res.json()
+        const data = (await res.json()) as ApiResponse<boolean>
         if (data.success && onMitreisendeChange) {
           const selectedMitreisende = allMitreisende.filter(m => newSelection.includes(m.id))
           onMitreisendeChange(selectedMitreisende)
@@ -123,8 +124,8 @@ export function MitreisendeManager({ vacationId, onMitreisendeChange }: Mitreise
           is_default_member: false
         })
       })
-      const data = await res.json()
-      if (data.success) {
+      const data = (await res.json()) as ApiResponse<{ id: string }>
+      if (data.success && data.data) {
         const newMitreisender: Mitreisender = {
           id: data.data.id,
           name: newMitreisenderName,
@@ -136,9 +137,9 @@ export function MitreisendeManager({ vacationId, onMitreisendeChange }: Mitreise
         setShowAddDialog(false)
         
         // Automatisch zur Auswahl hinzufügen
-        await handleToggleMitreisender(data.data.id)
+        await handleToggleMitreisender(data.data!.id)
       } else {
-        alert('Fehler beim Erstellen des Mitreisenden: ' + data.error)
+        alert('Fehler beim Erstellen des Mitreisenden: ' + (data.error ?? 'Unbekannt'))
       }
     } catch (error) {
       console.error('Failed to create mitreisender:', error)

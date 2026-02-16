@@ -7,6 +7,7 @@ import { TagManager } from '@/components/tag-manager'
 import { Menu } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { Tag } from '@/lib/db'
+import type { ApiResponse } from '@/lib/api-types'
 import { cn } from '@/lib/utils'
 
 export default function TagsPage() {
@@ -18,8 +19,8 @@ export default function TagsPage() {
     const fetchTags = async () => {
       try {
         const res = await fetch('/api/tags')
-        const data = await res.json()
-        if (data.success) {
+        const data = (await res.json()) as ApiResponse<Tag[]>
+        if (data.success && data.data) {
           setTags(data.data)
         }
       } catch (error) {
@@ -29,14 +30,12 @@ export default function TagsPage() {
     fetchTags()
   }, [])
 
-  const handleRefresh = () => {
-    fetch('/api/tags')
-      .then(res => res.json())
-      .then(data => {
-        if (data.success) {
-          setTags(data.data)
-        }
-      })
+  const handleRefresh = async () => {
+    const res = await fetch('/api/tags')
+    const data = (await res.json()) as ApiResponse<Tag[]>
+    if (data.success && data.data) {
+      setTags(data.data)
+    }
   }
 
   return (
