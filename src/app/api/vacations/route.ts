@@ -31,14 +31,23 @@ export async function POST(request: NextRequest) {
       land_region?: string | null
     }
 
+    const titel = body.titel ?? body.title ?? ''
+    const startdatum = body.startdatum ?? body.startDate ?? ''
+    const enddatum = body.enddatum ?? body.endDate ?? ''
+    const reiseziel_name = body.reiseziel_name ?? body.destination ?? ''
+
+    if (!titel || !startdatum || !enddatum) {
+      return NextResponse.json({ error: 'titel, startdatum and enddatum are required' }, { status: 400 })
+    }
+
     const vacation = await createVacation(db, {
-      titel: body.titel || body.title,
-      startdatum: body.startdatum || body.startDate,
-      abfahrtdatum: body.abfahrtdatum || null,
-      enddatum: body.enddatum || body.endDate,
-      reiseziel_name: body.reiseziel_name || body.destination,
-      reiseziel_adresse: body.reiseziel_adresse || null,
-      land_region: body.land_region || null
+      titel,
+      startdatum,
+      abfahrtdatum: body.abfahrtdatum ?? null,
+      enddatum,
+      reiseziel_name,
+      reiseziel_adresse: body.reiseziel_adresse ?? null,
+      land_region: body.land_region ?? null
     })
 
     if (!vacation) {
