@@ -42,6 +42,8 @@ export interface PackingItemMitreisender {
   mitreisender_id: string
   mitreisender_name: string
   gepackt: boolean
+  /** Pro-Person-Anzahl; bei undefined wird item.anzahl verwendet */
+  anzahl?: number
 }
 
 export interface Mitreisender {
@@ -347,18 +349,19 @@ export async function getPackingItems(db: D1Database, vacationId: string): Promi
     for (const item of rows) {
       const mitreisendeResult = await db
         .prepare(
-          `SELECT pem.mitreisender_id, m.name as mitreisender_name, pem.gepackt
+          `SELECT pem.mitreisender_id, m.name as mitreisender_name, pem.gepackt, pem.anzahl
            FROM packlisten_eintrag_mitreisende pem
            JOIN mitreisende m ON pem.mitreisender_id = m.id
            WHERE pem.packlisten_eintrag_id = ?
            ORDER BY m.name`
         )
         .bind(item.id)
-        .all<{ mitreisender_id: string; mitreisender_name: string; gepackt: number }>()
+        .all<{ mitreisender_id: string; mitreisender_name: string; gepackt: number; anzahl?: number | null }>()
       const mitreisende = (mitreisendeResult.results || []).map((m) => ({
         mitreisender_id: m.mitreisender_id,
         mitreisender_name: m.mitreisender_name,
         gepackt: !!m.gepackt,
+        anzahl: m.anzahl != null ? Number(m.anzahl) : undefined,
       }))
 
       items.push({
@@ -1124,6 +1127,64 @@ export async function togglePackingItemForMitreisender(
     return true
   } catch (error) {
     console.error('Error toggling packing item for mitreisender:', error)
+    return false
+  }
+}
+
+/**
+ * Anzahl eines Mitreisenden für einen Packlisten-Eintrag setzen
+ */
+export async function setMitreisenderAnzahl(
+  db: D1Database,
+  packingItemId: string,
+  mitreisenderId: string,
+  anzahl: number
+): Promise<boolean> {
+  try {
+    const existing = await db
+      .prepare('SELECT 1 FROM packlisten_eintrag_mitreisende WHERE packlisten_eintrag_id = ? AND mitreisender_id = ?')
+      .bind(packingItemId, mitreisenderId)
+      .first()
+
+    if (!existing) return false
+
+    await db
+      .prepare('UPDATE packlisten_eintrag_mitreisende SET anzahl = ? WHERE packlisten_eintrag_id = ? AND mitreisender_id = ?')
+      .bind(anzahl, packingItemId, mitreisenderId)
+      .run()
+    return true
+  } catch (error) {
+    console.error('Error setting mitreisender anzahl:', error)
+    return false
+  }
+}
+
+/**
+ * Mitreisenden von einem Packlisten-Eintrag entfernen.
+ * Wenn es der letzte Mitreisende ist, wird der gesamte Eintrag gelöscht.
+ */
+export async function removeMitreisenderFromPackingItem(
+  db: D1Database,
+  packingItemId: string,
+  mitreisenderId: string
+): Promise<boolean> {
+  try {
+    await db
+      .prepare('DELETE FROM packlisten_eintrag_mitreisende WHERE packlisten_eintrag_id = ? AND mitreisender_id = ?')
+      .bind(packingItemId, mitreisenderId)
+      .run()
+
+    const remaining = await db
+      .prepare('SELECT 1 FROM packlisten_eintrag_mitreisende WHERE packlisten_eintrag_id = ? LIMIT 1')
+      .bind(packingItemId)
+      .first()
+
+    if (!remaining) {
+      await db.prepare('DELETE FROM packlisten_eintraege WHERE id = ?').bind(packingItemId).run()
+    }
+    return true
+  } catch (error) {
+    console.error('Error removing mitreisender from packing item:', error)
     return false
   }
 }

@@ -81,6 +81,7 @@ function HomeContent() {
   const [showEditItemDialog, setShowEditItemDialog] = useState(false)
   const [showGeneratorDialog, setShowGeneratorDialog] = useState(false)
   const [editingPackingItemId, setEditingPackingItemId] = useState<string | null>(null)
+  const [editingForMitreisenderId, setEditingForMitreisenderId] = useState<string | null>(null)
   const [_equipmentSearchTerm, _setEquipmentSearchTerm] = useState('')
   const [selectedPackProfile, setSelectedPackProfile] = useState<string | null>(null)
   const [hidePackedItems, setHidePackedItems] = useState(true)
@@ -247,13 +248,17 @@ function HomeContent() {
     fetchTransportVehicles()
   }, [])
 
-  // Get available equipment (not on packing list, only packable status)
+  // Get available equipment (not on packing list, or on list but without selected person)
   const availableEquipment = useMemo(() => {
-    const packingItemEquipmentIds = new Set(packingItems.map(item => item.gegenstand_id))
-    return equipmentItems.filter(
-      eq => !packingItemEquipmentIds.has(eq.id) && PACKABLE_STATUSES.includes(eq.status)
-    )
-  }, [equipmentItems, packingItems])
+    return equipmentItems.filter((eq) => {
+      if (!PACKABLE_STATUSES.includes(eq.status)) return false
+      const existingItem = packingItems.find((p) => p.gegenstand_id === eq.id)
+      if (!existingItem) return true // Nicht auf der Liste → verfügbar
+      if (!selectedPackProfile) return false // Alle-Modus: bereits auf Liste → nicht verfügbar
+      // Mitreisender-Modus: verfügbar wenn diese Person noch nicht zugeordnet ist
+      return !existingItem.mitreisende?.some((m) => m.mitreisender_id === selectedPackProfile)
+    })
+  }, [equipmentItems, packingItems, selectedPackProfile])
 
   // Filter and group available equipment
   const groupedAvailableEquipment = useMemo(() => {
@@ -515,9 +520,19 @@ function HomeContent() {
 
   const handleEditPackingItem = (item: PackingItem) => {
     setEditingPackingItemId(item.id)
+    const personEntry = selectedPackProfile
+      ? item.mitreisende?.find((m) => m.mitreisender_id === selectedPackProfile)
+      : null
+    const forProfile =
+      selectedPackProfile &&
+      item.mitreisenden_typ !== 'pauschal' &&
+      (personEntry || item.mitreisende?.some((m) => m.mitreisender_id === selectedPackProfile))
+    setEditingForMitreisenderId(forProfile ? selectedPackProfile : null)
+    const anzahl =
+      selectedPackProfile && personEntry?.anzahl != null ? personEntry.anzahl : item.anzahl
     setPackingItemForm({
       gegenstandId: item.gegenstand_id,
-      anzahl: String(item.anzahl),
+      anzahl: String(anzahl ?? item.anzahl),
       bemerkung: item.bemerkung || '',
       transportId: item.transport_id || ''
     })
@@ -527,20 +542,45 @@ function HomeContent() {
   const handleUpdatePackingItem = async () => {
     if (!editingPackingItemId) return
 
+    const item = packingItems.find((p) => p.id === editingPackingItemId)
+    const isProfileUpdate = !!editingForMitreisenderId && !!item
+
     setIsLoading(true)
     try {
-      const res = await fetch('/api/packing-items', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: editingPackingItemId,
-          anzahl: parseInt(packingItemForm.anzahl) || 1,
-          bemerkung: packingItemForm.bemerkung || null,
-          transport_id: packingItemForm.transportId || null,
-        }),
-      })
-      const data = (await res.json()) as ApiResponse<boolean>
-      if (data.success && selectedVacationId) {
+      if (isProfileUpdate) {
+        const res = await fetch('/api/packing-items/set-mitreisender-anzahl', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            packingItemId: editingPackingItemId,
+            mitreisenderId: editingForMitreisenderId,
+            anzahl: parseInt(packingItemForm.anzahl) || 1,
+          }),
+        })
+        const data = (await res.json()) as ApiResponse<boolean>
+        if (!data.success) {
+          alert('Fehler beim Aktualisieren: ' + (data.error ?? 'Unbekannt'))
+          return
+        }
+      } else {
+        const res = await fetch('/api/packing-items', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: editingPackingItemId,
+            anzahl: parseInt(packingItemForm.anzahl) || 1,
+            bemerkung: packingItemForm.bemerkung || null,
+            transport_id: packingItemForm.transportId || null,
+          }),
+        })
+        const data = (await res.json()) as ApiResponse<boolean>
+        if (!data.success) {
+          alert('Fehler beim Aktualisieren: ' + data.error)
+          return
+        }
+      }
+
+      if (selectedVacationId) {
         const itemsRes = await fetch(`/api/packing-items?vacationId=${selectedVacationId}`)
         const itemsData = (await itemsRes.json()) as ApiResponse<PackingItem[]>
         if (itemsData.success && itemsData.data) {
@@ -548,8 +588,7 @@ function HomeContent() {
         }
         setShowEditItemDialog(false)
         setEditingPackingItemId(null)
-      } else {
-        alert('Fehler beim Aktualisieren: ' + data.error)
+        setEditingForMitreisenderId(null)
       }
     } catch (error) {
       console.error('Failed to update packing item:', error)
@@ -559,26 +598,44 @@ function HomeContent() {
     }
   }
 
-  // FIXED: Change from body to URL parameter
-  const handleDeletePackingItem = async (id: string) => {
-    if (!confirm('Möchten Sie diesen Eintrag wirklich aus der Packliste entfernen?')) {
+  const handleDeletePackingItem = async (id: string, forMitreisenderId?: string | null) => {
+    const item = packingItems.find((p) => p.id === id)
+    if (forMitreisenderId && item?.mitreisenden_typ === 'pauschal') {
+      alert('Pauschale Einträge können nur im Packprofil „Alle" entfernt werden.')
       return
     }
+    const isProfileDelete = !!forMitreisenderId
+
+    const message = isProfileDelete
+      ? 'Diesen Eintrag nur für diesen Mitreisenden entfernen?'
+      : 'Möchten Sie diesen Eintrag wirklich aus der Packliste entfernen?'
+    if (!confirm(message)) return
 
     setIsLoading(true)
     try {
-      const res = await fetch(`/api/packing-items?id=${id}`, {
-        method: 'DELETE',
-      })
-      const data = (await res.json()) as ApiResponse<boolean>
-      if (data.success && selectedVacationId) {
+      if (isProfileDelete) {
+        const res = await fetch(
+          `/api/packing-items/remove-mitreisender?packingItemId=${id}&mitreisenderId=${forMitreisenderId}`,
+          { method: 'DELETE' }
+        )
+        const data = (await res.json()) as ApiResponse<boolean>
+        if (!data.success) {
+          alert('Fehler beim Entfernen: ' + (data.error ?? 'Unbekannt'))
+        }
+      } else {
+        const res = await fetch(`/api/packing-items?id=${id}`, { method: 'DELETE' })
+        const data = (await res.json()) as ApiResponse<boolean>
+        if (!data.success) {
+          alert('Fehler beim Löschen: ' + (data.error ?? 'Unbekannt'))
+        }
+      }
+
+      if (selectedVacationId) {
         const itemsRes = await fetch(`/api/packing-items?vacationId=${selectedVacationId}`)
         const itemsData = (await itemsRes.json()) as ApiResponse<PackingItem[]>
         if (itemsData.success && itemsData.data) {
           setPackingItems(itemsData.data)
         }
-      } else if (!data.success) {
-        alert('Fehler beim Löschen: ' + (data.error ?? 'Unbekannt'))
       }
     } catch (error) {
       console.error('Failed to delete packing item:', error)
@@ -603,24 +660,69 @@ function HomeContent() {
 
     setIsLoading(true)
     try {
-      // Add all selected equipment items
-      const promises = Array.from(selectedEquipmentIds).map(equipmentId => {
-        const eq = equipmentItems.find(e => e.id === equipmentId)
-        return fetch('/api/packing-items', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            vacationId: selectedVacationId,
-            gegenstandId: equipmentId,
-            anzahl: eq?.standard_anzahl ?? 1,
-            bemerkung: null,
-            transportId: eq?.transport_id ?? null,
-            mitreisende: []
-          }),
-        })
-      })
+      const vacationMitreisendeIds = vacationMitreisende.map((m) => m.id)
 
-      await Promise.all(promises)
+      if (selectedPackProfile) {
+        // Packprofil Mitreisender: Person zu bestehendem Eintrag hinzufügen oder neuen erstellen
+        for (const equipmentId of selectedEquipmentIds) {
+          const eq = equipmentItems.find((e) => e.id === equipmentId)
+          const existingItem = packingItems.find((p) => p.gegenstand_id === equipmentId)
+
+          if (existingItem) {
+            // Eintrag existiert – Person per Toggle hinzufügen
+            const res = await fetch('/api/packing-items/toggle-mitreisender', {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                packingItemId: existingItem.id,
+                mitreisenderId: selectedPackProfile,
+                gepackt: false
+              })
+            })
+            if (!res.ok) {
+              console.error('Failed to add mitreisender to item:', existingItem.id)
+            }
+          } else {
+            // Neuer Eintrag – nur für diesen Mitreisenden
+            await fetch('/api/packing-items', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                vacationId: selectedVacationId,
+                gegenstandId: equipmentId,
+                anzahl: eq?.standard_anzahl ?? 1,
+                bemerkung: null,
+                transportId: eq?.transport_id ?? null,
+                mitreisende: [selectedPackProfile]
+              })
+            })
+          }
+        }
+      } else {
+        // Packprofil Alle: Zuordnung gemäß Ausrüstungstabelle (alle/ausgewaehlte)
+        const promises = Array.from(selectedEquipmentIds).map((equipmentId) => {
+          const eq = equipmentItems.find((e) => e.id === equipmentId)
+          let mitreisendeIds: string[] | undefined
+          if (eq?.mitreisenden_typ === 'alle') {
+            mitreisendeIds = vacationMitreisendeIds
+          } else if (eq?.mitreisenden_typ === 'ausgewaehlte' && eq.standard_mitreisende?.length) {
+            mitreisendeIds = eq.standard_mitreisende
+          }
+          return fetch('/api/packing-items', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              vacationId: selectedVacationId,
+              gegenstandId: equipmentId,
+              anzahl: eq?.standard_anzahl ?? 1,
+              bemerkung: null,
+              transportId: eq?.transport_id ?? null,
+              mitreisende: mitreisendeIds ?? []
+            })
+          })
+        })
+        await Promise.all(promises)
+      }
 
       const itemsRes = await fetch(`/api/packing-items?vacationId=${selectedVacationId}`)
       const itemsData = (await itemsRes.json()) as ApiResponse<PackingItem[]>
@@ -628,7 +730,6 @@ function HomeContent() {
         setPackingItems(itemsData.data)
       }
 
-      // Close dialog and reset
       setShowAddItemDialog(false)
       setSelectedEquipmentIds(new Set())
       setSearchTerm('')
@@ -763,8 +864,8 @@ function HomeContent() {
           <ResponsiveModal
             open={showEditItemDialog}
             onOpenChange={setShowEditItemDialog}
-            title="Packlisten-Eintrag bearbeiten"
-            description="Anzahl und Bemerkung anpassen"
+            title={editingForMitreisenderId ? 'Anzahl für Mitreisenden anpassen' : 'Packlisten-Eintrag bearbeiten'}
+            description={editingForMitreisenderId ? 'Änderung gilt nur für diesen Mitreisenden' : 'Anzahl und Bemerkung anpassen'}
           >
             <div className="space-y-4">
               <div>
@@ -777,6 +878,8 @@ function HomeContent() {
                   onChange={(e) => setPackingItemForm({ ...packingItemForm, anzahl: e.target.value })}
                 />
               </div>
+              {!editingForMitreisenderId && (
+                <>
               <div>
                 <Label htmlFor="edit-bemerkung">Bemerkung (optional)</Label>
                 <Input
@@ -810,6 +913,8 @@ function HomeContent() {
                   </SelectContent>
                 </Select>
               </div>
+                </>
+              )}
               <Button onClick={handleUpdatePackingItem} disabled={isLoading} className="w-full">
                 {isLoading ? 'Wird aktualisiert...' : 'Aktualisieren'}
               </Button>

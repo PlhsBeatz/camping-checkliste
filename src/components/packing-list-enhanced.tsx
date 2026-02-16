@@ -25,13 +25,14 @@ interface PackingItemProps {
   bemerkung?: string | null;
   transport_name?: string | null;
   mitreisenden_typ: 'pauschal' | 'alle' | 'ausgewaehlte';
-  mitreisende?: Array<{ mitreisender_id: string; mitreisender_name: string; gepackt: boolean }>;
+  mitreisende?: Array<{ mitreisender_id: string; mitreisender_name: string; gepackt: boolean; anzahl?: number }>;
   onToggle: (id: string) => void;
   /** Explizites Setzen des Gepackt-Status (für Undo bei Pauschal – vermeidet Stale-Closure) */
   onSetPacked?: (id: string, gepackt: boolean) => void;
   onToggleMitreisender: (packingItemId: string, mitreisenderId: string, currentStatus: boolean) => void;
   onEdit: (item: DBPackingItem) => void;
-  onDelete: (id: string) => void;
+  /** id + optional forMitreisenderId (nur diesen Mitreisenden entfernen) */
+  onDelete: (id: string, forMitreisenderId?: string | null) => void;
   details?: string;
   fullItem: DBPackingItem;
   selectedProfile: string | null;
@@ -211,7 +212,12 @@ const PackingItem: React.FC<PackingItemProps> = ({
                   isFullyPacked ? 'line-through text-muted-foreground' : 'text-foreground'
                 )}
               >
-                {was} {anzahl > 1 ? `(${anzahl}x)` : ''}
+                {was}{' '}
+                {(selectedProfile && selectedTravelerItem?.anzahl != null
+                  ? selectedTravelerItem.anzahl
+                  : anzahl) > 1
+                  ? `(${(selectedProfile && selectedTravelerItem?.anzahl != null ? selectedTravelerItem.anzahl : anzahl)}x)`
+                  : ''}
               </label>
             </div>
             
@@ -257,13 +263,15 @@ const PackingItem: React.FC<PackingItemProps> = ({
                 <Edit2 className="h-4 w-4 mr-2" />
                 Bearbeiten
               </DropdownMenuItem>
-              <DropdownMenuItem 
-                onClick={() => onDelete(id)}
-                className="text-destructive focus:text-destructive"
-              >
-                <Trash2 className="h-4 w-4 mr-2" />
-                Löschen
-              </DropdownMenuItem>
+              {!(selectedProfile && mitreisenden_typ === 'pauschal') && (
+                <DropdownMenuItem 
+                  onClick={() => onDelete(id, selectedProfile)}
+                  className="text-destructive focus:text-destructive"
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Löschen
+                </DropdownMenuItem>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
           </div>
@@ -292,7 +300,8 @@ interface PackingListProps {
   onToggleMitreisender: (packingItemId: string, mitreisenderId: string, currentStatus: boolean) => void;
   onToggleMultipleMitreisende: (packingItemId: string, updates: Array<{ mitreisenderId: string; newStatus: boolean }>) => void;
   onEdit: (item: DBPackingItem) => void;
-  onDelete: (id: string) => void;
+  /** id + optional mitreisenderId: bei Profil-Ansicht nur diesen Mitreisenden entfernen */
+  onDelete: (id: string, forMitreisenderId?: string | null) => void;
   selectedProfile: string | null;
   hidePackedItems: boolean;
   onOpenSettings: () => void;
