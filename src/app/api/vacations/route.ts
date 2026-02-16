@@ -17,7 +17,19 @@ export async function POST(request: NextRequest) {
   try {
     const env = process.env as unknown as CloudflareEnv
     const db = getDB(env)
-    const body = await request.json()
+    const body = (await request.json()) as {
+      titel?: string
+      title?: string
+      startdatum?: string
+      startDate?: string
+      abfahrtdatum?: string | null
+      enddatum?: string
+      endDate?: string
+      reiseziel_name?: string
+      destination?: string
+      reiseziel_adresse?: string | null
+      land_region?: string | null
+    }
 
     const vacation = await createVacation(db, {
       titel: body.titel || body.title,
@@ -44,7 +56,16 @@ export async function PUT(request: NextRequest) {
   try {
     const env = process.env as unknown as CloudflareEnv
     const db = getDB(env)
-    const body = await request.json()
+    const body = (await request.json()) as {
+      id?: string
+      titel?: string
+      startdatum?: string
+      abfahrtdatum?: string | null
+      enddatum?: string
+      reiseziel_name?: string
+      reiseziel_adresse?: string | null
+      land_region?: string | null
+    }
     const { id, ...updates } = body
 
     if (!id) {

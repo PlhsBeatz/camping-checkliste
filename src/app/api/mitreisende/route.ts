@@ -45,7 +45,13 @@ export async function POST(request: NextRequest) {
     const env = process.env as unknown as CloudflareEnv
     const db = getDB(env)
 
-    const body = await request.json()
+    const body = (await request.json()) as {
+      name?: string
+      userId?: string | null
+      user_id?: string | null
+      isDefaultMember?: boolean
+      is_default_member?: boolean
+    }
     const { name, userId, user_id, isDefaultMember, is_default_member } = body
 
     if (!name) {
@@ -79,7 +85,16 @@ export async function PUT(request: NextRequest) {
     const env = process.env as unknown as CloudflareEnv
     const db = getDB(env)
 
-    const body = await request.json()
+    const body = (await request.json()) as {
+      id?: string
+      name?: string
+      userId?: string | null
+      user_id?: string | null
+      isDefaultMember?: boolean
+      is_default_member?: boolean
+      vacationId?: string
+      mitreisendeIds?: string[]
+    }
     const { id, name, userId, user_id, isDefaultMember, is_default_member, vacationId, mitreisendeIds } = body
 
     // Setzen der Mitreisenden für einen Urlaub

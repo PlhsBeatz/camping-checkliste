@@ -13,7 +13,11 @@ export async function PUT(request: Request) {
     const env = process.env as unknown as CloudflareEnv
     const db = getDB(env)
 
-    const body = await request.json()
+    const body = (await request.json()) as {
+      packingItemId?: string
+      mitreisenderId?: string
+      gepackt?: boolean
+    }
     const { packingItemId, mitreisenderId, gepackt } = body
 
     if (!packingItemId || !mitreisenderId || gepackt === undefined) {

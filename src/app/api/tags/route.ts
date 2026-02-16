@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
   try {
     const env = process.env as unknown as CloudflareEnv
     const db = getDB(env)
-    const body = await request.json()
+    const body = (await request.json()) as { titel?: string; farbe?: string | null; icon?: string | null; beschreibung?: string | null }
     const { titel, farbe, icon, beschreibung } = body
 
     if (!titel) {
@@ -49,7 +49,7 @@ export async function PUT(request: NextRequest) {
   try {
     const env = process.env as unknown as CloudflareEnv
     const db = getDB(env)
-    const body = await request.json()
+    const body = (await request.json()) as { id?: string; titel?: string; farbe?: string | null; icon?: string | null; beschreibung?: string | null }
     const { id, titel, farbe, icon, beschreibung } = body
 
     if (!id || !titel) {

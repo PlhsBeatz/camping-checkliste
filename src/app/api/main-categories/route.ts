@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
   try {
     const env = process.env as unknown as CloudflareEnv
     const db = getDB(env)
-    const body = await request.json()
+    const body = (await request.json()) as { titel?: string; reihenfolge?: number }
     const { titel, reihenfolge } = body
 
     if (!titel) {
@@ -49,7 +49,7 @@ export async function PUT(request: NextRequest) {
   try {
     const env = process.env as unknown as CloudflareEnv
     const db = getDB(env)
-    const body = await request.json()
+    const body = (await request.json()) as { id?: string; titel?: string; reihenfolge?: number }
     const { id, titel, reihenfolge } = body
 
     if (!id || !titel) {

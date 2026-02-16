@@ -17,12 +17,12 @@ export async function POST(request: NextRequest) {
   try {
     const env = process.env as unknown as CloudflareEnv
     const _db = getDB(env)
-    const body = await request.json()
-    
+    const _body = (await request.json()) as Record<string, unknown>
+
     // Note: createEquipmentItem is not yet implemented in db.ts
     // This is a placeholder for future implementation
-    console.log('Create equipment item requested:', body)
-    
+    console.log('Create equipment item requested:', _body)
+
     return NextResponse.json({ error: 'Not implemented' }, { status: 501 })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error)
