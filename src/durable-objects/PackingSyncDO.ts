@@ -1,9 +1,10 @@
-/// <reference path="../../cloudflare-workers.d.ts" />
 /**
  * Durable Object für Echtzeit-Sync der Packliste.
  * Pro Urlaub (vacationId) eine DO-Instanz – WebSocket-Clients erhalten sofortige Updates
  * wenn Packlisten-Einträge geändert werden.
  */
+/* eslint-disable @typescript-eslint/triple-slash-reference */
+/// <reference path="../../cloudflare-workers.d.ts" />
 import { DurableObject } from 'cloudflare:workers'
 
 /** Umgebung für PackingSyncDO – keine zusätzlichen Bindings nötig */
