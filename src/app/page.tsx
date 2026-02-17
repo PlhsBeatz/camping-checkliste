@@ -134,6 +134,11 @@ function HomeContent() {
   // Versionszähler: veraltete Fetch-Antworten ignorieren (verhindert Race bei schnellem Abhaken)
   const fetchPackingVersionRef = useRef(0)
 
+  // Nach lokaler Änderung: packing-list-changed kurz ignorieren (Optimistic Update ist korrekt,
+  // Refetch könnte partielle Daten liefern wenn Server-PUTs noch laufen)
+  const lastLocalMutationRef = useRef(0)
+  const PACKING_SYNC_SUPPRESS_MS = 4000
+
   // Fetch Packing Items when vacation changes (mit Offline-Cache)
   const fetchPackingItems = useCallback(async () => {
     if (!selectedVacationId) return
@@ -165,8 +170,12 @@ function HomeContent() {
     fetchPackingItems()
   }, [selectedVacationId, fetchPackingItems])
 
-  // WebSocket für Echtzeit-Sync: andere Clients benachrichtigen
-  usePackingSync(selectedVacationId, fetchPackingItems)
+  // WebSocket für Echtzeit-Sync: Refetch nur wenn keine kürzliche lokale Änderung
+  const handlePackingSyncUpdate = useCallback(() => {
+    if (Date.now() - lastLocalMutationRef.current < PACKING_SYNC_SUPPRESS_MS) return
+    fetchPackingItems()
+  }, [fetchPackingItems])
+  usePackingSync(selectedVacationId, handlePackingSyncUpdate)
 
   // Bei Reconnect: Packliste neu laden
   useEffect(() => {
@@ -330,6 +339,7 @@ function HomeContent() {
 
   const handleGeneratePackingList = async (equipmentItems: EquipmentItem[]) => {
     if (!selectedVacationId || equipmentItems.length === 0) return
+    lastLocalMutationRef.current = Date.now()
 
     const packlisteGegenstandIds = new Set(packingItems.map(p => p.gegenstand_id))
     const toAdd = equipmentItems.filter(eq => !packlisteGegenstandIds.has(eq.id))
@@ -379,6 +389,7 @@ function HomeContent() {
   }
 
   const handleSetPacked = async (itemId: string, gepackt: boolean) => {
+    lastLocalMutationRef.current = Date.now()
     const prevItems = packingItems
     // Optimistic update: packingItems direkt aktualisieren → sofortige UI-Aktualisierung
     setPackingItems(prev =>
@@ -405,6 +416,7 @@ function HomeContent() {
   }
 
   const handleTogglePacked = async (itemId: string) => {
+    lastLocalMutationRef.current = Date.now()
     const item = packingItems.find(p => p.id === itemId)
     const isPacked = item?.gepackt ?? false
     const newPackedState = !isPacked
@@ -436,6 +448,7 @@ function HomeContent() {
   }
 
   const handleToggleMitreisender = async (itemId: string, mitreisenderId: string, currentStatus: boolean) => {
+    lastLocalMutationRef.current = Date.now()
     const newStatus = !currentStatus
     const prevItems = packingItems
 
@@ -481,6 +494,7 @@ function HomeContent() {
   }
 
   const handleToggleMultipleMitreisende = async (packingItemId: string, updates: Array<{ mitreisenderId: string; newStatus: boolean }>) => {
+    lastLocalMutationRef.current = Date.now()
     const prevItems = packingItems
 
     // Optimistic update für alle Änderungen
@@ -550,6 +564,7 @@ function HomeContent() {
 
   const handleUpdatePackingItem = async () => {
     if (!editingPackingItemId) return
+    lastLocalMutationRef.current = Date.now()
 
     const item = packingItems.find((p) => p.id === editingPackingItemId)
     const isProfileUpdate = !!editingForMitreisenderId && !!item
@@ -608,6 +623,7 @@ function HomeContent() {
   }
 
   const handleDeletePackingItem = async (id: string, forMitreisenderId?: string | null) => {
+    lastLocalMutationRef.current = Date.now()
     const item = packingItems.find((p) => p.id === id)
     if (forMitreisenderId && item?.mitreisenden_typ === 'pauschal') {
       alert('Pauschale Einträge können nur im Packprofil „Alle" entfernt werden.')
@@ -666,6 +682,7 @@ function HomeContent() {
 
   const handleAddSelectedEquipment = async () => {
     if (selectedEquipmentIds.size === 0 || !selectedVacationId) return
+    lastLocalMutationRef.current = Date.now()
 
     setIsLoading(true)
     try {
