@@ -25,8 +25,12 @@ export async function GET(request: NextRequest) {
       getStandardMitreisendeForEquipmentBatch(db, gegenstandIds),
     ])
     for (const item of items) {
-      item.tags = tagsMap.get(String(item.id)) || []
-      item.standard_mitreisende = smMap.get(String(item.id)) || []
+      const id = String(item.id)
+      item.tags = tagsMap.get(id) || []
+      item.standard_mitreisende = smMap.get(id) || []
+      // Explizite Normalisierung: D1 kann Spalten anders zurückgeben
+      const rawTyp = (item as Record<string, unknown>).mitreisenden_typ
+      item.mitreisenden_typ = (rawTyp === 'alle' || rawTyp === 'ausgewaehlte' ? rawTyp : 'pauschal') as 'pauschal' | 'alle' | 'ausgewaehlte'
     }
 
     const res = NextResponse.json({ success: true, data: items })

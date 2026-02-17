@@ -350,20 +350,23 @@ function HomeContent() {
     }
 
     const vacationMitreisendeIds = vacationMitreisende.map(m => m.id)
+    const vacationMitreisendeSet = new Set(vacationMitreisendeIds)
 
     try {
       const items = toAdd.map((item) => {
-        let mitreisendeIds: string[] | undefined
-        if (item.mitreisenden_typ === 'alle') {
+        const typ = (item.mitreisenden_typ ?? 'pauschal') as 'pauschal' | 'alle' | 'ausgewaehlte'
+        let mitreisendeIds: string[] = []
+        if (typ === 'alle') {
           mitreisendeIds = vacationMitreisendeIds
-        } else if (item.mitreisenden_typ === 'ausgewaehlte' && item.standard_mitreisende?.length) {
-          mitreisendeIds = item.standard_mitreisende
+        } else if (typ === 'ausgewaehlte' && item.standard_mitreisende?.length) {
+          // Nur Mitreisende zuordnen, die auch beim Urlaub dabei sind
+          mitreisendeIds = item.standard_mitreisende.filter(id => vacationMitreisendeSet.has(id))
         }
         return {
           gegenstandId: item.id,
           anzahl: item.standard_anzahl ?? 1,
           transportId: item.transport_id || null,
-          mitreisende: mitreisendeIds ?? [],
+          mitreisende: mitreisendeIds,
         }
       })
 
