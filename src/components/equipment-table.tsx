@@ -83,10 +83,10 @@ export const EquipmentTable = React.memo(({
     }).filter(Boolean)
   }
 
-  // Format weight in kg with German decimal format
+  // Format weight in kg with German decimal format (2 Nachkommastellen)
   const formatWeight = (weightInKg: number | null) => {
     if (weightInKg === null || weightInKg === undefined) return '-'
-    return `${weightInKg.toFixed(3).replace('.', ',')} kg`
+    return `${weightInKg.toFixed(2).replace('.', ',')} kg`
   }
 
   // Filter and search logic
@@ -229,6 +229,7 @@ export const EquipmentTable = React.memo(({
   }, [groupedItems])
 
   const parentRef = useRef<HTMLDivElement>(null)
+  const headerHeight = 49
   const virtualizer = useVirtualizer({
     count: flatRows.length,
     getScrollElement: () => parentRef.current,
@@ -239,10 +240,12 @@ export const EquipmentTable = React.memo(({
       if (row.type === 'category') return 40
       return 52
     },
-    overscan: 10
+    overscan: 10,
+    paddingStart: headerHeight,
   })
 
-  const gridCols = 'minmax(200px,1fr) minmax(100px,auto) minmax(100px,auto) 60px minmax(120px,auto) minmax(150px,auto) minmax(200px,1fr) minmax(150px,auto) 60px 80px'
+  // Feste Spaltenbreiten für konsistente Darstellung (px), Actions-Spalte schmal
+  const gridCols = '220px 120px 90px 48px 130px 130px 220px 150px 48px 44px'
 
   // Spalten-Ausrichtung für saubere vertikale Linien (Header und Body identisch)
   const colAlign = {
@@ -445,26 +448,11 @@ export const EquipmentTable = React.memo(({
         {/* Horizontal scrollbar auf Mobile - min-w-0 erlaubt Schrumpfen, overflow-x-auto ermöglicht Scroll */}
         <div className="overflow-x-auto flex-1 min-h-0 min-w-0 flex flex-col">
           <div className="min-w-[1200px] flex flex-col flex-1 min-h-0">
-            {/* Header - fest oberhalb der Scroll-Area */}
-            <div
-              className="grid gap-px bg-border border-b bg-background flex-shrink-0"
-              style={{ gridTemplateColumns: gridCols }}
-            >
-          <div className={`px-4 py-3 font-medium ${colAlign.was}`}>Was</div>
-          <div className={`px-4 py-3 font-medium ${colAlign.transport}`}>Transport</div>
-          <div className={`px-4 py-3 font-medium ${colAlign.gewicht}`}>Gewicht</div>
-          <div className={`px-4 py-3 font-medium ${colAlign.anzahl}`}>#</div>
-          <div className={`px-4 py-3 font-medium ${colAlign.status}`}>Status</div>
-          <div className={`px-4 py-3 font-medium ${colAlign.gepacktFuer}`}>Gepackt für</div>
-          <div className={`px-4 py-3 font-medium ${colAlign.details}`}>Details</div>
-          <div className={`px-4 py-3 font-medium ${colAlign.tags}`}>Tags</div>
-          <div className={`px-4 py-3 font-medium ${colAlign.links}`}>Links</div>
-          <div className={`px-4 py-3 font-medium ${colAlign.actions}`}></div>
-            </div>
+            {/* Ein gemeinsamer vertikaler Scroll: Header + Body scrollen zusammen (paddingStart für Header) */}
             <div
               ref={parentRef}
               className={cn(
-                'overflow-auto',
+                'overflow-y-auto overflow-x-hidden',
                 dynamicHeight ? 'flex-1 min-h-0' : 'h-[600px]',
                 !dynamicHeight && 'min-h-[200px]'
               )}
@@ -478,6 +466,22 @@ export const EquipmentTable = React.memo(({
               className="relative w-full"
               style={{ height: `${virtualizer.getTotalSize()}px` }}
             >
+              {/* Header im Padding-Bereich - scrollt mit */}
+              <div
+                className="absolute top-0 left-0 right-0 grid gap-px bg-border border-b bg-background"
+                style={{ gridTemplateColumns: gridCols, height: `${headerHeight}px` }}
+              >
+                <div className={`px-4 py-3 font-medium text-sm ${colAlign.was}`}>Was</div>
+                <div className={`px-4 py-3 font-medium text-sm ${colAlign.transport}`}>Transport</div>
+                <div className={`px-4 py-3 font-medium text-sm ${colAlign.gewicht}`}>Gewicht</div>
+                <div className={`px-4 py-3 font-medium text-sm ${colAlign.anzahl}`}>#</div>
+                <div className={`px-4 py-3 font-medium text-sm ${colAlign.status}`}>Status</div>
+                <div className={`px-4 py-3 font-medium text-sm ${colAlign.gepacktFuer}`}>Gepackt für</div>
+                <div className={`px-4 py-3 font-medium text-sm ${colAlign.details}`}>Details</div>
+                <div className={`px-4 py-3 font-medium text-sm ${colAlign.tags}`}>Tags</div>
+                <div className={`px-4 py-3 font-medium text-sm ${colAlign.links}`}>Links</div>
+                <div className={`px-1 py-3 font-medium text-sm ${colAlign.actions}`}></div>
+              </div>
               {virtualizer.getVirtualItems().map((virtualRow) => {
                 const row = flatRows[virtualRow.index]
                 if (!row) return null
@@ -518,7 +522,7 @@ export const EquipmentTable = React.memo(({
                       gridTemplateColumns: gridCols
                     }}
                   >
-                    <div className={`px-4 py-2 font-medium flex items-center gap-2 ${colAlign.was}`}>
+                    <div className={`px-4 py-2 text-sm flex items-center gap-2 ${colAlign.was}`}>
                       {item.is_standard ? (
                         <Star className="h-4 w-4 text-yellow-500 fill-yellow-500 flex-shrink-0" />
                       ) : (
@@ -581,10 +585,10 @@ export const EquipmentTable = React.memo(({
                         </DropdownMenu>
                       ) : null}
                     </div>
-                    <div className={`px-4 py-2 sticky right-0 bg-background flex items-center ${colAlign.actions}`}>
+                    <div className={`px-1 py-2 sticky right-0 bg-background flex items-center justify-center ${colAlign.actions}`}>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                          <Button variant="ghost" size="sm" className="h-7 w-7 min-w-7 p-0">
                             <MoreVertical className="h-4 w-4" />
                           </Button>
                         </DropdownMenuTrigger>
