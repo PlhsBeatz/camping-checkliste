@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getDB, getEquipmentByTags, getTagsForEquipment, getStandardMitreisendeForEquipment, CloudflareEnv } from '@/lib/db'
+import {
+  getDB,
+  getEquipmentByTags,
+  getTagsForEquipmentBatch,
+  getStandardMitreisendeForEquipmentBatch,
+  CloudflareEnv,
+} from '@/lib/db'
 
 export async function GET(request: NextRequest) {
   try {
@@ -11,15 +17,16 @@ export async function GET(request: NextRequest) {
     const includeStandard = searchParams.get('includeStandard') === 'true'
 
     const items = await getEquipmentByTags(db, tagIds, includeStandard)
-    
-    // Load tags and standard_mitreisende for each item (für Generator: ausgewaehlte-Zuordnung)
+    const gegenstandIds = items.map((item) => String(item.id))
+
+    // Batch: Tags und Standard-Mitreisende laden (für Generator: ausgewaehlte-Zuordnung)
+    const [tagsMap, smMap] = await Promise.all([
+      getTagsForEquipmentBatch(db, gegenstandIds),
+      getStandardMitreisendeForEquipmentBatch(db, gegenstandIds),
+    ])
     for (const item of items) {
-      const [tags, standardMitreisende] = await Promise.all([
-        getTagsForEquipment(db, item.id),
-        getStandardMitreisendeForEquipment(db, item.id),
-      ])
-      item.tags = tags
-      item.standard_mitreisende = standardMitreisende
+      item.tags = tagsMap.get(String(item.id)) || []
+      item.standard_mitreisende = smMap.get(String(item.id)) || []
     }
 
     return NextResponse.json({ success: true, data: items })

@@ -442,7 +442,7 @@ export async function updatePackingItem(
 
 /**
  * Abrufen aller Ausrüstungsgegenstände
- * Links und Standard-Mitreisende pro Item (N+1) – bewährt, funktioniert mit D1
+ * Batch-Loading für Links, Standard-Mitreisende (kein N+1)
  */
 export async function getEquipmentItems(db: D1Database): Promise<EquipmentItem[]> {
   try {
@@ -461,20 +461,36 @@ export async function getEquipmentItems(db: D1Database): Promise<EquipmentItem[]
     const itemsResult = await db.prepare(query).all<Record<string, unknown>>()
     const rows = itemsResult.results || []
 
+    // Batch: Alle Links und Standard-Mitreisende in je einer Query laden
+    const linksResult = await db
+      .prepare('SELECT * FROM ausruestungsgegenstaende_links')
+      .all<EquipmentLink>()
+    const allLinks = linksResult.results || []
+    const linksByGegenstand = new Map<string, EquipmentLink[]>()
+    for (const link of allLinks) {
+      const gid = String(link.gegenstand_id)
+      const existing = linksByGegenstand.get(gid) || []
+      existing.push(link)
+      linksByGegenstand.set(gid, existing)
+    }
+
+    const smResult = await db
+      .prepare('SELECT gegenstand_id, mitreisender_id FROM ausruestungsgegenstaende_standard_mitreisende')
+      .all<{ gegenstand_id: string; mitreisender_id: string }>()
+    const allSm = smResult.results || []
+    const smByGegenstand = new Map<string, string[]>()
+    for (const row of allSm) {
+      const gid = String(row.gegenstand_id)
+      const existing = smByGegenstand.get(gid) || []
+      existing.push(String(row.mitreisender_id))
+      smByGegenstand.set(gid, existing)
+    }
+
     const items: EquipmentItem[] = []
     for (const row of rows) {
       const id = String(row.id)
-      const linksResult = await db
-        .prepare('SELECT * FROM ausruestungsgegenstaende_links WHERE gegenstand_id = ?')
-        .bind(id)
-        .all<EquipmentLink>()
-      const links = linksResult.results || []
-
-      const smResult = await db
-        .prepare('SELECT mitreisender_id FROM ausruestungsgegenstaende_standard_mitreisende WHERE gegenstand_id = ?')
-        .bind(id)
-        .all<{ mitreisender_id: string }>()
-      const standard_mitreisende = (smResult.results || []).map((m) => m.mitreisender_id)
+      const links = linksByGegenstand.get(id) || []
+      const standard_mitreisende = smByGegenstand.get(id) || []
 
       items.push({
         id,
@@ -1448,6 +1464,121 @@ export async function deleteTag(db: D1Database, id: string): Promise<boolean> {
   } catch (error) {
     console.error('Error deleting tag:', error)
     return false
+  }
+}
+
+/**
+ * Batch: Alle Tag-Equipment-Zuordnungen in einer Query laden
+ * Rückgabe: Map<gegenstand_id, Tag[]>
+ */
+export async function getAllTagsForEquipment(db: D1Database): Promise<Map<string, Tag[]>> {
+  try {
+    const result = await db
+      .prepare(`
+        SELECT at.gegenstand_id, t.id, t.titel, t.farbe, t.icon, t.beschreibung, t.created_at
+        FROM ausruestungsgegenstaende_tags at
+        JOIN tags t ON t.id = at.tag_id
+        ORDER BY t.titel
+      `)
+      .all<{ gegenstand_id: string } & Tag>()
+    const rows = result.results || []
+    const map = new Map<string, Tag[]>()
+    for (const row of rows) {
+      const gegenstandId = String(row.gegenstand_id)
+      const tag: Tag = {
+        id: String(row.id),
+        titel: String(row.titel),
+        farbe: row.farbe != null ? String(row.farbe) : null,
+        icon: row.icon != null ? String(row.icon) : null,
+        beschreibung: row.beschreibung != null ? String(row.beschreibung) : null,
+        created_at: String(row.created_at || ''),
+      }
+      const existing = map.get(gegenstandId) || []
+      existing.push(tag)
+      map.set(gegenstandId, existing)
+    }
+    return map
+  } catch (error) {
+    console.error('Error fetching all tags for equipment:', error)
+    return new Map()
+  }
+}
+
+/**
+ * Batch: Tags für mehrere Ausrüstungsgegenstände laden
+ * Rückgabe: Map<gegenstand_id, Tag[]>
+ */
+export async function getTagsForEquipmentBatch(
+  db: D1Database,
+  gegenstandIds: string[]
+): Promise<Map<string, Tag[]>> {
+  if (gegenstandIds.length === 0) return new Map()
+  try {
+    const placeholders = gegenstandIds.map(() => '?').join(', ')
+    const result = await db
+      .prepare(`
+        SELECT at.gegenstand_id, t.id, t.titel, t.farbe, t.icon, t.beschreibung, t.created_at
+        FROM ausruestungsgegenstaende_tags at
+        JOIN tags t ON t.id = at.tag_id
+        WHERE at.gegenstand_id IN (${placeholders})
+        ORDER BY t.titel
+      `)
+      .bind(...gegenstandIds)
+      .all<{ gegenstand_id: string } & Tag>()
+    const rows = result.results || []
+    const map = new Map<string, Tag[]>()
+    for (const row of rows) {
+      const gegenstandId = String(row.gegenstand_id)
+      const tag: Tag = {
+        id: String(row.id),
+        titel: String(row.titel),
+        farbe: row.farbe != null ? String(row.farbe) : null,
+        icon: row.icon != null ? String(row.icon) : null,
+        beschreibung: row.beschreibung != null ? String(row.beschreibung) : null,
+        created_at: String(row.created_at || ''),
+      }
+      const existing = map.get(gegenstandId) || []
+      existing.push(tag)
+      map.set(gegenstandId, existing)
+    }
+    return map
+  } catch (error) {
+    console.error('Error fetching tags for equipment batch:', error)
+    return new Map()
+  }
+}
+
+/**
+ * Batch: Standard-Mitreisende für mehrere Ausrüstungsgegenstände laden
+ * Rückgabe: Map<gegenstand_id, string[]>
+ */
+export async function getStandardMitreisendeForEquipmentBatch(
+  db: D1Database,
+  gegenstandIds: string[]
+): Promise<Map<string, string[]>> {
+  if (gegenstandIds.length === 0) return new Map()
+  try {
+    const placeholders = gegenstandIds.map(() => '?').join(', ')
+    const result = await db
+      .prepare(`
+        SELECT gegenstand_id, mitreisender_id
+        FROM ausruestungsgegenstaende_standard_mitreisende
+        WHERE gegenstand_id IN (${placeholders})
+      `)
+      .bind(...gegenstandIds)
+      .all<{ gegenstand_id: string; mitreisender_id: string }>()
+    const rows = result.results || []
+    const map = new Map<string, string[]>()
+    for (const row of rows) {
+      const gegenstandId = String(row.gegenstand_id)
+      const existing = map.get(gegenstandId) || []
+      existing.push(String(row.mitreisender_id))
+      map.set(gegenstandId, existing)
+    }
+    return map
+  } catch (error) {
+    console.error('Error fetching standard mitreisende for equipment batch:', error)
+    return new Map()
   }
 }
 

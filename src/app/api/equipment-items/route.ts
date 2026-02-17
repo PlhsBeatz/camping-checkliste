@@ -7,6 +7,7 @@ import {
   updateEquipmentItem,
   deleteEquipmentItem,
   getTagsForEquipment,
+  getAllTagsForEquipment,
   CloudflareEnv,
 } from '@/lib/db'
 
@@ -54,15 +55,12 @@ export async function GET(request: NextRequest) {
       
       return NextResponse.json({ success: true, data: item })
     } else {
-      // Get all equipment items with tags
+      // Get all equipment items with tags (Batch-Loading)
       const items = await getEquipmentItems(db)
-      
-      // Load tags for each item
+      const tagsMap = await getAllTagsForEquipment(db)
       for (const item of items) {
-        const tags = await getTagsForEquipment(db, item.id)
-        item.tags = tags
+        item.tags = tagsMap.get(item.id) || []
       }
-      
       return NextResponse.json({ success: true, data: items })
     }
   } catch (error: unknown) {

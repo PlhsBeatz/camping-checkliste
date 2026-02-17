@@ -186,21 +186,19 @@ export function CategoryManager({ categories, mainCategories, onRefresh, openNew
   )
 
   const [mainCategoryForm, setMainCategoryForm] = useState({
-    titel: '',
-    reihenfolge: ''
+    titel: ''
   })
 
   const [categoryForm, setCategoryForm] = useState({
     titel: '',
-    hauptkategorieId: '',
-    reihenfolge: ''
+    hauptkategorieId: ''
   })
 
   // FAB-Trigger: Von außen (z.B. Klick auf FAB) Dialog für neue Hauptkategorie öffnen
   useEffect(() => {
     if (openNewMainCategoryTrigger) {
       setEditingMainCategory(null)
-      setMainCategoryForm({ titel: '', reihenfolge: '' })
+      setMainCategoryForm({ titel: '' })
       setShowMainCategoryDialog(true)
       onOpenNewMainCategoryConsumed?.()
     }
@@ -212,6 +210,10 @@ export function CategoryManager({ categories, mainCategories, onRefresh, openNew
       return
     }
 
+    const nextReihenfolge = mainCategories.length > 0
+      ? Math.max(...mainCategories.map(m => m.reihenfolge)) + 1
+      : 0
+
     setIsLoading(true)
     try {
       const res = await fetch('/api/main-categories', {
@@ -219,13 +221,13 @@ export function CategoryManager({ categories, mainCategories, onRefresh, openNew
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           titel: mainCategoryForm.titel,
-          reihenfolge: mainCategoryForm.reihenfolge ? parseInt(mainCategoryForm.reihenfolge) : undefined
+          reihenfolge: nextReihenfolge
         })
       })
       const data = (await res.json()) as ApiResponse<unknown>
       if (data.success) {
         setShowMainCategoryDialog(false)
-        setMainCategoryForm({ titel: '', reihenfolge: '' })
+        setMainCategoryForm({ titel: '' })
         onRefresh()
       } else {
         alert('Fehler: ' + (data.error ?? 'Unbekannt'))
@@ -252,14 +254,14 @@ export function CategoryManager({ categories, mainCategories, onRefresh, openNew
         body: JSON.stringify({
           id: editingMainCategory.id,
           titel: mainCategoryForm.titel,
-          reihenfolge: mainCategoryForm.reihenfolge ? parseInt(mainCategoryForm.reihenfolge) : undefined
+          reihenfolge: editingMainCategory.reihenfolge
         })
       })
       const data = (await res.json()) as ApiResponse<unknown>
       if (data.success) {
         setShowMainCategoryDialog(false)
         setEditingMainCategory(null)
-        setMainCategoryForm({ titel: '', reihenfolge: '' })
+        setMainCategoryForm({ titel: '' })
         onRefresh()
       } else {
         alert('Fehler: ' + (data.error ?? 'Unbekannt'))
@@ -302,6 +304,11 @@ export function CategoryManager({ categories, mainCategories, onRefresh, openNew
       return
     }
 
+    const subCats = categories.filter(c => c.hauptkategorie_id === categoryForm.hauptkategorieId)
+    const nextReihenfolge = subCats.length > 0
+      ? Math.max(...subCats.map(c => c.reihenfolge)) + 1
+      : 0
+
     setIsLoading(true)
     try {
       const res = await fetch('/api/categories', {
@@ -310,13 +317,13 @@ export function CategoryManager({ categories, mainCategories, onRefresh, openNew
         body: JSON.stringify({
           titel: categoryForm.titel,
           hauptkategorieId: categoryForm.hauptkategorieId,
-          reihenfolge: categoryForm.reihenfolge ? parseInt(categoryForm.reihenfolge) : undefined
+          reihenfolge: nextReihenfolge
         })
       })
       const data = (await res.json()) as ApiResponse<unknown>
       if (data.success) {
         setShowCategoryDialog(false)
-        setCategoryForm({ titel: '', hauptkategorieId: '', reihenfolge: '' })
+        setCategoryForm({ titel: '', hauptkategorieId: '' })
         onRefresh()
       } else {
         alert('Fehler: ' + (data.error ?? 'Unbekannt'))
@@ -344,14 +351,14 @@ export function CategoryManager({ categories, mainCategories, onRefresh, openNew
           id: editingCategory.id,
           titel: categoryForm.titel,
           hauptkategorieId: categoryForm.hauptkategorieId || undefined,
-          reihenfolge: categoryForm.reihenfolge ? parseInt(categoryForm.reihenfolge) : undefined
+          reihenfolge: editingCategory.reihenfolge
         })
       })
       const data = (await res.json()) as ApiResponse<unknown>
       if (data.success) {
         setShowCategoryDialog(false)
         setEditingCategory(null)
-        setCategoryForm({ titel: '', hauptkategorieId: '', reihenfolge: '' })
+        setCategoryForm({ titel: '', hauptkategorieId: '' })
         onRefresh()
       } else {
         alert('Fehler: ' + (data.error ?? 'Unbekannt'))
@@ -391,8 +398,7 @@ export function CategoryManager({ categories, mainCategories, onRefresh, openNew
   const openEditMainCategory = (mainCategory: MainCategory) => {
     setEditingMainCategory(mainCategory)
     setMainCategoryForm({
-      titel: mainCategory.titel,
-      reihenfolge: mainCategory.reihenfolge.toString()
+      titel: mainCategory.titel
     })
     setShowMainCategoryDialog(true)
   }
@@ -401,15 +407,14 @@ export function CategoryManager({ categories, mainCategories, onRefresh, openNew
     setEditingCategory(category)
     setCategoryForm({
       titel: category.titel,
-      hauptkategorieId: category.hauptkategorie_id,
-      reihenfolge: category.reihenfolge.toString()
+      hauptkategorieId: category.hauptkategorie_id
     })
     setShowCategoryDialog(true)
   }
 
   const openNewCategory = (mainCategoryId: string) => {
     setEditingCategory(null)
-    setCategoryForm({ titel: '', hauptkategorieId: mainCategoryId, reihenfolge: '' })
+    setCategoryForm({ titel: '', hauptkategorieId: mainCategoryId })
     setShowCategoryDialog(true)
   }
 
@@ -559,16 +564,6 @@ export function CategoryManager({ categories, mainCategories, onRefresh, openNew
                 placeholder="z.B. Campingausrüstung"
               />
             </div>
-            <div>
-              <Label htmlFor="main-cat-order">Reihenfolge</Label>
-              <Input
-                id="main-cat-order"
-                type="number"
-                value={mainCategoryForm.reihenfolge}
-                onChange={(e) => setMainCategoryForm({ ...mainCategoryForm, reihenfolge: e.target.value })}
-                placeholder="z.B. 1"
-              />
-            </div>
             <Button
               onClick={editingMainCategory ? handleUpdateMainCategory : handleCreateMainCategory}
               disabled={isLoading}
@@ -613,16 +608,6 @@ export function CategoryManager({ categories, mainCategories, onRefresh, openNew
                   ))}
                 </SelectContent>
               </Select>
-            </div>
-            <div>
-              <Label htmlFor="cat-order">Reihenfolge</Label>
-              <Input
-                id="cat-order"
-                type="number"
-                value={categoryForm.reihenfolge}
-                onChange={(e) => setCategoryForm({ ...categoryForm, reihenfolge: e.target.value })}
-                placeholder="z.B. 1"
-              />
             </div>
             <Button
               onClick={editingCategory ? handleUpdateCategory : handleCreateCategory}
