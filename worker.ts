@@ -54,7 +54,8 @@ export default {
 
     // Equipment-API cachen (reduziert Worker-Ressourcen, Error 1102)
     if (isCachedEquipmentRequest(request, url)) {
-      const cache = caches.default
+      // Cloudflare-spezifisch: caches.default (nicht im Standard CacheStorage-Typ)
+      const cache = (caches as unknown as { default: Cache }).default
       const cached = await cache.match(request)
       if (cached) {
         return cached
