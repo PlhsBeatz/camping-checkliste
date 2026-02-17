@@ -7,7 +7,7 @@ import { PackingListGenerator } from '@/components/packing-list-generator'
 import { NavigationSidebar } from '@/components/navigation-sidebar'
 import { PackingSettingsSidebar } from '@/components/packing-settings-sidebar'
 import { Plus, Sparkles, Menu, Search, Users } from 'lucide-react'
-import { useState, useEffect, Suspense, useMemo, useCallback } from 'react'
+import { useState, useEffect, Suspense, useMemo, useCallback, useRef } from 'react'
 import { Vacation, PackingItem, TransportVehicle, Mitreisender, EquipmentItem, Category, MainCategory } from '@/lib/db'
 import type { ApiResponse } from '@/lib/api-types'
 import { ResponsiveModal } from '@/components/ui/responsive-modal'
@@ -131,20 +131,26 @@ function HomeContent() {
     fetchVacations()
   }, [urlVacationId, selectedVacationId])
 
+  // Versionszähler: veraltete Fetch-Antworten ignorieren (verhindert Race bei schnellem Abhaken)
+  const fetchPackingVersionRef = useRef(0)
+
   // Fetch Packing Items when vacation changes (mit Offline-Cache)
   const fetchPackingItems = useCallback(async () => {
     if (!selectedVacationId) return
+    const myVersion = ++fetchPackingVersionRef.current
     try {
       const res = await fetch(`/api/packing-items?vacationId=${selectedVacationId}`)
       const data = (await res.json()) as ApiResponse<PackingItem[]>
+      // Nur anwenden wenn keine neuere Abfrage gestartet wurde (Race vermeiden)
+      if (myVersion !== fetchPackingVersionRef.current) return
       if (data.success && data.data) {
         setPackingItems(data.data)
         await cachePackingItems(selectedVacationId, data.data)
       }
     } catch (error) {
       console.error('Failed to fetch packing items:', error)
+      if (myVersion !== fetchPackingVersionRef.current) return
       // Nur bei Offline Fallback: Bei Online würde alter Cache optimistische Updates überschreiben
-      // (z.B. nach Toggle → packing-list-changed → GET schlägt fehl → Checkbox würde zurückspringen)
       if (typeof navigator !== 'undefined' && !navigator.onLine) {
         const cached = await getCachedPackingItems(selectedVacationId)
         if (cached.length > 0) {

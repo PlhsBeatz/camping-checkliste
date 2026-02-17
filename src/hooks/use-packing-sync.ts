@@ -2,10 +2,14 @@
 
 import { useEffect, useRef } from 'react'
 
+/** Debounce-Verzögerung für Sync-Updates (verhindert Flackern bei schnellem Abhaken) */
+const SYNC_DEBOUNCE_MS = 450
+
 /**
  * WebSocket-Hook für Echtzeit-Sync der Packliste via Durable Object.
  * Verbindet sich mit dem PackingSync-DO und löst onUpdate aus, wenn
  * Änderungen von anderen Clients eintreffen.
+ * Debounced, um bei schnellem Abhaken mehrerer Einträge Race Conditions zu vermeiden.
  */
 export function usePackingSync(
   vacationId: string | null,
@@ -23,6 +27,15 @@ export function usePackingSync(
 
     let ws: WebSocket | null = null
     let reconnectTimeout: ReturnType<typeof setTimeout>
+    let debounceTimeout: ReturnType<typeof setTimeout> | null = null
+
+    const scheduleUpdate = () => {
+      if (debounceTimeout) clearTimeout(debounceTimeout)
+      debounceTimeout = setTimeout(() => {
+        debounceTimeout = null
+        onUpdateRef.current()
+      }, SYNC_DEBOUNCE_MS)
+    }
 
     const connect = () => {
       try {
@@ -31,7 +44,7 @@ export function usePackingSync(
           try {
             const data = JSON.parse(event.data as string) as { type?: string }
             if (data?.type === 'packing-list-changed') {
-              onUpdateRef.current()
+              scheduleUpdate()
             }
           } catch {
             // Kein JSON – ignorieren
@@ -55,6 +68,7 @@ export function usePackingSync(
 
     return () => {
       clearTimeout(reconnectTimeout)
+      if (debounceTimeout) clearTimeout(debounceTimeout)
       ws?.close()
     }
   }, [vacationId])
