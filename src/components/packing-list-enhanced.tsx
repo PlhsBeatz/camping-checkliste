@@ -327,17 +327,13 @@ export function PackingList({
   const [activeMainCategory, setActiveMainCategory] = useState<string>('');
 
   // Prüft ob ein Eintrag im aktuellen Profil sichtbar ist
-  const isItemVisibleForProfile = (item: DBPackingItem) => {
-    if (!selectedProfile) return true;
-    if (item.mitreisenden_typ === 'pauschal') return true;
-    return item.mitreisende?.some(m => m.mitreisender_id === selectedProfile) ?? false;
-  };
-
   // Gefilterte Einträge: Anzeige-Modus + Profil
   const visibleItems = useMemo(() => {
     return items.filter(item => {
       if (listDisplayMode === 'packliste' && item.status === 'Immer gepackt') return false;
-      return isItemVisibleForProfile(item);
+      if (!selectedProfile) return true;
+      if (item.mitreisenden_typ === 'pauschal') return true;
+      return item.mitreisende?.some(m => m.mitreisender_id === selectedProfile) ?? false;
     });
   }, [items, listDisplayMode, selectedProfile]);
 

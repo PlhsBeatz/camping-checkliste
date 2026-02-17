@@ -59,14 +59,6 @@ export const EquipmentTable = React.memo(({
     return category?.titel || 'Unbekannt'
   }, [categories])
 
-  // Get main category name by category ID
-  const getMainCategoryName = useCallback((categoryId: string) => {
-    const category = categories.find(c => c.id === categoryId)
-    if (!category) return 'Unbekannt'
-    const mainCategory = mainCategories.find(mc => mc.id === category.hauptkategorie_id)
-    return mainCategory?.titel || 'Unbekannt'
-  }, [categories, mainCategories])
-
   // Get main category ID by category ID
   const getMainCategoryId = useCallback((categoryId: string) => {
     const category = categories.find(c => c.id === categoryId)
