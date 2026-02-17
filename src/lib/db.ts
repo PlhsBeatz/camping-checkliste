@@ -350,7 +350,7 @@ export async function getPackingItems(db: D1Database, vacationId: string): Promi
     const ids = rows.map((r) => String(r.id))
 
     // Batch: alle Mitreisende-Zuordnungen in einer Query
-    let mitreisendeByEintrag = new Map<string, Array<{ mitreisender_id: string; mitreisender_name: string; gepackt: boolean; anzahl?: number }>>()
+    const mitreisendeByEintrag = new Map<string, Array<{ mitreisender_id: string; mitreisender_name: string; gepackt: boolean; anzahl?: number }>>()
     if (ids.length > 0) {
       const placeholders = ids.map(() => '?').join(', ')
       const mitResult = await db
