@@ -1,6 +1,5 @@
 'use client'
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { NavigationSidebar } from '@/components/navigation-sidebar'
 import { TagManager } from '@/components/tag-manager'
@@ -73,21 +72,13 @@ export default function TagsPage() {
             </div>
           </div>
 
-          {/* Tag Manager */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Tag-Verwaltung</CardTitle>
-              <CardDescription>
-                Erstellen und verwalten Sie Tags zur Kategorisierung Ihrer Ausrüstung
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <TagManager 
-                tags={tags} 
-                onRefresh={handleRefresh} 
-              />
-            </CardContent>
-          </Card>
+          {/* Tag Manager - direkt im Container, keine doppelte Verschachtelung */}
+          <div className="mt-4 md:mt-6 border rounded-lg p-4 md:p-6 bg-muted/30">
+            <TagManager 
+              tags={tags} 
+              onRefresh={handleRefresh} 
+            />
+          </div>
         </div>
       </div>
     </div>

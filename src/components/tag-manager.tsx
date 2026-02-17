@@ -4,8 +4,13 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Edit2, Trash2, Plus, Tag as TagIcon } from 'lucide-react'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { MoreVertical, Pencil, Plus, Trash2, Tag as TagIcon } from 'lucide-react'
 import { Tag } from '@/lib/db'
 import type { ApiResponse } from '@/lib/api-types'
 
@@ -149,94 +154,83 @@ export function TagManager({ tags, onRefresh }: TagManagerProps) {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h2 className="text-2xl font-bold">Tags verwalten</h2>
-          <p className="text-muted-foreground">
-            Erstellen Sie Tags zur Kategorisierung Ihrer Ausrüstungsgegenstände
-          </p>
+    <div className="relative">
+      {/* Tags Grid - direkt im übergeordneten Container */}
+      {tags.length === 0 ? (
+        <p className="text-sm text-muted-foreground text-center py-8">
+          Noch keine Tags vorhanden. Erstellen Sie Ihren ersten Tag!
+        </p>
+      ) : (
+        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+          {tags.map((tag) => (
+            <div
+              key={tag.id}
+              className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50"
+              style={{ borderLeftWidth: '4px', borderLeftColor: tag.farbe || '#3b82f6' }}
+            >
+              <div className="flex items-center gap-3 flex-1 min-w-0">
+                <div
+                  className="h-8 w-8 rounded-full flex items-center justify-center flex-shrink-0"
+                  style={{ backgroundColor: tag.farbe || '#3b82f6' }}
+                >
+                  {tag.icon ? (
+                    <span className="text-white text-sm">{tag.icon}</span>
+                  ) : (
+                    <TagIcon className="h-4 w-4 text-white" />
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium truncate">{tag.titel}</p>
+                  {tag.beschreibung && (
+                    <p className="text-xs text-muted-foreground truncate">{tag.beschreibung}</p>
+                  )}
+                </div>
+              </div>
+              <div className="ml-2">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="sm" className="h-7 w-7 min-w-7 p-0">
+                      <MoreVertical className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem
+                      onSelect={(e) => {
+                        e.preventDefault()
+                        openEdit(tag)
+                      }}
+                    >
+                      <Pencil className="h-4 w-4 mr-2" />
+                      Bearbeiten
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onSelect={(e) => {
+                        e.preventDefault()
+                        handleDelete(tag.id)
+                      }}
+                      className="text-destructive"
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Löschen
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            </div>
+          ))}
         </div>
-        <Button onClick={openNew}>
-          <Plus className="h-4 w-4 mr-2" />
-          Neuer Tag
+      )}
+
+      {/* FAB: Neuer Tag - wie auf Ausrüstungsseite */}
+      <div className="fixed bottom-6 right-6 z-30">
+        <Button
+          size="icon"
+          onClick={openNew}
+          className="h-14 w-14 rounded-full shadow-lg hover:shadow-xl transition-shadow bg-[rgb(45,79,30)] hover:bg-[rgb(45,79,30)]/90 text-white aspect-square p-0"
+        >
+          <Plus className="h-6 w-6" strokeWidth={2.5} />
         </Button>
       </div>
-
-      {/* Statistics */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-sm font-medium text-muted-foreground">Gesamt</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="text-2xl font-bold">{tags.length}</div>
-          <p className="text-xs text-muted-foreground mt-1">
-            Tags für Packlisten-Generierung
-          </p>
-        </CardContent>
-      </Card>
-
-      {/* Tags Grid */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Alle Tags</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {tags.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-8">
-              Noch keine Tags vorhanden. Erstellen Sie Ihren ersten Tag!
-            </p>
-          ) : (
-            <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-              {tags.map((tag) => (
-                <div
-                  key={tag.id}
-                  className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50"
-                  style={{ borderLeftWidth: '4px', borderLeftColor: tag.farbe || '#3b82f6' }}
-                >
-                  <div className="flex items-center gap-3 flex-1 min-w-0">
-                    <div
-                      className="h-8 w-8 rounded-full flex items-center justify-center flex-shrink-0"
-                      style={{ backgroundColor: tag.farbe || '#3b82f6' }}
-                    >
-                      {tag.icon ? (
-                        <span className="text-white text-sm">{tag.icon}</span>
-                      ) : (
-                        <TagIcon className="h-4 w-4 text-white" />
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium truncate">{tag.titel}</p>
-                      {tag.beschreibung && (
-                        <p className="text-xs text-muted-foreground truncate">{tag.beschreibung}</p>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex gap-1 ml-2">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => openEdit(tag)}
-                      className="h-8 w-8 p-0"
-                    >
-                      <Edit2 className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleDelete(tag.id)}
-                      className="h-8 w-8 p-0"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
 
       {/* Create/Edit Dialog */}
       <ResponsiveModal
