@@ -1,11 +1,33 @@
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragStartEvent,
+} from '@dnd-kit/core'
+import {
+  arrayMove,
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import { ResponsiveModal } from '@/components/ui/responsive-modal'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Edit2, Trash2, Plus, FolderOpen } from 'lucide-react'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { Plus, MoreVertical, Pencil, Trash2, GripVertical } from 'lucide-react'
 import { Category, MainCategory } from '@/lib/db'
 import type { ApiResponse } from '@/lib/api-types'
 
@@ -13,18 +35,153 @@ interface CategoryWithMain extends Category {
   hauptkategorie_titel: string
 }
 
+type MainCategoryWithSubs = MainCategory & { categories: CategoryWithMain[] }
+
+function SortableSubcategoryRow({
+  cat,
+  onEdit,
+  onDelete,
+}: {
+  cat: CategoryWithMain
+  onEdit: () => void
+  onDelete: () => void
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: cat.id })
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  }
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className="flex items-center gap-2 py-2 px-3 rounded-md hover:bg-muted/50"
+    >
+      <div
+        {...attributes}
+        {...listeners}
+        className="flex items-center justify-center w-6 h-6 text-muted-foreground/70 cursor-grab active:cursor-grabbing touch-manipulation shrink-0"
+        style={{ touchAction: 'manipulation' }}
+        aria-label="Zum Sortieren ziehen"
+      >
+        <GripVertical className="h-4 w-4" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium">{cat.titel}</p>
+      </div>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0">
+            <MoreVertical className="h-4 w-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem onSelect={(e) => { e.preventDefault(); onEdit() }}>
+            <Pencil className="h-4 w-4 mr-2" />
+            Bearbeiten
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={(e) => { e.preventDefault(); onDelete() }} className="text-destructive focus:text-destructive">
+            <Trash2 className="h-4 w-4 mr-2" />
+            Löschen
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+  )
+}
+
+function SortableMainCategoryRow({
+  mainCat,
+  isCompact,
+  onEdit,
+  onDelete,
+  onAddSub,
+  children,
+}: {
+  mainCat: MainCategoryWithSubs
+  isCompact: boolean
+  onEdit: () => void
+  onDelete: () => void
+  onAddSub: () => void
+  children: React.ReactNode
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: mainCat.id })
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  }
+
+  return (
+    <div ref={setNodeRef} style={style} className="rounded-lg border bg-muted/30 overflow-hidden">
+      <div className="flex items-center gap-2 p-3">
+        <div
+          {...attributes}
+          {...listeners}
+          className="flex items-center justify-center w-8 h-8 text-muted-foreground cursor-grab active:cursor-grabbing touch-manipulation shrink-0"
+          style={{ touchAction: 'manipulation' }}
+          aria-label="Zum Sortieren ziehen"
+        >
+          <GripVertical className="h-5 w-5" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="font-semibold text-[rgb(45,79,30)]">{mainCat.titel}</p>
+        </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
+              <MoreVertical className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onSelect={(e) => { e.preventDefault(); onEdit() }}>
+              <Pencil className="h-4 w-4 mr-2" />
+              Bearbeiten
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={(e) => { e.preventDefault(); onDelete() }} className="text-destructive focus:text-destructive">
+              <Trash2 className="h-4 w-4 mr-2" />
+              Löschen
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+      {!isCompact && (
+        <div className="px-3 pb-2 space-y-1">
+          {children}
+          <button type="button" onClick={onAddSub} className="text-sm text-muted-foreground hover:text-foreground py-2 transition-colors">
+            + Unterkategorie hinzufügen
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 interface CategoryManagerProps {
   categories: CategoryWithMain[]
   mainCategories: MainCategory[]
   onRefresh: () => void
+  /** Wenn true, wird der Dialog für neue Hauptkategorie geöffnet (z.B. von FAB); nach Öffnen wird onOpenNewMainCategoryConsumed aufgerufen */
+  openNewMainCategoryTrigger?: boolean
+  onOpenNewMainCategoryConsumed?: () => void
 }
 
-export function CategoryManager({ categories, mainCategories, onRefresh }: CategoryManagerProps) {
+export function CategoryManager({ categories, mainCategories, onRefresh, openNewMainCategoryTrigger, onOpenNewMainCategoryConsumed }: CategoryManagerProps) {
   const [showMainCategoryDialog, setShowMainCategoryDialog] = useState(false)
   const [showCategoryDialog, setShowCategoryDialog] = useState(false)
   const [editingMainCategory, setEditingMainCategory] = useState<MainCategory | null>(null)
   const [editingCategory, setEditingCategory] = useState<CategoryWithMain | null>(null)
   const [isLoading, setIsLoading] = useState(false)
+  const [draggingMainId, setDraggingMainId] = useState<string | null>(null)
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 5 } })
+  )
 
   const [mainCategoryForm, setMainCategoryForm] = useState({
     titel: '',
@@ -36,6 +193,16 @@ export function CategoryManager({ categories, mainCategories, onRefresh }: Categ
     hauptkategorieId: '',
     reihenfolge: ''
   })
+
+  // FAB-Trigger: Von außen (z.B. Klick auf FAB) Dialog für neue Hauptkategorie öffnen
+  useEffect(() => {
+    if (openNewMainCategoryTrigger) {
+      setEditingMainCategory(null)
+      setMainCategoryForm({ titel: '', reihenfolge: '' })
+      setShowMainCategoryDialog(true)
+      onOpenNewMainCategoryConsumed?.()
+    }
+  }, [openNewMainCategoryTrigger, onOpenNewMainCategoryConsumed])
 
   const handleCreateMainCategory = async () => {
     if (!mainCategoryForm.titel) {
@@ -244,117 +411,140 @@ export function CategoryManager({ categories, mainCategories, onRefresh }: Categ
     setShowMainCategoryDialog(true)
   }
 
-  const openNewCategory = () => {
+  const openNewCategory = (mainCategoryId: string) => {
     setEditingCategory(null)
-    setCategoryForm({ titel: '', hauptkategorieId: '', reihenfolge: '' })
+    setCategoryForm({ titel: '', hauptkategorieId: mainCategoryId, reihenfolge: '' })
     setShowCategoryDialog(true)
   }
 
-  // Group categories by main category
-  const categoriesByMain = mainCategories.map(main => ({
+  // Group categories by main category (sorted by reihenfolge)
+  const categoriesByMain: MainCategoryWithSubs[] = mainCategories.map(main => ({
     ...main,
-    categories: categories.filter(cat => cat.hauptkategorie_id === main.id)
+    categories: categories
+      .filter(cat => cat.hauptkategorie_id === main.id)
+      .sort((a, b) => a.reihenfolge - b.reihenfolge)
   }))
 
+  const handleDragStart = useCallback((event: DragStartEvent) => {
+    const mainIds = new Set(mainCategories.map(m => m.id))
+    if (mainIds.has(event.active.id as string)) {
+      setDraggingMainId(event.active.id as string)
+    }
+  }, [mainCategories])
+
+  const handleDragEnd = useCallback(async (event: DragEndEvent) => {
+    setDraggingMainId(null)
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+
+    const mainIds = new Set(mainCategories.map(m => m.id))
+
+    if (mainIds.has(active.id as string)) {
+      // Main category reorder
+      const oldIndex = mainCategories.findIndex(m => m.id === active.id)
+      const newIndex = mainCategories.findIndex(m => m.id === over.id)
+      if (oldIndex === -1 || newIndex === -1) return
+
+      const reordered = arrayMove([...mainCategories], oldIndex, newIndex)
+      setIsLoading(true)
+      try {
+        for (let i = 0; i < reordered.length; i++) {
+          const mc = reordered[i]
+          await fetch('/api/main-categories', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: mc.id, titel: mc.titel, reihenfolge: i })
+          })
+        }
+        onRefresh()
+      } catch (e) {
+        console.error('Failed to reorder main categories:', e)
+        onRefresh()
+      } finally {
+        setIsLoading(false)
+      }
+    } else {
+      // Subcategory reorder - find which main category
+      const mainCat = categoriesByMain.find(m => m.categories.some(c => c.id === active.id))
+      if (!mainCat) return
+
+      const subCats = mainCat.categories
+      const oldIndex = subCats.findIndex(c => c.id === active.id)
+      const newIndex = subCats.findIndex(c => c.id === over.id)
+      if (oldIndex === -1 || newIndex === -1) return
+
+      const reordered = arrayMove([...subCats], oldIndex, newIndex)
+      setIsLoading(true)
+      try {
+        for (let i = 0; i < reordered.length; i++) {
+          const cat = reordered[i]
+          await fetch('/api/categories', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: cat.id, titel: cat.titel, hauptkategorieId: mainCat.id, reihenfolge: i })
+          })
+        }
+        onRefresh()
+      } catch (e) {
+        console.error('Failed to reorder categories:', e)
+        onRefresh()
+      } finally {
+        setIsLoading(false)
+      }
+    }
+  }, [mainCategories, categoriesByMain, onRefresh])
+
   return (
-    <div className="space-y-6">
-      {/* Main Categories Section */}
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
-          <CardTitle className="text-lg">Hauptkategorien</CardTitle>
-          <Button onClick={openNewMainCategory} size="sm">
-            <Plus className="h-4 w-4 mr-2" />
-            Neue Hauptkategorie
-          </Button>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-2">
-            {mainCategories.map((mainCat) => (
-              <div key={mainCat.id} className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50">
-                <div className="flex items-center gap-3">
-                  <FolderOpen className="h-5 w-5 text-muted-foreground" />
-                  <div>
-                    <p className="font-medium">{mainCat.titel}</p>
-                    <p className="text-xs text-muted-foreground">Reihenfolge: {mainCat.reihenfolge}</p>
-                  </div>
-                </div>
-                <div className="flex gap-2">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => openEditMainCategory(mainCat)}
-                    className="h-8 w-8 p-0"
-                  >
-                    <Edit2 className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleDeleteMainCategory(mainCat.id)}
-                    className="h-8 w-8 p-0"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+    <>
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
+    >
+      <div className="space-y-4">
+        {/* Main categories – beim Ziehen einer Hauptkategorie werden Unterkategorien ausgeblendet */}
+        <SortableContext
+          items={mainCategories.map(m => m.id)}
+          strategy={verticalListSortingStrategy}
+        >
+          {categoriesByMain.map((mainCat) => (
+            <SortableMainCategoryRow
+              key={mainCat.id}
+              mainCat={mainCat}
+              isCompact={!!draggingMainId}
+              onEdit={() => openEditMainCategory(mainCat)}
+              onDelete={() => handleDeleteMainCategory(mainCat.id)}
+              onAddSub={() => openNewCategory(mainCat.id)}
+            >
+              {mainCat.categories.length === 0 ? (
+                <p className="text-sm text-muted-foreground italic py-2">Keine Unterkategorien</p>
+              ) : (
+                <SortableContext
+                  items={mainCat.categories.map(c => c.id)}
+                  strategy={verticalListSortingStrategy}
+                >
+                  {mainCat.categories.map((cat) => (
+                    <SortableSubcategoryRow
+                      key={cat.id}
+                      cat={cat}
+                      onEdit={() => openEditCategory(cat)}
+                      onDelete={() => handleDeleteCategory(cat.id)}
+                    />
+                  ))}
+                </SortableContext>
+              )}
+            </SortableMainCategoryRow>
+          ))}
+        </SortableContext>
 
-      {/* Categories Section */}
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
-          <CardTitle className="text-lg">Kategorien</CardTitle>
-          <Button onClick={openNewCategory} size="sm">
-            <Plus className="h-4 w-4 mr-2" />
-            Neue Kategorie
-          </Button>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {categoriesByMain.map((mainCat) => (
-              <div key={mainCat.id}>
-                <h3 className="font-semibold text-sm text-muted-foreground mb-2">{mainCat.titel}</h3>
-                <div className="space-y-2 ml-4">
-                  {mainCat.categories.length === 0 ? (
-                    <p className="text-sm text-muted-foreground italic">Keine Kategorien</p>
-                  ) : (
-                    mainCat.categories.map((cat) => (
-                      <div key={cat.id} className="flex items-center justify-between p-2 border rounded hover:bg-muted/30">
-                        <div>
-                          <p className="text-sm font-medium">{cat.titel}</p>
-                          <p className="text-xs text-muted-foreground">Reihenfolge: {cat.reihenfolge}</p>
-                        </div>
-                        <div className="flex gap-2">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => openEditCategory(cat)}
-                            className="h-7 w-7 p-0"
-                          >
-                            <Edit2 className="h-3 w-3" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleDeleteCategory(cat.id)}
-                            className="h-7 w-7 p-0"
-                          >
-                            <Trash2 className="h-3 w-3" />
-                          </Button>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+        {mainCategories.length === 0 && (
+          <p className="text-sm text-muted-foreground text-center py-8">Noch keine Kategorien. Legen Sie über den + Button eine Hauptkategorie an.</p>
+        )}
+      </div>
+    </DndContext>
 
-      {/* Main Category Dialog */}
+    {/* Main Category Dialog */}
       <ResponsiveModal
         open={showMainCategoryDialog}
         onOpenChange={setShowMainCategoryDialog}
@@ -445,6 +635,6 @@ export function CategoryManager({ categories, mainCategories, onRefresh }: Categ
             </Button>
           </div>
       </ResponsiveModal>
-    </div>
+    </>
   )
 }

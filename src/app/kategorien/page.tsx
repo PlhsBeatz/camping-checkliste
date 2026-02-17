@@ -1,10 +1,9 @@
 'use client'
 
-import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { NavigationSidebar } from '@/components/navigation-sidebar'
 import { CategoryManager } from '@/components/category-manager'
-import { Menu } from 'lucide-react'
+import { Menu, Plus } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { Category, MainCategory } from '@/lib/db'
 import type { ApiResponse } from '@/lib/api-types'
@@ -18,6 +17,7 @@ export default function KategorienPage() {
   const [showNavSidebar, setShowNavSidebar] = useState(false)
   const [categories, setCategories] = useState<CategoryWithMain[]>([])
   const [mainCategories, setMainCategories] = useState<MainCategory[]>([])
+  const [openNewMainCategoryTrigger, setOpenNewMainCategoryTrigger] = useState(false)
 
   // Fetch Categories
   useEffect(() => {
@@ -97,16 +97,25 @@ export default function KategorienPage() {
           </div>
 
           {/* Category Manager */}
-          <Card>
-            <CardContent>
-              <CategoryManager
-                categories={categories}
-                mainCategories={mainCategories}
-                onRefresh={handleRefresh}
-              />
-            </CardContent>
-          </Card>
+          <CategoryManager
+            categories={categories}
+            mainCategories={mainCategories}
+            onRefresh={handleRefresh}
+            openNewMainCategoryTrigger={openNewMainCategoryTrigger}
+            onOpenNewMainCategoryConsumed={() => setOpenNewMainCategoryTrigger(false)}
+          />
         </div>
+      </div>
+
+      {/* FAB: Neue Hauptkategorie */}
+      <div className="fixed bottom-6 right-6 z-30">
+        <Button
+          size="icon"
+          onClick={() => setOpenNewMainCategoryTrigger(true)}
+          className="h-14 w-14 rounded-full shadow-lg hover:shadow-xl transition-shadow bg-[rgb(45,79,30)] hover:bg-[rgb(45,79,30)]/90 text-white aspect-square p-0"
+        >
+          <Plus className="h-6 w-6" strokeWidth={2.5} />
+        </Button>
       </div>
     </div>
   )
