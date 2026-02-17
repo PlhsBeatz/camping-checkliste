@@ -143,9 +143,13 @@ function HomeContent() {
       }
     } catch (error) {
       console.error('Failed to fetch packing items:', error)
-      const cached = await getCachedPackingItems(selectedVacationId)
-      if (cached.length > 0) {
-        setPackingItems(cached)
+      // Nur bei Offline Fallback: Bei Online würde alter Cache optimistische Updates überschreiben
+      // (z.B. nach Toggle → packing-list-changed → GET schlägt fehl → Checkbox würde zurückspringen)
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        const cached = await getCachedPackingItems(selectedVacationId)
+        if (cached.length > 0) {
+          setPackingItems(cached)
+        }
       }
     }
   }, [selectedVacationId])
@@ -332,35 +336,33 @@ function HomeContent() {
     const vacationMitreisendeIds = vacationMitreisende.map(m => m.id)
 
     try {
-      const results = await Promise.allSettled(
-        toAdd.map((item) => {
-          let mitreisendeIds: string[] | undefined
-          if (item.mitreisenden_typ === 'alle') {
-            mitreisendeIds = vacationMitreisendeIds
-          } else if (item.mitreisenden_typ === 'ausgewaehlte' && item.standard_mitreisende?.length) {
-            mitreisendeIds = item.standard_mitreisende
-          }
-          return fetch('/api/packing-items', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              vacationId: selectedVacationId,
-              gegenstandId: item.id,
-              anzahl: item.standard_anzahl ?? 1,
-              transportId: item.transport_id || null,
-              mitreisende: mitreisendeIds,
-            }),
-          })
-        })
-      )
+      const items = toAdd.map((item) => {
+        let mitreisendeIds: string[] | undefined
+        if (item.mitreisenden_typ === 'alle') {
+          mitreisendeIds = vacationMitreisendeIds
+        } else if (item.mitreisenden_typ === 'ausgewaehlte' && item.standard_mitreisende?.length) {
+          mitreisendeIds = item.standard_mitreisende
+        }
+        return {
+          gegenstandId: item.id,
+          anzahl: item.standard_anzahl ?? 1,
+          transportId: item.transport_id || null,
+          mitreisende: mitreisendeIds ?? [],
+        }
+      })
 
-      const failed = results.filter((r) => r.status === 'rejected' || (r.status === 'fulfilled' && !r.value.ok))
-      if (failed.length > 0) {
-        console.error('Some items failed to add:', failed)
+      const res = await fetch('/api/packing-items/batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ vacationId: selectedVacationId, items }),
+      })
+      const batchData = (await res.json()) as ApiResponse<{ added: number; total: number }>
+      if (!res.ok || !batchData.success) {
+        throw new Error(batchData.error ?? 'Batch-Anfrage fehlgeschlagen')
       }
 
-      const res = await fetch(`/api/packing-items?vacationId=${selectedVacationId}`)
-      const data = (await res.json()) as ApiResponse<PackingItem[]>
+      const refreshRes = await fetch(`/api/packing-items?vacationId=${selectedVacationId}`)
+      const data = (await refreshRes.json()) as ApiResponse<PackingItem[]>
       if (data.success && data.data) {
         setPackingItems(data.data)
       }
