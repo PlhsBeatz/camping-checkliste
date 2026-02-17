@@ -63,8 +63,8 @@ function SortableSubcategoryRow({
       <div
         {...attributes}
         {...listeners}
-        className="flex items-center justify-center w-6 h-6 text-muted-foreground/70 cursor-grab active:cursor-grabbing touch-manipulation shrink-0"
-        style={{ touchAction: 'manipulation' }}
+        className="flex items-center justify-center min-w-[44px] min-h-[44px] -my-1 text-muted-foreground/70 cursor-grab active:cursor-grabbing shrink-0"
+        style={{ touchAction: 'none' }}
         aria-label="Zum Sortieren ziehen"
       >
         <GripVertical className="h-4 w-4" />
@@ -122,8 +122,8 @@ function SortableMainCategoryRow({
         <div
           {...attributes}
           {...listeners}
-          className="flex items-center justify-center w-8 h-8 text-muted-foreground cursor-grab active:cursor-grabbing touch-manipulation shrink-0"
-          style={{ touchAction: 'manipulation' }}
+          className="flex items-center justify-center min-w-[44px] min-h-[44px] -ml-2 text-muted-foreground cursor-grab active:cursor-grabbing shrink-0"
+          style={{ touchAction: 'none' }}
           aria-label="Zum Sortieren ziehen"
         >
           <GripVertical className="h-5 w-5" />
@@ -178,9 +178,11 @@ export function CategoryManager({ categories, mainCategories, onRefresh, openNew
   const [isLoading, setIsLoading] = useState(false)
   const [draggingMainId, setDraggingMainId] = useState<string | null>(null)
 
+  // Touch vor Pointer: auf Mobilgeräten explizite Touch-Behandlung
+  // touch-action: none am Handle verhindert, dass Scroll das Drag-Gesteure übernimmt
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 5 } })
+    useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 8 } }),
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
   )
 
   const [mainCategoryForm, setMainCategoryForm] = useState({
