@@ -29,7 +29,12 @@ export async function GET(request: NextRequest) {
       item.standard_mitreisende = smMap.get(String(item.id)) || []
     }
 
-    return NextResponse.json({ success: true, data: items })
+    const res = NextResponse.json({ success: true, data: items })
+    res.headers.set(
+      'Cache-Control',
+      'public, max-age=60, s-maxage=60, stale-while-revalidate=120'
+    )
+    return res
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error)
     return NextResponse.json({ error: message }, { status: 500 })

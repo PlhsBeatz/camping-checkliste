@@ -61,7 +61,13 @@ export async function GET(request: NextRequest) {
       for (const item of items) {
         item.tags = tagsMap.get(item.id) || []
       }
-      return NextResponse.json({ success: true, data: items })
+      const res = NextResponse.json({ success: true, data: items })
+      // Cache am Edge (Worker) – reduziert CPU/Memory, vermeidet Error 1102
+      res.headers.set(
+        'Cache-Control',
+        'public, max-age=60, s-maxage=60, stale-while-revalidate=120'
+      )
+      return res
     }
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error)
