@@ -323,7 +323,7 @@ export async function deleteVacation(db: D1Database, id: string): Promise<boolea
 
 /**
  * Abrufen aller Packartikel für eine Urlaubsreise
- * Batch-Loading für Mitreisende (kein N+1)
+ * Mitreisende pro Eintrag (N+1) – bewährt, funktioniert mit D1
  */
 export async function getPackingItems(db: D1Database, vacationId: string): Promise<PackingItem[]> {
   try {
@@ -347,43 +347,28 @@ export async function getPackingItems(db: D1Database, vacationId: string): Promi
     `
     const result = await db.prepare(query).bind(vacationId).all<Record<string, unknown>>()
     const rows = result.results || []
-    const ids = rows.map((r) => String(r.id))
-
-    // Batch: alle Mitreisende-Zuordnungen in einer Query
-    const mitreisendeByEintrag = new Map<string, Array<{ mitreisender_id: string; mitreisender_name: string; gepackt: boolean; anzahl?: number }>>()
-    if (ids.length > 0) {
-      const placeholders = ids.map(() => '?').join(', ')
-      const mitResult = await db
-        .prepare(
-          `SELECT pem.packlisten_eintrag_id, pem.mitreisender_id, m.name as mitreisender_name, pem.gepackt, pem.anzahl
-           FROM packlisten_eintrag_mitreisende pem
-           JOIN mitreisende m ON pem.mitreisender_id = m.id
-           WHERE pem.packlisten_eintrag_id IN (${placeholders})
-           ORDER BY pem.packlisten_eintrag_id, m.name`
-        )
-        .bind(...ids)
-        .all<{ packlisten_eintrag_id: string; mitreisender_id: string; mitreisender_name: string; gepackt: number; anzahl?: number | null }>()
-      const mitRows = mitResult.results || []
-      for (const m of mitRows) {
-        const eid = String(m.packlisten_eintrag_id)
-        const arr = mitreisendeByEintrag.get(eid) || []
-        arr.push({
-          mitreisender_id: String(m.mitreisender_id),
-          mitreisender_name: String(m.mitreisender_name),
-          gepackt: !!m.gepackt,
-          anzahl: m.anzahl != null ? Number(m.anzahl) : undefined,
-        })
-        mitreisendeByEintrag.set(eid, arr)
-      }
-    }
 
     const items: PackingItem[] = []
     for (const item of rows) {
-      const id = String(item.id)
-      const mitreisende = mitreisendeByEintrag.get(id) || []
+      const mitreisendeResult = await db
+        .prepare(
+          `SELECT pem.mitreisender_id, m.name as mitreisender_name, pem.gepackt, pem.anzahl
+           FROM packlisten_eintrag_mitreisende pem
+           JOIN mitreisende m ON pem.mitreisender_id = m.id
+           WHERE pem.packlisten_eintrag_id = ?
+           ORDER BY m.name`
+        )
+        .bind(item.id)
+        .all<{ mitreisender_id: string; mitreisender_name: string; gepackt: number; anzahl?: number | null }>()
+      const mitreisende = (mitreisendeResult.results || []).map((m) => ({
+        mitreisender_id: m.mitreisender_id,
+        mitreisender_name: m.mitreisender_name,
+        gepackt: !!m.gepackt,
+        anzahl: m.anzahl != null ? Number(m.anzahl) : undefined,
+      }))
 
       items.push({
-        id,
+        id: String(item.id),
         packliste_id: String(item.packliste_id),
         gegenstand_id: String(item.gegenstand_id),
         anzahl: Number(item.anzahl),
