@@ -2,14 +2,13 @@
 
 import { useEffect, useRef } from 'react'
 
-/** Debounce-Verzögerung für Sync-Updates (verhindert Flackern bei schnellem Abhaken) */
-const SYNC_DEBOUNCE_MS = 450
+/** Kurzer Debounce nur um nahezu gleichzeitige Broadcasts zu bündeln (z.B. Batch-API) */
+const SYNC_DEBOUNCE_MS = 80
 
 /**
  * WebSocket-Hook für Echtzeit-Sync der Packliste via Durable Object.
  * Verbindet sich mit dem PackingSync-DO und löst onUpdate aus, wenn
  * Änderungen von anderen Clients eintreffen.
- * Debounced, um bei schnellem Abhaken mehrerer Einträge Race Conditions zu vermeiden.
  */
 export function usePackingSync(
   vacationId: string | null,
