@@ -245,7 +245,7 @@ export const EquipmentTable = React.memo(({
   })
 
   // Feste Spaltenbreiten für konsistente Darstellung (px), Actions-Spalte schmal
-  const gridCols = '220px 120px 90px 48px 130px 130px 220px 150px 48px 44px'
+  const gridCols = '220px 120px 90px 48px 133px 130px 220px 150px 48px 44px'
 
   // Spalten-Ausrichtung für saubere vertikale Linien (Header und Body identisch)
   const colAlign = {

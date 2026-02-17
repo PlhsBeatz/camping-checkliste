@@ -218,9 +218,6 @@ export function MitreisendeManager({ vacationId, onMitreisendeChange }: Mitreise
                   className="text-sm font-medium cursor-pointer"
                 >
                   {mitreisender.name}
-                  {mitreisender.is_default_member && (
-                    <span className="ml-2 text-xs text-yellow-600 font-normal">⭐ Standard</span>
-                  )}
                 </label>
               </div>
             </div>

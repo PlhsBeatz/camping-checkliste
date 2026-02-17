@@ -4,7 +4,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { NavigationSidebar } from '@/components/navigation-sidebar'
 import { MitreisendeManager } from '@/components/mitreisende-manager'
-import { Plus, Menu, Edit2, Trash2 } from 'lucide-react'
+import { Plus, Menu, MoreVertical, Pencil, Trash2 } from 'lucide-react'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { useState, useEffect } from 'react'
 import { Vacation, Mitreisender } from '@/lib/db'
 import type { ApiResponse } from '@/lib/api-types'
@@ -13,6 +19,16 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
 import { useRouter } from 'next/navigation'
+import { format } from 'date-fns'
+import { de } from 'date-fns/locale'
+import { Calendar as CalendarIcon } from 'lucide-react'
+import type { DateRange } from 'react-day-picker'
+import { Calendar } from '@/components/ui/calendar'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
 
 export default function UrlaubePage() {
   const router = useRouter()
@@ -269,7 +285,7 @@ export default function UrlaubePage() {
                       onChange={(e) => setNewVacationForm({ ...newVacationForm, land_region: e.target.value })}
                     />
                   </div>
-                  <div className="grid grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <Label htmlFor="abfahrtdatum">Abreisedatum</Label>
                       <Input
@@ -278,27 +294,91 @@ export default function UrlaubePage() {
                         value={newVacationForm.abfahrtdatum}
                         onChange={(e) => setNewVacationForm({ ...newVacationForm, abfahrtdatum: e.target.value })}
                       />
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Wann starten Sie von zuhause?
-                      </p>
                     </div>
-                    <div>
-                      <Label htmlFor="startdatum">Startdatum *</Label>
-                      <Input
-                        id="startdatum"
-                        type="date"
-                        value={newVacationForm.startdatum}
-                        onChange={(e) => setNewVacationForm({ ...newVacationForm, startdatum: e.target.value })}
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="enddatum">Enddatum *</Label>
-                      <Input
-                        id="enddatum"
-                        type="date"
-                        value={newVacationForm.enddatum}
-                        onChange={(e) => setNewVacationForm({ ...newVacationForm, enddatum: e.target.value })}
-                      />
+                    <div className="sm:col-span-2">
+                      <Label>Reisedatum *</Label>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            className={cn(
+                              'w-full justify-start text-left font-normal',
+                              !newVacationForm.startdatum && !newVacationForm.enddatum && 'text-muted-foreground'
+                            )}
+                          >
+                            <CalendarIcon className="mr-2 h-4 w-4" />
+                            {newVacationForm.startdatum && newVacationForm.enddatum ? (
+                              <>
+                                {format(new Date(newVacationForm.startdatum), 'EE, dd. MMM yyyy', { locale: de })} - {format(new Date(newVacationForm.enddatum), 'EE, dd. MMM yyyy', { locale: de })}
+                              </>
+                            ) : (
+                              <span>Start- und Enddatum wählen</span>
+                            )}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <Calendar
+                            mode="range"
+                            defaultMonth={
+                              newVacationForm.startdatum
+                                ? new Date(newVacationForm.startdatum)
+                                : new Date()
+                            }
+                            selected={
+                              newVacationForm.startdatum && newVacationForm.enddatum
+                                ? {
+                                    from: new Date(newVacationForm.startdatum),
+                                    to: new Date(newVacationForm.enddatum)
+                                  }
+                                : undefined
+                            }
+                            onSelect={(range: DateRange | undefined) => {
+                              if (range?.from) {
+                                setNewVacationForm((prev) => ({
+                                  ...prev,
+                                  startdatum: format(range.from!, 'yyyy-MM-dd'),
+                                  enddatum: range.to ? format(range.to, 'yyyy-MM-dd') : format(range.from!, 'yyyy-MM-dd')
+                                }))
+                              }
+                            }}
+                            locale={de}
+                            numberOfMonths={2}
+                          />
+                          <div className="flex gap-2 p-3 border-t bg-muted/30">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="flex-1 bg-[rgb(45,79,30)] text-white hover:bg-[rgb(45,79,30)]/90 hover:text-white border-[rgb(45,79,30)]"
+                              onClick={() => {
+                                const today = new Date()
+                                setNewVacationForm((prev) => ({
+                                  ...prev,
+                                  startdatum: format(today, 'yyyy-MM-dd'),
+                                  enddatum: format(today, 'yyyy-MM-dd')
+                                }))
+                              }}
+                            >
+                              Heute
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="flex-1 bg-[rgb(45,79,30)] text-white hover:bg-[rgb(45,79,30)]/90 hover:text-white border-[rgb(45,79,30)]"
+                              onClick={() => {
+                                setNewVacationForm((prev) => ({
+                                  ...prev,
+                                  startdatum: '',
+                                  enddatum: ''
+                                }))
+                              }}
+                            >
+                              Löschen
+                            </Button>
+                          </div>
+                        </PopoverContent>
+                      </Popover>
                     </div>
                   </div>
                   
@@ -345,29 +425,39 @@ export default function UrlaubePage() {
                           </div>
                         </CardDescription>
                       </div>
-                      <div className="flex gap-2">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleEditVacation(vacation)
-                          }}
-                        >
-                          <Edit2 className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleDeleteVacation(vacation.id)
-                          }}
-                          disabled={isLoading}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 w-8 p-0"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <MoreVertical className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                          <DropdownMenuItem
+                            onSelect={(e) => {
+                              e.preventDefault()
+                              handleEditVacation(vacation)
+                            }}
+                          >
+                            <Pencil className="h-4 w-4 mr-2" />
+                            Bearbeiten
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onSelect={(e) => {
+                              e.preventDefault()
+                              handleDeleteVacation(vacation.id)
+                            }}
+                            className="text-destructive"
+                          >
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Löschen
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
                   </CardHeader>
                   <CardContent>
@@ -388,10 +478,10 @@ export default function UrlaubePage() {
           </div>
         </div>
 
-        {/* FAB: Neuer Urlaub */}
+        {/* FAB: Neuer Urlaub - Plus-Symbol, runder Kreis wie Ausrüstung und Packliste */}
         <div className="fixed bottom-6 right-6 z-30">
           <Button
-            size="lg"
+            size="icon"
             onClick={() => {
               setEditingVacationId(null)
               setNewVacationForm({
@@ -406,9 +496,9 @@ export default function UrlaubePage() {
               setVacationMitreisende([])
               setShowNewVacationDialog(true)
             }}
-            className="h-14 w-14 rounded-full shadow-lg hover:shadow-xl transition-shadow bg-[rgb(45,79,30)] hover:bg-[rgb(45,79,30)]/90"
+            className="h-14 w-14 rounded-full shadow-lg hover:shadow-xl transition-shadow bg-[rgb(45,79,30)] hover:bg-[rgb(45,79,30)]/90 text-white aspect-square p-0"
           >
-            <Plus className="h-6 w-6" />
+            <Plus className="h-6 w-6" strokeWidth={2.5} />
           </Button>
         </div>
       </div>
