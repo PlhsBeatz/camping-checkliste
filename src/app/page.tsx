@@ -134,10 +134,9 @@ function HomeContent() {
   // Versionszähler: veraltete Fetch-Antworten ignorieren (verhindert Race bei schnellem Abhaken)
   const fetchPackingVersionRef = useRef(0)
 
-  // Nach lokaler Änderung: packing-list-changed kurz ignorieren (Optimistic Update ist korrekt,
-  // Refetch könnte partielle Daten liefern wenn Server-PUTs noch laufen)
-  const lastLocalMutationRef = useRef(0)
-  const PACKING_SYNC_SUPPRESS_MS = 4000
+  // Zähler ausstehender eigener Mutationen: Refetch nur wenn 0 (Änderung von anderem Gerät
+  // oder alle eigenen PUTs abgeschlossen – verhindert partielle Daten bei schnellem Abhaken)
+  const pendingMutationsRef = useRef(0)
 
   // Fetch Packing Items when vacation changes (mit Offline-Cache)
   const fetchPackingItems = useCallback(async () => {
@@ -170,9 +169,9 @@ function HomeContent() {
     fetchPackingItems()
   }, [selectedVacationId, fetchPackingItems])
 
-  // WebSocket für Echtzeit-Sync: Refetch nur wenn keine kürzliche lokale Änderung
+  // WebSocket für Echtzeit-Sync: Refetch nur wenn keine eigenen PUTs ausstehen
   const handlePackingSyncUpdate = useCallback(() => {
-    if (Date.now() - lastLocalMutationRef.current < PACKING_SYNC_SUPPRESS_MS) return
+    if (pendingMutationsRef.current > 0) return
     fetchPackingItems()
   }, [fetchPackingItems])
   usePackingSync(selectedVacationId, handlePackingSyncUpdate)
@@ -339,12 +338,13 @@ function HomeContent() {
 
   const handleGeneratePackingList = async (equipmentItems: EquipmentItem[]) => {
     if (!selectedVacationId || equipmentItems.length === 0) return
-    lastLocalMutationRef.current = Date.now()
+    pendingMutationsRef.current += 1
 
     const packlisteGegenstandIds = new Set(packingItems.map(p => p.gegenstand_id))
     const toAdd = equipmentItems.filter(eq => !packlisteGegenstandIds.has(eq.id))
 
     if (toAdd.length === 0) {
+      pendingMutationsRef.current -= 1
       alert('Alle ausgewählten Gegenstände sind bereits in der Packliste.')
       return
     }
@@ -385,11 +385,13 @@ function HomeContent() {
     } catch (error) {
       console.error('Failed to generate packing list:', error)
       throw error
+    } finally {
+      pendingMutationsRef.current -= 1
     }
   }
 
   const handleSetPacked = async (itemId: string, gepackt: boolean) => {
-    lastLocalMutationRef.current = Date.now()
+    pendingMutationsRef.current += 1
     const prevItems = packingItems
     // Optimistic update: packingItems direkt aktualisieren → sofortige UI-Aktualisierung
     setPackingItems(prev =>
@@ -412,11 +414,13 @@ function HomeContent() {
       console.error('Failed to set packed:', error)
       setPackingItems(prevItems)
       alert('Fehler beim Aktualisieren')
+    } finally {
+      pendingMutationsRef.current -= 1
     }
   }
 
   const handleTogglePacked = async (itemId: string) => {
-    lastLocalMutationRef.current = Date.now()
+    pendingMutationsRef.current += 1
     const item = packingItems.find(p => p.id === itemId)
     const isPacked = item?.gepackt ?? false
     const newPackedState = !isPacked
@@ -444,11 +448,13 @@ function HomeContent() {
       console.error('Failed to toggle packed:', error)
       setPackingItems(prevItems)
       alert('Fehler beim Aktualisieren')
+    } finally {
+      pendingMutationsRef.current -= 1
     }
   }
 
   const handleToggleMitreisender = async (itemId: string, mitreisenderId: string, currentStatus: boolean) => {
-    lastLocalMutationRef.current = Date.now()
+    pendingMutationsRef.current += 1
     const newStatus = !currentStatus
     const prevItems = packingItems
 
@@ -490,11 +496,13 @@ function HomeContent() {
     } catch (error) {
       console.error('Failed to toggle mitreisender:', error)
       setPackingItems(prevItems)
+    } finally {
+      pendingMutationsRef.current -= 1
     }
   }
 
   const handleToggleMultipleMitreisende = async (packingItemId: string, updates: Array<{ mitreisenderId: string; newStatus: boolean }>) => {
-    lastLocalMutationRef.current = Date.now()
+    pendingMutationsRef.current += 1
     const prevItems = packingItems
 
     // Optimistic update für alle Änderungen
@@ -538,6 +546,8 @@ function HomeContent() {
     } catch (error) {
       console.error('Failed to toggle multiple mitreisende:', error)
       setPackingItems(prevItems)
+    } finally {
+      pendingMutationsRef.current -= 1
     }
   }
 
@@ -564,7 +574,7 @@ function HomeContent() {
 
   const handleUpdatePackingItem = async () => {
     if (!editingPackingItemId) return
-    lastLocalMutationRef.current = Date.now()
+    pendingMutationsRef.current += 1
 
     const item = packingItems.find((p) => p.id === editingPackingItemId)
     const isProfileUpdate = !!editingForMitreisenderId && !!item
@@ -618,12 +628,12 @@ function HomeContent() {
       console.error('Failed to update packing item:', error)
       alert('Fehler beim Aktualisieren')
     } finally {
+      pendingMutationsRef.current -= 1
       setIsLoading(false)
     }
   }
 
   const handleDeletePackingItem = async (id: string, forMitreisenderId?: string | null) => {
-    lastLocalMutationRef.current = Date.now()
     const item = packingItems.find((p) => p.id === id)
     if (forMitreisenderId && item?.mitreisenden_typ === 'pauschal') {
       alert('Pauschale Einträge können nur im Packprofil „Alle" entfernt werden.')
@@ -636,6 +646,7 @@ function HomeContent() {
       : 'Möchten Sie diesen Eintrag wirklich aus der Packliste entfernen?'
     if (!confirm(message)) return
 
+    pendingMutationsRef.current += 1
     setIsLoading(true)
     try {
       if (isProfileDelete) {
@@ -666,6 +677,7 @@ function HomeContent() {
       console.error('Failed to delete packing item:', error)
       alert('Fehler beim Löschen')
     } finally {
+      pendingMutationsRef.current -= 1
       setIsLoading(false)
     }
   }
@@ -682,7 +694,7 @@ function HomeContent() {
 
   const handleAddSelectedEquipment = async () => {
     if (selectedEquipmentIds.size === 0 || !selectedVacationId) return
-    lastLocalMutationRef.current = Date.now()
+    pendingMutationsRef.current += 1
 
     setIsLoading(true)
     try {
@@ -763,6 +775,7 @@ function HomeContent() {
       console.error('Failed to add equipment items:', error)
       alert('Fehler beim Hinzufügen der Gegenstände')
     } finally {
+      pendingMutationsRef.current -= 1
       setIsLoading(false)
     }
   }
