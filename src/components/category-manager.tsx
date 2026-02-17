@@ -27,7 +27,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Plus, MoreVertical, Pencil, Trash2, GripVertical } from 'lucide-react'
+import { MoreVertical, Pencil, Trash2, GripVertical } from 'lucide-react'
 import { Category, MainCategory } from '@/lib/db'
 import type { ApiResponse } from '@/lib/api-types'
 
@@ -403,12 +403,6 @@ export function CategoryManager({ categories, mainCategories, onRefresh, openNew
       reihenfolge: category.reihenfolge.toString()
     })
     setShowCategoryDialog(true)
-  }
-
-  const openNewMainCategory = () => {
-    setEditingMainCategory(null)
-    setMainCategoryForm({ titel: '', reihenfolge: '' })
-    setShowMainCategoryDialog(true)
   }
 
   const openNewCategory = (mainCategoryId: string) => {
