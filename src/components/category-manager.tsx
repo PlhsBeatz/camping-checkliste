@@ -444,6 +444,7 @@ export function CategoryManager({ categories, mainCategories, onRefresh, openNew
       try {
         for (let i = 0; i < reordered.length; i++) {
           const mc = reordered[i]
+          if (!mc) continue
           await fetch('/api/main-categories', {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
@@ -472,6 +473,7 @@ export function CategoryManager({ categories, mainCategories, onRefresh, openNew
       try {
         for (let i = 0; i < reordered.length; i++) {
           const cat = reordered[i]
+          if (!cat) continue
           await fetch('/api/categories', {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
