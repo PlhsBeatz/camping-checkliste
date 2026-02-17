@@ -4,10 +4,99 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Edit2, Trash2, Plus, User, Star } from 'lucide-react'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { Trash2, Plus, Star, MoreVertical, Pencil } from 'lucide-react'
 import { Mitreisender } from '@/lib/db'
 import type { ApiResponse } from '@/lib/api-types'
+
+const getInitials = (name: string) => {
+  const parts = name.split(' ')
+  if (parts.length >= 2) {
+    return ((parts[0]?.[0] ?? '') + (parts[1]?.[0] ?? '')).toUpperCase()
+  }
+  return name.substring(0, 2).toUpperCase()
+}
+
+const getAvatarColor = (index: number) => {
+  const colors = [
+    'bg-blue-200 text-blue-800',
+    'bg-pink-200 text-pink-800',
+    'bg-purple-200 text-purple-800',
+    'bg-yellow-200 text-yellow-800',
+    'bg-green-200 text-green-800',
+    'bg-red-200 text-red-800',
+  ]
+  return colors[index % colors.length]
+}
+
+function TravelerRow({
+  traveler,
+  index,
+  isDefault,
+  onEdit,
+  onDelete,
+}: {
+  traveler: Mitreisender
+  index: number
+  isDefault: boolean
+  onEdit: (t: Mitreisender) => void
+  onDelete: (id: string) => void
+}) {
+  return (
+    <div
+      className={`flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 ${
+        isDefault ? 'bg-yellow-50 dark:bg-yellow-950/20' : ''
+      }`}
+    >
+      <div className="flex items-center gap-3">
+        <div
+          className={`h-10 w-10 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0 ${getAvatarColor(index)}`}
+        >
+          {getInitials(traveler.name)}
+        </div>
+        <div>
+          <p className="font-medium">{traveler.name}</p>
+          {traveler.user_id && (
+            <p className="text-xs text-muted-foreground">User-ID: {traveler.user_id}</p>
+          )}
+        </div>
+      </div>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+            <MoreVertical className="h-4 w-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem
+            onSelect={(e) => {
+              e.preventDefault()
+              onEdit(traveler)
+            }}
+          >
+            <Pencil className="h-4 w-4 mr-2" />
+            Bearbeiten
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onSelect={(e) => {
+              e.preventDefault()
+              onDelete(traveler.id)
+            }}
+            className="text-destructive"
+          >
+            <Trash2 className="h-4 w-4 mr-2" />
+            Löschen
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+  )
+}
 
 interface TravelersManagerProps {
   travelers: Mitreisender[]
@@ -139,154 +228,67 @@ export function TravelersManager({ travelers, onRefresh }: TravelersManagerProps
 
   return (
     <div className="space-y-6">
-      {/* Header with Create Button */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h2 className="text-2xl font-bold">Mitreisende verwalten</h2>
-          <p className="text-muted-foreground">
-            Zentrale Verwaltung aller Mitreisenden. Standard-Mitreisende werden automatisch neuen Urlauben zugeordnet.
-          </p>
-        </div>
-        <Button onClick={openNew}>
-          <Plus className="h-4 w-4 mr-2" />
-          Neuer Mitreisender
-        </Button>
-      </div>
-
-      {/* Statistics */}
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Gesamt</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{travelers.length}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Standard</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-yellow-600">{defaultTravelers.length}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Weitere</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{otherTravelers.length}</div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Default Travelers Section */}
+      {/* Standard-Mitreisende Section */}
       {defaultTravelers.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Star className="h-5 w-5 text-yellow-500 fill-yellow-500" />
-              Standard-Mitreisende
-            </CardTitle>
-            <p className="text-sm text-muted-foreground">
-              Diese Mitreisenden werden automatisch bei neuen Urlauben ausgewählt
-            </p>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              {defaultTravelers.map((traveler) => (
-                <div
-                  key={traveler.id}
-                  className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 bg-yellow-50 dark:bg-yellow-950/20"
-                >
-                  <div className="flex items-center gap-3">
-                    <User className="h-5 w-5 text-muted-foreground" />
-                    <div>
-                      <p className="font-medium">{traveler.name}</p>
-                      {traveler.user_id && (
-                        <p className="text-xs text-muted-foreground">User-ID: {traveler.user_id}</p>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => openEdit(traveler)}
-                      className="h-8 w-8 p-0"
-                    >
-                      <Edit2 className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleDelete(traveler.id)}
-                      className="h-8 w-8 p-0"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+        <div className="space-y-2">
+          <h3 className="flex items-center gap-2 text-base font-semibold">
+            <Star className="h-4 w-4 text-yellow-500 fill-yellow-500" />
+            Standard-Mitreisende
+          </h3>
+          <p className="text-sm text-muted-foreground">
+            Diese Mitreisenden werden automatisch bei neuen Urlauben ausgewählt
+          </p>
+          <div className="space-y-2">
+            {defaultTravelers.map((traveler, idx) => (
+              <TravelerRow
+                key={traveler.id}
+                traveler={traveler}
+                index={idx}
+                isDefault
+                onEdit={openEdit}
+                onDelete={handleDelete}
+              />
+            ))}
+          </div>
+        </div>
       )}
 
-      {/* Other Travelers Section */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Weitere Mitreisende</CardTitle>
-          <p className="text-sm text-muted-foreground">
-            Diese Mitreisenden können manuell zu Urlauben hinzugefügt werden
+      {/* Weitere Mitreisende Section */}
+      <div className="space-y-2">
+        <h3 className="text-base font-semibold">Weitere Mitreisende</h3>
+        <p className="text-sm text-muted-foreground">
+          Diese Mitreisenden können manuell zu Urlauben hinzugefügt werden
+        </p>
+        {otherTravelers.length === 0 ? (
+          <p className="text-sm text-muted-foreground text-center py-8 border rounded-lg">
+            Keine weiteren Mitreisenden vorhanden
           </p>
-        </CardHeader>
-        <CardContent>
-          {otherTravelers.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-8">
-              Keine weiteren Mitreisenden vorhanden
-            </p>
-          ) : (
-            <div className="space-y-2">
-              {otherTravelers.map((traveler) => (
-                <div
-                  key={traveler.id}
-                  className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50"
-                >
-                  <div className="flex items-center gap-3">
-                    <User className="h-5 w-5 text-muted-foreground" />
-                    <div>
-                      <p className="font-medium">{traveler.name}</p>
-                      {traveler.user_id && (
-                        <p className="text-xs text-muted-foreground">User-ID: {traveler.user_id}</p>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => openEdit(traveler)}
-                      className="h-8 w-8 p-0"
-                    >
-                      <Edit2 className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleDelete(traveler.id)}
-                      className="h-8 w-8 p-0"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+        ) : (
+          <div className="space-y-2">
+            {otherTravelers.map((traveler, idx) => (
+              <TravelerRow
+                key={traveler.id}
+                traveler={traveler}
+                index={defaultTravelers.length + idx}
+                isDefault={false}
+                onEdit={openEdit}
+                onDelete={handleDelete}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* FAB: Neuer Mitreisender - wie auf Ausrüstungsseite */}
+      <div className="fixed bottom-6 right-6 z-30">
+        <Button
+          size="icon"
+          onClick={openNew}
+          className="h-14 w-14 rounded-full shadow-lg hover:shadow-xl transition-shadow bg-[rgb(45,79,30)] hover:bg-[rgb(45,79,30)]/90 text-white aspect-square p-0"
+        >
+          <Plus className="h-6 w-6" strokeWidth={2.5} />
+        </Button>
+      </div>
 
       {/* Create/Edit Dialog */}
       <ResponsiveModal
