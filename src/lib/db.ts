@@ -1567,32 +1567,38 @@ export async function getTagsForEquipmentBatch(
   }
 }
 
+const D1_MAX_BIND_PARAMS = 99
+
 /**
  * Batch: Standard-Mitreisende für mehrere Ausrüstungsgegenstände laden
  * Rückgabe: Map<gegenstand_id, string[]>
+ * Batching bei >99 IDs wegen D1-Parameter-Limit
  */
 export async function getStandardMitreisendeForEquipmentBatch(
   db: D1Database,
   gegenstandIds: string[]
 ): Promise<Map<string, string[]>> {
   if (gegenstandIds.length === 0) return new Map()
+  const map = new Map<string, string[]>()
   try {
-    const placeholders = gegenstandIds.map(() => '?').join(', ')
-    const result = await db
-      .prepare(`
-        SELECT gegenstand_id, mitreisender_id
-        FROM ausruestungsgegenstaende_standard_mitreisende
-        WHERE gegenstand_id IN (${placeholders})
-      `)
-      .bind(...gegenstandIds)
-      .all<{ gegenstand_id: string; mitreisender_id: string }>()
-    const rows = result.results || []
-    const map = new Map<string, string[]>()
-    for (const row of rows) {
-      const gegenstandId = String(row.gegenstand_id)
-      const existing = map.get(gegenstandId) || []
-      existing.push(String(row.mitreisender_id))
-      map.set(gegenstandId, existing)
+    for (let i = 0; i < gegenstandIds.length; i += D1_MAX_BIND_PARAMS) {
+      const chunk = gegenstandIds.slice(i, i + D1_MAX_BIND_PARAMS)
+      const placeholders = chunk.map(() => '?').join(', ')
+      const result = await db
+        .prepare(`
+          SELECT gegenstand_id, mitreisender_id
+          FROM ausruestungsgegenstaende_standard_mitreisende
+          WHERE gegenstand_id IN (${placeholders})
+        `)
+        .bind(...chunk)
+        .all<{ gegenstand_id: string; mitreisender_id: string }>()
+      const rows = result.results || []
+      for (const row of rows) {
+        const gegenstandId = String(row.gegenstand_id)
+        const existing = map.get(gegenstandId) || []
+        existing.push(String(row.mitreisender_id))
+        map.set(gegenstandId, existing)
+      }
     }
     return map
   } catch (error) {
@@ -1695,9 +1701,35 @@ export async function getEquipmentByTags(
     query += `) AND a.status NOT IN ('Ausgemustert', 'Fest Installiert') ORDER BY h.reihenfolge, k.reihenfolge, a.was`
     
     const stmt = db.prepare(query)
-    const result = await stmt.bind(...tagIds).all<EquipmentItem>()
-    
-    return result.results || []
+    const result = await stmt.bind(...tagIds).all<Record<string, unknown>>()
+    const rows = result.results || []
+
+    const items: EquipmentItem[] = []
+    for (const row of rows) {
+      const id = String(row.id)
+      const rawTyp = row.mitreisenden_typ
+      const mitreisenden_typ = (rawTyp === 'alle' || rawTyp === 'ausgewaehlte' ? rawTyp : 'pauschal') as 'pauschal' | 'alle' | 'ausgewaehlte'
+      items.push({
+        id,
+        was: String(row.was),
+        kategorie_id: String(row.kategorie_id),
+        kategorie_titel: row.kategorie_titel ? String(row.kategorie_titel) : undefined,
+        hauptkategorie_titel: row.hauptkategorie_titel ? String(row.hauptkategorie_titel) : undefined,
+        transport_id: row.transport_id ? String(row.transport_id) : null,
+        transport_name: row.transport_name ? String(row.transport_name) : undefined,
+        einzelgewicht: row.einzelgewicht != null ? Number(row.einzelgewicht) : 0,
+        standard_anzahl: row.standard_anzahl != null ? Number(row.standard_anzahl) : 1,
+        status: String(row.status || 'Normal'),
+        details: row.details ? String(row.details) : '',
+        is_standard: !!row.is_standard,
+        mitreisenden_typ,
+        standard_mitreisende: [], // wird von equipment-by-tags Route per Batch ergänzt
+        tags: [],
+        links: [],
+        created_at: String(row.created_at || ''),
+      })
+    }
+    return items
   } catch (error) {
     console.error('Error fetching equipment by tags:', error)
     return []

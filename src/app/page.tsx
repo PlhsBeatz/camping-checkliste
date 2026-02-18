@@ -358,9 +358,11 @@ function HomeContent() {
         let mitreisendeIds: string[] = []
         if (typ === 'alle') {
           mitreisendeIds = vacationMitreisendeIds
-        } else if (typ === 'ausgewaehlte' && item.standard_mitreisende?.length) {
+        } else if (typ === 'ausgewaehlte') {
           // Nur Mitreisende zuordnen, die auch beim Urlaub dabei sind
-          mitreisendeIds = item.standard_mitreisende.filter(id => vacationMitreisendeSet.has(id))
+          const filtered = (item.standard_mitreisende ?? []).filter(id => vacationMitreisendeSet.has(id))
+          // Fallback: Wenn keine Überlappung (z.B. andere Urlaubsgruppe) → alle Urlaubs-Mitreisenden
+          mitreisendeIds = filtered.length > 0 ? filtered : vacationMitreisendeIds
         }
         return {
           gegenstandId: item.id,

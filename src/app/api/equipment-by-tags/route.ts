@@ -28,9 +28,6 @@ export async function GET(request: NextRequest) {
       const id = String(item.id)
       item.tags = tagsMap.get(id) || []
       item.standard_mitreisende = smMap.get(id) || []
-      // Explizite Normalisierung: D1 kann Spalten anders zurückgeben
-      const rawTyp = (item as unknown as Record<string, unknown>).mitreisenden_typ
-      item.mitreisenden_typ = (rawTyp === 'alle' || rawTyp === 'ausgewaehlte' ? rawTyp : 'pauschal') as 'pauschal' | 'alle' | 'ausgewaehlte'
     }
 
     const res = NextResponse.json({ success: true, data: items })
