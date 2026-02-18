@@ -118,8 +118,8 @@ function SortableMainCategoryRow({
   }
 
   return (
-    <div ref={setNodeRef} style={style} className="rounded-lg border bg-muted/30 overflow-hidden">
-      <div className="flex items-center gap-2 p-3">
+    <div ref={setNodeRef} style={style} className="rounded-lg border bg-white overflow-hidden">
+      <div className="flex items-center gap-2 p-3 py-1">
         <div
           {...attributes}
           {...listeners}
