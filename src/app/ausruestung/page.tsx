@@ -559,11 +559,11 @@ export default function AusruestungPage() {
                         type="checkbox"
                         checked={formData.tags.includes(tag.id)}
                         onChange={(e) => {
-                          if (e.target.checked) {
-                            setFormData({ ...formData, tags: [...formData.tags, tag.id] })
-                          } else {
-                            setFormData({ ...formData, tags: formData.tags.filter(id => id !== tag.id) })
-                          }
+                          const checked = e.target.checked
+                          setFormData(prev => ({
+                            ...prev,
+                            tags: checked ? [...prev.tags, tag.id] : prev.tags.filter(id => id !== tag.id)
+                          }))
                         }}
                         className="h-3 w-3"
                       />
@@ -806,11 +806,11 @@ export default function AusruestungPage() {
                         type="checkbox"
                         checked={formData.tags.includes(tag.id)}
                         onChange={(e) => {
-                          if (e.target.checked) {
-                            setFormData({ ...formData, tags: [...formData.tags, tag.id] })
-                          } else {
-                            setFormData({ ...formData, tags: formData.tags.filter(id => id !== tag.id) })
-                          }
+                          const checked = e.target.checked
+                          setFormData(prev => ({
+                            ...prev,
+                            tags: checked ? [...prev.tags, tag.id] : prev.tags.filter(id => id !== tag.id)
+                          }))
                         }}
                         className="h-3 w-3"
                       />
