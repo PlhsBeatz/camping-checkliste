@@ -51,6 +51,7 @@ export default function AusruestungPage() {
     status: 'Normal',
     details: '',
     is_standard: false,
+    erst_abreisetag_gepackt: false,
     mitreisenden_typ: 'alle' as 'pauschal' | 'alle' | 'ausgewaehlte',
     tags: [] as string[],
     links: [] as { url: string }[],
@@ -164,6 +165,7 @@ export default function AusruestungPage() {
       status: 'Normal',
       details: '',
       is_standard: false,
+      erst_abreisetag_gepackt: false,
       mitreisenden_typ: 'alle',
       tags: [],
       links: [],
@@ -187,6 +189,7 @@ export default function AusruestungPage() {
       status: item.status,
       details: item.details || '',
       is_standard: item.is_standard || false,
+      erst_abreisetag_gepackt: item.erst_abreisetag_gepackt || false,
       mitreisenden_typ: item.mitreisenden_typ || 'alle',
       tags: item.tags?.map(t => typeof t === 'object' ? t.id : t) || [],
       links: item.links || [],
@@ -212,6 +215,7 @@ export default function AusruestungPage() {
         status: formData.status,
         details: formData.details || null,
         is_standard: formData.is_standard,
+        erst_abreisetag_gepackt: formData.erst_abreisetag_gepackt,
         mitreisenden_typ: formData.mitreisenden_typ,
         standard_mitreisende: formData.standard_mitreisende,
         tags: formData.tags,
@@ -262,6 +266,7 @@ export default function AusruestungPage() {
         status: formData.status,
         details: formData.details || null,
         is_standard: formData.is_standard,
+        erst_abreisetag_gepackt: formData.erst_abreisetag_gepackt,
         mitreisenden_typ: formData.mitreisenden_typ,
         standard_mitreisende: formData.standard_mitreisende,
         tags: formData.tags,
@@ -410,15 +415,16 @@ export default function AusruestungPage() {
         </div>
       </div>
 
-      {/* Add Equipment Dialog */}
+      {/* Add Equipment Dialog – Padding wie Packliste (px-6) */}
       <ResponsiveModal
         open={showAddDialog}
         onOpenChange={setShowAddDialog}
         title="Neuen Gegenstand hinzufügen"
         description="Fügen Sie einen neuen Ausrüstungsgegenstand hinzu"
         contentClassName="max-w-2xl max-h-[90vh] overflow-y-auto"
+        noPadding
       >
-        <div className="space-y-4">
+        <div className="space-y-4 px-6 pt-4 pb-6">
             <div>
               <Label htmlFor="was">Was *</Label>
               <Input
@@ -592,6 +598,19 @@ export default function AusruestungPage() {
               </Label>
             </div>
 
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="erst_abreisetag_gepackt"
+                checked={formData.erst_abreisetag_gepackt}
+                onChange={(e) => setFormData({ ...formData, erst_abreisetag_gepackt: e.target.checked })}
+                className="h-4 w-4"
+              />
+              <Label htmlFor="erst_abreisetag_gepackt" className="cursor-pointer">
+                Erst am Abreisetag packen
+              </Label>
+            </div>
+
             <div>
               <Label>Links</Label>
               {formData.links.map((link, idx) => (
@@ -643,15 +662,16 @@ export default function AusruestungPage() {
         isLoading={isLoading}
       />
 
-      {/* Edit Equipment Dialog */}
+      {/* Edit Equipment Dialog – Padding wie Packliste */}
       <ResponsiveModal
         open={showEditDialog}
         onOpenChange={setShowEditDialog}
         title="Gegenstand bearbeiten"
         description="Bearbeiten Sie die Details des Ausrüstungsgegenstands"
         contentClassName="max-w-2xl max-h-[90vh] overflow-y-auto"
+        noPadding
       >
-        <div className="space-y-4">
+        <div className="space-y-4 px-6 pt-4 pb-6">
             <div>
               <Label htmlFor="edit-was">Was *</Label>
               <Input
@@ -822,6 +842,19 @@ export default function AusruestungPage() {
               />
               <Label htmlFor="edit_is_standard" className="cursor-pointer">
                 Als Standard markieren (⭐)
+              </Label>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="edit_erst_abreisetag_gepackt"
+                checked={formData.erst_abreisetag_gepackt}
+                onChange={(e) => setFormData({ ...formData, erst_abreisetag_gepackt: e.target.checked })}
+                className="h-4 w-4"
+              />
+              <Label htmlFor="edit_erst_abreisetag_gepackt" className="cursor-pointer">
+                Erst am Abreisetag packen
               </Label>
             </div>
 

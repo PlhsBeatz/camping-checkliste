@@ -69,6 +69,7 @@ export interface EquipmentItem {
   status: string
   details: string
   is_standard: boolean // Immer dabei
+  erst_abreisetag_gepackt?: boolean // Erst am Abreisetag packen
   mitreisenden_typ: 'pauschal' | 'alle' | 'ausgewaehlte'
   standard_mitreisende?: string[] // IDs der standardmäßig zugeordneten Mitreisenden
   tags?: Tag[] // Zugeordnete Tags
@@ -524,6 +525,7 @@ export async function getEquipmentItems(db: D1Database): Promise<EquipmentItem[]
         status: String(row.status || 'Normal'),
         details: row.details ? String(row.details) : '',
         is_standard: !!row.is_standard,
+        erst_abreisetag_gepackt: !!row.erst_abreisetag_gepackt,
         mitreisenden_typ: String(row.mitreisenden_typ || 'pauschal') as 'pauschal' | 'alle' | 'ausgewaehlte',
         standard_mitreisende,
         tags: [],
@@ -593,6 +595,7 @@ export async function createEquipmentItem(
     status?: string
     details?: string
     is_standard?: boolean
+    erst_abreisetag_gepackt?: boolean
     mitreisenden_typ?: 'pauschal' | 'alle' | 'ausgewaehlte'
     standard_mitreisende?: string[]
     tags?: string[]
@@ -604,8 +607,8 @@ export async function createEquipmentItem(
     await db
       .prepare(
         `INSERT INTO ausruestungsgegenstaende 
-         (id, was, kategorie_id, transport_id, einzelgewicht, standard_anzahl, status, details, is_standard, mitreisenden_typ) 
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+         (id, was, kategorie_id, transport_id, einzelgewicht, standard_anzahl, status, details, is_standard, erst_abreisetag_gepackt, mitreisenden_typ) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .bind(
         id,
@@ -617,6 +620,7 @@ export async function createEquipmentItem(
         item.status || 'Normal',
         item.details || '',
         item.is_standard ? 1 : 0,
+        item.erst_abreisetag_gepackt ? 1 : 0,
         item.mitreisenden_typ || 'pauschal'
       )
       .run()
@@ -667,6 +671,7 @@ export async function updateEquipmentItem(
     status?: string
     details?: string
     is_standard?: boolean
+    erst_abreisetag_gepackt?: boolean
     mitreisenden_typ?: 'pauschal' | 'alle' | 'ausgewaehlte'
     standard_mitreisende?: string[]
     tags?: string[]
@@ -712,6 +717,10 @@ export async function updateEquipmentItem(
     if (updates.is_standard !== undefined) {
       fields.push('is_standard = ?')
       values.push(updates.is_standard ? 1 : 0)
+    }
+    if (updates.erst_abreisetag_gepackt !== undefined) {
+      fields.push('erst_abreisetag_gepackt = ?')
+      values.push(updates.erst_abreisetag_gepackt ? 1 : 0)
     }
 
     if (fields.length > 0) {

@@ -20,6 +20,7 @@ interface EquipmentItemBody {
   status?: string
   details?: string
   is_standard?: boolean
+  erst_abreisetag_gepackt?: boolean
   mitreisenden_typ?: 'pauschal' | 'alle' | 'ausgewaehlte'
   standard_mitreisende?: string[]
   tags?: string[]
@@ -90,6 +91,7 @@ export async function POST(request: NextRequest) {
       status,
       details,
       is_standard,
+      erst_abreisetag_gepackt,
       mitreisenden_typ,
       standard_mitreisende,
       tags,
@@ -111,6 +113,7 @@ export async function POST(request: NextRequest) {
       status,
       details,
       is_standard,
+      erst_abreisetag_gepackt,
       mitreisenden_typ,
       standard_mitreisende,
       tags,
@@ -146,6 +149,7 @@ export async function PUT(request: NextRequest) {
       status,
       details,
       is_standard,
+      erst_abreisetag_gepackt,
       mitreisenden_typ,
       standard_mitreisende,
       tags,
@@ -165,6 +169,7 @@ export async function PUT(request: NextRequest) {
       status,
       details,
       is_standard,
+      erst_abreisetag_gepackt,
       mitreisenden_typ,
       standard_mitreisende,
       tags,

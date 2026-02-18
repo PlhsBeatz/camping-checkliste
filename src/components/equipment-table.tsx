@@ -208,7 +208,7 @@ export const EquipmentTable = React.memo(({
   const flatRows = useMemo(() => {
     const rows: Array<
       | { type: 'main-category'; id: string; name: string }
-      | { type: 'category'; id: string; name: string; count: number }
+      | { type: 'category'; id: string; name: string; mainCategoryName: string; count: number }
       | { type: 'item'; id: string; item: EquipmentItem }
     > = []
     for (const mainGroup of groupedItems) {
@@ -218,6 +218,7 @@ export const EquipmentTable = React.memo(({
           type: 'category',
           id: `group-${mainGroup.mainCategoryName}-${group.categoryName}`,
           name: group.categoryName,
+          mainCategoryName: mainGroup.mainCategoryName,
           count: group.items?.length ?? 0
         })
         for (const item of group.items ?? []) {
@@ -236,16 +237,44 @@ export const EquipmentTable = React.memo(({
     estimateSize: (index) => {
       const row = flatRows[index]
       if (!row) return 52
-      if (row.type === 'main-category') return 48
-      if (row.type === 'category') return 40
+    if (row.type === 'main-category') return 36
+    if (row.type === 'category') return 36
       return 52
     },
     overscan: 10,
     paddingStart: headerHeight,
   })
 
-  // Feste Spaltenbreiten für konsistente Darstellung (px), Actions-Spalte schmal
-  const gridCols = '220px 120px 90px 48px 133px 130px 220px 150px 48px 44px'
+  // Sticky-Header: Aktuelle Hauptkategorie und Kategorie aus erstem sichtbaren Eintrag ableiten
+  const virtualItems = virtualizer.getVirtualItems()
+  const stickyContext = useMemo(() => {
+    const firstIdx = virtualItems[0]?.index ?? 0
+    let currentMain = ''
+    let currentCat = ''
+    for (let i = firstIdx; i >= 0; i--) {
+      const r = flatRows[i]
+      if (!r) continue
+      if (r.type === 'main-category') {
+        currentMain = r.name
+        break
+      }
+      if (r.type === 'category') {
+        currentCat = r.name
+        if (currentMain) break
+      }
+    }
+    for (let i = firstIdx - 1; i >= 0 && !currentMain; i--) {
+      const r = flatRows[i]
+      if (r?.type === 'main-category') {
+        currentMain = r.name
+        break
+      }
+    }
+    return { main: currentMain, category: currentCat }
+  }, [flatRows, virtualItems])
+
+  // Feste Spaltenbreiten: was, transport, gewicht, anzahl, status, abreise, gepacktFuer, details, tags, links, actions
+  const gridCols = '220px 120px 90px 48px 135px 48px 130px 220px 150px 48px 44px'
 
   // Spalten-Ausrichtung für saubere vertikale Linien (Header und Body identisch)
   const colAlign = {
@@ -254,6 +283,7 @@ export const EquipmentTable = React.memo(({
     gewicht: 'text-right', // Zahlen rechts
     anzahl: 'text-center',
     status: 'text-left',
+    abreise: 'text-center',
     gepacktFuer: 'text-left',
     details: 'text-left',
     tags: 'text-left',
@@ -447,7 +477,7 @@ export const EquipmentTable = React.memo(({
       )}>
         {/* Horizontal scrollbar auf Mobile - min-w-0 erlaubt Schrumpfen, overflow-x-auto ermöglicht Scroll */}
         <div className="overflow-x-auto flex-1 min-h-0 min-w-0 flex flex-col">
-          <div className="min-w-[1200px] flex flex-col flex-1 min-h-0">
+          <div className="min-w-[1253px] flex flex-col flex-1 min-h-0">
             {/* Ein gemeinsamer vertikaler Scroll: Header + Body scrollen zusammen (paddingStart für Header) */}
             <div
               ref={parentRef}
@@ -457,6 +487,21 @@ export const EquipmentTable = React.memo(({
                 !dynamicHeight && 'min-h-[200px]'
               )}
             >
+              {/* Sticky Header: Hauptkategorie + Kategorie bleiben beim Scrollen sichtbar */}
+              {flatRows.length > 0 && (stickyContext.main || stickyContext.category) && (
+                <div className="sticky top-0 z-20 flex flex-col bg-background border-b shadow-sm">
+                  {stickyContext.main && (
+                    <div className="flex items-center bg-[rgb(45,79,30)] text-white font-bold text-sm px-4 py-1.5">
+                      {stickyContext.main}
+                    </div>
+                  )}
+                  {stickyContext.category && (
+                    <div className="flex items-center bg-muted/70 font-semibold text-sm px-4 py-1.5">
+                      {stickyContext.category}
+                    </div>
+                  )}
+                </div>
+              )}
           {flatRows.length === 0 ? (
             <div className="py-16 text-center text-muted-foreground">
               Keine Ausrüstungsgegenstände gefunden
@@ -476,6 +521,7 @@ export const EquipmentTable = React.memo(({
                 <div className={`px-4 py-3 font-medium text-sm ${colAlign.gewicht}`}>Gewicht</div>
                 <div className={`px-4 py-3 font-medium text-sm ${colAlign.anzahl}`}>#</div>
                 <div className={`px-4 py-3 font-medium text-sm ${colAlign.status}`}>Status</div>
+                <div className={`px-2 py-3 font-medium text-sm ${colAlign.abreise}`} title="Erst am Abreisetag">Abr.</div>
                 <div className={`px-4 py-3 font-medium text-sm ${colAlign.gepacktFuer}`}>Gepackt für</div>
                 <div className={`px-4 py-3 font-medium text-sm ${colAlign.details}`}>Details</div>
                 <div className={`px-4 py-3 font-medium text-sm ${colAlign.tags}`}>Tags</div>
@@ -500,13 +546,16 @@ export const EquipmentTable = React.memo(({
                   )
                 }
                 if (row.type === 'category') {
+                  const label = row.name === row.mainCategoryName
+                    ? `(${row.count})`
+                    : `${row.name} (${row.count})`
                   return (
                     <div
                       key={row.id}
                       className="absolute left-0 right-0 flex items-center bg-muted/70 font-semibold px-4"
                       style={{ height: size, top: 0, transform: `translateY(${translateY}px)` }}
                     >
-                      {row.name} ({row.count})
+                      {label}
                     </div>
                   )
                 }
@@ -537,6 +586,13 @@ export const EquipmentTable = React.memo(({
                       <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(item.status)}`}>
                         {item.status}
                       </span>
+                    </div>
+                    <div className={`px-2 py-2 text-center ${colAlign.abreise}`} title={item.erst_abreisetag_gepackt ? 'Erst am Abreisetag packen' : ''}>
+                      {item.erst_abreisetag_gepackt ? (
+                        <span className="inline-flex items-center rounded bg-amber-100 text-amber-800 px-1.5 py-0.5 text-xs">Abr.</span>
+                      ) : (
+                        <span className="w-6 block" />
+                      )}
                     </div>
                     <div className={`px-4 py-2 text-sm ${colAlign.gepacktFuer}`}>
                       {item.mitreisenden_typ === 'pauschal' ? (
