@@ -182,7 +182,7 @@ export const EquipmentTable = React.memo(({
 
     return mainCategoryIds.map(mainCategoryId => {
       const categoryGroup = mainCategoryGroups[mainCategoryId]
-      if (!categoryGroup) return { mainCategoryName: 'Unbekannt', categories: [] }
+      if (!categoryGroup) return { mainCategoryId, mainCategoryName: 'Unbekannt', categories: [] }
       
       const mainCategory = mainCategories.find(mc => mc.id === mainCategoryId)
       const mainCategoryName = mainCategory?.titel ?? 'Unbekannt'
@@ -195,8 +195,10 @@ export const EquipmentTable = React.memo(({
       })
 
       return {
+        mainCategoryId,
         mainCategoryName,
         categories: categoryIds.map(categoryId => ({
+          categoryId,
           categoryName: getCategoryName(categoryId),
           items: categoryGroup[categoryId] || []
         }))
@@ -205,6 +207,8 @@ export const EquipmentTable = React.memo(({
   }, [filteredItems, getCategoryName, getMainCategoryId, mainCategories, categories])
 
   // Flache Zeilenliste für Virtualisierung (Hauptkategorie → Kategorie → Items)
+  // Eindeutige Keys mit mainCategoryId/categoryId verhindern Geisterzeilen durch Key-Kollisionen
+  // Leere Kategorien werden übersprungen (verhindert "Unbekannt (0)"-Zeilen bei Filtern)
   const flatRows = useMemo(() => {
     const rows: Array<
       | { type: 'main-category'; id: string; name: string }
@@ -212,11 +216,14 @@ export const EquipmentTable = React.memo(({
       | { type: 'item'; id: string; item: EquipmentItem }
     > = []
     for (const mainGroup of groupedItems) {
-      rows.push({ type: 'main-category', id: `main-${mainGroup.mainCategoryName}`, name: mainGroup.mainCategoryName })
-      for (const group of mainGroup.categories) {
+      const mainId = mainGroup.mainCategoryId ?? `main-${mainGroup.mainCategoryName}`
+      const categoriesWithItems = mainGroup.categories.filter(g => (g.items?.length ?? 0) > 0)
+      if (categoriesWithItems.length === 0) continue // Hauptkategorie ohne Einträge überspringen
+      rows.push({ type: 'main-category', id: `main-${mainId}`, name: mainGroup.mainCategoryName })
+      for (const group of categoriesWithItems) {
         rows.push({
           type: 'category',
-          id: `group-${mainGroup.mainCategoryName}-${group.categoryName}`,
+          id: `group-${mainId}-${group.categoryId}`,
           name: group.categoryName,
           count: group.items?.length ?? 0
         })
@@ -233,6 +240,7 @@ export const EquipmentTable = React.memo(({
   const virtualizer = useVirtualizer({
     count: flatRows.length,
     getScrollElement: () => parentRef.current,
+    getItemKey: useCallback((index: number) => flatRows[index]?.id ?? index, [flatRows]),
     estimateSize: (index) => {
       const row = flatRows[index]
       if (!row) return 52
@@ -240,7 +248,7 @@ export const EquipmentTable = React.memo(({
       if (row.type === 'category') return 36
       return 52
     },
-    overscan: 10,
+    overscan: 5,
     paddingStart: headerHeight,
   })
 
