@@ -15,14 +15,7 @@ import { Trash2, Plus, Star, MoreVertical, Pencil } from 'lucide-react'
 import { Mitreisender } from '@/lib/db'
 import type { ApiResponse } from '@/lib/api-types'
 import { USER_COLORS, DEFAULT_USER_COLOR_BG } from '@/lib/user-colors'
-
-const getInitials = (name: string) => {
-  const parts = name.split(' ')
-  if (parts.length >= 2) {
-    return ((parts[0]?.[0] ?? '') + (parts[1]?.[0] ?? '')).toUpperCase()
-  }
-  return name.substring(0, 2).toUpperCase()
-}
+import { getInitials } from '@/lib/utils'
 
 const getAvatarColor = (index: number, customColor?: string | null) => {
   if (customColor) {
@@ -35,11 +28,13 @@ const getAvatarColor = (index: number, customColor?: string | null) => {
 
 function TravelerRow({
   traveler,
+  initials,
   index,
   onEdit,
   onDelete,
 }: {
   traveler: Mitreisender
+  initials: string
   index: number
   onEdit: (t: Mitreisender) => void
   onDelete: (id: string) => void
@@ -53,7 +48,7 @@ function TravelerRow({
           className="h-10 w-10 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0"
           style={getAvatarColor(index, traveler.farbe)}
         >
-          {getInitials(traveler.name)}
+          {initials}
         </div>
         <div>
           <p className="font-medium">{traveler.name}</p>
@@ -229,6 +224,8 @@ export function TravelersManager({ travelers, onRefresh }: TravelersManagerProps
   // Separate default and non-default travelers
   const defaultTravelers = travelers.filter(t => t.is_default_member)
   const otherTravelers = travelers.filter(t => !t.is_default_member)
+  const travelerNames = travelers.map((t) => t.name)
+  const getTravelerInitials = (name: string) => getInitials(name, travelerNames)
 
   return (
     <div className="space-y-6">
@@ -247,6 +244,7 @@ export function TravelersManager({ travelers, onRefresh }: TravelersManagerProps
               <TravelerRow
                 key={traveler.id}
                 traveler={traveler}
+                initials={getTravelerInitials(traveler.name)}
                 index={idx}
                 onEdit={openEdit}
                 onDelete={handleDelete}
@@ -272,6 +270,7 @@ export function TravelersManager({ travelers, onRefresh }: TravelersManagerProps
               <TravelerRow
                 key={traveler.id}
                 traveler={traveler}
+                initials={getTravelerInitials(traveler.name)}
                 index={defaultTravelers.length + idx}
                 onEdit={openEdit}
                 onDelete={handleDelete}

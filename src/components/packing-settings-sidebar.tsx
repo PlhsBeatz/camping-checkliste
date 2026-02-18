@@ -4,7 +4,7 @@ import { X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
-import { cn } from '@/lib/utils'
+import { cn, getInitials } from '@/lib/utils'
 import { USER_COLORS } from '@/lib/user-colors'
 
 interface Mitreisender {
@@ -37,14 +37,8 @@ export function PackingSettingsSidebar({
   listDisplayMode,
   onListDisplayModeChange
 }: PackingSettingsSidebarProps) {
-  // Generate avatar initials and colors
-  const getInitials = (name: string) => {
-    const parts = name.split(' ')
-    if (parts.length >= 2) {
-      return ((parts[0]?.[0] ?? '') + (parts[1]?.[0] ?? '')).toUpperCase()
-    }
-    return name.substring(0, 2).toUpperCase()
-  }
+  const travelerNames = mitreisende.map((m) => m.name)
+  const getTravelerInitials = (name: string) => getInitials(name, travelerNames)
 
   const getAvatarStyle = (person: Mitreisender, index: number) => {
     if (person.farbe) {
@@ -172,7 +166,7 @@ export function PackingSettingsSidebar({
                     className="w-12 h-12 rounded-full flex items-center justify-center text-lg font-bold"
                     style={getAvatarStyle(person, index)}
                   >
-                    {getInitials(person.name)}
+                    {getTravelerInitials(person.name)}
                   </div>
                   <span className="text-sm font-medium text-gray-900 text-center">
                     {person.name}

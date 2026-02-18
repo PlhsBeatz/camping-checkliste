@@ -22,7 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { cn, formatWeight } from '@/lib/utils'
+import { cn, formatWeight, getInitials } from '@/lib/utils'
 import { USER_COLORS, DEFAULT_USER_COLOR_BG } from '@/lib/user-colors'
 import { useSearchParams } from 'next/navigation'
 import { usePackingSync } from '@/hooks/use-packing-sync'
@@ -793,19 +793,8 @@ function HomeContent() {
     }
   }
 
-  // Initialen: Bei Duplikaten (z.B. Luisa, Luca) 1.+3. Buchstabe nutzen
-  const getInitials = (name: string) => {
-    const getFirstTwo = (n: string) =>
-      n.split(' ').map(p => p[0]).join('').toUpperCase().substring(0, 2)
-    const firstTwo = getFirstTwo(name)
-    const sameInitialsCount = vacationMitreisende.filter(
-      m => getFirstTwo(m.name) === firstTwo
-    ).length
-    if (sameInitialsCount >= 2 && name.length >= 3) {
-      return (name[0] ?? '').toUpperCase() + (name[2] ?? '').toUpperCase()
-    }
-    return firstTwo
-  }
+  const travelerNames = vacationMitreisende.map((m) => m.name)
+  const getTravelerInitials = (name: string) => getInitials(name, travelerNames)
 
   return (
     <div className="min-h-screen bg-[rgb(250,250,249)] flex max-w-full overflow-x-hidden">
@@ -871,7 +860,7 @@ function HomeContent() {
                         }
                       >
                         {selectedPackProfile ? (
-                          getInitials(vacationMitreisende.find((m) => m.id === selectedPackProfile)?.name ?? '?')
+                          getTravelerInitials(vacationMitreisende.find((m) => m.id === selectedPackProfile)?.name ?? '?')
                         ) : (
                           <Users className="h-4 w-4" />
                         )}

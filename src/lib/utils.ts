@@ -62,6 +62,43 @@ export function groupBy<T, K extends PropertyKey>(
 }
 
 /**
+ * Generiert 2-Buchstaben-Initialen für einen Namen.
+ * - 2+ Wörter: erster Buchstabe der ersten zwei Wörter (z.B. "Max Mustermann" -> "MM")
+ * - 1 Wort: erste 2 Zeichen (z.B. "Andi" -> "AN", "Melli" -> "ME")
+ *
+ * Bei Duplikaten (gleiche Basis-Initialen bei mehreren Personen) wird
+ * 1.+3. Buchstabe genutzt (z.B. Luca -> "LC", Luisa -> "LI").
+ *
+ * @param name Der Name
+ * @param allNames Alle Namen im Kontext (z.B. alle Mitreisenden) für Duplikat-Vermeidung
+ */
+export function getInitials(name: string, allNames?: string[]): string {
+  const getBase = (n: string) => {
+    const t = n.trim()
+    if (!t) return '??'
+    const parts = t.split(/\s+/).filter(Boolean)
+    if (parts.length >= 2) {
+      return ((parts[0]?.[0] ?? '') + (parts[1]?.[0] ?? '')).toUpperCase()
+    }
+    const s = t.substring(0, 2).toUpperCase()
+    return s.length >= 2 ? s : (s + (s[0] ?? '')).substring(0, 2)
+  }
+
+  const base = getBase(name)
+  if (!allNames || allNames.length === 0) return base
+
+  const duplicates = allNames.filter((n) => getBase(n.trim()) === base)
+  if (duplicates.length >= 2) {
+    const t = name.trim()
+    const first = (t[0] ?? '').toUpperCase()
+    const third = (t[2] ?? t[1] ?? '').toUpperCase()
+    const alt = (first + third).substring(0, 2)
+    return alt || base
+  }
+  return base
+}
+
+/**
  * Debounces a function call
  */
 export function debounce<T extends (...args: unknown[]) => unknown>(
