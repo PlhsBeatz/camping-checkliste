@@ -14,6 +14,7 @@ import {
 import { Trash2, Plus, Star, MoreVertical, Pencil } from 'lucide-react'
 import { Mitreisender } from '@/lib/db'
 import type { ApiResponse } from '@/lib/api-types'
+import { USER_COLORS, DEFAULT_USER_COLOR_BG } from '@/lib/user-colors'
 
 const getInitials = (name: string) => {
   const parts = name.split(' ')
@@ -23,32 +24,13 @@ const getInitials = (name: string) => {
   return name.substring(0, 2).toUpperCase()
 }
 
-const PRESET_COLORS = [
-  { name: 'Blau', value: '#3b82f6' },
-  { name: 'Grün', value: '#10b981' },
-  { name: 'Gelb', value: '#f59e0b' },
-  { name: 'Rot', value: '#ef4444' },
-  { name: 'Lila', value: '#8b5cf6' },
-  { name: 'Pink', value: '#ec4899' },
-  { name: 'Orange', value: '#f97316' },
-  { name: 'Türkis', value: '#06b6d4' },
-]
-
 const getAvatarColor = (index: number, customColor?: string | null) => {
   if (customColor) {
-    // Heller Farbton für Hintergrund, dunkler für Text – berechnet aus der Farbe
-    return { backgroundColor: customColor, color: '#fff' }
+    const preset = USER_COLORS.find((c) => c.bg === customColor)
+    return { backgroundColor: customColor, color: preset?.fg ?? '#ffffff' }
   }
-  const fallbacks = [
-    { bg: '#bfdbfe', fg: '#1e40af' },
-    { bg: '#fbcfe8', fg: '#9d174d' },
-    { bg: '#e9d5ff', fg: '#6b21a8' },
-    { bg: '#fef08a', fg: '#a16207' },
-    { bg: '#bbf7d0', fg: '#166534' },
-    { bg: '#fecaca', fg: '#b91c1c' },
-  ]
-  const c = fallbacks[index % fallbacks.length]
-  return { backgroundColor: c!.bg, color: c!.fg }
+  const c = USER_COLORS[index % USER_COLORS.length]!
+  return { backgroundColor: c.bg, color: c.fg }
 }
 
 function TravelerRow({
@@ -127,7 +109,7 @@ export function TravelersManager({ travelers, onRefresh }: TravelersManagerProps
     name: '',
     userId: '',
     isDefaultMember: false,
-    farbe: '#3b82f6'
+    farbe: DEFAULT_USER_COLOR_BG
   })
 
   const handleCreate = async () => {
@@ -151,7 +133,7 @@ export function TravelersManager({ travelers, onRefresh }: TravelersManagerProps
       const data = (await res.json()) as ApiResponse<unknown>
       if (data.success) {
         setShowDialog(false)
-        setForm({ name: '', userId: '', isDefaultMember: false, farbe: '#3b82f6' })
+        setForm({ name: '', userId: '', isDefaultMember: false, farbe: DEFAULT_USER_COLOR_BG })
         onRefresh()
       } else {
         alert('Fehler: ' + (data.error ?? 'Unbekannt'))
@@ -187,7 +169,7 @@ export function TravelersManager({ travelers, onRefresh }: TravelersManagerProps
       if (data.success) {
         setShowDialog(false)
         setEditingTraveler(null)
-        setForm({ name: '', userId: '', isDefaultMember: false, farbe: '#3b82f6' })
+        setForm({ name: '', userId: '', isDefaultMember: false, farbe: DEFAULT_USER_COLOR_BG })
         onRefresh()
       } else {
         alert('Fehler: ' + (data.error ?? 'Unbekannt'))
@@ -233,14 +215,14 @@ export function TravelersManager({ travelers, onRefresh }: TravelersManagerProps
       name: traveler.name,
       userId: traveler.user_id || '',
       isDefaultMember: traveler.is_default_member,
-      farbe: traveler.farbe || '#3b82f6'
+      farbe: traveler.farbe || DEFAULT_USER_COLOR_BG
     })
     setShowDialog(true)
   }
 
   const openNew = () => {
     setEditingTraveler(null)
-    setForm({ name: '', userId: '', isDefaultMember: false, farbe: '#3b82f6' })
+    setForm({ name: '', userId: '', isDefaultMember: false, farbe: DEFAULT_USER_COLOR_BG })
     setShowDialog(true)
   }
 
@@ -345,27 +327,20 @@ export function TravelersManager({ travelers, onRefresh }: TravelersManagerProps
             </div>
             <div>
               <Label htmlFor="traveler-farbe">Farbe</Label>
-              <div className="flex gap-2 mt-2">
-                {PRESET_COLORS.map((color) => (
+              <div className="flex flex-wrap gap-2 mt-2">
+                {USER_COLORS.map((color) => (
                   <button
-                    key={color.value}
+                    key={color.id}
                     type="button"
                     className={`h-8 w-8 rounded-full border-2 ${
-                      form.farbe === color.value ? 'border-foreground' : 'border-transparent'
+                      form.farbe === color.bg ? 'border-foreground' : 'border-transparent'
                     }`}
-                    style={{ backgroundColor: color.value }}
-                    onClick={() => setForm({ ...form, farbe: color.value })}
-                    title={color.name}
+                    style={{ backgroundColor: color.bg }}
+                    onClick={() => setForm({ ...form, farbe: color.bg })}
+                    title={color.label}
                   />
                 ))}
               </div>
-              <Input
-                id="traveler-farbe"
-                type="color"
-                value={form.farbe}
-                onChange={(e) => setForm({ ...form, farbe: e.target.value })}
-                className="mt-2 h-10"
-              />
             </div>
             <div className="flex items-center space-x-2">
               <Checkbox

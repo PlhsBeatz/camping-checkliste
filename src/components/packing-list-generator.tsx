@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Sparkles, Tag as TagIcon } from 'lucide-react'
 import { Tag, EquipmentItem } from '@/lib/db'
 import type { ApiResponse } from '@/lib/api-types'
+import { DEFAULT_USER_COLOR_BG } from '@/lib/user-colors'
 
 interface PackingListGeneratorProps {
   open: boolean
@@ -178,7 +179,7 @@ export function PackingListGenerator({
                       >
                         <div
                           className="h-6 w-6 rounded-full flex items-center justify-center flex-shrink-0"
-                          style={{ backgroundColor: tag.farbe || '#3b82f6' }}
+                          style={{ backgroundColor: tag.farbe || DEFAULT_USER_COLOR_BG }}
                         >
                           {tag.icon ? (
                             <span className="text-white text-xs">{tag.icon}</span>
@@ -227,7 +228,7 @@ export function PackingListGenerator({
                                     key={tag.id}
                                     className="text-xs px-1.5 py-0.5 rounded"
                                     style={{ 
-                                      backgroundColor: tag.farbe || '#3b82f6',
+                                      backgroundColor: tag.farbe || DEFAULT_USER_COLOR_BG,
                                       color: 'white'
                                     }}
                                   >

@@ -14,22 +14,12 @@ import {
 import { MoreVertical, Pencil, Plus, Trash2, Tag as TagIcon } from 'lucide-react'
 import { Tag } from '@/lib/db'
 import type { ApiResponse } from '@/lib/api-types'
+import { USER_COLORS, DEFAULT_USER_COLOR_BG, toColorInputValue } from '@/lib/user-colors'
 
 interface TagManagerProps {
   tags: Tag[]
   onRefresh: () => void
 }
-
-const PRESET_COLORS = [
-  { name: 'Blau', value: '#3b82f6' },
-  { name: 'Grün', value: '#10b981' },
-  { name: 'Gelb', value: '#f59e0b' },
-  { name: 'Rot', value: '#ef4444' },
-  { name: 'Lila', value: '#8b5cf6' },
-  { name: 'Pink', value: '#ec4899' },
-  { name: 'Orange', value: '#f97316' },
-  { name: 'Türkis', value: '#06b6d4' },
-]
 
 export function TagManager({ tags, onRefresh }: TagManagerProps) {
   const [showDialog, setShowDialog] = useState(false)
@@ -39,7 +29,7 @@ export function TagManager({ tags, onRefresh }: TagManagerProps) {
 
   const [form, setForm] = useState({
     titel: '',
-    farbe: '#3b82f6',
+    farbe: DEFAULT_USER_COLOR_BG,
     icon: '',
     beschreibung: ''
   })
@@ -65,7 +55,7 @@ export function TagManager({ tags, onRefresh }: TagManagerProps) {
       const data = (await res.json()) as ApiResponse<unknown>
       if (data.success) {
         setShowDialog(false)
-        setForm({ titel: '', farbe: '#3b82f6', icon: '', beschreibung: '' })
+        setForm({ titel: '', farbe: DEFAULT_USER_COLOR_BG, icon: '', beschreibung: '' })
         onRefresh()
       } else {
         alert('Fehler: ' + (data.error ?? 'Unbekannt'))
@@ -101,7 +91,7 @@ export function TagManager({ tags, onRefresh }: TagManagerProps) {
       if (data.success) {
         setShowDialog(false)
         setEditingTag(null)
-        setForm({ titel: '', farbe: '#3b82f6', icon: '', beschreibung: '' })
+        setForm({ titel: '', farbe: DEFAULT_USER_COLOR_BG, icon: '', beschreibung: '' })
         onRefresh()
       } else {
         alert('Fehler: ' + (data.error ?? 'Unbekannt'))
@@ -145,7 +135,7 @@ export function TagManager({ tags, onRefresh }: TagManagerProps) {
     setEditingTag(tag)
     setForm({
       titel: tag.titel,
-      farbe: tag.farbe || '#3b82f6',
+      farbe: tag.farbe || DEFAULT_USER_COLOR_BG,
       icon: tag.icon || '',
       beschreibung: tag.beschreibung || ''
     })
@@ -154,7 +144,7 @@ export function TagManager({ tags, onRefresh }: TagManagerProps) {
 
   const openNew = () => {
     setEditingTag(null)
-    setForm({ titel: '', farbe: '#3b82f6', icon: '', beschreibung: '' })
+    setForm({ titel: '', farbe: DEFAULT_USER_COLOR_BG, icon: '', beschreibung: '' })
     setShowDialog(true)
   }
 
@@ -171,12 +161,12 @@ export function TagManager({ tags, onRefresh }: TagManagerProps) {
             <div
               key={tag.id}
               className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50"
-              style={{ borderLeftWidth: '4px', borderLeftColor: tag.farbe || '#3b82f6' }}
+              style={{ borderLeftWidth: '4px', borderLeftColor: tag.farbe || DEFAULT_USER_COLOR_BG }}
             >
               <div className="flex items-center gap-3 flex-1 min-w-0">
                 <div
                   className="h-8 w-8 rounded-full flex items-center justify-center flex-shrink-0"
-                  style={{ backgroundColor: tag.farbe || '#3b82f6' }}
+                  style={{ backgroundColor: tag.farbe || DEFAULT_USER_COLOR_BG }}
                 >
                   {tag.icon ? (
                     <span className="text-white text-sm">{tag.icon}</span>
@@ -259,24 +249,24 @@ export function TagManager({ tags, onRefresh }: TagManagerProps) {
             
             <div>
               <Label htmlFor="tag-farbe">Farbe</Label>
-              <div className="flex gap-2 mt-2">
-                {PRESET_COLORS.map((color) => (
+              <div className="flex flex-wrap gap-2 mt-2">
+                {USER_COLORS.map((color) => (
                   <button
-                    key={color.value}
+                    key={color.id}
                     type="button"
                     className={`h-8 w-8 rounded-full border-2 ${
-                      form.farbe === color.value ? 'border-foreground' : 'border-transparent'
+                      form.farbe === color.bg ? 'border-foreground' : 'border-transparent'
                     }`}
-                    style={{ backgroundColor: color.value }}
-                    onClick={() => setForm({ ...form, farbe: color.value })}
-                    title={color.name}
+                    style={{ backgroundColor: color.bg }}
+                    onClick={() => setForm({ ...form, farbe: color.bg })}
+                    title={color.label}
                   />
                 ))}
               </div>
               <Input
                 id="tag-farbe"
                 type="color"
-                value={form.farbe}
+                value={toColorInputValue(form.farbe)}
                 onChange={(e) => setForm({ ...form, farbe: e.target.value })}
                 className="mt-2 h-10"
               />
