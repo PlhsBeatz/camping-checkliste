@@ -232,7 +232,7 @@ export default function AusruestungPage() {
       if (data.success) {
         setShowAddDialog(false)
         resetForm()
-        const itemsRes = await fetch('/api/equipment-items')
+        const itemsRes = await fetch('/api/equipment-items', { cache: 'no-store' })
         const itemsData = (await itemsRes.json()) as ApiResponse<EquipmentItem[]>
         if (itemsData.success && itemsData.data) {
           setEquipmentItems(itemsData.data)
@@ -284,7 +284,7 @@ export default function AusruestungPage() {
         setShowEditDialog(false)
         setEditingItem(null)
         resetForm()
-        const itemsRes = await fetch('/api/equipment-items')
+        const itemsRes = await fetch('/api/equipment-items', { cache: 'no-store' })
         const itemsData = (await itemsRes.json()) as ApiResponse<EquipmentItem[]>
         if (itemsData.success && itemsData.data) {
           setEquipmentItems(itemsData.data)
