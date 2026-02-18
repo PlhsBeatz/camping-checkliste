@@ -53,6 +53,7 @@ export interface Mitreisender {
   name: string
   user_id?: string | null
   is_default_member: boolean
+  farbe?: string | null
   created_at: string
 }
 
@@ -972,13 +973,14 @@ export async function createMitreisender(
   db: D1Database,
   name: string,
   userId?: string | null,
-  isDefaultMember: boolean = false
+  isDefaultMember: boolean = false,
+  farbe?: string | null
 ): Promise<string | null> {
   try {
     const id = crypto.randomUUID()
     await db
-      .prepare('INSERT INTO mitreisende (id, name, user_id, is_default_member) VALUES (?, ?, ?, ?)')
-      .bind(id, name, userId || null, isDefaultMember ? 1 : 0)
+      .prepare('INSERT INTO mitreisende (id, name, user_id, is_default_member, farbe) VALUES (?, ?, ?, ?, ?)')
+      .bind(id, name, userId || null, isDefaultMember ? 1 : 0, farbe || null)
       .run()
     return id
   } catch (error) {
@@ -995,18 +997,19 @@ export async function updateMitreisender(
   id: string,
   name: string,
   userId?: string | null,
-  isDefaultMember?: boolean
+  isDefaultMember?: boolean,
+  farbe?: string | null
 ): Promise<boolean> {
   try {
     if (isDefaultMember !== undefined) {
       await db
-        .prepare('UPDATE mitreisende SET name = ?, user_id = ?, is_default_member = ? WHERE id = ?')
-        .bind(name, userId || null, isDefaultMember ? 1 : 0, id)
+        .prepare('UPDATE mitreisende SET name = ?, user_id = ?, is_default_member = ?, farbe = ? WHERE id = ?')
+        .bind(name, userId || null, isDefaultMember ? 1 : 0, farbe ?? null, id)
         .run()
     } else {
       await db
-        .prepare('UPDATE mitreisende SET name = ?, user_id = ? WHERE id = ?')
-        .bind(name, userId || null, id)
+        .prepare('UPDATE mitreisende SET name = ?, user_id = ?, farbe = ? WHERE id = ?')
+        .bind(name, userId || null, farbe ?? null, id)
         .run()
     }
     return true

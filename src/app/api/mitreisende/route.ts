@@ -51,8 +51,9 @@ export async function POST(request: NextRequest) {
       user_id?: string | null
       isDefaultMember?: boolean
       is_default_member?: boolean
+      farbe?: string | null
     }
-    const { name, userId, user_id, isDefaultMember, is_default_member } = body
+    const { name, userId, user_id, isDefaultMember, is_default_member, farbe } = body
 
     if (!name) {
       return NextResponse.json({ success: false, error: 'Name is required' }, { status: 400 })
@@ -62,7 +63,7 @@ export async function POST(request: NextRequest) {
     const finalUserId = userId || user_id
     const finalIsDefault = isDefaultMember !== undefined ? isDefaultMember : is_default_member
 
-    const id = await createMitreisender(db, name, finalUserId, finalIsDefault)
+    const id = await createMitreisender(db, name, finalUserId, finalIsDefault, farbe)
     
     if (!id) {
       return NextResponse.json({ success: false, error: 'Failed to create mitreisender' }, { status: 500 })
@@ -92,10 +93,11 @@ export async function PUT(request: NextRequest) {
       user_id?: string | null
       isDefaultMember?: boolean
       is_default_member?: boolean
+      farbe?: string | null
       vacationId?: string
       mitreisendeIds?: string[]
     }
-    const { id, name, userId, user_id, isDefaultMember, is_default_member, vacationId, mitreisendeIds } = body
+    const { id, name, userId, user_id, isDefaultMember, is_default_member, farbe, vacationId, mitreisendeIds } = body
 
     // Setzen der Mitreisenden für einen Urlaub
     if (vacationId && mitreisendeIds) {
@@ -115,7 +117,7 @@ export async function PUT(request: NextRequest) {
     const finalUserId = userId || user_id
     const finalIsDefault = isDefaultMember !== undefined ? isDefaultMember : is_default_member
 
-    const success = await updateMitreisender(db, id, name, finalUserId, finalIsDefault)
+    const success = await updateMitreisender(db, id, name, finalUserId, finalIsDefault, farbe)
     
     if (!success) {
       return NextResponse.json({ success: false, error: 'Failed to update mitreisender' }, { status: 500 })

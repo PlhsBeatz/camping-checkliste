@@ -23,16 +23,32 @@ const getInitials = (name: string) => {
   return name.substring(0, 2).toUpperCase()
 }
 
-const getAvatarColor = (index: number) => {
-  const colors = [
-    'bg-blue-200 text-blue-800',
-    'bg-pink-200 text-pink-800',
-    'bg-purple-200 text-purple-800',
-    'bg-yellow-200 text-yellow-800',
-    'bg-green-200 text-green-800',
-    'bg-red-200 text-red-800',
+const PRESET_COLORS = [
+  { name: 'Blau', value: '#3b82f6' },
+  { name: 'Grün', value: '#10b981' },
+  { name: 'Gelb', value: '#f59e0b' },
+  { name: 'Rot', value: '#ef4444' },
+  { name: 'Lila', value: '#8b5cf6' },
+  { name: 'Pink', value: '#ec4899' },
+  { name: 'Orange', value: '#f97316' },
+  { name: 'Türkis', value: '#06b6d4' },
+]
+
+const getAvatarColor = (index: number, customColor?: string | null) => {
+  if (customColor) {
+    // Heller Farbton für Hintergrund, dunkler für Text – berechnet aus der Farbe
+    return { backgroundColor: customColor, color: '#fff' }
+  }
+  const fallbacks = [
+    { bg: '#bfdbfe', fg: '#1e40af' },
+    { bg: '#fbcfe8', fg: '#9d174d' },
+    { bg: '#e9d5ff', fg: '#6b21a8' },
+    { bg: '#fef08a', fg: '#a16207' },
+    { bg: '#bbf7d0', fg: '#166534' },
+    { bg: '#fecaca', fg: '#b91c1c' },
   ]
-  return colors[index % colors.length]
+  const c = fallbacks[index % fallbacks.length]
+  return { backgroundColor: c!.bg, color: c!.fg }
 }
 
 function TravelerRow({
@@ -50,13 +66,12 @@ function TravelerRow({
 }) {
   return (
     <div
-      className={`flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 ${
-        isDefault ? 'bg-yellow-50 dark:bg-yellow-950/20' : ''
-      }`}
+      className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 bg-white"
     >
       <div className="flex items-center gap-3">
         <div
-          className={`h-10 w-10 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0 ${getAvatarColor(index)}`}
+          className="h-10 w-10 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0"
+          style={getAvatarColor(index, traveler.farbe)}
         >
           {getInitials(traveler.name)}
         </div>
@@ -113,7 +128,8 @@ export function TravelersManager({ travelers, onRefresh }: TravelersManagerProps
   const [form, setForm] = useState({
     name: '',
     userId: '',
-    isDefaultMember: false
+    isDefaultMember: false,
+    farbe: '#3b82f6'
   })
 
   const handleCreate = async () => {
@@ -130,13 +146,14 @@ export function TravelersManager({ travelers, onRefresh }: TravelersManagerProps
         body: JSON.stringify({
           name: form.name,
           userId: form.userId || null,
-          isDefaultMember: form.isDefaultMember
+          isDefaultMember: form.isDefaultMember,
+          farbe: form.farbe || null
         })
       })
       const data = (await res.json()) as ApiResponse<unknown>
       if (data.success) {
         setShowDialog(false)
-        setForm({ name: '', userId: '', isDefaultMember: false })
+        setForm({ name: '', userId: '', isDefaultMember: false, farbe: '#3b82f6' })
         onRefresh()
       } else {
         alert('Fehler: ' + (data.error ?? 'Unbekannt'))
@@ -164,7 +181,8 @@ export function TravelersManager({ travelers, onRefresh }: TravelersManagerProps
           id: editingTraveler.id,
           name: form.name,
           userId: form.userId || null,
-          isDefaultMember: form.isDefaultMember
+          isDefaultMember: form.isDefaultMember,
+          farbe: form.farbe || null
         })
       })
       const data = (await res.json()) as ApiResponse<unknown>
@@ -216,14 +234,15 @@ export function TravelersManager({ travelers, onRefresh }: TravelersManagerProps
     setForm({
       name: traveler.name,
       userId: traveler.user_id || '',
-      isDefaultMember: traveler.is_default_member
+      isDefaultMember: traveler.is_default_member,
+      farbe: traveler.farbe || '#3b82f6'
     })
     setShowDialog(true)
   }
 
   const openNew = () => {
     setEditingTraveler(null)
-    setForm({ name: '', userId: '', isDefaultMember: false })
+    setForm({ name: '', userId: '', isDefaultMember: false, farbe: '#3b82f6' })
     setShowDialog(true)
   }
 
@@ -237,7 +256,7 @@ export function TravelersManager({ travelers, onRefresh }: TravelersManagerProps
       {defaultTravelers.length > 0 && (
         <div className="space-y-2">
           <h3 className="flex items-center gap-2 text-base font-semibold">
-            <Star className="h-4 w-4 text-yellow-500 fill-yellow-500" />
+            <Star className="h-4 w-4" style={{ color: 'rgb(230,126,34)', fill: 'rgb(230,126,34)' }} />
             Standard-Mitreisende
           </h3>
           <p className="text-sm text-muted-foreground">
@@ -295,7 +314,7 @@ export function TravelersManager({ travelers, onRefresh }: TravelersManagerProps
         </Button>
       </div>
 
-      {/* Create/Edit Dialog */}
+      {/* Create/Edit Dialog – Padding wie Packliste/Ausrüstung (px-6) */}
       <ResponsiveModal
         open={showDialog}
         onOpenChange={setShowDialog}
@@ -303,8 +322,10 @@ export function TravelersManager({ travelers, onRefresh }: TravelersManagerProps
         description={editingTraveler 
           ? 'Ändern Sie die Details des Mitreisenden' 
           : 'Erstellen Sie einen neuen Mitreisenden'}
+        contentClassName="max-w-2xl max-h-[90vh] overflow-y-auto"
+        noPadding
       >
-        <div className="space-y-4">
+        <div className="space-y-4 px-6 pt-4 pb-6">
             <div>
               <Label htmlFor="traveler-name">Name *</Label>
               <Input
@@ -326,6 +347,30 @@ export function TravelersManager({ travelers, onRefresh }: TravelersManagerProps
                 Dieses Feld wird für die zukünftige Benutzer-Authentifizierung verwendet
               </p>
             </div>
+            <div>
+              <Label htmlFor="traveler-farbe">Farbe</Label>
+              <div className="flex gap-2 mt-2">
+                {PRESET_COLORS.map((color) => (
+                  <button
+                    key={color.value}
+                    type="button"
+                    className={`h-8 w-8 rounded-full border-2 ${
+                      form.farbe === color.value ? 'border-foreground' : 'border-transparent'
+                    }`}
+                    style={{ backgroundColor: color.value }}
+                    onClick={() => setForm({ ...form, farbe: color.value })}
+                    title={color.name}
+                  />
+                ))}
+              </div>
+              <Input
+                id="traveler-farbe"
+                type="color"
+                value={form.farbe}
+                onChange={(e) => setForm({ ...form, farbe: e.target.value })}
+                className="mt-2 h-10"
+              />
+            </div>
             <div className="flex items-center space-x-2">
               <Checkbox
                 id="is-default"
@@ -337,7 +382,7 @@ export function TravelersManager({ travelers, onRefresh }: TravelersManagerProps
                   htmlFor="is-default"
                   className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer flex items-center gap-2"
                 >
-                  <Star className="h-4 w-4 text-yellow-500" />
+                  <Star className="h-4 w-4" style={{ color: 'rgb(230,126,34)', fill: 'rgb(230,126,34)' }} />
                   Als Standard markieren
                 </label>
                 <p className="text-xs text-muted-foreground">
