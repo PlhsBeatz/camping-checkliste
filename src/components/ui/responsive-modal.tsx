@@ -85,7 +85,7 @@ export function ResponsiveModal({
               <DrawerDescription className="text-left">{description}</DrawerDescription>
             )}
           </DrawerHeader>
-          <div className={cn('flex-1 overflow-y-auto min-h-0', !noPadding && 'px-6 pb-6')}>
+          <div className={cn('flex-1 overflow-y-auto min-h-0 overscroll-y-none', !noPadding && 'px-6 pb-6')}>
             {children}
           </div>
         </DrawerContent>
