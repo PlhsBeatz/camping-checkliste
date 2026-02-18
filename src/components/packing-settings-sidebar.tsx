@@ -5,11 +5,13 @@ import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
+import { USER_COLORS } from '@/lib/user-colors'
 
 interface Mitreisender {
   id: string
   name: string
   is_default_member: boolean
+  farbe?: string | null
 }
 
 interface PackingSettingsSidebarProps {
@@ -44,16 +46,13 @@ export function PackingSettingsSidebar({
     return name.substring(0, 2).toUpperCase()
   }
 
-  const getAvatarColor = (index: number) => {
-    const colors = [
-      'bg-blue-200 text-blue-800',
-      'bg-pink-200 text-pink-800',
-      'bg-purple-200 text-purple-800',
-      'bg-yellow-200 text-yellow-800',
-      'bg-green-200 text-green-800',
-      'bg-red-200 text-red-800',
-    ]
-    return colors[index % colors.length]
+  const getAvatarStyle = (person: Mitreisender, index: number) => {
+    if (person.farbe) {
+      const preset = USER_COLORS.find((c) => c.bg === person.farbe)
+      return { backgroundColor: person.farbe, color: preset?.fg ?? '#ffffff' }
+    }
+    const c = USER_COLORS[index % USER_COLORS.length]!
+    return { backgroundColor: c.bg, color: c.fg }
   }
 
   return (
@@ -141,9 +140,12 @@ export function PackingSettingsSidebar({
                 : 'border-gray-200 hover:border-gray-300'
             )}
           >
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-[rgb(45,79,30)] rounded-full flex items-center justify-center flex-shrink-0">
-                <span className="material-icons text-white">groups</span>
+                <div className="flex items-center gap-3">
+              <div
+                className="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0"
+                style={{ backgroundColor: 'rgb(45,79,30)', color: '#ffffff' }}
+              >
+                <span className="material-icons">groups</span>
               </div>
               <div className="text-left">
                 <div className="font-semibold text-gray-900">Zentral / Alle</div>
@@ -166,10 +168,10 @@ export function PackingSettingsSidebar({
                       : 'border-gray-200 hover:border-gray-300'
                   )}
                 >
-                  <div className={cn(
-                    "w-12 h-12 rounded-full flex items-center justify-center text-lg font-bold",
-                    getAvatarColor(index)
-                  )}>
+                  <div
+                    className="w-12 h-12 rounded-full flex items-center justify-center text-lg font-bold"
+                    style={getAvatarStyle(person, index)}
+                  >
                     {getInitials(person.name)}
                   </div>
                   <span className="text-sm font-medium text-gray-900 text-center">

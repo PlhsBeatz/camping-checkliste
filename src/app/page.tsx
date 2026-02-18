@@ -23,6 +23,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { cn, formatWeight } from '@/lib/utils'
+import { USER_COLORS, DEFAULT_USER_COLOR_BG } from '@/lib/user-colors'
 import { useSearchParams } from 'next/navigation'
 import { usePackingSync } from '@/hooks/use-packing-sync'
 import { getCachedPackingItems, subscribeToOnlineStatus } from '@/lib/offline-sync'
@@ -847,16 +848,30 @@ function HomeContent() {
                     </div>
                   </div>
 
-                  {/* Pack Profile Button - Nur runder Kreis mit Initialen oder Alle-Symbol */}
+                  {/* Pack Profile Button - Nutzt Farbe des ausgewählten Profils */}
                   {packingItems.length > 0 && (
                     <button
                       type="button"
                       onClick={() => setShowPackSettings(true)}
                       className="flex-shrink-0 p-0 border-0 bg-transparent cursor-pointer focus:outline-none focus:ring-2 focus:ring-[rgb(45,79,30)] focus:ring-offset-2 rounded-full"
                     >
-                      <div className="h-8 w-8 rounded-full bg-[rgb(45,79,30)] text-white flex items-center justify-center text-xs font-bold">
+                      <div
+                        className="h-8 w-8 rounded-full text-white flex items-center justify-center text-xs font-bold"
+                        style={
+                          selectedPackProfile
+                            ? (() => {
+                                const m = vacationMitreisende.find((x) => x.id === selectedPackProfile)
+                                const preset = m?.farbe ? USER_COLORS.find((c) => c.bg === m.farbe) : null
+                                return {
+                                  backgroundColor: m?.farbe ?? DEFAULT_USER_COLOR_BG,
+                                  color: preset?.fg ?? '#ffffff',
+                                }
+                              })()
+                            : { backgroundColor: 'rgb(45,79,30)', color: '#ffffff' }
+                        }
+                      >
                         {selectedPackProfile ? (
-                          getInitials(vacationMitreisende.find(m => m.id === selectedPackProfile)?.name ?? '?')
+                          getInitials(vacationMitreisende.find((m) => m.id === selectedPackProfile)?.name ?? '?')
                         ) : (
                           <Users className="h-4 w-4" />
                         )}
