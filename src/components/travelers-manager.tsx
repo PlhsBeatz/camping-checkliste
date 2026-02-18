@@ -187,7 +187,7 @@ export function TravelersManager({ travelers, onRefresh }: TravelersManagerProps
       if (data.success) {
         setShowDialog(false)
         setEditingTraveler(null)
-        setForm({ name: '', userId: '', isDefaultMember: false })
+        setForm({ name: '', userId: '', isDefaultMember: false, farbe: '#3b82f6' })
         onRefresh()
       } else {
         alert('Fehler: ' + (data.error ?? 'Unbekannt'))
