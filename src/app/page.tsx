@@ -1033,9 +1033,6 @@ function HomeContent() {
         <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
           <div className="px-6 pt-6 pb-4 border-b flex-shrink-0">
             <h2 className="text-lg font-semibold">Gegenstände hinzufügen</h2>
-            <p className="text-sm text-muted-foreground mt-1">
-              Wählen Sie Ausrüstungsgegenstände aus, die zur Packliste hinzugefügt werden sollen
-            </p>
           </div>
 
           {/* Search Bar */}
@@ -1048,9 +1045,6 @@ function HomeContent() {
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-10"
               />
-            </div>
-            <div className="mt-2 text-sm text-muted-foreground">
-              {selectedEquipmentIds.size} ausgewählt · {availableEquipment.length} verfügbar
             </div>
           </div>
 
