@@ -54,13 +54,11 @@ const getAvatarColor = (index: number, customColor?: string | null) => {
 function TravelerRow({
   traveler,
   index,
-  isDefault,
   onEdit,
   onDelete,
 }: {
   traveler: Mitreisender
   index: number
-  isDefault: boolean
   onEdit: (t: Mitreisender) => void
   onDelete: (id: string) => void
 }) {
@@ -268,7 +266,6 @@ export function TravelersManager({ travelers, onRefresh }: TravelersManagerProps
                 key={traveler.id}
                 traveler={traveler}
                 index={idx}
-                isDefault
                 onEdit={openEdit}
                 onDelete={handleDelete}
               />
@@ -294,7 +291,6 @@ export function TravelersManager({ travelers, onRefresh }: TravelersManagerProps
                 key={traveler.id}
                 traveler={traveler}
                 index={defaultTravelers.length + idx}
-                isDefault={false}
                 onEdit={openEdit}
                 onDelete={handleDelete}
               />
