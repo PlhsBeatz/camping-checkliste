@@ -15,6 +15,7 @@ import { useState, useEffect } from 'react'
 import { Vacation, Mitreisender } from '@/lib/db'
 import type { ApiResponse } from '@/lib/api-types'
 import { ResponsiveModal } from '@/components/ui/responsive-modal'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
@@ -38,6 +39,7 @@ export default function UrlaubePage() {
   const [showNewVacationDialog, setShowNewVacationDialog] = useState(false)
   const [editingVacationId, setEditingVacationId] = useState<string | null>(null)
   const [vacationMitreisende, setVacationMitreisende] = useState<Mitreisender[]>([])
+  const [deleteVacationId, setDeleteVacationId] = useState<string | null>(null)
   
   const [newVacationForm, setNewVacationForm] = useState({
     titel: '',
@@ -173,10 +175,13 @@ export default function UrlaubePage() {
     setVacationMitreisende([])
   }
 
-  const handleDeleteVacation = async (vacationId: string) => {
-    if (!confirm('Sind Sie sicher, dass Sie diesen Urlaub löschen möchten?')) {
-      return
-    }
+  const handleDeleteVacation = (vacationId: string) => {
+    setDeleteVacationId(vacationId)
+  }
+
+  const executeDeleteVacation = async () => {
+    if (!deleteVacationId) return
+    const vacationId = deleteVacationId
 
     setIsLoading(true)
     try {
@@ -394,6 +399,16 @@ export default function UrlaubePage() {
                 </div>
           </ResponsiveModal>
 
+          {/* Urlaub löschen – Bestätigung */}
+          <ConfirmDialog
+            open={!!deleteVacationId}
+            onOpenChange={(open) => !open && setDeleteVacationId(null)}
+            title="Urlaub löschen"
+            description="Sind Sie sicher, dass Sie diesen Urlaub löschen möchten?"
+            onConfirm={executeDeleteVacation}
+            isLoading={isLoading}
+          />
+
           {/* Vacations List */}
           <div className="grid gap-4">
             {displayedVacations.length === 0 ? (
@@ -451,7 +466,7 @@ export default function UrlaubePage() {
                               e.preventDefault()
                               handleDeleteVacation(vacation.id)
                             }}
-                            className="text-destructive"
+                            className="text-destructive focus:text-destructive"
                           >
                             <Trash2 className="h-4 w-4 mr-2" />
                             Löschen

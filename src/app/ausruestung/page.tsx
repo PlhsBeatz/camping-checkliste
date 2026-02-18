@@ -7,6 +7,7 @@ import { useState, useEffect } from 'react'
 import { EquipmentItem, Category, MainCategory, TransportVehicle, Tag } from '@/lib/db'
 import type { ApiResponse } from '@/lib/api-types'
 import { ResponsiveModal } from '@/components/ui/responsive-modal'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
@@ -38,6 +39,7 @@ export default function AusruestungPage() {
   const [showAddDialog, setShowAddDialog] = useState(false)
   const [showEditDialog, setShowEditDialog] = useState(false)
   const [editingItem, setEditingItem] = useState<EquipmentItem | null>(null)
+  const [deleteEquipmentId, setDeleteEquipmentId] = useState<string | null>(null)
   
   // Form state
   const [formData, setFormData] = useState({
@@ -293,10 +295,13 @@ export default function AusruestungPage() {
     }
   }
 
-  const handleDeleteEquipment = async (equipmentId: string) => {
-    if (!confirm('Sind Sie sicher, dass Sie diesen Gegenstand löschen möchten?')) {
-      return
-    }
+  const handleDeleteEquipment = (equipmentId: string) => {
+    setDeleteEquipmentId(equipmentId)
+  }
+
+  const executeDeleteEquipment = async () => {
+    if (!deleteEquipmentId) return
+    const equipmentId = deleteEquipmentId
 
     setIsLoading(true)
     try {
@@ -627,6 +632,16 @@ export default function AusruestungPage() {
             </div>
           </div>
       </ResponsiveModal>
+
+      {/* Gegenstand löschen – Bestätigung */}
+      <ConfirmDialog
+        open={!!deleteEquipmentId}
+        onOpenChange={(open) => !open && setDeleteEquipmentId(null)}
+        title="Gegenstand löschen"
+        description="Sind Sie sicher, dass Sie diesen Gegenstand löschen möchten?"
+        onConfirm={executeDeleteEquipment}
+        isLoading={isLoading}
+      />
 
       {/* Edit Equipment Dialog */}
       <ResponsiveModal

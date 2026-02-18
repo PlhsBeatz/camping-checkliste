@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { ResponsiveModal } from '@/components/ui/responsive-modal'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -87,7 +88,7 @@ function TravelerRow({
               e.preventDefault()
               onDelete(traveler.id)
             }}
-            className="text-destructive"
+            className="text-destructive focus:text-destructive"
           >
             <Trash2 className="h-4 w-4 mr-2" />
             Löschen
@@ -106,6 +107,7 @@ interface TravelersManagerProps {
 export function TravelersManager({ travelers, onRefresh }: TravelersManagerProps) {
   const [showDialog, setShowDialog] = useState(false)
   const [editingTraveler, setEditingTraveler] = useState<Mitreisender | null>(null)
+  const [deleteTravelerId, setDeleteTravelerId] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
 
   const [form, setForm] = useState({
@@ -182,10 +184,13 @@ export function TravelersManager({ travelers, onRefresh }: TravelersManagerProps
     }
   }
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Möchten Sie diesen Mitreisenden wirklich löschen? Dies entfernt ihn auch von allen Urlauben und Ausrüstungsgegenständen.')) {
-      return
-    }
+  const handleDelete = (id: string) => {
+    setDeleteTravelerId(id)
+  }
+
+  const executeDeleteTraveler = async () => {
+    if (!deleteTravelerId) return
+    const id = deleteTravelerId
 
     setIsLoading(true)
     try {
@@ -349,6 +354,16 @@ export function TravelersManager({ travelers, onRefresh }: TravelersManagerProps
             </Button>
           </div>
       </ResponsiveModal>
+
+      {/* Mitreisender löschen – Bestätigung */}
+      <ConfirmDialog
+        open={!!deleteTravelerId}
+        onOpenChange={(open) => !open && setDeleteTravelerId(null)}
+        title="Mitreisenden löschen"
+        description="Möchten Sie diesen Mitreisenden wirklich löschen? Dies entfernt ihn auch von allen Urlauben und Ausrüstungsgegenständen."
+        onConfirm={executeDeleteTraveler}
+        isLoading={isLoading}
+      />
     </div>
   )
 }

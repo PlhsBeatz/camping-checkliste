@@ -17,6 +17,7 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { ResponsiveModal } from '@/components/ui/responsive-modal'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -177,6 +178,7 @@ export function CategoryManager({ categories, mainCategories, onRefresh, openNew
   const [editingCategory, setEditingCategory] = useState<CategoryWithMain | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [draggingMainId, setDraggingMainId] = useState<string | null>(null)
+  const [deleteConfirm, setDeleteConfirm] = useState<{ type: 'main' | 'category'; id: string } | null>(null)
 
   // Touch vor Pointer: auf Mobilgeräten explizite Touch-Behandlung
   // touch-action: none am Handle verhindert, dass Scroll das Drag-Gesteure übernimmt
@@ -274,10 +276,13 @@ export function CategoryManager({ categories, mainCategories, onRefresh, openNew
     }
   }
 
-  const handleDeleteMainCategory = async (id: string) => {
-    if (!confirm('Möchten Sie diese Hauptkategorie wirklich löschen?')) {
-      return
-    }
+  const handleDeleteMainCategory = (id: string) => {
+    setDeleteConfirm({ type: 'main', id })
+  }
+
+  const executeDeleteMainCategory = async () => {
+    if (!deleteConfirm || deleteConfirm.type !== 'main') return
+    const id = deleteConfirm.id
 
     setIsLoading(true)
     try {
@@ -371,10 +376,13 @@ export function CategoryManager({ categories, mainCategories, onRefresh, openNew
     }
   }
 
-  const handleDeleteCategory = async (id: string) => {
-    if (!confirm('Möchten Sie diese Kategorie wirklich löschen?')) {
-      return
-    }
+  const handleDeleteCategory = (id: string) => {
+    setDeleteConfirm({ type: 'category', id })
+  }
+
+  const executeDeleteCategory = async () => {
+    if (!deleteConfirm || deleteConfirm.type !== 'category') return
+    const id = deleteConfirm.id
 
     setIsLoading(true)
     try {
@@ -393,6 +401,11 @@ export function CategoryManager({ categories, mainCategories, onRefresh, openNew
     } finally {
       setIsLoading(false)
     }
+  }
+
+  const executeDeleteConfirm = async () => {
+    if (deleteConfirm?.type === 'main') await executeDeleteMainCategory()
+    else if (deleteConfirm?.type === 'category') await executeDeleteCategory()
   }
 
   const openEditMainCategory = (mainCategory: MainCategory) => {
@@ -618,6 +631,20 @@ export function CategoryManager({ categories, mainCategories, onRefresh, openNew
             </Button>
           </div>
       </ResponsiveModal>
+
+      {/* Kategorie/Hauptkategorie löschen – Bestätigung */}
+      <ConfirmDialog
+        open={!!deleteConfirm}
+        onOpenChange={(open) => !open && setDeleteConfirm(null)}
+        title={deleteConfirm?.type === 'main' ? 'Hauptkategorie löschen' : 'Kategorie löschen'}
+        description={
+          deleteConfirm?.type === 'main'
+            ? 'Möchten Sie diese Hauptkategorie wirklich löschen?'
+            : 'Möchten Sie diese Kategorie wirklich löschen?'
+        }
+        onConfirm={executeDeleteConfirm}
+        isLoading={isLoading}
+      />
     </>
   )
 }

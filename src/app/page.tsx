@@ -11,6 +11,7 @@ import { useState, useEffect, Suspense, useMemo, useCallback, useRef } from 'rea
 import { Vacation, PackingItem, TransportVehicle, Mitreisender, EquipmentItem, Category, MainCategory } from '@/lib/db'
 import type { ApiResponse } from '@/lib/api-types'
 import { ResponsiveModal } from '@/components/ui/responsive-modal'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -85,6 +86,11 @@ function HomeContent() {
   const [_equipmentSearchTerm, _setEquipmentSearchTerm] = useState('')
   const [selectedPackProfile, setSelectedPackProfile] = useState<string | null>(null)
   const [hidePackedItems, setHidePackedItems] = useState(true)
+  const [deletePackingItemConfirm, setDeletePackingItemConfirm] = useState<{
+    id: string
+    forMitreisenderId?: string | null
+    isProfileDelete: boolean
+  } | null>(null)
   const [listDisplayMode, setListDisplayMode] = useState<'alles' | 'packliste'>('packliste')
   
   // FAB modal state
@@ -638,18 +644,19 @@ function HomeContent() {
     }
   }
 
-  const handleDeletePackingItem = async (id: string, forMitreisenderId?: string | null) => {
+  const handleDeletePackingItem = (id: string, forMitreisenderId?: string | null) => {
     const item = packingItems.find((p) => p.id === id)
     if (forMitreisenderId && item?.mitreisenden_typ === 'pauschal') {
       alert('Pauschale Einträge können nur im Packprofil „Alle" entfernt werden.')
       return
     }
     const isProfileDelete = !!forMitreisenderId
+    setDeletePackingItemConfirm({ id, forMitreisenderId, isProfileDelete })
+  }
 
-    const message = isProfileDelete
-      ? 'Diesen Eintrag nur für diesen Mitreisenden entfernen?'
-      : 'Möchten Sie diesen Eintrag wirklich aus der Packliste entfernen?'
-    if (!confirm(message)) return
+  const executeDeletePackingItem = async () => {
+    if (!deletePackingItemConfirm) return
+    const { id, forMitreisenderId, isProfileDelete } = deletePackingItemConfirm
 
     pendingMutationsRef.current += 1
     setIsLoading(true)
@@ -965,6 +972,21 @@ function HomeContent() {
               </Button>
             </div>
           </ResponsiveModal>
+
+          {/* Packlisten-Eintrag löschen – Bestätigung */}
+          <ConfirmDialog
+            open={!!deletePackingItemConfirm}
+            onOpenChange={(open) => !open && setDeletePackingItemConfirm(null)}
+            title={deletePackingItemConfirm?.isProfileDelete ? 'Eintrag entfernen' : 'Eintrag löschen'}
+            description={
+              deletePackingItemConfirm?.isProfileDelete
+                ? 'Diesen Eintrag nur für diesen Mitreisenden entfernen?'
+                : 'Möchten Sie diesen Eintrag wirklich aus der Packliste entfernen?'
+            }
+            confirmLabel={deletePackingItemConfirm?.isProfileDelete ? 'Entfernen' : 'Löschen'}
+            onConfirm={executeDeletePackingItem}
+            isLoading={isLoading}
+          />
         </div>
       </div>
 

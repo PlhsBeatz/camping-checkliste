@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { ResponsiveModal } from '@/components/ui/responsive-modal'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -33,6 +34,7 @@ const PRESET_COLORS = [
 export function TagManager({ tags, onRefresh }: TagManagerProps) {
   const [showDialog, setShowDialog] = useState(false)
   const [editingTag, setEditingTag] = useState<Tag | null>(null)
+  const [deleteTagId, setDeleteTagId] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
 
   const [form, setForm] = useState({
@@ -112,10 +114,13 @@ export function TagManager({ tags, onRefresh }: TagManagerProps) {
     }
   }
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Möchten Sie diesen Tag wirklich löschen? Er wird von allen Ausrüstungsgegenständen entfernt.')) {
-      return
-    }
+  const handleDelete = (id: string) => {
+    setDeleteTagId(id)
+  }
+
+  const executeDeleteTag = async () => {
+    if (!deleteTagId) return
+    const id = deleteTagId
 
     setIsLoading(true)
     try {
@@ -208,7 +213,7 @@ export function TagManager({ tags, onRefresh }: TagManagerProps) {
                         e.preventDefault()
                         handleDelete(tag.id)
                       }}
-                      className="text-destructive"
+                      className="text-destructive focus:text-destructive"
                     >
                       <Trash2 className="h-4 w-4 mr-2" />
                       Löschen
@@ -311,6 +316,16 @@ export function TagManager({ tags, onRefresh }: TagManagerProps) {
             </Button>
           </div>
       </ResponsiveModal>
+
+      {/* Tag löschen – Bestätigung */}
+      <ConfirmDialog
+        open={!!deleteTagId}
+        onOpenChange={(open) => !open && setDeleteTagId(null)}
+        title="Tag löschen"
+        description="Möchten Sie diesen Tag wirklich löschen? Er wird von allen Ausrüstungsgegenständen entfernt."
+        onConfirm={executeDeleteTag}
+        isLoading={isLoading}
+      />
     </div>
   )
 }
