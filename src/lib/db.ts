@@ -1117,6 +1117,174 @@ export async function getTransportVehiclesWithFestgewicht(
   return result
 }
 
+export interface PackStatusTransportOverview {
+  transportId: string
+  transportName: string
+  zuladung: number
+  festInstalliert: number
+  beladung: number
+  reserve: number
+}
+
+export interface PackStatusEntryOhneGewicht {
+  id: string
+  was: string
+  anzahl: number
+  hauptkategorie: string
+}
+
+export interface PackStatusProgressHauptkategorie {
+  hauptkategorie: string
+  gepackt: number
+  gesamt: number
+  prozent: number
+}
+
+export interface PackStatusData {
+  transportOverview: PackStatusTransportOverview[]
+  entriesOhneGewicht: PackStatusEntryOhneGewicht[]
+  progressHauptkategorien: PackStatusProgressHauptkategorie[]
+}
+
+/**
+ * Pack-Status für einen Urlaub: Gewichtsübersicht, Einträge ohne Gewicht, Fortschritt
+ */
+export async function getPackStatus(db: D1Database, vacationId: string): Promise<PackStatusData | null> {
+  try {
+    const packlisteResult = await db
+      .prepare('SELECT id FROM packlisten WHERE urlaub_id = ?')
+      .bind(vacationId)
+      .first<{ id: string }>()
+    const packlisteId = packlisteResult?.id
+    if (!packlisteId) return null
+
+    const transporte = await getTransportVehicles(db)
+
+    // Festgewicht für alle Transporte in 2 Batch-Queries (statt 2*N Einzelabfragen)
+    const festSums = new Map<string, { manuell: number; equipment: number }>()
+    for (const t of transporte) {
+      festSums.set(t.id, { manuell: 0, equipment: 0 })
+    }
+    const manuellAll = await db
+      .prepare(
+        'SELECT transport_id, COALESCE(SUM(gewicht), 0) as s FROM transportmittel_festgewicht_manuell GROUP BY transport_id'
+      )
+      .all<{ transport_id: string; s: number }>()
+    for (const r of manuellAll.results || []) {
+      const entry = festSums.get(r.transport_id)
+      if (entry) entry.manuell = r.s
+    }
+    const equipAll = await db
+      .prepare(
+        `SELECT transport_id, COALESCE(SUM(einzelgewicht * COALESCE(standard_anzahl, 1)), 0) as s
+         FROM ausruestungsgegenstaende WHERE status = 'Fest Installiert' AND transport_id IS NOT NULL GROUP BY transport_id`
+      )
+      .all<{ transport_id: string; s: number }>()
+    for (const r of equipAll.results || []) {
+      const entry = festSums.get(r.transport_id)
+      if (entry) entry.equipment = r.s
+    }
+
+    const beladungQuery = `
+      SELECT pe.transport_id, 
+        COALESCE(SUM(ag.einzelgewicht * pe.anzahl), 0) as gewicht
+      FROM packlisten_eintraege pe
+      JOIN ausruestungsgegenstaende ag ON pe.gegenstand_id = ag.id
+      WHERE pe.packliste_id = ? AND pe.transport_id IS NOT NULL
+      GROUP BY pe.transport_id
+    `
+    const beladungResult = await db
+      .prepare(beladungQuery)
+      .bind(packlisteId)
+      .all<{ transport_id: string; gewicht: number }>()
+    const beladungByTransport = new Map<string, number>()
+    for (const r of beladungResult.results || []) {
+      beladungByTransport.set(r.transport_id, r.gewicht)
+    }
+
+    const transportOverview: PackStatusTransportOverview[] = transporte.map((t) => {
+      const zuladung = t.zul_gesamtgewicht - t.eigengewicht
+      const fest = festSums.get(t.id)
+      const festInstalliert = fest ? fest.manuell + fest.equipment : 0
+      const beladung = beladungByTransport.get(t.id) ?? 0
+      const reserve = zuladung - festInstalliert - beladung
+      return {
+        transportId: t.id,
+        transportName: t.name,
+        zuladung,
+        festInstalliert,
+        beladung,
+        reserve
+      }
+    })
+
+    const ohneGewichtQuery = `
+      SELECT pe.id, ag.was, pe.anzahl, hk.titel as hauptkategorie
+      FROM packlisten_eintraege pe
+      JOIN ausruestungsgegenstaende ag ON pe.gegenstand_id = ag.id
+      JOIN kategorien k ON ag.kategorie_id = k.id
+      JOIN hauptkategorien hk ON k.hauptkategorie_id = hk.id
+      WHERE pe.packliste_id = ? AND ag.status NOT IN ('Ausgemustert', 'Fest Installiert')
+        AND (ag.einzelgewicht IS NULL OR ag.einzelgewicht = 0)
+      ORDER BY hk.reihenfolge, ag.was
+    `
+    const ohneGewichtResult = await db
+      .prepare(ohneGewichtQuery)
+      .bind(packlisteId)
+      .all<{ id: string; was: string; anzahl: number; hauptkategorie: string }>()
+    const entriesOhneGewicht: PackStatusEntryOhneGewicht[] = (ohneGewichtResult.results || []).map(
+      (r) => ({
+        id: r.id,
+        was: r.was,
+        anzahl: r.anzahl,
+        hauptkategorie: r.hauptkategorie
+      })
+    )
+
+    const progressQuery = `
+      SELECT hk.titel as hauptkategorie,
+        SUM(CASE WHEN ag.mitreisenden_typ = 'pauschal' THEN 1 ELSE 0 END) +
+        SUM(CASE WHEN ag.mitreisenden_typ != 'pauschal' AND pem.mitreisender_id IS NOT NULL THEN 1 ELSE 0 END) as gesamt,
+        SUM(CASE WHEN ag.mitreisenden_typ = 'pauschal' AND pe.gepackt THEN 1 ELSE 0 END) +
+        SUM(CASE WHEN ag.mitreisenden_typ != 'pauschal' AND pem.gepackt THEN 1 ELSE 0 END) as gepackt
+      FROM packlisten_eintraege pe
+      JOIN ausruestungsgegenstaende ag ON pe.gegenstand_id = ag.id
+      JOIN kategorien k ON ag.kategorie_id = k.id
+      JOIN hauptkategorien hk ON k.hauptkategorie_id = hk.id
+      LEFT JOIN packlisten_eintrag_mitreisende pem ON pem.packlisten_eintrag_id = pe.id
+      WHERE pe.packliste_id = ? AND ag.status NOT IN ('Ausgemustert', 'Fest Installiert')
+      GROUP BY hk.id, hk.titel, hk.reihenfolge
+      ORDER BY hk.reihenfolge
+    `
+    const progressResult = await db
+      .prepare(progressQuery)
+      .bind(packlisteId)
+      .all<{ hauptkategorie: string; gesamt: number; gepackt: number }>()
+
+    const progressHauptkategorien: PackStatusProgressHauptkategorie[] = (
+      progressResult.results || []
+    ).map((r) => {
+      const gesamt = Number(r.gesamt) || 0
+      const gepackt = Number(r.gepackt) || 0
+      return {
+        hauptkategorie: r.hauptkategorie,
+        gepackt,
+        gesamt,
+        prozent: gesamt > 0 ? Math.round((gepackt / gesamt) * 100) : 0
+      }
+    })
+
+    return {
+      transportOverview,
+      entriesOhneGewicht,
+      progressHauptkategorien
+    }
+  } catch (error) {
+    console.error('Error fetching pack status:', error)
+    return null
+  }
+}
+
 /**
  * Hinzufügen eines Gegenstands zur Packliste
  */

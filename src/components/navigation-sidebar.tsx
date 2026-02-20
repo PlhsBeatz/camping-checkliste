@@ -27,6 +27,12 @@ export function NavigationSidebar({ isOpen, onClose }: NavigationSidebarProps) {
       active: pathname === '/'
     },
     {
+      icon: 'analytics',
+      label: 'PACK-STATUS',
+      href: '/pack-status',
+      active: pathname.startsWith('/pack-status')
+    },
+    {
       icon: 'event',
       label: 'MEINE URLAUBE',
       href: '/urlaube',
