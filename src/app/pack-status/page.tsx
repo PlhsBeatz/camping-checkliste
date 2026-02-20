@@ -71,7 +71,7 @@ export default function PackStatusPage() {
       }
     }
     fetchVacations()
-  }, [urlVacationId])
+  }, [urlVacationId, selectedVacationId])
 
   const fetchPackStatus = useCallback(async () => {
     if (!selectedVacationId) {
@@ -102,8 +102,6 @@ export default function PackStatusPage() {
   useEffect(() => {
     fetchPackStatus()
   }, [fetchPackStatus])
-
-  const currentVacation = vacations.find((v) => v.id === selectedVacationId)
 
   return (
     <div className="min-h-screen bg-[rgb(250,250,249)] flex max-w-full overflow-x-hidden">
