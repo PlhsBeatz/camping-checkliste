@@ -873,8 +873,8 @@ export async function createTransportVehicle(
   eigengewicht: number,
   festInstalliertMitrechnen: boolean = false
 ): Promise<string | null> {
+  const id = crypto.randomUUID()
   try {
-    const id = crypto.randomUUID()
     await db
       .prepare(
         'INSERT INTO transportmittel (id, name, zul_gesamtgewicht, eigengewicht, fest_installiert_mitrechnen) VALUES (?, ?, ?, ?, ?)'
@@ -883,6 +883,21 @@ export async function createTransportVehicle(
       .run()
     return id
   } catch (error) {
+    const errMsg = error instanceof Error ? error.message : String(error)
+    if (errMsg.includes('fest_installiert_mitrechnen') || errMsg.includes('no such column')) {
+      try {
+        await db
+          .prepare(
+            'INSERT INTO transportmittel (id, name, zul_gesamtgewicht, eigengewicht) VALUES (?, ?, ?, ?)'
+          )
+          .bind(id, name, zulGesamtgewicht, eigengewicht)
+          .run()
+        return id
+      } catch (fallbackError) {
+        console.error('Error creating transport vehicle (fallback):', fallbackError)
+        return null
+      }
+    }
     console.error('Error creating transport vehicle:', error)
     return null
   }
@@ -890,6 +905,8 @@ export async function createTransportVehicle(
 
 /**
  * Aktualisieren eines Transportmittels
+ * Versucht zuerst UPDATE mit fest_installiert_mitrechnen (nach Migration 0006).
+ * Falls die Spalte noch nicht existiert, Fallback auf UPDATE ohne diese Spalte.
  */
 export async function updateTransportVehicle(
   db: D1Database,
@@ -899,8 +916,8 @@ export async function updateTransportVehicle(
   eigengewicht: number,
   festInstalliertMitrechnen?: boolean
 ): Promise<boolean> {
+  const fim = festInstalliertMitrechnen ?? false
   try {
-    const fim = festInstalliertMitrechnen ?? false
     await db
       .prepare(
         'UPDATE transportmittel SET name = ?, zul_gesamtgewicht = ?, eigengewicht = ?, fest_installiert_mitrechnen = ? WHERE id = ?'
@@ -909,6 +926,21 @@ export async function updateTransportVehicle(
       .run()
     return true
   } catch (error) {
+    const errMsg = error instanceof Error ? error.message : String(error)
+    if (errMsg.includes('fest_installiert_mitrechnen') || errMsg.includes('no such column')) {
+      try {
+        await db
+          .prepare(
+            'UPDATE transportmittel SET name = ?, zul_gesamtgewicht = ?, eigengewicht = ? WHERE id = ?'
+          )
+          .bind(name, zulGesamtgewicht, eigengewicht, id)
+          .run()
+        return true
+      } catch (fallbackError) {
+        console.error('Error updating transport vehicle (fallback):', fallbackError)
+        return false
+      }
+    }
     console.error('Error updating transport vehicle:', error)
     return false
   }

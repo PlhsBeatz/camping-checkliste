@@ -136,7 +136,7 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
       setFestgewichtEquipment([])
       setFestInstalliertExpanded(false)
     }
-  }, [editingVehicle?.id, showDialog])
+  }, [editingVehicle, showDialog])
 
   const handleCreate = async () => {
     const name = form.name.trim()
@@ -228,30 +228,34 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
       })
       const data = (await res.json()) as ApiResponse<unknown>
       if (data.success) {
-        const resFest = await fetch(
-          `/api/transport-vehicles/festgewicht?transportId=${editingVehicle.id}`
-        )
-        const dataFest = (await resFest.json()) as ApiResponse<{
-          manuell: TransportVehicleFestgewichtManuell[]
-        }>
-        const prevManuell = dataFest.success && dataFest.data ? dataFest.data.manuell : []
-        for (const e of prevManuell) {
-          await fetch(`/api/transport-vehicles/festgewicht-manuell?id=${e.id}`, {
-            method: 'DELETE',
-          })
-        }
-        for (const e of manuellEntries) {
-          if (e.titel.trim()) {
-            await fetch('/api/transport-vehicles/festgewicht-manuell', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                transportId: editingVehicle.id,
-                titel: e.titel.trim(),
-                gewicht: e.gewicht >= 0 ? e.gewicht : 0,
-              }),
+        try {
+          const resFest = await fetch(
+            `/api/transport-vehicles/festgewicht?transportId=${editingVehicle.id}`
+          )
+          const dataFest = (await resFest.json()) as ApiResponse<{
+            manuell: TransportVehicleFestgewichtManuell[]
+          }>
+          const prevManuell = dataFest.success && dataFest.data ? dataFest.data.manuell : []
+          for (const e of prevManuell) {
+            await fetch(`/api/transport-vehicles/festgewicht-manuell?id=${e.id}`, {
+              method: 'DELETE',
             })
           }
+          for (const e of manuellEntries) {
+            if (e.titel.trim()) {
+              await fetch('/api/transport-vehicles/festgewicht-manuell', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  transportId: editingVehicle.id,
+                  titel: e.titel.trim(),
+                  gewicht: e.gewicht >= 0 ? e.gewicht : 0,
+                }),
+              })
+            }
+          }
+        } catch (festErr) {
+          console.warn('Festgewicht-Sync fehlgeschlagen (Migration 0006 evtl. nicht ausgeführt):', festErr)
         }
         setShowDialog(false)
         setEditingVehicle(null)
