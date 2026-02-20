@@ -32,27 +32,40 @@ export function formatWeight(weight: number | null | undefined): string {
 /**
  * Formatiert eine Zahl mit deutschem Tausendertrennzeichen für die Anzeige in Gewichtsfeldern.
  * z.B. 1234.56 -> "1.234,56"
+ * @param maxDecimals Maximale Dezimalstellen (Standard 2, für Eingabefelder z.B. 6)
  */
-export function formatWeightForDisplay(weight: number | null | undefined): string {
+export function formatWeightForDisplay(
+  weight: number | null | undefined,
+  maxDecimals: number = 2
+): string {
   if (weight === null || weight === undefined || isNaN(weight)) return "";
   return weight.toLocaleString("de-DE", {
     minimumFractionDigits: 0,
-    maximumFractionDigits: 2,
+    maximumFractionDigits: maxDecimals,
     useGrouping: true
   });
 }
 
 /**
  * Parst einen Benutzereingabe-String zu einer Zahl.
- * Regeln: Nur Komma als Dezimaltrennzeichen. Punkt = Tausendertrennzeichen (wird ignoriert).
- * Beispiele: "1.234,56" -> 1234.56, "0,06" -> 0.06, "1234" -> 1234
+ * Eingabe: Nur Komma als Dezimaltrennzeichen. Punkt = Tausendertrennzeichen.
+ * Geladene Daten: "0.05" (Punkt, von Backend) wird als Dezimalzahl erkannt.
+ * Beispiele: "1.234,56" -> 1234.56, "0,06" -> 0.06, "0.05" -> 0.05, "1234" -> 1234
  */
 export function parseWeightInput(value: string): number | null {
   if (!value || value.trim() === "") return null;
   const s = value.trim();
-  const dotRemoved = s.replace(/\./g, "");
-  const commaToDot = dotRemoved.replace(",", ".");
-  const num = parseFloat(commaToDot);
+  const hasComma = s.includes(",");
+  const hasDot = s.includes(".");
+  let normalized: string;
+  if (hasComma) {
+    normalized = s.replace(/\./g, "").replace(",", ".");
+  } else if (hasDot) {
+    normalized = s.replace(/,/g, "");
+  } else {
+    normalized = s;
+  }
+  const num = parseFloat(normalized);
   return isNaN(num) ? null : num;
 }
 

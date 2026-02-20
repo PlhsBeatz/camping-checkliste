@@ -25,10 +25,19 @@ export function WeightInput({
   const parsed = typeof value === 'number' ? value : parseWeightInput(String(value ?? ''))
   const rawStr =
     typeof value === 'number'
-      ? formatWeightForDisplay(value)
-      : (value ?? '')
+      ? formatWeightForDisplay(value, 6)
+      : (() => {
+          const v = String(value ?? '')
+          if (v.includes('.') && !v.includes(',')) {
+            const p = parseWeightInput(v)
+            return p != null ? formatWeightForDisplay(p, 6) : v
+          }
+          return v
+        })()
 
-  const displayValue = isFocused ? rawStr : formatWeightForDisplay(parsed ?? undefined)
+  const displayValue = isFocused
+    ? rawStr
+    : formatWeightForDisplay(parsed ?? undefined, 6)
 
   const handleFocus = () => setIsFocused(true)
 
@@ -36,7 +45,7 @@ export function WeightInput({
     setIsFocused(false)
     const p = parseWeightInput(rawStr)
     if (p !== null) {
-      const commaFormatted = formatWeightForDisplay(p)
+      const commaFormatted = formatWeightForDisplay(p, 6)
       if (commaFormatted !== rawStr) {
         onChange(commaFormatted, p)
       }
@@ -51,7 +60,7 @@ export function WeightInput({
       sanitized = parts[0] ?? ''
       if (raw.endsWith(',')) sanitized += ','
     } else {
-      const decPart = parts.slice(1).join('').slice(0, 4)
+      const decPart = parts.slice(1).join('').slice(0, 6)
       sanitized = (parts[0] ?? '') + ',' + decPart
     }
     const p = parseWeightInput(sanitized)
