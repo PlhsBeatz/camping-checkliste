@@ -6,13 +6,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { NavigationSidebar } from '@/components/navigation-sidebar'
 import { Menu, Scale, Package, TrendingUp, AlertTriangle } from 'lucide-react'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { Progress } from '@/components/ui/progress'
 import { formatWeight } from '@/lib/utils'
 import { Vacation } from '@/lib/db'
@@ -59,9 +52,16 @@ function PackStatusContent() {
         const data = (await res.json()) as ApiResponse<Vacation[]>
         if (data.success && data.data) {
           setVacations(data.data)
-          if (urlVacationId && data.data.some((v) => v.id === urlVacationId)) {
-            setSelectedVacationId(urlVacationId)
-          } else if (!selectedVacationId && data.data.length > 0) {
+          const stored =
+            urlVacationId && data.data.some((v) => v.id === urlVacationId)
+              ? urlVacationId
+              : typeof window !== 'undefined'
+                ? sessionStorage.getItem('packlistVacationId')
+                : null
+          const validStored = stored && data.data.some((v) => v.id === stored)
+          if (validStored) {
+            setSelectedVacationId(stored)
+          } else if (data.data.length > 0) {
             const next = findNextVacation(data.data)
             if (next) setSelectedVacationId(next.id)
           }
@@ -71,7 +71,7 @@ function PackStatusContent() {
       }
     }
     fetchVacations()
-  }, [urlVacationId, selectedVacationId])
+  }, [urlVacationId])
 
   const fetchPackStatus = useCallback(async () => {
     if (!selectedVacationId) {
@@ -103,6 +103,8 @@ function PackStatusContent() {
     fetchPackStatus()
   }, [fetchPackStatus])
 
+  const currentVacation = vacations.find((v) => v.id === selectedVacationId)
+
   return (
     <div className="min-h-screen bg-[rgb(250,250,249)] flex max-w-full overflow-x-hidden">
       <NavigationSidebar isOpen={showNavSidebar} onClose={() => setShowNavSidebar(false)} />
@@ -110,46 +112,20 @@ function PackStatusContent() {
       <div className="flex-1 transition-all duration-300 min-w-0 lg:ml-[280px]">
         <div className="p-4 sm:p-6 max-w-4xl mx-auto">
           {/* Header */}
-          <div className="flex items-center justify-between gap-4 mb-6">
-            <div className="flex items-center gap-3 min-w-0">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setShowNavSidebar(true)}
-                className="lg:hidden flex-shrink-0"
-              >
-                <Menu className="h-5 w-5" />
-              </Button>
-              <div>
-                <h1 className="text-xl font-bold text-[rgb(45,79,30)]">Pack-Status</h1>
-                <p className="text-sm text-muted-foreground">Gewicht, Reserve und Packfortschritt</p>
-              </div>
-            </div>
-
-            {/* Urlaubsauswahl */}
-            <div className="flex-shrink-0 w-[220px] sm:w-[260px]">
-              <Select
-                value={selectedVacationId ?? ''}
-                onValueChange={(v) => setSelectedVacationId(v || null)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Urlaub wählen" />
-                </SelectTrigger>
-                <SelectContent>
-                  {vacations
-                    .filter((v) => {
-                      const end = new Date(v.enddatum)
-                      end.setHours(0, 0, 0, 0)
-                      return end >= new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
-                    })
-                    .sort((a, b) => new Date(a.startdatum).getTime() - new Date(b.startdatum).getTime())
-                    .map((v) => (
-                      <SelectItem key={v.id} value={v.id}>
-                        {v.titel}
-                      </SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
+          <div className="flex items-center gap-3 mb-6">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setShowNavSidebar(true)}
+              className="lg:hidden flex-shrink-0"
+            >
+              <Menu className="h-5 w-5" />
+            </Button>
+            <div className="min-w-0">
+              <h1 className="text-xl font-bold text-[rgb(45,79,30)]">Pack-Status</h1>
+              <p className="text-sm text-muted-foreground truncate">
+                {currentVacation?.titel ?? '—'}
+              </p>
             </div>
           </div>
 
@@ -157,7 +133,7 @@ function PackStatusContent() {
             <Card>
               <CardContent className="pt-6">
                 <p className="text-muted-foreground text-center">
-                  Wählen Sie einen Urlaub aus, um den Pack-Status zu sehen.
+                  Kein Urlaub für die Packliste. Öffnen Sie die Packliste und wählen Sie einen Urlaub, oder legen Sie einen neuen Urlaub an.
                 </p>
               </CardContent>
             </Card>
@@ -189,7 +165,7 @@ function PackStatusContent() {
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-lg">
                     <Scale className="h-5 w-5" />
-                    Gewichtsübersicht pro Transportmittel
+                    Gewichtsübersicht
                   </CardTitle>
                   <CardDescription>
                     Zuladung, Fest installiert, Beladung und berechnete Reserve
@@ -289,15 +265,15 @@ function TransportWeightCard({ data }: { data: PackStatusTransportOverview }) {
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm">
           <div>
             <span className="text-muted-foreground block">Zuladung</span>
-            <span className="font-medium">{formatWeight(zuladung)}</span>
+            <span className="font-medium">{formatWeight(zuladung, 0)}</span>
           </div>
           <div>
             <span className="text-muted-foreground block">Fest installiert</span>
-            <span className="font-medium">{formatWeight(festInstalliert)}</span>
+            <span className="font-medium">{formatWeight(festInstalliert, 0)}</span>
           </div>
           <div>
             <span className="text-muted-foreground block">Beladung</span>
-            <span className="font-medium">{formatWeight(beladung)}</span>
+            <span className="font-medium">{formatWeight(beladung, 0)}</span>
           </div>
           <div>
             <span className="text-muted-foreground block">Reserve</span>
@@ -306,7 +282,7 @@ function TransportWeightCard({ data }: { data: PackStatusTransportOverview }) {
                 isNegative ? 'text-red-600' : isLow ? 'text-amber-600' : 'text-emerald-600'
               }`}
             >
-              {formatWeight(reserve)}
+              {formatWeight(reserve, 0)}
             </span>
           </div>
         </div>

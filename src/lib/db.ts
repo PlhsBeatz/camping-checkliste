@@ -1186,11 +1186,18 @@ export async function getPackStatus(db: D1Database, vacationId: string): Promise
     }
 
     const beladungQuery = `
-      SELECT pe.transport_id, 
-        COALESCE(SUM(ag.einzelgewicht * pe.anzahl), 0) as gewicht
+      SELECT pe.transport_id,
+        COALESCE(SUM(
+          CASE
+            WHEN ag.mitreisenden_typ = 'pauschal' THEN ag.einzelgewicht * pe.anzahl
+            ELSE ag.einzelgewicht * COALESCE(pem.anzahl, pe.anzahl)
+          END
+        ), 0) as gewicht
       FROM packlisten_eintraege pe
       JOIN ausruestungsgegenstaende ag ON pe.gegenstand_id = ag.id
+      LEFT JOIN packlisten_eintrag_mitreisende pem ON pem.packlisten_eintrag_id = pe.id
       WHERE pe.packliste_id = ? AND pe.transport_id IS NOT NULL
+        AND (ag.mitreisenden_typ = 'pauschal' OR pem.mitreisender_id IS NOT NULL)
       GROUP BY pe.transport_id
     `
     const beladungResult = await db

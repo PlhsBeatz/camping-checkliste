@@ -138,6 +138,13 @@ function HomeContent() {
     fetchVacations()
   }, [urlVacationId, selectedVacationId])
 
+  // Pack-Status nutzt diesen Urlaub; bei Wechsel sync zu sessionStorage
+  useEffect(() => {
+    if (selectedVacationId && typeof window !== 'undefined') {
+      sessionStorage.setItem('packlistVacationId', selectedVacationId)
+    }
+  }, [selectedVacationId])
+
   // Versionszähler: veraltete Fetch-Antworten ignorieren (verhindert Race bei schnellem Abhaken)
   const fetchPackingVersionRef = useRef(0)
 

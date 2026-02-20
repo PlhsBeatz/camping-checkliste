@@ -23,10 +23,11 @@ export function generateUUID(): string {
 
 /**
  * Formats a weight value with the appropriate unit
+ * @param decimals Number of decimal places (default 2, use 0 for integer display)
  */
-export function formatWeight(weight: number | null | undefined): string {
+export function formatWeight(weight: number | null | undefined, decimals: number = 2): string {
   if (weight === null || weight === undefined) return "-";
-  return `${weight.toFixed(2)} kg`;
+  return `${weight.toFixed(decimals)} kg`;
 }
 
 /**
