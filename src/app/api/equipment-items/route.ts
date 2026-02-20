@@ -23,6 +23,7 @@ interface EquipmentItemBody {
   erst_abreisetag_gepackt?: boolean
   mitreisenden_typ?: 'pauschal' | 'alle' | 'ausgewaehlte'
   standard_mitreisende?: string[]
+  in_pauschale_inbegriffen?: boolean
   tags?: string[]
   links?: string[]
 }
@@ -94,6 +95,7 @@ export async function POST(request: NextRequest) {
       erst_abreisetag_gepackt,
       mitreisenden_typ,
       standard_mitreisende,
+      in_pauschale_inbegriffen,
       tags,
       links,
     } = body
@@ -116,6 +118,7 @@ export async function POST(request: NextRequest) {
       erst_abreisetag_gepackt,
       mitreisenden_typ,
       standard_mitreisende,
+      in_pauschale_inbegriffen,
       tags,
       links
     })
@@ -152,6 +155,7 @@ export async function PUT(request: NextRequest) {
       erst_abreisetag_gepackt,
       mitreisenden_typ,
       standard_mitreisende,
+      in_pauschale_inbegriffen,
       tags,
       links,
     } = body
@@ -172,6 +176,7 @@ export async function PUT(request: NextRequest) {
       erst_abreisetag_gepackt,
       mitreisenden_typ,
       standard_mitreisende,
+      in_pauschale_inbegriffen,
       tags,
       links
     })

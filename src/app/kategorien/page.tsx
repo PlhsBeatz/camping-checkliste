@@ -5,7 +5,7 @@ import { NavigationSidebar } from '@/components/navigation-sidebar'
 import { CategoryManager } from '@/components/category-manager'
 import { Menu, Plus } from 'lucide-react'
 import { useState, useEffect } from 'react'
-import { Category, MainCategory } from '@/lib/db'
+import { Category, MainCategory, TransportVehicle } from '@/lib/db'
 import type { ApiResponse } from '@/lib/api-types'
 import { cn } from '@/lib/utils'
 
@@ -17,7 +17,22 @@ export default function KategorienPage() {
   const [showNavSidebar, setShowNavSidebar] = useState(false)
   const [categories, setCategories] = useState<CategoryWithMain[]>([])
   const [mainCategories, setMainCategories] = useState<MainCategory[]>([])
+  const [transportVehicles, setTransportVehicles] = useState<TransportVehicle[]>([])
   const [openNewMainCategoryTrigger, setOpenNewMainCategoryTrigger] = useState(false)
+
+  // Fetch Transport Vehicles
+  useEffect(() => {
+    const fetchTransport = async () => {
+      try {
+        const res = await fetch('/api/transport-vehicles')
+        const data = (await res.json()) as ApiResponse<TransportVehicle[]>
+        if (data.success && data.data) setTransportVehicles(data.data)
+      } catch (error) {
+        console.error('Failed to fetch transport vehicles:', error)
+      }
+    }
+    fetchTransport()
+  }, [])
 
   // Fetch Categories
   useEffect(() => {
@@ -55,10 +70,14 @@ export default function KategorienPage() {
     const catRes = await fetch('/api/categories')
     const catData = (await catRes.json()) as ApiResponse<CategoryWithMain[]>
     if (catData.success && catData.data) setCategories(catData.data)
-    
+
     const mainCatRes = await fetch('/api/main-categories')
     const mainCatData = (await mainCatRes.json()) as ApiResponse<MainCategory[]>
     if (mainCatData.success && mainCatData.data) setMainCategories(mainCatData.data)
+
+    const transportRes = await fetch('/api/transport-vehicles')
+    const transportData = (await transportRes.json()) as ApiResponse<TransportVehicle[]>
+    if (transportData.success && transportData.data) setTransportVehicles(transportData.data)
   }
 
   return (
@@ -100,6 +119,7 @@ export default function KategorienPage() {
           <CategoryManager
             categories={categories}
             mainCategories={mainCategories}
+            transportVehicles={transportVehicles}
             onRefresh={handleRefresh}
             openNewMainCategoryTrigger={openNewMainCategoryTrigger}
             onOpenNewMainCategoryConsumed={() => setOpenNewMainCategoryTrigger(false)}

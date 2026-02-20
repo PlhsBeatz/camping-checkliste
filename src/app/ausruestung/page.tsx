@@ -19,6 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Checkbox } from '@/components/ui/checkbox'
 import { cn, parseWeightInput } from '@/lib/utils'
 
 interface CategoryWithMain extends Category {
@@ -54,6 +55,7 @@ export default function AusruestungPage() {
     is_standard: false,
     erst_abreisetag_gepackt: false,
     mitreisenden_typ: 'alle' as 'pauschal' | 'alle' | 'ausgewaehlte',
+    in_pauschale_inbegriffen: false,
     tags: [] as string[],
     links: [] as { url: string }[],
     standard_mitreisende: [] as string[]
@@ -168,6 +170,7 @@ export default function AusruestungPage() {
       is_standard: false,
       erst_abreisetag_gepackt: false,
       mitreisenden_typ: 'alle',
+      in_pauschale_inbegriffen: false,
       tags: [],
       links: [],
       standard_mitreisende: []
@@ -192,7 +195,8 @@ export default function AusruestungPage() {
       is_standard: item.is_standard || false,
       erst_abreisetag_gepackt: item.erst_abreisetag_gepackt || false,
       mitreisenden_typ: item.mitreisenden_typ || 'alle',
-      tags: item.tags?.map(t => typeof t === 'object' ? t.id : t) || [],
+      in_pauschale_inbegriffen: item.in_pauschale_inbegriffen || false,
+      tags: item.tags?.map((t) => (typeof t === 'object' ? t.id : t)) || [],
       links: item.links || [],
       standard_mitreisende: item.standard_mitreisende || []
     })
@@ -218,9 +222,10 @@ export default function AusruestungPage() {
         is_standard: formData.is_standard,
         erst_abreisetag_gepackt: formData.erst_abreisetag_gepackt,
         mitreisenden_typ: formData.mitreisenden_typ,
+        in_pauschale_inbegriffen: formData.in_pauschale_inbegriffen,
         standard_mitreisende: formData.standard_mitreisende,
         tags: formData.tags,
-        links: formData.links.filter(link => link.url.trim() !== '').map(link => link.url)
+        links: formData.links.filter((link) => link.url.trim() !== '').map((link) => link.url)
       }
 
       const res = await fetch('/api/equipment-items', {
@@ -271,9 +276,10 @@ export default function AusruestungPage() {
         is_standard: formData.is_standard,
         erst_abreisetag_gepackt: formData.erst_abreisetag_gepackt,
         mitreisenden_typ: formData.mitreisenden_typ,
+        in_pauschale_inbegriffen: formData.in_pauschale_inbegriffen,
         standard_mitreisende: formData.standard_mitreisende,
         tags: formData.tags,
-        links: formData.links.filter(link => link.url.trim() !== '').map(link => link.url)
+        links: formData.links.filter((link) => link.url.trim() !== '').map((link) => link.url)
       }
 
       const res = await fetch('/api/equipment-items', {
@@ -330,6 +336,16 @@ export default function AusruestungPage() {
     } finally {
       setIsLoading(false)
     }
+  }
+
+  const hasPauschaleForCategory = (kategorieId: string) => {
+    if (!kategorieId) return false
+    const cat = categories.find((c) => c.id === kategorieId)
+    if (!cat) return false
+    if ((cat as Category & { pauschalgewicht?: number }).pauschalgewicht != null && (cat as Category & { pauschalgewicht?: number }).pauschalgewicht! > 0)
+      return true
+    const main = mainCategories.find((m) => m.id === cat.hauptkategorie_id)
+    return !!(main?.pauschalgewicht != null && main.pauschalgewicht > 0)
   }
 
   const addLinkField = () => {
@@ -478,6 +494,19 @@ export default function AusruestungPage() {
                 />
               </div>
             </div>
+
+            {hasPauschaleForCategory(formData.kategorie_id) && (
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="in-pauschale"
+                  checked={formData.in_pauschale_inbegriffen}
+                  onCheckedChange={(c) => setFormData({ ...formData, in_pauschale_inbegriffen: !!c })}
+                />
+                <Label htmlFor="in-pauschale" className="cursor-pointer text-sm">
+                  In Pauschale inbegriffen (kein Einzelgewicht)
+                </Label>
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -725,6 +754,19 @@ export default function AusruestungPage() {
                 />
               </div>
             </div>
+
+            {hasPauschaleForCategory(formData.kategorie_id) && (
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="edit-in-pauschale"
+                  checked={formData.in_pauschale_inbegriffen}
+                  onCheckedChange={(c) => setFormData({ ...formData, in_pauschale_inbegriffen: !!c })}
+                />
+                <Label htmlFor="edit-in-pauschale" className="cursor-pointer text-sm">
+                  In Pauschale inbegriffen (kein Einzelgewicht)
+                </Label>
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-4">
               <div>

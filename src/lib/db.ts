@@ -73,6 +73,7 @@ export interface EquipmentItem {
   erst_abreisetag_gepackt?: boolean // Erst am Abreisetag packen
   mitreisenden_typ: 'pauschal' | 'alle' | 'ausgewaehlte'
   standard_mitreisende?: string[] // IDs der standardmäßig zugeordneten Mitreisenden
+  in_pauschale_inbegriffen?: boolean // Gewicht in Pauschale (Kategorie/Hauptkategorie) enthalten
   tags?: Tag[] // Zugeordnete Tags
   links?: EquipmentLink[]
   created_at: string
@@ -107,12 +108,18 @@ export interface Category {
   titel: string
   hauptkategorie_id: string
   reihenfolge: number
+  pauschalgewicht?: number | null
+  pauschal_pro_person?: boolean
+  pauschal_transport_id?: string | null
 }
 
 export interface MainCategory {
   id: string
   titel: string
   reihenfolge: number
+  pauschalgewicht?: number | null
+  pauschal_pro_person?: boolean
+  pauschal_transport_id?: string | null
 }
 
 export interface Tag {
@@ -538,6 +545,7 @@ export async function getEquipmentItems(db: D1Database): Promise<EquipmentItem[]
         erst_abreisetag_gepackt: !!row.erst_abreisetag_gepackt,
         mitreisenden_typ: String(row.mitreisenden_typ || 'pauschal') as 'pauschal' | 'alle' | 'ausgewaehlte',
         standard_mitreisende,
+        in_pauschale_inbegriffen: !!(row.in_pauschale_inbegriffen ?? 0),
         tags: [],
         links,
         created_at: String(row.created_at || ''),
@@ -580,10 +588,11 @@ export async function getEquipmentItem(db: D1Database, id: string): Promise<Equi
       'SELECT mitreisender_id FROM ausruestungsgegenstaende_standard_mitreisende WHERE gegenstand_id = ?'
     ).bind(id).all<{ mitreisender_id: string }>()
     
-    return { 
-      ...item, 
+    return {
+      ...item,
+      in_pauschale_inbegriffen: !!(item.in_pauschale_inbegriffen ?? 0),
       links: links.results || [],
-      standard_mitreisende: standardMitreisende.results?.map(m => m.mitreisender_id) || []
+      standard_mitreisende: standardMitreisende.results?.map((m) => m.mitreisender_id) || []
     }
   } catch (error) {
     console.error('Error fetching equipment item:', error)
@@ -608,6 +617,7 @@ export async function createEquipmentItem(
     erst_abreisetag_gepackt?: boolean
     mitreisenden_typ?: 'pauschal' | 'alle' | 'ausgewaehlte'
     standard_mitreisende?: string[]
+    in_pauschale_inbegriffen?: boolean
     tags?: string[]
     links?: string[]
   }
@@ -617,8 +627,8 @@ export async function createEquipmentItem(
     await db
       .prepare(
         `INSERT INTO ausruestungsgegenstaende 
-         (id, was, kategorie_id, transport_id, einzelgewicht, standard_anzahl, status, details, is_standard, erst_abreisetag_gepackt, mitreisenden_typ) 
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+         (id, was, kategorie_id, transport_id, einzelgewicht, standard_anzahl, status, details, is_standard, erst_abreisetag_gepackt, mitreisenden_typ, in_pauschale_inbegriffen) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .bind(
         id,
@@ -631,7 +641,8 @@ export async function createEquipmentItem(
         item.details || '',
         item.is_standard ? 1 : 0,
         item.erst_abreisetag_gepackt ? 1 : 0,
-        item.mitreisenden_typ || 'pauschal'
+        item.mitreisenden_typ || 'pauschal',
+        item.in_pauschale_inbegriffen ? 1 : 0
       )
       .run()
 
@@ -684,6 +695,7 @@ export async function updateEquipmentItem(
     erst_abreisetag_gepackt?: boolean
     mitreisenden_typ?: 'pauschal' | 'alle' | 'ausgewaehlte'
     standard_mitreisende?: string[]
+    in_pauschale_inbegriffen?: boolean
     tags?: string[]
     links?: string[]
   }
@@ -731,6 +743,10 @@ export async function updateEquipmentItem(
     if (updates.erst_abreisetag_gepackt !== undefined) {
       fields.push('erst_abreisetag_gepackt = ?')
       values.push(updates.erst_abreisetag_gepackt ? 1 : 0)
+    }
+    if (updates.in_pauschale_inbegriffen !== undefined) {
+      fields.push('in_pauschale_inbegriffen = ?')
+      values.push(updates.in_pauschale_inbegriffen ? 1 : 0)
     }
 
     if (fields.length > 0) {
@@ -805,8 +821,19 @@ export async function deleteEquipmentItem(db: D1Database, id: string): Promise<b
  */
 export async function getMainCategories(db: D1Database): Promise<MainCategory[]> {
   try {
-    const result = await db.prepare('SELECT id, titel, reihenfolge FROM hauptkategorien ORDER BY reihenfolge').all<MainCategory>()
-    return result.results || []
+    const result = await db
+      .prepare(
+        'SELECT id, titel, reihenfolge, pauschalgewicht, pauschal_pro_person, pauschal_transport_id FROM hauptkategorien ORDER BY reihenfolge'
+      )
+      .all<MainCategory & { pauschal_pro_person?: number }>()
+    return (result.results || []).map((r) => ({
+      id: r.id,
+      titel: r.titel,
+      reihenfolge: r.reihenfolge,
+      pauschalgewicht: r.pauschalgewicht,
+      pauschal_pro_person: !!(r.pauschal_pro_person ?? 0),
+      pauschal_transport_id: r.pauschal_transport_id ?? null
+    }))
   } catch (error) {
     console.error('Error fetching main categories:', error)
     return []
@@ -821,13 +848,17 @@ export async function getCategoriesWithMainCategories(db: D1Database): Promise<A
     const query = `
       SELECT 
         k.id, k.titel, k.hauptkategorie_id, k.reihenfolge,
+        k.pauschalgewicht, k.pauschal_pro_person, k.pauschal_transport_id,
         hk.titel as hauptkategorie_titel
       FROM kategorien k
       JOIN hauptkategorien hk ON k.hauptkategorie_id = hk.id
       ORDER BY hk.reihenfolge, k.reihenfolge
     `
-    const result = await db.prepare(query).all<Category & { hauptkategorie_titel: string }>()
-    return result.results || []
+    const result = await db.prepare(query).all<Category & { hauptkategorie_titel: string; pauschal_pro_person?: number }>()
+    return (result.results || []).map((r) => ({
+      ...r,
+      pauschal_pro_person: !!(r.pauschal_pro_person ?? 0)
+    }))
   } catch (error) {
     console.error('Error fetching categories with main categories:', error)
     return []
@@ -1205,8 +1236,74 @@ export async function getPackStatus(db: D1Database, vacationId: string): Promise
       .bind(packlisteId)
       .all<{ transport_id: string; gewicht: number }>()
     const beladungByTransport = new Map<string, number>()
+    for (const t of transporte) {
+      beladungByTransport.set(t.id, 0)
+    }
     for (const r of beladungResult.results || []) {
-      beladungByTransport.set(r.transport_id, r.gewicht)
+      const cur = beladungByTransport.get(r.transport_id) ?? 0
+      beladungByTransport.set(r.transport_id, cur + r.gewicht)
+    }
+
+    // Pauschalen: pro Kategorie/Hauptkategorie genau einmal, wenn mindestens ein inbegriffener Eintrag
+    const mitreisendeCountResult = await db
+      .prepare('SELECT COUNT(*) as c FROM urlaub_mitreisende WHERE urlaub_id = ?')
+      .bind(vacationId)
+      .first<{ c: number }>()
+    const mitreisendeCount = mitreisendeCountResult?.c ?? 0
+    const firstTransportId = transporte.length > 0 ? transporte[0].id : null
+
+    // Kategorien mit Pauschale: Hat mindestens ein inbegriffenes Item in der Packliste?
+    const kategorienPauschalResult = await db
+      .prepare(
+        `SELECT k.id, k.pauschalgewicht, k.pauschal_pro_person, k.pauschal_transport_id
+         FROM kategorien k
+         WHERE (k.pauschalgewicht IS NOT NULL AND k.pauschalgewicht > 0)
+           AND EXISTS (
+             SELECT 1 FROM packlisten_eintraege pe
+             JOIN ausruestungsgegenstaende ag ON pe.gegenstand_id = ag.id
+             WHERE pe.packliste_id = ? AND ag.kategorie_id = k.id
+               AND COALESCE(ag.in_pauschale_inbegriffen, 0) = 1
+           )`
+      )
+      .bind(packlisteId)
+      .all<{ id: string; pauschalgewicht: number; pauschal_pro_person?: number; pauschal_transport_id?: string | null }>()
+
+    for (const row of kategorienPauschalResult.results || []) {
+      const gewicht =
+        Number(row.pauschalgewicht) * (row.pauschal_pro_person ? mitreisendeCount : 1)
+      const tid = row.pauschal_transport_id || firstTransportId
+      if (tid) {
+        const cur = beladungByTransport.get(tid) ?? 0
+        beladungByTransport.set(tid, cur + gewicht)
+      }
+    }
+
+    // Hauptkategorien mit Pauschale: Inbegriffene Items in Unterkategorien OHNE eigene Pauschale
+    const hauptkategorienPauschalResult = await db
+      .prepare(
+        `SELECT hk.id, hk.pauschalgewicht, hk.pauschal_pro_person, hk.pauschal_transport_id
+         FROM hauptkategorien hk
+         WHERE (hk.pauschalgewicht IS NOT NULL AND hk.pauschalgewicht > 0)
+           AND EXISTS (
+             SELECT 1 FROM packlisten_eintraege pe
+             JOIN ausruestungsgegenstaende ag ON pe.gegenstand_id = ag.id
+             JOIN kategorien k ON ag.kategorie_id = k.id
+             WHERE pe.packliste_id = ? AND k.hauptkategorie_id = hk.id
+               AND COALESCE(ag.in_pauschale_inbegriffen, 0) = 1
+               AND (k.pauschalgewicht IS NULL OR k.pauschalgewicht = 0)
+           )`
+      )
+      .bind(packlisteId)
+      .all<{ id: string; pauschalgewicht: number; pauschal_pro_person?: number; pauschal_transport_id?: string | null }>()
+
+    for (const row of hauptkategorienPauschalResult.results || []) {
+      const gewicht =
+        Number(row.pauschalgewicht) * (row.pauschal_pro_person ? mitreisendeCount : 1)
+      const tid = row.pauschal_transport_id || firstTransportId
+      if (tid) {
+        const cur = beladungByTransport.get(tid) ?? 0
+        beladungByTransport.set(tid, cur + gewicht)
+      }
     }
 
     const transportOverview: PackStatusTransportOverview[] = transporte.map((t) => {
@@ -1233,6 +1330,7 @@ export async function getPackStatus(db: D1Database, vacationId: string): Promise
       JOIN hauptkategorien hk ON k.hauptkategorie_id = hk.id
       WHERE pe.packliste_id = ? AND ag.status NOT IN ('Ausgemustert', 'Fest Installiert')
         AND (ag.einzelgewicht IS NULL OR ag.einzelgewicht = 0)
+        AND COALESCE(ag.in_pauschale_inbegriffen, 0) = 0
       ORDER BY hk.reihenfolge, ag.was
     `
     const ohneGewichtResult = await db
@@ -1700,14 +1798,19 @@ export async function removeMitreisenderFromPackingItem(
 export async function createMainCategory(
   db: D1Database,
   titel: string,
-  reihenfolge?: number
+  reihenfolge?: number,
+  pauschalgewicht?: number | null,
+  pauschal_pro_person?: boolean,
+  pauschal_transport_id?: string | null
 ): Promise<string | null> {
   try {
     const id = crypto.randomUUID()
     const order = reihenfolge ?? 999
     await db
-      .prepare('INSERT INTO hauptkategorien (id, titel, reihenfolge) VALUES (?, ?, ?)')
-      .bind(id, titel, order)
+      .prepare(
+        'INSERT INTO hauptkategorien (id, titel, reihenfolge, pauschalgewicht, pauschal_pro_person, pauschal_transport_id) VALUES (?, ?, ?, ?, ?, ?)'
+      )
+      .bind(id, titel, order, pauschalgewicht ?? null, pauschal_pro_person ? 1 : 0, pauschal_transport_id ?? null)
       .run()
     return id
   } catch (error) {
@@ -1723,20 +1826,32 @@ export async function updateMainCategory(
   db: D1Database,
   id: string,
   titel: string,
-  reihenfolge?: number
+  reihenfolge?: number,
+  pauschalgewicht?: number | null,
+  pauschal_pro_person?: boolean,
+  pauschal_transport_id?: string | null
 ): Promise<boolean> {
   try {
+    const fields: string[] = ['titel = ?']
+    const values: (string | number | null)[] = [titel]
     if (reihenfolge !== undefined) {
-      await db
-        .prepare('UPDATE hauptkategorien SET titel = ?, reihenfolge = ? WHERE id = ?')
-        .bind(titel, reihenfolge, id)
-        .run()
-    } else {
-      await db
-        .prepare('UPDATE hauptkategorien SET titel = ? WHERE id = ?')
-        .bind(titel, id)
-        .run()
+      fields.push('reihenfolge = ?')
+      values.push(reihenfolge)
     }
+    if (pauschalgewicht !== undefined) {
+      fields.push('pauschalgewicht = ?')
+      values.push(pauschalgewicht)
+    }
+    if (pauschal_pro_person !== undefined) {
+      fields.push('pauschal_pro_person = ?')
+      values.push(pauschal_pro_person ? 1 : 0)
+    }
+    if (pauschal_transport_id !== undefined) {
+      fields.push('pauschal_transport_id = ?')
+      values.push(pauschal_transport_id)
+    }
+    values.push(id)
+    await db.prepare(`UPDATE hauptkategorien SET ${fields.join(', ')} WHERE id = ?`).bind(...values).run()
     return true
   } catch (error) {
     console.error('Error updating main category:', error)
@@ -1774,14 +1889,27 @@ export async function createCategory(
   db: D1Database,
   titel: string,
   hauptkategorieId: string,
-  reihenfolge?: number
+  reihenfolge?: number,
+  pauschalgewicht?: number | null,
+  pauschal_pro_person?: boolean,
+  pauschal_transport_id?: string | null
 ): Promise<string | null> {
   try {
     const id = crypto.randomUUID()
     const order = reihenfolge ?? 999
     await db
-      .prepare('INSERT INTO kategorien (id, titel, hauptkategorie_id, reihenfolge) VALUES (?, ?, ?, ?)')
-      .bind(id, titel, hauptkategorieId, order)
+      .prepare(
+        'INSERT INTO kategorien (id, titel, hauptkategorie_id, reihenfolge, pauschalgewicht, pauschal_pro_person, pauschal_transport_id) VALUES (?, ?, ?, ?, ?, ?, ?)'
+      )
+      .bind(
+        id,
+        titel,
+        hauptkategorieId,
+        order,
+        pauschalgewicht ?? null,
+        pauschal_pro_person ? 1 : 0,
+        pauschal_transport_id ?? null
+      )
       .run()
     return id
   } catch (error) {
@@ -1798,24 +1926,42 @@ export async function updateCategory(
   id: string,
   titel: string,
   hauptkategorieId?: string,
-  reihenfolge?: number
+  reihenfolge?: number,
+  pauschalgewicht?: number | null,
+  pauschal_pro_person?: boolean,
+  pauschal_transport_id?: string | null
 ): Promise<boolean> {
   try {
     const fields: string[] = ['titel = ?']
-    const values: (string | number)[] = [titel]
-    
+    const values: (string | number | null)[] = [titel]
+
     if (hauptkategorieId !== undefined) {
       fields.push('hauptkategorie_id = ?')
       values.push(hauptkategorieId)
     }
-    
+
     if (reihenfolge !== undefined) {
       fields.push('reihenfolge = ?')
       values.push(reihenfolge)
     }
-    
+
+    if (pauschalgewicht !== undefined) {
+      fields.push('pauschalgewicht = ?')
+      values.push(pauschalgewicht)
+    }
+
+    if (pauschal_pro_person !== undefined) {
+      fields.push('pauschal_pro_person = ?')
+      values.push(pauschal_pro_person ? 1 : 0)
+    }
+
+    if (pauschal_transport_id !== undefined) {
+      fields.push('pauschal_transport_id = ?')
+      values.push(pauschal_transport_id)
+    }
+
     values.push(id)
-    
+
     await db
       .prepare(`UPDATE kategorien SET ${fields.join(', ')} WHERE id = ?`)
       .bind(...values)

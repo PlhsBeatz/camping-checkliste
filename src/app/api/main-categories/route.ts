@@ -25,14 +25,27 @@ export async function POST(request: NextRequest) {
   try {
     const env = process.env as unknown as CloudflareEnv
     const db = getDB(env)
-    const body = (await request.json()) as { titel?: string; reihenfolge?: number }
-    const { titel, reihenfolge } = body
+    const body = (await request.json()) as {
+      titel?: string
+      reihenfolge?: number
+      pauschalgewicht?: number | null
+      pauschal_pro_person?: boolean
+      pauschal_transport_id?: string | null
+    }
+    const { titel, reihenfolge, pauschalgewicht, pauschal_pro_person, pauschal_transport_id } = body
 
     if (!titel) {
       return NextResponse.json({ error: 'titel is required' }, { status: 400 })
     }
 
-    const id = await createMainCategory(db, titel, reihenfolge)
+    const id = await createMainCategory(
+      db,
+      titel,
+      reihenfolge,
+      pauschalgewicht,
+      pauschal_pro_person,
+      pauschal_transport_id
+    )
 
     if (!id) {
       return NextResponse.json({ error: 'Failed to create main category' }, { status: 400 })
@@ -49,14 +62,29 @@ export async function PUT(request: NextRequest) {
   try {
     const env = process.env as unknown as CloudflareEnv
     const db = getDB(env)
-    const body = (await request.json()) as { id?: string; titel?: string; reihenfolge?: number }
-    const { id, titel, reihenfolge } = body
+    const body = (await request.json()) as {
+      id?: string
+      titel?: string
+      reihenfolge?: number
+      pauschalgewicht?: number | null
+      pauschal_pro_person?: boolean
+      pauschal_transport_id?: string | null
+    }
+    const { id, titel, reihenfolge, pauschalgewicht, pauschal_pro_person, pauschal_transport_id } = body
 
     if (!id || !titel) {
       return NextResponse.json({ error: 'id and titel are required' }, { status: 400 })
     }
 
-    const success = await updateMainCategory(db, id, titel, reihenfolge)
+    const success = await updateMainCategory(
+      db,
+      id,
+      titel,
+      reihenfolge,
+      pauschalgewicht,
+      pauschal_pro_person,
+      pauschal_transport_id
+    )
 
     if (!success) {
       return NextResponse.json({ error: 'Failed to update main category' }, { status: 400 })

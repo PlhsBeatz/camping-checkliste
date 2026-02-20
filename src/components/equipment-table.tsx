@@ -547,9 +547,20 @@ export const EquipmentTable = React.memo(({
                         <span className="w-4" />
                       )}
                       <span>{item.was}</span>
+                      {item.in_pauschale_inbegriffen && (
+                        <span className="inline-flex items-center rounded bg-emerald-100 text-emerald-800 px-1.5 py-0.5 text-xs" title="In Pauschale inbegriffen">
+                          Pausch.
+                        </span>
+                      )}
                     </div>
                     <div className={`px-4 py-2 text-sm ${colAlign.transport}`}>{getTransportName(item.transport_id)}</div>
-                    <div className={`px-4 py-2 text-sm ${colAlign.gewicht}`}>{formatWeight(item.einzelgewicht)}</div>
+                    <div className={`px-4 py-2 text-sm ${colAlign.gewicht}`}>
+                      {item.in_pauschale_inbegriffen && (item.einzelgewicht == null || item.einzelgewicht === 0) ? (
+                        <span className="text-muted-foreground italic">—</span>
+                      ) : (
+                        formatWeight(item.einzelgewicht)
+                      )}
+                    </div>
                     <div className={`px-4 py-2 text-sm ${colAlign.anzahl}`}>{item.standard_anzahl}</div>
                     <div className={`px-4 py-2 ${colAlign.status}`}>
                       <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(item.status)}`}>

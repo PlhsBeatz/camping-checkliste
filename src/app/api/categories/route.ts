@@ -30,6 +30,9 @@ export async function POST(request: NextRequest) {
       titel: string
       hauptkategorieId: string | number
       reihenfolge?: number
+      pauschalgewicht?: number | null
+      pauschal_pro_person?: boolean
+      pauschal_transport_id?: string | null
     }
 
     let body: unknown
@@ -58,9 +61,18 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { titel, hauptkategorieId, reihenfolge } = body
+    const { titel, hauptkategorieId, reihenfolge, pauschalgewicht, pauschal_pro_person, pauschal_transport_id } =
+      body
 
-    const id = await createCategory(db, titel, String(hauptkategorieId), reihenfolge)
+    const id = await createCategory(
+      db,
+      titel,
+      String(hauptkategorieId),
+      reihenfolge,
+      pauschalgewicht,
+      pauschal_pro_person,
+      pauschal_transport_id
+    )
 
     if (!id) {
       return NextResponse.json({ error: 'Failed to create category' }, { status: 400 })
@@ -78,6 +90,9 @@ interface PutCategoryBody {
   titel: string
   hauptkategorieId?: string
   reihenfolge?: number
+  pauschalgewicht?: number | null
+  pauschal_pro_person?: boolean
+  pauschal_transport_id?: string | null
 }
 
 export async function PUT(request: NextRequest) {
@@ -85,13 +100,23 @@ export async function PUT(request: NextRequest) {
     const env = process.env as unknown as CloudflareEnv
     const db = getDB(env)
     const body = (await request.json()) as PutCategoryBody
-    const { id, titel, hauptkategorieId, reihenfolge } = body
+    const { id, titel, hauptkategorieId, reihenfolge, pauschalgewicht, pauschal_pro_person, pauschal_transport_id } =
+      body
 
     if (!id || !titel) {
       return NextResponse.json({ error: 'id and titel are required' }, { status: 400 })
     }
 
-    const success = await updateCategory(db, id, titel, hauptkategorieId, reihenfolge)
+    const success = await updateCategory(
+      db,
+      id,
+      titel,
+      hauptkategorieId,
+      reihenfolge,
+      pauschalgewicht,
+      pauschal_pro_person,
+      pauschal_transport_id
+    )
 
     if (!success) {
       return NextResponse.json({ error: 'Failed to update category' }, { status: 400 })

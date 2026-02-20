@@ -29,7 +29,8 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { MoreVertical, Pencil, Trash2, GripVertical } from 'lucide-react'
-import { Category, MainCategory } from '@/lib/db'
+import { Category, MainCategory, TransportVehicle } from '@/lib/db'
+import { Checkbox } from '@/components/ui/checkbox'
 import type { ApiResponse } from '@/lib/api-types'
 
 interface CategoryWithMain extends Category {
@@ -165,13 +166,21 @@ function SortableMainCategoryRow({
 interface CategoryManagerProps {
   categories: CategoryWithMain[]
   mainCategories: MainCategory[]
+  transportVehicles: TransportVehicle[]
   onRefresh: () => void
   /** Wenn true, wird der Dialog für neue Hauptkategorie geöffnet (z.B. von FAB); nach Öffnen wird onOpenNewMainCategoryConsumed aufgerufen */
   openNewMainCategoryTrigger?: boolean
   onOpenNewMainCategoryConsumed?: () => void
 }
 
-export function CategoryManager({ categories, mainCategories, onRefresh, openNewMainCategoryTrigger, onOpenNewMainCategoryConsumed }: CategoryManagerProps) {
+export function CategoryManager({
+  categories,
+  mainCategories,
+  transportVehicles,
+  onRefresh,
+  openNewMainCategoryTrigger,
+  onOpenNewMainCategoryConsumed
+}: CategoryManagerProps) {
   const [showMainCategoryDialog, setShowMainCategoryDialog] = useState(false)
   const [showCategoryDialog, setShowCategoryDialog] = useState(false)
   const [editingMainCategory, setEditingMainCategory] = useState<MainCategory | null>(null)
@@ -188,19 +197,25 @@ export function CategoryManager({ categories, mainCategories, onRefresh, openNew
   )
 
   const [mainCategoryForm, setMainCategoryForm] = useState({
-    titel: ''
+    titel: '',
+    pauschalgewicht: '' as string | number,
+    pauschal_pro_person: false,
+    pauschal_transport_id: '' as string
   })
 
   const [categoryForm, setCategoryForm] = useState({
     titel: '',
-    hauptkategorieId: ''
+    hauptkategorieId: '',
+    pauschalgewicht: '' as string | number,
+    pauschal_pro_person: false,
+    pauschal_transport_id: '' as string
   })
 
   // FAB-Trigger: Von außen (z.B. Klick auf FAB) Dialog für neue Hauptkategorie öffnen
   useEffect(() => {
     if (openNewMainCategoryTrigger) {
       setEditingMainCategory(null)
-      setMainCategoryForm({ titel: '' })
+      setMainCategoryForm({ titel: '', pauschalgewicht: '', pauschal_pro_person: false, pauschal_transport_id: '' })
       setShowMainCategoryDialog(true)
       onOpenNewMainCategoryConsumed?.()
     }
@@ -218,18 +233,28 @@ export function CategoryManager({ categories, mainCategories, onRefresh, openNew
 
     setIsLoading(true)
     try {
+      const pauschalgewichtNum =
+        mainCategoryForm.pauschalgewicht !== '' && mainCategoryForm.pauschalgewicht != null
+          ? Number(mainCategoryForm.pauschalgewicht)
+          : null
       const res = await fetch('/api/main-categories', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           titel: mainCategoryForm.titel,
-          reihenfolge: nextReihenfolge
+          reihenfolge: nextReihenfolge,
+          pauschalgewicht: pauschalgewichtNum,
+          pauschal_pro_person: pauschalgewichtNum != null ? mainCategoryForm.pauschal_pro_person : undefined,
+          pauschal_transport_id:
+            pauschalgewichtNum != null && mainCategoryForm.pauschal_transport_id
+              ? mainCategoryForm.pauschal_transport_id
+              : null
         })
       })
       const data = (await res.json()) as ApiResponse<unknown>
       if (data.success) {
         setShowMainCategoryDialog(false)
-        setMainCategoryForm({ titel: '' })
+        setMainCategoryForm({ titel: '', pauschalgewicht: '', pauschal_pro_person: false, pauschal_transport_id: '' })
         onRefresh()
       } else {
         alert('Fehler: ' + (data.error ?? 'Unbekannt'))
@@ -250,20 +275,30 @@ export function CategoryManager({ categories, mainCategories, onRefresh, openNew
 
     setIsLoading(true)
     try {
+      const pauschalgewichtNum =
+        mainCategoryForm.pauschalgewicht !== '' && mainCategoryForm.pauschalgewicht != null
+          ? Number(mainCategoryForm.pauschalgewicht)
+          : null
       const res = await fetch('/api/main-categories', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           id: editingMainCategory.id,
           titel: mainCategoryForm.titel,
-          reihenfolge: editingMainCategory.reihenfolge
+          reihenfolge: editingMainCategory.reihenfolge,
+          pauschalgewicht: pauschalgewichtNum,
+          pauschal_pro_person: pauschalgewichtNum != null ? mainCategoryForm.pauschal_pro_person : undefined,
+          pauschal_transport_id:
+            pauschalgewichtNum != null && mainCategoryForm.pauschal_transport_id
+              ? mainCategoryForm.pauschal_transport_id
+              : null
         })
       })
       const data = (await res.json()) as ApiResponse<unknown>
       if (data.success) {
         setShowMainCategoryDialog(false)
         setEditingMainCategory(null)
-        setMainCategoryForm({ titel: '' })
+        setMainCategoryForm({ titel: '', pauschalgewicht: '', pauschal_pro_person: false, pauschal_transport_id: '' })
         onRefresh()
       } else {
         alert('Fehler: ' + (data.error ?? 'Unbekannt'))
@@ -316,19 +351,27 @@ export function CategoryManager({ categories, mainCategories, onRefresh, openNew
 
     setIsLoading(true)
     try {
+      const pauschalgewichtNum =
+        categoryForm.pauschalgewicht !== '' && categoryForm.pauschalgewicht != null
+          ? Number(categoryForm.pauschalgewicht)
+          : null
       const res = await fetch('/api/categories', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           titel: categoryForm.titel,
           hauptkategorieId: categoryForm.hauptkategorieId,
-          reihenfolge: nextReihenfolge
+          reihenfolge: nextReihenfolge,
+          pauschalgewicht: pauschalgewichtNum,
+          pauschal_pro_person: pauschalgewichtNum != null ? categoryForm.pauschal_pro_person : undefined,
+          pauschal_transport_id:
+            pauschalgewichtNum != null && categoryForm.pauschal_transport_id ? categoryForm.pauschal_transport_id : null
         })
       })
       const data = (await res.json()) as ApiResponse<unknown>
       if (data.success) {
         setShowCategoryDialog(false)
-        setCategoryForm({ titel: '', hauptkategorieId: '' })
+        setCategoryForm({ titel: '', hauptkategorieId: '', pauschalgewicht: '', pauschal_pro_person: false, pauschal_transport_id: '' })
         onRefresh()
       } else {
         alert('Fehler: ' + (data.error ?? 'Unbekannt'))
@@ -349,6 +392,10 @@ export function CategoryManager({ categories, mainCategories, onRefresh, openNew
 
     setIsLoading(true)
     try {
+      const pauschalgewichtNum =
+        categoryForm.pauschalgewicht !== '' && categoryForm.pauschalgewicht != null
+          ? Number(categoryForm.pauschalgewicht)
+          : null
       const res = await fetch('/api/categories', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -356,14 +403,18 @@ export function CategoryManager({ categories, mainCategories, onRefresh, openNew
           id: editingCategory.id,
           titel: categoryForm.titel,
           hauptkategorieId: categoryForm.hauptkategorieId || undefined,
-          reihenfolge: editingCategory.reihenfolge
+          reihenfolge: editingCategory.reihenfolge,
+          pauschalgewicht: pauschalgewichtNum,
+          pauschal_pro_person: pauschalgewichtNum != null ? categoryForm.pauschal_pro_person : undefined,
+          pauschal_transport_id:
+            pauschalgewichtNum != null && categoryForm.pauschal_transport_id ? categoryForm.pauschal_transport_id : null
         })
       })
       const data = (await res.json()) as ApiResponse<unknown>
       if (data.success) {
         setShowCategoryDialog(false)
         setEditingCategory(null)
-        setCategoryForm({ titel: '', hauptkategorieId: '' })
+        setCategoryForm({ titel: '', hauptkategorieId: '', pauschalgewicht: '', pauschal_pro_person: false, pauschal_transport_id: '' })
         onRefresh()
       } else {
         alert('Fehler: ' + (data.error ?? 'Unbekannt'))
@@ -411,7 +462,10 @@ export function CategoryManager({ categories, mainCategories, onRefresh, openNew
   const openEditMainCategory = (mainCategory: MainCategory) => {
     setEditingMainCategory(mainCategory)
     setMainCategoryForm({
-      titel: mainCategory.titel
+      titel: mainCategory.titel,
+      pauschalgewicht: mainCategory.pauschalgewicht ?? '',
+      pauschal_pro_person: mainCategory.pauschal_pro_person ?? false,
+      pauschal_transport_id: mainCategory.pauschal_transport_id ?? ''
     })
     setShowMainCategoryDialog(true)
   }
@@ -420,14 +474,23 @@ export function CategoryManager({ categories, mainCategories, onRefresh, openNew
     setEditingCategory(category)
     setCategoryForm({
       titel: category.titel,
-      hauptkategorieId: category.hauptkategorie_id
+      hauptkategorieId: category.hauptkategorie_id,
+      pauschalgewicht: category.pauschalgewicht ?? '',
+      pauschal_pro_person: category.pauschal_pro_person ?? false,
+      pauschal_transport_id: category.pauschal_transport_id ?? ''
     })
     setShowCategoryDialog(true)
   }
 
   const openNewCategory = (mainCategoryId: string) => {
     setEditingCategory(null)
-    setCategoryForm({ titel: '', hauptkategorieId: mainCategoryId })
+    setCategoryForm({
+      titel: '',
+      hauptkategorieId: mainCategoryId,
+      pauschalgewicht: '',
+      pauschal_pro_person: false,
+      pauschal_transport_id: ''
+    })
     setShowCategoryDialog(true)
   }
 
@@ -577,6 +640,63 @@ export function CategoryManager({ categories, mainCategories, onRefresh, openNew
                 placeholder="z.B. Campingausrüstung"
               />
             </div>
+            <div>
+              <Label htmlFor="main-cat-pauschal">Pauschalgewicht (kg)</Label>
+              <Input
+                id="main-cat-pauschal"
+                type="number"
+                min={0}
+                step={0.1}
+                value={mainCategoryForm.pauschalgewicht}
+                onChange={(e) =>
+                  setMainCategoryForm({ ...mainCategoryForm, pauschalgewicht: e.target.value ? Number(e.target.value) : '' })
+                }
+                placeholder="z.B. 18"
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Pauschalgewicht für Gegenstände, die als „in Pauschale inbegriffen“ markiert sind
+              </p>
+            </div>
+            {(mainCategoryForm.pauschalgewicht !== '' && mainCategoryForm.pauschalgewicht != null) && (
+              <>
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="main-cat-pro-person"
+                    checked={mainCategoryForm.pauschal_pro_person}
+                    onCheckedChange={(c) =>
+                      setMainCategoryForm({ ...mainCategoryForm, pauschal_pro_person: !!c })
+                    }
+                  />
+                  <Label htmlFor="main-cat-pro-person" className="cursor-pointer">
+                    Pro Person (z.B. 18 kg × Anzahl Mitreisende)
+                  </Label>
+                </div>
+                <div>
+                  <Label htmlFor="main-cat-transport">Pauschale zuordnen zu</Label>
+                  <Select
+                    value={mainCategoryForm.pauschal_transport_id || 'none'}
+                    onValueChange={(v) =>
+                      setMainCategoryForm({
+                        ...mainCategoryForm,
+                        pauschal_transport_id: v === 'none' ? '' : v
+                      })
+                    }
+                  >
+                    <SelectTrigger id="main-cat-transport">
+                      <SelectValue placeholder="Transport wählen" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">— Keiner —</SelectItem>
+                      {transportVehicles.map((tv) => (
+                        <SelectItem key={tv.id} value={tv.id}>
+                          {tv.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </>
+            )}
             <Button
               onClick={editingMainCategory ? handleUpdateMainCategory : handleCreateMainCategory}
               disabled={isLoading}
@@ -622,6 +742,60 @@ export function CategoryManager({ categories, mainCategories, onRefresh, openNew
                 </SelectContent>
               </Select>
             </div>
+            <div>
+              <Label htmlFor="cat-pauschal">Pauschalgewicht (kg)</Label>
+              <Input
+                id="cat-pauschal"
+                type="number"
+                min={0}
+                step={0.1}
+                value={categoryForm.pauschalgewicht}
+                onChange={(e) =>
+                  setCategoryForm({ ...categoryForm, pauschalgewicht: e.target.value ? Number(e.target.value) : '' })
+                }
+                placeholder="Optional – hat Vorrang vor Hauptkategorie-Pauschale"
+              />
+            </div>
+            {(categoryForm.pauschalgewicht !== '' && categoryForm.pauschalgewicht != null) && (
+              <>
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="cat-pro-person"
+                    checked={categoryForm.pauschal_pro_person}
+                    onCheckedChange={(c) =>
+                      setCategoryForm({ ...categoryForm, pauschal_pro_person: !!c })
+                    }
+                  />
+                  <Label htmlFor="cat-pro-person" className="cursor-pointer">
+                    Pro Person
+                  </Label>
+                </div>
+                <div>
+                  <Label htmlFor="cat-transport">Pauschale zuordnen zu</Label>
+                  <Select
+                    value={categoryForm.pauschal_transport_id || 'none'}
+                    onValueChange={(v) =>
+                      setCategoryForm({
+                        ...categoryForm,
+                        pauschal_transport_id: v === 'none' ? '' : v
+                      })
+                    }
+                  >
+                    <SelectTrigger id="cat-transport">
+                      <SelectValue placeholder="Transport wählen" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">— Keiner —</SelectItem>
+                      {transportVehicles.map((tv) => (
+                        <SelectItem key={tv.id} value={tv.id}>
+                          {tv.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </>
+            )}
             <Button
               onClick={editingCategory ? handleUpdateCategory : handleCreateCategory}
               disabled={isLoading}

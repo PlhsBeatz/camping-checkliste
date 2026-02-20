@@ -3,6 +3,9 @@ CREATE TABLE IF NOT EXISTS hauptkategorien (
     id TEXT PRIMARY KEY,
     titel TEXT NOT NULL UNIQUE,
     reihenfolge INTEGER,
+    pauschalgewicht REAL,
+    pauschal_pro_person INTEGER DEFAULT 0,
+    pauschal_transport_id TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -75,6 +78,8 @@ CREATE TABLE IF NOT EXISTS kategorien (
     hauptkategorie_id TEXT NOT NULL,
     reihenfolge INTEGER,
     pauschalgewicht REAL,
+    pauschal_pro_person INTEGER DEFAULT 0,
+    pauschal_transport_id TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
     UNIQUE (hauptkategorie_id, titel),
@@ -111,6 +116,7 @@ CREATE TABLE IF NOT EXISTS ausruestungsgegenstaende (
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now')), 
     mitreisenden_typ TEXT NOT NULL DEFAULT 'pauschal' CHECK (mitreisenden_typ IN ('pauschal', 'alle', 'ausgewaehlte')), is_standard INTEGER DEFAULT 0,
+    in_pauschale_inbegriffen INTEGER DEFAULT 0,
     CHECK (einzelgewicht >= 0 OR einzelgewicht IS NULL),
     CHECK (standard_anzahl >= 0),
     CHECK (status IN ('Normal', 'Ausgemustert', 'Fest Installiert', 'Immer gepackt')),
