@@ -110,7 +110,7 @@ function HomeContent() {
   const searchParams = useSearchParams()
   const urlVacationId = searchParams.get('vacation')
 
-  // Fetch Vacations and select vacation from URL or next vacation
+  // Fetch Vacations und Urlaub wählen (gleiche Logik wie Pack-Status: URL → sessionStorage → nächster)
   useEffect(() => {
     const fetchVacations = async () => {
       try {
@@ -118,13 +118,16 @@ function HomeContent() {
         const data = (await res.json()) as ApiResponse<Vacation[]>
         if (data.success && data.data) {
           setVacations(data.data)
-          
-          // Priority 1: URL parameter
-          if (urlVacationId && data.data.some((v: Vacation) => v.id === urlVacationId)) {
-            setSelectedVacationId(urlVacationId)
-          }
-          // Priority 2: Auto-select next vacation if no vacation is selected
-          else if (!selectedVacationId && data.data.length > 0) {
+          const stored =
+            urlVacationId && data.data.some((v: Vacation) => v.id === urlVacationId)
+              ? urlVacationId
+              : typeof window !== 'undefined'
+                ? sessionStorage.getItem('packlistVacationId')
+                : null
+          const validStored = stored && data.data.some((v: Vacation) => v.id === stored)
+          if (validStored) {
+            setSelectedVacationId(stored)
+          } else if (data.data.length > 0) {
             const nextVacation = findNextVacation(data.data)
             if (nextVacation) {
               setSelectedVacationId(nextVacation.id)
@@ -136,7 +139,7 @@ function HomeContent() {
       }
     }
     fetchVacations()
-  }, [urlVacationId, selectedVacationId])
+  }, [urlVacationId])
 
   // Pack-Status nutzt diesen Urlaub; bei Wechsel sync zu sessionStorage
   useEffect(() => {
