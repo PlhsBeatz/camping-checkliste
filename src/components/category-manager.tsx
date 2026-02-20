@@ -71,8 +71,13 @@ function SortableSubcategoryRow({
       >
         <GripVertical className="h-4 w-4" />
       </div>
-      <div className="flex-1 min-w-0">
+      <div className="flex-1 min-w-0 flex items-center gap-2">
         <p className="text-sm font-medium">{cat.titel}</p>
+        {cat.pauschalgewicht != null && cat.pauschalgewicht > 0 && (
+          <span className="text-xs text-muted-foreground">
+            {cat.pauschal_pro_person ? `${cat.pauschalgewicht} kg/Person` : `${cat.pauschalgewicht} kg`}
+          </span>
+        )}
       </div>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
@@ -130,8 +135,13 @@ function SortableMainCategoryRow({
         >
           <GripVertical className="h-5 w-5" />
         </div>
-        <div className="flex-1 min-w-0">
+        <div className="flex-1 min-w-0 flex items-center gap-2">
           <p className="font-semibold text-[rgb(45,79,30)]">{mainCat.titel}</p>
+          {mainCat.pauschalgewicht != null && mainCat.pauschalgewicht > 0 && (
+            <span className="text-xs text-muted-foreground">
+              {mainCat.pauschal_pro_person ? `${mainCat.pauschalgewicht} kg/Person` : `${mainCat.pauschalgewicht} kg`}
+            </span>
+          )}
         </div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
