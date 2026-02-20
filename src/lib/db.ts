@@ -1250,7 +1250,7 @@ export async function getPackStatus(db: D1Database, vacationId: string): Promise
       .bind(vacationId)
       .first<{ c: number }>()
     const mitreisendeCount = mitreisendeCountResult?.c ?? 0
-    const firstTransportId = transporte.length > 0 ? transporte[0].id : null
+    const firstTransportId = transporte[0]?.id ?? null
 
     // Kategorien mit Pauschale: Hat mindestens ein inbegriffenes Item in der Packliste?
     const kategorienPauschalResult = await db
