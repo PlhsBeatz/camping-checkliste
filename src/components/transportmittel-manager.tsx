@@ -117,7 +117,13 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
       const res = await fetch(`/api/transport-vehicles/festgewicht?transportId=${transportId}`)
       const data = (await res.json()) as ApiResponse<{
         manuell: TransportVehicleFestgewichtManuell[]
-        equipment: Array<{ id: string; was: string; einzelgewicht: number }>
+        equipment: Array<{
+          id: string
+          was: string
+          einzelgewicht: number
+          standard_anzahl: number
+          gesamtgewicht: number
+        }>
       }>
       if (data.success && data.data) {
         setManuellEntries(data.data.manuell)
