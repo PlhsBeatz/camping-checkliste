@@ -6,7 +6,6 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Checkbox } from '@/components/ui/checkbox'
 import { WeightInput } from '@/components/ui/weight-input'
 import {
   Collapsible,
@@ -104,7 +103,6 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
     name: '',
     zulGesamtgewicht: '',
     eigengewicht: '',
-    festInstalliertMitrechnen: false,
   })
   const [manuellEntries, setManuellEntries] = useState<TransportVehicleFestgewichtManuell[]>([])
   const [festgewichtEquipment, setFestgewichtEquipment] = useState<
@@ -170,7 +168,6 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
           name,
           zulGesamtgewicht: zul,
           eigengewicht: eigen,
-          festInstalliertMitrechnen: form.festInstalliertMitrechnen,
         }),
       })
       const data = (await res.json()) as ApiResponse<{ id: string }>
@@ -229,7 +226,6 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
           name,
           zulGesamtgewicht: zul,
           eigengewicht: eigen,
-          festInstalliertMitrechnen: form.festInstalliertMitrechnen,
         }),
       })
       const data = (await res.json()) as ApiResponse<unknown>
@@ -283,7 +279,6 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
       name: '',
       zulGesamtgewicht: '',
       eigengewicht: '',
-      festInstalliertMitrechnen: false,
     })
     setManuellEntries([])
   }
@@ -318,7 +313,6 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
       name: vehicle.name,
       zulGesamtgewicht: String(vehicle.zul_gesamtgewicht),
       eigengewicht: String(vehicle.eigengewicht),
-      festInstalliertMitrechnen: vehicle.fest_installiert_mitrechnen ?? false,
     })
     setShowDialog(true)
   }
@@ -440,23 +434,6 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
             </p>
           </div>
 
-          <div className="flex items-center space-x-2">
-            <Checkbox
-              id="fest-installiert"
-              checked={form.festInstalliertMitrechnen}
-              onCheckedChange={(c) =>
-                setForm({ ...form, festInstalliertMitrechnen: (c as boolean) ?? false })
-              }
-            />
-            <Label htmlFor="fest-installiert" className="cursor-pointer">
-              Fest installierte Ausrüstung mitrechnen
-            </Label>
-          </div>
-          <p className="text-xs text-muted-foreground -mt-2">
-            Addiert Ausrüstungsgegenstände mit Status „Fest Installiert“ (und diesem Transport) zum
-            Festgewicht.
-          </p>
-
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <Label>Manuelle Festgewicht-Einträge</Label>
@@ -501,7 +478,7 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
             )}
           </div>
 
-          {form.festInstalliertMitrechnen && (
+          {editingVehicle && (
             <Collapsible open={festInstalliertExpanded} onOpenChange={setFestInstalliertExpanded}>
               <CollapsibleTrigger className="flex items-center gap-2 text-sm font-medium">
                 {festInstalliertExpanded ? (

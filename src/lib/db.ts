@@ -1069,8 +1069,7 @@ export async function getEquipmentItemsFestInstalliertByTransport(
  */
 export async function getTransportVehicleFestgewichtSums(
   db: D1Database,
-  transportId: string,
-  festInstalliertMitrechnen: boolean
+  transportId: string
 ): Promise<{ manuellSum: number; equipmentSum: number; total: number }> {
   let manuellSum = 0
   let equipmentSum = 0
@@ -1085,20 +1084,18 @@ export async function getTransportVehicleFestgewichtSums(
   } catch {
     // Tabelle existiert möglicherweise noch nicht
   }
-  if (festInstalliertMitrechnen) {
-    try {
-      const equip = await db
-        .prepare(
-          `SELECT COALESCE(SUM(einzelgewicht * COALESCE(standard_anzahl, 1)), 0) as s 
-           FROM ausruestungsgegenstaende 
-           WHERE transport_id = ? AND status = 'Fest Installiert'`
-        )
-        .bind(transportId)
-        .first<{ s: number }>()
-      equipmentSum = equip?.s ?? 0
-    } catch {
-      // ignore
-    }
+  try {
+    const equip = await db
+      .prepare(
+        `SELECT COALESCE(SUM(einzelgewicht * COALESCE(standard_anzahl, 1)), 0) as s 
+         FROM ausruestungsgegenstaende 
+         WHERE transport_id = ? AND status = 'Fest Installiert'`
+      )
+      .bind(transportId)
+      .first<{ s: number }>()
+    equipmentSum = equip?.s ?? 0
+  } catch {
+    // ignore
   }
   return { manuellSum, equipmentSum, total: manuellSum + equipmentSum }
 }
@@ -1114,11 +1111,7 @@ export async function getTransportVehiclesWithFestgewicht(
   const vehicles = await getTransportVehicles(db)
   const result: TransportVehicleWithFestgewicht[] = []
   for (const v of vehicles) {
-    const sums = await getTransportVehicleFestgewichtSums(
-      db,
-      v.id,
-      v.fest_installiert_mitrechnen
-    )
+    const sums = await getTransportVehicleFestgewichtSums(db, v.id)
     result.push({ ...v, festgewichtTotal: sums.total })
   }
   return result
