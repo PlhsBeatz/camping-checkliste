@@ -1040,21 +1040,23 @@ export async function deleteTransportVehicleFestgewichtManuell(
 }
 
 /**
- * Abrufen der Ausrüstungsgegenstände mit Status "Fest Installiert" für ein Transportmittel
+ * Abrufen der Ausrüstungsgegenstände mit Status "Fest Installiert" für ein Transportmittel.
+ * Gesamtgewicht = einzelgewicht × standard_anzahl pro Position.
  */
 export async function getEquipmentItemsFestInstalliertByTransport(
   db: D1Database,
   transportId: string
-): Promise<Array<{ id: string; was: string; einzelgewicht: number }>> {
+): Promise<Array<{ id: string; was: string; einzelgewicht: number; standard_anzahl: number; gesamtgewicht: number }>> {
   try {
     const result = await db
       .prepare(
-        `SELECT id, was, COALESCE(einzelgewicht, 0) as einzelgewicht 
+        `SELECT id, was, COALESCE(einzelgewicht, 0) as einzelgewicht, COALESCE(standard_anzahl, 1) as standard_anzahl,
+                (COALESCE(einzelgewicht, 0) * COALESCE(standard_anzahl, 1)) as gesamtgewicht
          FROM ausruestungsgegenstaende 
          WHERE transport_id = ? AND status = 'Fest Installiert'`
       )
       .bind(transportId)
-      .all<{ id: string; was: string; einzelgewicht: number }>()
+      .all<{ id: string; was: string; einzelgewicht: number; standard_anzahl: number; gesamtgewicht: number }>()
     return result.results || []
   } catch (error) {
     console.error('Error fetching equipment items fest installiert:', error)
@@ -1087,7 +1089,8 @@ export async function getTransportVehicleFestgewichtSums(
     try {
       const equip = await db
         .prepare(
-          `SELECT COALESCE(SUM(einzelgewicht), 0) as s FROM ausruestungsgegenstaende 
+          `SELECT COALESCE(SUM(einzelgewicht * COALESCE(standard_anzahl, 1)), 0) as s 
+           FROM ausruestungsgegenstaende 
            WHERE transport_id = ? AND status = 'Fest Installiert'`
         )
         .bind(transportId)

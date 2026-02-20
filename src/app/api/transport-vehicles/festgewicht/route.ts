@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
       getEquipmentItemsFestInstalliertByTransport(db, transportId)
     ])
 
-    const festInstalliertSum = equipment.reduce((sum, e) => sum + (e.einzelgewicht ?? 0), 0)
+    const festInstalliertSum = equipment.reduce((sum, e) => sum + (e.gesamtgewicht ?? 0), 0)
 
     return NextResponse.json({
       success: true,

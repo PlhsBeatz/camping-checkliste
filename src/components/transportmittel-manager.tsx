@@ -108,7 +108,7 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
   })
   const [manuellEntries, setManuellEntries] = useState<TransportVehicleFestgewichtManuell[]>([])
   const [festgewichtEquipment, setFestgewichtEquipment] = useState<
-    Array<{ id: string; was: string; einzelgewicht: number }>
+    Array<{ id: string; was: string; einzelgewicht: number; standard_anzahl: number; gesamtgewicht: number }>
   >([])
   const [festInstalliertExpanded, setFestInstalliertExpanded] = useState(false)
 
@@ -517,9 +517,14 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
                         key={eq.id}
                         className="flex justify-between text-sm py-1 border-b border-muted last:border-0"
                       >
-                        <span>{eq.was}</span>
+                        <span>
+                          {eq.was}
+                          {eq.standard_anzahl > 1 && (
+                            <span className="text-muted-foreground"> × {eq.standard_anzahl}</span>
+                          )}
+                        </span>
                         <span className="text-muted-foreground">
-                          {formatWeightForDisplay(eq.einzelgewicht)} kg
+                          {formatWeightForDisplay(eq.gesamtgewicht ?? eq.einzelgewicht)} kg
                         </span>
                       </div>
                     ))
