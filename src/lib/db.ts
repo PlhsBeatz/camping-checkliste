@@ -90,6 +90,15 @@ export interface TransportVehicle {
   name: string
   zul_gesamtgewicht: number
   eigengewicht: number
+  fest_installiert_mitrechnen: boolean
+  created_at: string
+}
+
+export interface TransportVehicleFestgewichtManuell {
+  id: string
+  transport_id: string
+  titel: string
+  gewicht: number
   created_at: string
 }
 
@@ -828,10 +837,26 @@ export async function getCategoriesWithMainCategories(db: D1Database): Promise<A
 /**
  * Abrufen aller Transportmittel
  */
+interface TransportVehicleRow {
+  id: string
+  name: string
+  zul_gesamtgewicht: number
+  eigengewicht: number
+  fest_installiert_mitrechnen?: number
+  created_at: string
+}
+
 export async function getTransportVehicles(db: D1Database): Promise<TransportVehicle[]> {
   try {
-    const result = await db.prepare('SELECT * FROM transportmittel ORDER BY name').all<TransportVehicle>()
-    return result.results || []
+    const result = await db.prepare('SELECT * FROM transportmittel ORDER BY name').all<TransportVehicleRow>()
+    return (result.results || []).map((row) => ({
+      id: row.id,
+      name: row.name,
+      zul_gesamtgewicht: row.zul_gesamtgewicht,
+      eigengewicht: row.eigengewicht,
+      fest_installiert_mitrechnen: !!(row.fest_installiert_mitrechnen ?? 0),
+      created_at: row.created_at
+    }))
   } catch (error) {
     console.error('Error fetching transport vehicles:', error)
     return []
@@ -845,13 +870,16 @@ export async function createTransportVehicle(
   db: D1Database,
   name: string,
   zulGesamtgewicht: number,
-  eigengewicht: number
+  eigengewicht: number,
+  festInstalliertMitrechnen: boolean = false
 ): Promise<string | null> {
   try {
     const id = crypto.randomUUID()
     await db
-      .prepare('INSERT INTO transportmittel (id, name, zul_gesamtgewicht, eigengewicht) VALUES (?, ?, ?, ?)')
-      .bind(id, name, zulGesamtgewicht, eigengewicht)
+      .prepare(
+        'INSERT INTO transportmittel (id, name, zul_gesamtgewicht, eigengewicht, fest_installiert_mitrechnen) VALUES (?, ?, ?, ?, ?)'
+      )
+      .bind(id, name, zulGesamtgewicht, eigengewicht, festInstalliertMitrechnen ? 1 : 0)
       .run()
     return id
   } catch (error) {
@@ -868,12 +896,16 @@ export async function updateTransportVehicle(
   id: string,
   name: string,
   zulGesamtgewicht: number,
-  eigengewicht: number
+  eigengewicht: number,
+  festInstalliertMitrechnen?: boolean
 ): Promise<boolean> {
   try {
+    const fim = festInstalliertMitrechnen ?? false
     await db
-      .prepare('UPDATE transportmittel SET name = ?, zul_gesamtgewicht = ?, eigengewicht = ? WHERE id = ?')
-      .bind(name, zulGesamtgewicht, eigengewicht, id)
+      .prepare(
+        'UPDATE transportmittel SET name = ?, zul_gesamtgewicht = ?, eigengewicht = ?, fest_installiert_mitrechnen = ? WHERE id = ?'
+      )
+      .bind(name, zulGesamtgewicht, eigengewicht, fim ? 1 : 0, id)
       .run()
     return true
   } catch (error) {
@@ -893,6 +925,168 @@ export async function deleteTransportVehicle(db: D1Database, id: string): Promis
     console.error('Error deleting transport vehicle:', error)
     return false
   }
+}
+
+/**
+ * Abrufen der manuellen Festgewicht-Einträge eines Transportmittels
+ */
+export async function getTransportVehicleFestgewichtManuell(
+  db: D1Database,
+  transportId: string
+): Promise<TransportVehicleFestgewichtManuell[]> {
+  try {
+    const result = await db
+      .prepare('SELECT * FROM transportmittel_festgewicht_manuell WHERE transport_id = ? ORDER BY titel')
+      .bind(transportId)
+      .all<TransportVehicleFestgewichtManuell>()
+    return result.results || []
+  } catch (error) {
+    console.error('Error fetching transport vehicle festgewicht manuell:', error)
+    return []
+  }
+}
+
+/**
+ * Erstellen eines manuellen Festgewicht-Eintrags
+ */
+export async function createTransportVehicleFestgewichtManuell(
+  db: D1Database,
+  transportId: string,
+  titel: string,
+  gewicht: number
+): Promise<string | null> {
+  try {
+    const id = crypto.randomUUID()
+    await db
+      .prepare(
+        'INSERT INTO transportmittel_festgewicht_manuell (id, transport_id, titel, gewicht) VALUES (?, ?, ?, ?)'
+      )
+      .bind(id, transportId, titel, gewicht)
+      .run()
+    return id
+  } catch (error) {
+    console.error('Error creating transport vehicle festgewicht manuell:', error)
+    return null
+  }
+}
+
+/**
+ * Aktualisieren eines manuellen Festgewicht-Eintrags
+ */
+export async function updateTransportVehicleFestgewichtManuell(
+  db: D1Database,
+  id: string,
+  titel: string,
+  gewicht: number
+): Promise<boolean> {
+  try {
+    await db
+      .prepare('UPDATE transportmittel_festgewicht_manuell SET titel = ?, gewicht = ? WHERE id = ?')
+      .bind(titel, gewicht, id)
+      .run()
+    return true
+  } catch (error) {
+    console.error('Error updating transport vehicle festgewicht manuell:', error)
+    return false
+  }
+}
+
+/**
+ * Löschen eines manuellen Festgewicht-Eintrags
+ */
+export async function deleteTransportVehicleFestgewichtManuell(
+  db: D1Database,
+  id: string
+): Promise<boolean> {
+  try {
+    await db.prepare('DELETE FROM transportmittel_festgewicht_manuell WHERE id = ?').bind(id).run()
+    return true
+  } catch (error) {
+    console.error('Error deleting transport vehicle festgewicht manuell:', error)
+    return false
+  }
+}
+
+/**
+ * Abrufen der Ausrüstungsgegenstände mit Status "Fest Installiert" für ein Transportmittel
+ */
+export async function getEquipmentItemsFestInstalliertByTransport(
+  db: D1Database,
+  transportId: string
+): Promise<Array<{ id: string; was: string; einzelgewicht: number }>> {
+  try {
+    const result = await db
+      .prepare(
+        `SELECT id, was, COALESCE(einzelgewicht, 0) as einzelgewicht 
+         FROM ausruestungsgegenstaende 
+         WHERE transport_id = ? AND status = 'Fest Installiert'`
+      )
+      .bind(transportId)
+      .all<{ id: string; was: string; einzelgewicht: number }>()
+    return result.results || []
+  } catch (error) {
+    console.error('Error fetching equipment items fest installiert:', error)
+    return []
+  }
+}
+
+/**
+ * Festgewicht-Summen für ein Transportmittel (für Übersicht)
+ */
+export async function getTransportVehicleFestgewichtSums(
+  db: D1Database,
+  transportId: string,
+  festInstalliertMitrechnen: boolean
+): Promise<{ manuellSum: number; equipmentSum: number; total: number }> {
+  let manuellSum = 0
+  let equipmentSum = 0
+  try {
+    const manuell = await db
+      .prepare(
+        'SELECT COALESCE(SUM(gewicht), 0) as s FROM transportmittel_festgewicht_manuell WHERE transport_id = ?'
+      )
+      .bind(transportId)
+      .first<{ s: number }>()
+    manuellSum = manuell?.s ?? 0
+  } catch {
+    // Tabelle existiert möglicherweise noch nicht
+  }
+  if (festInstalliertMitrechnen) {
+    try {
+      const equip = await db
+        .prepare(
+          `SELECT COALESCE(SUM(einzelgewicht), 0) as s FROM ausruestungsgegenstaende 
+           WHERE transport_id = ? AND status = 'Fest Installiert'`
+        )
+        .bind(transportId)
+        .first<{ s: number }>()
+      equipmentSum = equip?.s ?? 0
+    } catch {
+      // ignore
+    }
+  }
+  return { manuellSum, equipmentSum, total: manuellSum + equipmentSum }
+}
+
+export type TransportVehicleWithFestgewicht = TransportVehicle & { festgewichtTotal: number }
+
+/**
+ * Transportmittel mit Festgewicht-Gesamtsumme (für Übersicht)
+ */
+export async function getTransportVehiclesWithFestgewicht(
+  db: D1Database
+): Promise<TransportVehicleWithFestgewicht[]> {
+  const vehicles = await getTransportVehicles(db)
+  const result: TransportVehicleWithFestgewicht[] = []
+  for (const v of vehicles) {
+    const sums = await getTransportVehicleFestgewichtSums(
+      db,
+      v.id,
+      v.fest_installiert_mitrechnen
+    )
+    result.push({ ...v, festgewichtTotal: sums.total })
+  }
+  return result
 }
 
 /**

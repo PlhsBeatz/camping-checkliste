@@ -1,31 +1,44 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { ResponsiveModal } from '@/components/ui/responsive-modal'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Checkbox } from '@/components/ui/checkbox'
+import { WeightInput } from '@/components/ui/weight-input'
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Trash2, Plus, MoreVertical, Pencil, Truck } from 'lucide-react'
-import { TransportVehicle } from '@/lib/db'
+import { Trash2, Plus, MoreVertical, Pencil, Truck, ChevronDown, ChevronRight } from 'lucide-react'
+import {
+  TransportVehicle,
+  TransportVehicleFestgewichtManuell,
+  type TransportVehicleWithFestgewicht,
+} from '@/lib/db'
 import type { ApiResponse } from '@/lib/api-types'
+import { formatWeightForDisplay, parseWeightInput } from '@/lib/utils'
 
 function TransportmittelRow({
   vehicle,
   onEdit,
   onDelete,
 }: {
-  vehicle: TransportVehicle
+  vehicle: TransportVehicleWithFestgewicht | TransportVehicle
   onEdit: (v: TransportVehicle) => void
   onDelete: (id: string) => void
 }) {
   const nutzlast = vehicle.zul_gesamtgewicht - vehicle.eigengewicht
+  const festgewichtTotal = 'festgewichtTotal' in vehicle ? vehicle.festgewichtTotal : 0
   return (
     <div className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 bg-white">
       <div className="flex items-center gap-3">
@@ -35,7 +48,12 @@ function TransportmittelRow({
         <div>
           <p className="font-medium">{vehicle.name}</p>
           <p className="text-xs text-muted-foreground">
-            Zul. Gesamt: {vehicle.zul_gesamtgewicht} kg · Eigengewicht: {vehicle.eigengewicht} kg · Nutzlast: {nutzlast.toFixed(1)} kg
+            Zul. Gesamt: {formatWeightForDisplay(vehicle.zul_gesamtgewicht)} kg · Eigengewicht:{' '}
+            {formatWeightForDisplay(vehicle.eigengewicht)} kg · Nutzlast:{' '}
+            {formatWeightForDisplay(nutzlast)} kg
+            {festgewichtTotal > 0 && (
+              <> · Fest Installiert: {formatWeightForDisplay(festgewichtTotal)} kg</>
+            )}
           </p>
         </div>
       </div>
@@ -72,7 +90,7 @@ function TransportmittelRow({
 }
 
 interface TransportmittelManagerProps {
-  vehicles: TransportVehicle[]
+  vehicles: (TransportVehicleWithFestgewicht | TransportVehicle)[]
   onRefresh: () => void
 }
 
@@ -85,22 +103,54 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
   const [form, setForm] = useState({
     name: '',
     zulGesamtgewicht: '',
-    eigengewicht: ''
+    eigengewicht: '',
+    festInstalliertMitrechnen: false,
   })
+  const [manuellEntries, setManuellEntries] = useState<TransportVehicleFestgewichtManuell[]>([])
+  const [festgewichtEquipment, setFestgewichtEquipment] = useState<
+    Array<{ id: string; was: string; einzelgewicht: number }>
+  >([])
+  const [festInstalliertExpanded, setFestInstalliertExpanded] = useState(false)
+
+  const loadFestgewicht = async (transportId: string) => {
+    try {
+      const res = await fetch(`/api/transport-vehicles/festgewicht?transportId=${transportId}`)
+      const data = (await res.json()) as ApiResponse<{
+        manuell: TransportVehicleFestgewichtManuell[]
+        equipment: Array<{ id: string; was: string; einzelgewicht: number }>
+      }>
+      if (data.success && data.data) {
+        setManuellEntries(data.data.manuell)
+        setFestgewichtEquipment(data.data.equipment ?? [])
+      }
+    } catch (e) {
+      console.error('Failed to load festgewicht:', e)
+    }
+  }
+
+  useEffect(() => {
+    if (editingVehicle && showDialog) {
+      loadFestgewicht(editingVehicle.id)
+    } else {
+      setManuellEntries([])
+      setFestgewichtEquipment([])
+      setFestInstalliertExpanded(false)
+    }
+  }, [editingVehicle?.id, showDialog])
 
   const handleCreate = async () => {
     const name = form.name.trim()
-    const zul = parseFloat(form.zulGesamtgewicht.replace(',', '.'))
-    const eigen = parseFloat(form.eigengewicht.replace(',', '.'))
+    const zul = parseWeightInput(form.zulGesamtgewicht)
+    const eigen = parseWeightInput(form.eigengewicht)
     if (!name) {
       alert('Bitte geben Sie einen Namen ein')
       return
     }
-    if (isNaN(zul) || zul <= 0) {
+    if (zul === null || zul <= 0) {
       alert('Zulässiges Gesamtgewicht muss größer als 0 sein')
       return
     }
-    if (isNaN(eigen) || eigen < 0) {
+    if (eigen === null || eigen < 0) {
       alert('Eigengewicht muss 0 oder größer sein')
       return
     }
@@ -113,13 +163,26 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
         body: JSON.stringify({
           name,
           zulGesamtgewicht: zul,
-          eigengewicht: eigen
-        })
+          eigengewicht: eigen,
+          festInstalliertMitrechnen: form.festInstalliertMitrechnen,
+        }),
       })
-      const data = (await res.json()) as ApiResponse<unknown>
-      if (data.success) {
+      const data = (await res.json()) as ApiResponse<{ id: string }>
+      if (data.success && data.data?.id) {
+        const newId = data.data.id
+        for (const e of manuellEntries) {
+          await fetch('/api/transport-vehicles/festgewicht-manuell', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              transportId: newId,
+              titel: e.titel,
+              gewicht: e.gewicht,
+            }),
+          })
+        }
         setShowDialog(false)
-        setForm({ name: '', zulGesamtgewicht: '', eigengewicht: '' })
+        resetForm()
         onRefresh()
       } else {
         alert('Fehler: ' + (data.error ?? 'Unbekannt'))
@@ -135,17 +198,17 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
   const handleUpdate = async () => {
     if (!editingVehicle) return
     const name = form.name.trim()
-    const zul = parseFloat(form.zulGesamtgewicht.replace(',', '.'))
-    const eigen = parseFloat(form.eigengewicht.replace(',', '.'))
+    const zul = parseWeightInput(form.zulGesamtgewicht)
+    const eigen = parseWeightInput(form.eigengewicht)
     if (!name) {
       alert('Bitte geben Sie einen Namen ein')
       return
     }
-    if (isNaN(zul) || zul <= 0) {
+    if (zul === null || zul <= 0) {
       alert('Zulässiges Gesamtgewicht muss größer als 0 sein')
       return
     }
-    if (isNaN(eigen) || eigen < 0) {
+    if (eigen === null || eigen < 0) {
       alert('Eigengewicht muss 0 oder größer sein')
       return
     }
@@ -159,14 +222,40 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
           id: editingVehicle.id,
           name,
           zulGesamtgewicht: zul,
-          eigengewicht: eigen
-        })
+          eigengewicht: eigen,
+          festInstalliertMitrechnen: form.festInstalliertMitrechnen,
+        }),
       })
       const data = (await res.json()) as ApiResponse<unknown>
       if (data.success) {
+        const resFest = await fetch(
+          `/api/transport-vehicles/festgewicht?transportId=${editingVehicle.id}`
+        )
+        const dataFest = (await resFest.json()) as ApiResponse<{
+          manuell: TransportVehicleFestgewichtManuell[]
+        }>
+        const prevManuell = dataFest.success && dataFest.data ? dataFest.data.manuell : []
+        for (const e of prevManuell) {
+          await fetch(`/api/transport-vehicles/festgewicht-manuell?id=${e.id}`, {
+            method: 'DELETE',
+          })
+        }
+        for (const e of manuellEntries) {
+          if (e.titel.trim()) {
+            await fetch('/api/transport-vehicles/festgewicht-manuell', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                transportId: editingVehicle.id,
+                titel: e.titel.trim(),
+                gewicht: e.gewicht >= 0 ? e.gewicht : 0,
+              }),
+            })
+          }
+        }
         setShowDialog(false)
         setEditingVehicle(null)
-        setForm({ name: '', zulGesamtgewicht: '', eigengewicht: '' })
+        resetForm()
         onRefresh()
       } else {
         alert('Fehler: ' + (data.error ?? 'Unbekannt'))
@@ -179,18 +268,24 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
     }
   }
 
-  const handleDelete = (id: string) => {
-    setDeleteVehicleId(id)
+  const resetForm = () => {
+    setForm({
+      name: '',
+      zulGesamtgewicht: '',
+      eigengewicht: '',
+      festInstalliertMitrechnen: false,
+    })
+    setManuellEntries([])
   }
+
+  const handleDelete = (id: string) => setDeleteVehicleId(id)
 
   const executeDelete = async () => {
     if (!deleteVehicleId) return
-    const id = deleteVehicleId
-
     setIsLoading(true)
     try {
-      const res = await fetch(`/api/transport-vehicles?id=${id}`, {
-        method: 'DELETE'
+      const res = await fetch(`/api/transport-vehicles?id=${deleteVehicleId}`, {
+        method: 'DELETE',
       })
       const data = (await res.json()) as ApiResponse<unknown>
       if (data.success) {
@@ -212,22 +307,54 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
     setForm({
       name: vehicle.name,
       zulGesamtgewicht: String(vehicle.zul_gesamtgewicht),
-      eigengewicht: String(vehicle.eigengewicht)
+      eigengewicht: String(vehicle.eigengewicht),
+      festInstalliertMitrechnen: vehicle.fest_installiert_mitrechnen ?? false,
     })
     setShowDialog(true)
   }
 
   const openNew = () => {
     setEditingVehicle(null)
-    setForm({ name: '', zulGesamtgewicht: '', eigengewicht: '' })
+    resetForm()
     setShowDialog(true)
+  }
+
+  const addManuellEntry = () => {
+    setManuellEntries([...manuellEntries, { id: '', transport_id: '', titel: '', gewicht: 0, created_at: '' }])
+  }
+  const updateManuellEntry = (idx: number, field: 'titel' | 'gewicht', value: string | number) => {
+    const next = [...manuellEntries]
+    const e = next[idx]
+    if (!e) return
+    if (field === 'titel') e.titel = String(value)
+    else e.gewicht = typeof value === 'number' ? value : parseFloat(String(value)) || 0
+    setManuellEntries(next)
+  }
+  const removeManuellEntry = (idx: number) => {
+    setManuellEntries(manuellEntries.filter((_, i) => i !== idx))
+  }
+  const deleteManuellEntry = async (idx: number) => {
+    const e = manuellEntries[idx]
+    if (!e?.id) {
+      removeManuellEntry(idx)
+      return
+    }
+    const res = await fetch(`/api/transport-vehicles/festgewicht-manuell?id=${e.id}`, {
+      method: 'DELETE',
+    })
+    const data = (await res.json()) as ApiResponse<unknown>
+    if (data.success) {
+      removeManuellEntry(idx)
+      onRefresh()
+    }
   }
 
   return (
     <div className="space-y-6">
       <div className="space-y-2">
         <p className="text-sm text-muted-foreground">
-          Verwalten Sie Ihre Transportmittel (z.B. Wohnwagen, Auto). Die Gewichtsangaben werden für die Packlisten-Berechnung verwendet.
+          Verwalten Sie Ihre Transportmittel (z.B. Wohnwagen, Auto). Die Gewichtsangaben werden für
+          die Packlisten-Berechnung verwendet.
         </p>
         {vehicles.length === 0 ? (
           <p className="text-sm text-muted-foreground text-center py-8 border rounded-lg">
@@ -247,7 +374,6 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
         )}
       </div>
 
-      {/* FAB: Neues Transportmittel */}
       <div className="fixed bottom-6 right-6 z-30">
         <Button
           size="icon"
@@ -258,7 +384,6 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
         </Button>
       </div>
 
-      {/* Create/Edit Dialog */}
       <ResponsiveModal
         open={showDialog}
         onOpenChange={setShowDialog}
@@ -282,32 +407,124 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
             />
           </div>
           <div>
-            <Label htmlFor="vehicle-zul">Zulässiges Gesamtgewicht (kg) *</Label>
-            <Input
-              id="vehicle-zul"
-              type="number"
-              step="0.1"
-              min="0.1"
+            <Label>Zulässiges Gesamtgewicht *</Label>
+            <WeightInput
               value={form.zulGesamtgewicht}
-              onChange={(e) => setForm({ ...form, zulGesamtgewicht: e.target.value })}
+              onChange={(_, parsed) =>
+                setForm({ ...form, zulGesamtgewicht: parsed != null ? String(parsed) : '' })
+              }
               placeholder="z.B. 2000"
             />
           </div>
           <div>
-            <Label htmlFor="vehicle-eigen">Eigengewicht (kg) *</Label>
-            <Input
-              id="vehicle-eigen"
-              type="number"
-              step="0.1"
-              min="0"
+            <Label>Eigengewicht *</Label>
+            <WeightInput
               value={form.eigengewicht}
-              onChange={(e) => setForm({ ...form, eigengewicht: e.target.value })}
+              onChange={(_, parsed) =>
+                setForm({ ...form, eigengewicht: parsed != null ? String(parsed) : '' })
+              }
               placeholder="z.B. 1475"
             />
             <p className="text-xs text-muted-foreground mt-1">
               Nutzlast = Zul. Gesamtgewicht − Eigengewicht
             </p>
           </div>
+
+          <div className="flex items-center space-x-2">
+            <Checkbox
+              id="fest-installiert"
+              checked={form.festInstalliertMitrechnen}
+              onCheckedChange={(c) =>
+                setForm({ ...form, festInstalliertMitrechnen: (c as boolean) ?? false })
+              }
+            />
+            <Label htmlFor="fest-installiert" className="cursor-pointer">
+              Fest installierte Ausrüstung mitrechnen
+            </Label>
+          </div>
+          <p className="text-xs text-muted-foreground -mt-2">
+            Addiert Ausrüstungsgegenstände mit Status „Fest Installiert“ (und diesem Transport) zum
+            Festgewicht.
+          </p>
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label>Manuelle Festgewicht-Einträge</Label>
+              <Button type="button" variant="outline" size="sm" onClick={addManuellEntry}>
+                <Plus className="h-4 w-4 mr-1" />
+                Hinzufügen
+              </Button>
+            </div>
+            {manuellEntries.length === 0 ? (
+              <p className="text-sm text-muted-foreground italic py-2">
+                Keine manuellen Einträge (z.B. Stützlast, Insassen, Tank)
+              </p>
+            ) : (
+              <div className="space-y-2 border rounded-lg p-3">
+                {manuellEntries.map((entry, idx) => (
+                  <div key={entry.id || idx} className="flex gap-2 items-center">
+                    <Input
+                      value={entry.titel}
+                      onChange={(e) => updateManuellEntry(idx, 'titel', e.target.value)}
+                      placeholder="z.B. Stützlast"
+                      className="flex-1"
+                    />
+                    <WeightInput
+                      value={String(entry.gewicht)}
+                      onChange={(_, parsed) =>
+                        updateManuellEntry(idx, 'gewicht', parsed ?? 0)
+                      }
+                      className="w-28"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="shrink-0 text-destructive"
+                      onClick={() => deleteManuellEntry(idx)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {form.festInstalliertMitrechnen && (
+            <Collapsible open={festInstalliertExpanded} onOpenChange={setFestInstalliertExpanded}>
+              <CollapsibleTrigger className="flex items-center gap-2 text-sm font-medium">
+                {festInstalliertExpanded ? (
+                  <ChevronDown className="h-4 w-4" />
+                ) : (
+                  <ChevronRight className="h-4 w-4" />
+                )}
+                Fest installierte Ausrüstung ({festgewichtEquipment.length} Einträge)
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <div className="mt-2 border rounded-lg p-3 space-y-2 max-h-40 overflow-y-auto">
+                  {festgewichtEquipment.length === 0 ? (
+                    <p className="text-sm text-muted-foreground italic">
+                      Keine Ausrüstung mit Status „Fest Installiert“ für dieses Transportmittel.
+                    </p>
+                  ) : (
+                    festgewichtEquipment.map((eq) => (
+                      <div
+                        key={eq.id}
+                        className="flex justify-between text-sm py-1 border-b border-muted last:border-0"
+                      >
+                        <span>{eq.was}</span>
+                        <span className="text-muted-foreground">
+                          {formatWeightForDisplay(eq.einzelgewicht)} kg
+                        </span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
+          )}
+
           <Button
             onClick={editingVehicle ? handleUpdate : handleCreate}
             disabled={isLoading}
@@ -318,7 +535,6 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
         </div>
       </ResponsiveModal>
 
-      {/* Löschen – Bestätigung */}
       <ConfirmDialog
         open={!!deleteVehicleId}
         onOpenChange={(open) => !open && setDeleteVehicleId(null)}

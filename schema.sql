@@ -12,10 +12,21 @@ CREATE TABLE IF NOT EXISTS transportmittel (
     name TEXT NOT NULL UNIQUE,
     zul_gesamtgewicht REAL NOT NULL,
     eigengewicht REAL NOT NULL,
+    fest_installiert_mitrechnen INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
     CHECK (zul_gesamtgewicht > 0),
     CHECK (eigengewicht >= 0)
+);
+
+CREATE TABLE IF NOT EXISTS transportmittel_festgewicht_manuell (
+    id TEXT PRIMARY KEY,
+    transport_id TEXT NOT NULL,
+    titel TEXT NOT NULL,
+    gewicht REAL NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    CHECK (gewicht >= 0),
+    FOREIGN KEY (transport_id) REFERENCES transportmittel(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS mitreisende (
@@ -192,6 +203,7 @@ CREATE INDEX idx_tags_titel ON tags(titel);
 CREATE INDEX idx_ausruestungsgegenstaende_tags_gegenstand ON ausruestungsgegenstaende_tags(gegenstand_id);
 CREATE INDEX idx_ausruestungsgegenstaende_tags_tag ON ausruestungsgegenstaende_tags(tag_id);
 CREATE INDEX idx_ausruestungsgegenstaende_is_standard ON ausruestungsgegenstaende(is_standard);
+CREATE INDEX idx_transportmittel_festgewicht_manuell_transport_id ON transportmittel_festgewicht_manuell(transport_id);
 
 -- 6. Trigger
 CREATE TRIGGER update_hauptkategorien_timestamp AFTER UPDATE ON hauptkategorien BEGIN UPDATE hauptkategorien SET updated_at = datetime('now') WHERE id = NEW.id; END;

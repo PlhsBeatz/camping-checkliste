@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import {
-  getTransportVehicles,
+  getTransportVehiclesWithFestgewicht,
   createTransportVehicle,
   updateTransportVehicle,
   deleteTransportVehicle,
@@ -12,7 +12,7 @@ export async function GET(_request: NextRequest) {
   try {
     const env = process.env as unknown as CloudflareEnv
     const db = getDB(env)
-    const vehicles = await getTransportVehicles(db)
+    const vehicles = await getTransportVehiclesWithFestgewicht(db)
 
     return NextResponse.json({
       success: true,
@@ -44,10 +44,12 @@ export async function POST(request: NextRequest) {
       zulGesamtgewicht?: number
       zul_gesamtgewicht?: number
       eigengewicht?: number
+      festInstalliertMitrechnen?: boolean
     }
     const name = body.name
     const zulGesamtgewicht = body.zulGesamtgewicht ?? body.zul_gesamtgewicht
     const eigengewicht = body.eigengewicht
+    const festInstalliertMitrechnen = body.festInstalliertMitrechnen ?? false
 
     if (!name?.trim()) {
       return NextResponse.json({ success: false, error: 'Name ist erforderlich' }, { status: 400 })
@@ -65,7 +67,13 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const id = await createTransportVehicle(db, name.trim(), zulGesamtgewicht, eigengewicht)
+    const id = await createTransportVehicle(
+      db,
+      name.trim(),
+      zulGesamtgewicht,
+      eigengewicht,
+      festInstalliertMitrechnen
+    )
     if (!id) {
       return NextResponse.json({ success: false, error: 'Fehler beim Erstellen' }, { status: 500 })
     }
@@ -98,8 +106,10 @@ export async function PUT(request: NextRequest) {
       zulGesamtgewicht?: number
       zul_gesamtgewicht?: number
       eigengewicht?: number
+      festInstalliertMitrechnen?: boolean
     }
-    const { id, name, zulGesamtgewicht, zul_gesamtgewicht, eigengewicht } = body
+    const { id, name, zulGesamtgewicht, zul_gesamtgewicht, eigengewicht, festInstalliertMitrechnen } =
+      body
 
     if (!id || !name?.trim()) {
       return NextResponse.json({ success: false, error: 'ID und Name sind erforderlich' }, { status: 400 })
@@ -118,7 +128,14 @@ export async function PUT(request: NextRequest) {
       )
     }
 
-    const success = await updateTransportVehicle(db, id, name.trim(), zul, eigengewicht)
+    const success = await updateTransportVehicle(
+      db,
+      id,
+      name.trim(),
+      zul,
+      eigengewicht,
+      festInstalliertMitrechnen
+    )
     if (!success) {
       return NextResponse.json({ success: false, error: 'Fehler beim Aktualisieren' }, { status: 500 })
     }

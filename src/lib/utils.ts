@@ -30,6 +30,49 @@ export function formatWeight(weight: number | null | undefined): string {
 }
 
 /**
+ * Formatiert eine Zahl mit deutschem Tausendertrennzeichen für die Anzeige in Gewichtsfeldern.
+ * z.B. 1234.56 -> "1.234,56"
+ */
+export function formatWeightForDisplay(weight: number | null | undefined): string {
+  if (weight === null || weight === undefined || isNaN(weight)) return "";
+  return weight.toLocaleString("de-DE", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+    useGrouping: true
+  });
+}
+
+/**
+ * Parst einen Benutzereingabe-String zu einer Zahl (ohne Tausendertrennzeichen).
+ * Erlaubt: Ziffern, ein Komma oder Punkt als Dezimaltrennzeichen.
+ */
+export function parseWeightInput(value: string): number | null {
+  if (!value || value.trim() === "") return null;
+  const normalized = value.replace(/\./g, "").replace(",", ".");
+  const num = parseFloat(normalized);
+  return isNaN(num) ? null : num;
+}
+
+/**
+ * Bereinigt Benutzereingabe: nur Ziffern, Komma und Punkt erlauben.
+ */
+export function sanitizeWeightInput(value: string): string {
+  const hasComma = value.includes(",");
+  const hasDot = value.includes(".");
+  let out = value.replace(/[^\d.,]/g, "");
+  if (hasComma && hasDot) {
+    const lastComma = out.lastIndexOf(",");
+    const lastDot = out.lastIndexOf(".");
+    out = lastComma > lastDot ? out.replace(/\./g, "") : out.replace(/,/g, "");
+  }
+  const parts = out.split(/[.,]/);
+  if (parts.length > 2) {
+    out = parts[0] + (parts[1]?.charAt(0) === "" ? "." : "." + parts[1]) + (parts[2] ?? "");
+  }
+  return out;
+}
+
+/**
  * Calculates the total weight for a transport vehicle
  */
 export function calculateTotalWeight(

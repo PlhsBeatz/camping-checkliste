@@ -10,6 +10,7 @@ import { ResponsiveModal } from '@/components/ui/responsive-modal'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { WeightInput } from '@/components/ui/weight-input'
 import { Textarea } from '@/components/ui/textarea'
 import {
   Select,
@@ -18,7 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { cn } from '@/lib/utils'
+import { cn, parseWeightInput } from '@/lib/utils'
 
 interface CategoryWithMain extends Category {
   hauptkategorie_titel: string
@@ -210,7 +211,7 @@ export default function AusruestungPage() {
         was: formData.was,
         kategorie_id: formData.kategorie_id,
         transport_id: formData.transport_id === 'none' ? null : formData.transport_id || null,
-        einzelgewicht: formData.einzelgewicht ? parseFloat(formData.einzelgewicht.replace(',', '.')) : null,
+        einzelgewicht: parseWeightInput(formData.einzelgewicht),
         standard_anzahl: parseInt(formData.standard_anzahl) || 1,
         status: formData.status,
         details: formData.details || null,
@@ -261,7 +262,7 @@ export default function AusruestungPage() {
         was: formData.was,
         kategorie_id: formData.kategorie_id,
         transport_id: formData.transport_id === 'none' ? null : formData.transport_id || null,
-        einzelgewicht: formData.einzelgewicht ? parseFloat(formData.einzelgewicht.replace(',', '.')) : null,
+        einzelgewicht: parseWeightInput(formData.einzelgewicht),
         standard_anzahl: parseInt(formData.standard_anzahl) || 1,
         status: formData.status,
         details: formData.details || null,
@@ -453,11 +454,11 @@ export default function AusruestungPage() {
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="gewicht">Gewicht (kg)</Label>
-                <Input
+                <Label htmlFor="gewicht">Gewicht</Label>
+                <WeightInput
                   id="gewicht"
                   value={formData.einzelgewicht}
-                  onChange={(e) => setFormData({ ...formData, einzelgewicht: e.target.value })}
+                  onChange={(val) => setFormData({ ...formData, einzelgewicht: val })}
                   placeholder="z.B. 0,234"
                 />
               </div>
@@ -700,11 +701,11 @@ export default function AusruestungPage() {
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="edit-gewicht">Gewicht (kg)</Label>
-                <Input
+                <Label htmlFor="edit-gewicht">Gewicht</Label>
+                <WeightInput
                   id="edit-gewicht"
                   value={formData.einzelgewicht}
-                  onChange={(e) => setFormData({ ...formData, einzelgewicht: e.target.value })}
+                  onChange={(val) => setFormData({ ...formData, einzelgewicht: val })}
                   placeholder="z.B. 0,234"
                 />
               </div>
