@@ -40,7 +40,7 @@ export function NavigationSidebar({ isOpen, onClose }: NavigationSidebarProps) {
     }
   ]
 
-  const configItems = [
+  const configItems: { label: string; href: string; disabled?: boolean }[] = [
     { label: 'KATEGORIEN', href: '/kategorien' },
     { label: 'TAGS & LABELS', href: '/tags' },
     { label: 'MITREISENDE', href: '/mitreisende' },
