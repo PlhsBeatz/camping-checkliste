@@ -44,7 +44,7 @@ export function NavigationSidebar({ isOpen, onClose }: NavigationSidebarProps) {
     { label: 'KATEGORIEN', href: '/kategorien' },
     { label: 'TAGS & LABELS', href: '/tags' },
     { label: 'MITREISENDE', href: '/mitreisende' },
-    { label: 'TRANSPORTMITTEL', href: '/transportmittel', disabled: true }
+    { label: 'TRANSPORTMITTEL', href: '/transportmittel' }
   ]
 
   return (

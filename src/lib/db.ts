@@ -839,6 +839,63 @@ export async function getTransportVehicles(db: D1Database): Promise<TransportVeh
 }
 
 /**
+ * Erstellen eines neuen Transportmittels
+ */
+export async function createTransportVehicle(
+  db: D1Database,
+  name: string,
+  zulGesamtgewicht: number,
+  eigengewicht: number
+): Promise<string | null> {
+  try {
+    const id = crypto.randomUUID()
+    await db
+      .prepare('INSERT INTO transportmittel (id, name, zul_gesamtgewicht, eigengewicht) VALUES (?, ?, ?, ?)')
+      .bind(id, name, zulGesamtgewicht, eigengewicht)
+      .run()
+    return id
+  } catch (error) {
+    console.error('Error creating transport vehicle:', error)
+    return null
+  }
+}
+
+/**
+ * Aktualisieren eines Transportmittels
+ */
+export async function updateTransportVehicle(
+  db: D1Database,
+  id: string,
+  name: string,
+  zulGesamtgewicht: number,
+  eigengewicht: number
+): Promise<boolean> {
+  try {
+    await db
+      .prepare('UPDATE transportmittel SET name = ?, zul_gesamtgewicht = ?, eigengewicht = ? WHERE id = ?')
+      .bind(name, zulGesamtgewicht, eigengewicht, id)
+      .run()
+    return true
+  } catch (error) {
+    console.error('Error updating transport vehicle:', error)
+    return false
+  }
+}
+
+/**
+ * Löschen eines Transportmittels
+ */
+export async function deleteTransportVehicle(db: D1Database, id: string): Promise<boolean> {
+  try {
+    await db.prepare('DELETE FROM transportmittel WHERE id = ?').bind(id).run()
+    return true
+  } catch (error) {
+    console.error('Error deleting transport vehicle:', error)
+    return false
+  }
+}
+
+/**
  * Hinzufügen eines Gegenstands zur Packliste
  */
 export async function addPackingItem(
