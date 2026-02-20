@@ -35,20 +35,32 @@ export function WeightInput({
   const handleBlur = () => {
     setIsFocused(false)
     const p = parseWeightInput(rawStr)
-    if (p !== null && String(p) !== rawStr) {
-      onChange(String(p), p)
+    if (p !== null) {
+      const normalized = String(p)
+      if (normalized !== rawStr) {
+        onChange(normalized, p)
+      }
     }
   }
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const raw = e.target.value
-    const digitsAndDecimal = raw.replace(/[^\d.,]/g, '')
-    const parts = digitsAndDecimal.split(/[.,]/)
+    const raw = e.target.value.replace(/[^\d.,]/g, '')
+    const parts = raw.split(/[.,]/)
+    const lastComma = raw.lastIndexOf(',')
+    const lastDot = raw.lastIndexOf('.')
+    const sep: ',' | '.' = lastComma > lastDot ? ',' : '.'
     let sanitized: string
     if (parts.length <= 2) {
-      sanitized = (parts[0] ?? '') + (parts[1] !== undefined ? '.' + parts[1] : '')
+      sanitized =
+        (parts[0] ?? '') +
+        (parts[1] !== undefined
+          ? sep + parts[1]
+          : raw.endsWith(',') || raw.endsWith('.')
+            ? sep
+            : '')
     } else {
-      sanitized = (parts[0] ?? '') + '.' + (parts.slice(1).join('') ?? '')
+      const decPart = parts.slice(1).join('')
+      sanitized = (parts[0] ?? '') + (decPart ? sep + decPart : '')
     }
     const p = parseWeightInput(sanitized)
     onChange(sanitized, p)
