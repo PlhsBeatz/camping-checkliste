@@ -43,13 +43,16 @@ export function formatWeightForDisplay(weight: number | null | undefined): strin
 }
 
 /**
- * Parst einen Benutzereingabe-String zu einer Zahl (ohne Tausendertrennzeichen).
- * Erlaubt: Ziffern, ein Komma oder Punkt als Dezimaltrennzeichen.
+ * Parst einen Benutzereingabe-String zu einer Zahl.
+ * Regeln: Nur Komma als Dezimaltrennzeichen. Punkt = Tausendertrennzeichen (wird ignoriert).
+ * Beispiele: "1.234,56" -> 1234.56, "0,06" -> 0.06, "1234" -> 1234
  */
 export function parseWeightInput(value: string): number | null {
   if (!value || value.trim() === "") return null;
-  const normalized = value.replace(/\./g, "").replace(",", ".");
-  const num = parseFloat(normalized);
+  const s = value.trim();
+  const dotRemoved = s.replace(/\./g, "");
+  const commaToDot = dotRemoved.replace(",", ".");
+  const num = parseFloat(commaToDot);
   return isNaN(num) ? null : num;
 }
 

@@ -25,7 +25,7 @@ export function WeightInput({
   const parsed = typeof value === 'number' ? value : parseWeightInput(String(value ?? ''))
   const rawStr =
     typeof value === 'number'
-      ? (Number.isInteger(value) ? String(value) : String(value))
+      ? formatWeightForDisplay(value)
       : (value ?? '')
 
   const displayValue = isFocused ? rawStr : formatWeightForDisplay(parsed ?? undefined)
@@ -36,31 +36,23 @@ export function WeightInput({
     setIsFocused(false)
     const p = parseWeightInput(rawStr)
     if (p !== null) {
-      const normalized = String(p)
-      if (normalized !== rawStr) {
-        onChange(normalized, p)
+      const commaFormatted = formatWeightForDisplay(p)
+      if (commaFormatted !== rawStr) {
+        onChange(commaFormatted, p)
       }
     }
   }
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const raw = e.target.value.replace(/[^\d.,]/g, '')
-    const parts = raw.split(/[.,]/)
-    const lastComma = raw.lastIndexOf(',')
-    const lastDot = raw.lastIndexOf('.')
-    const sep: ',' | '.' = lastComma > lastDot ? ',' : '.'
+    const raw = e.target.value.replace(/[^\d,]/g, '')
+    const parts = raw.split(',')
     let sanitized: string
-    if (parts.length <= 2) {
-      sanitized =
-        (parts[0] ?? '') +
-        (parts[1] !== undefined
-          ? sep + parts[1]
-          : raw.endsWith(',') || raw.endsWith('.')
-            ? sep
-            : '')
+    if (parts.length === 1) {
+      sanitized = parts[0] ?? ''
+      if (raw.endsWith(',')) sanitized += ','
     } else {
-      const decPart = parts.slice(1).join('')
-      sanitized = (parts[0] ?? '') + (decPart ? sep + decPart : '')
+      const decPart = parts.slice(1).join('').slice(0, 4)
+      sanitized = (parts[0] ?? '') + ',' + decPart
     }
     const p = parseWeightInput(sanitized)
     onChange(sanitized, p)
