@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -41,7 +41,7 @@ const findNextVacation = (vacations: Vacation[]): Vacation | null => {
   return toUse.sort((a, b) => new Date(a.startdatum).getTime() - new Date(b.startdatum).getTime())[0] ?? null
 }
 
-export default function PackStatusPage() {
+function PackStatusContent() {
   const searchParams = useSearchParams()
   const urlVacationId = searchParams.get('vacation')
 
@@ -389,5 +389,22 @@ function ProgressByMainCategory({ items }: { items: PackStatusProgressHauptkateg
         </div>
       ))}
     </div>
+  )
+}
+
+export default function PackStatusPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-[rgb(250,250,249)] flex items-center justify-center">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[rgb(45,79,30)] mx-auto mb-4" />
+            <p className="text-muted-foreground">Lädt…</p>
+          </div>
+        </div>
+      }
+    >
+      <PackStatusContent />
+    </Suspense>
   )
 }
