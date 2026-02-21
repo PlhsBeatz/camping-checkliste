@@ -389,15 +389,14 @@ export default function AusruestungPage() {
         onClose={() => setShowNavSidebar(false)}
       />
 
-      {/* Main Content Area - auf Mobile: volle Viewport-Höhe, Flex-Layout für dynamische Tabellenhöhe */}
+      {/* Main Content Area - gleiche Struktur wie andere Seiten */}
       <div className={cn(
-        "flex-1 flex flex-col min-h-0 min-w-0 transition-all duration-300",
-        "lg:ml-[280px]",
-        "max-md:h-dvh max-md:min-h-dvh"
+        "flex-1 transition-all duration-300",
+        "lg:ml-[280px]"
       )}>
-        <div className="flex flex-col flex-1 min-h-0 min-w-0 container mx-auto p-4 md:p-6 overflow-hidden">
-          {/* Header - Sticky */}
-          <div className="sticky top-0 z-10 flex-shrink-0 flex items-center justify-between bg-[rgb(244,241,234)] pb-4 -mx-4 px-4 -mt-4 pt-4 md:-mx-6 md:px-6 md:-mt-6 md:pt-6">
+        <div className="container mx-auto p-4 md:p-6 space-y-6">
+          {/* Header - Sticky, am oberen Rand wie auf anderen Seiten */}
+          <div className="sticky top-0 z-10 flex items-center justify-between bg-white shadow pb-4 -mx-4 px-4 -mt-4 pt-4 md:-mx-6 md:px-6 md:-mt-6 md:pt-6">
             <div className="flex items-center gap-4">
               {/* Mobile Menu Toggle */}
               <Button
@@ -417,8 +416,8 @@ export default function AusruestungPage() {
             </div>
           </div>
 
-          {/* Equipment Table - füllt verbleibende Höhe auf Mobile, dynamische Höhe */}
-          <div className="flex-1 min-h-0 min-w-0 mt-4 md:mt-6 overflow-hidden">
+          {/* Equipment Table */}
+          <div className="min-h-[500px]">
               {isLoading ? (
                 <div className="flex flex-col items-center justify-center py-20 gap-4">
                   <div className="animate-spin rounded-full h-12 w-12 border-4 border-[rgb(45,79,30)] border-t-transparent"></div>
@@ -433,7 +432,7 @@ export default function AusruestungPage() {
                   tags={tags}
                   onEdit={handleEditEquipment}
                   onDelete={handleDeleteEquipment}
-                  dynamicHeight
+                  dynamicHeight={false}
                 />
               )}
           </div>

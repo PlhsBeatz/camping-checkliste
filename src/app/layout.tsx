@@ -43,7 +43,7 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="de" className="scroll-smooth overflow-x-hidden">
+    <html lang="de" className="scroll-smooth overflow-x-clip">
       <head>
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -53,8 +53,8 @@ export default function RootLayout({
           rel="stylesheet"
         />
       </head>
-      <body className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased bg-background text-foreground overflow-x-hidden`}>
-        <div className="w-full max-w-full overflow-x-hidden">
+      <body className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased bg-background text-foreground overflow-x-clip`}>
+        <div className="w-full max-w-full overflow-x-clip">
           {children}
         </div>
       </body>

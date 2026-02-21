@@ -457,9 +457,9 @@ export const EquipmentTable = React.memo(({
         </div>
       </div>
 
-      {/* Tabelle - virtualisiert für 500+ Zeilen (nur ~20 sichtbare DOM-Zeilen) */}
+      {/* Tabelle - virtualisiert für 500+ Zeilen (nur ~20 sichtbare DOM-Zeilen), weißer Hintergrund */}
       <div className={cn(
-        "border rounded-lg overflow-hidden min-w-0",
+        "border rounded-lg overflow-hidden min-w-0 bg-white",
         dynamicHeight && "flex-1 min-h-0 flex flex-col"
       )}>
         {/* Horizontal scrollbar auf Mobile - min-w-0 erlaubt Schrumpfen, overflow-x-auto ermöglicht Scroll */}
@@ -485,7 +485,7 @@ export const EquipmentTable = React.memo(({
             >
               {/* Header im Padding-Bereich - scrollt mit */}
               <div
-                className="absolute top-0 left-0 right-0 grid gap-px bg-border border-b bg-background"
+                className="absolute top-0 left-0 right-0 grid gap-px bg-border border-b bg-gray-50"
                 style={{ gridTemplateColumns: gridCols, height: `${headerHeight}px` }}
               >
                 <div className={`px-4 py-3 font-medium text-sm ${colAlign.was}`}>Was</div>
@@ -532,7 +532,7 @@ export const EquipmentTable = React.memo(({
                 return (
                   <div
                     key={row.id}
-                    className="absolute left-0 right-0 grid gap-px hover:bg-muted/30 border-b border-border/50 isolate"
+                    className="absolute left-0 right-0 grid gap-px bg-white hover:bg-muted/30 border-b border-border/50 isolate"
                     style={{
                       height: size,
                       top: 0,
@@ -618,7 +618,7 @@ export const EquipmentTable = React.memo(({
                         </DropdownMenu>
                       ) : null}
                     </div>
-                    <div className={`px-1 py-2 sticky right-0 bg-background flex items-center justify-center ${colAlign.actions}`}>
+                    <div className={`px-1 py-2 sticky right-0 bg-white flex items-center justify-center ${colAlign.actions}`}>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button variant="ghost" size="sm" className="h-7 w-7 min-w-7 p-0">

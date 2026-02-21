@@ -121,13 +121,13 @@ function PackStatusContent() {
   const currentVacation = vacations.find((v) => v.id === selectedVacationId)
 
   return (
-    <div className="min-h-screen flex max-w-full overflow-x-hidden">
+    <div className="min-h-screen flex max-w-full overflow-x-clip">
       <NavigationSidebar isOpen={showNavSidebar} onClose={() => setShowNavSidebar(false)} />
 
       <div className="flex-1 transition-all duration-300 min-w-0 lg:ml-[280px]">
-        <div className="p-4 sm:p-6 max-w-4xl mx-auto">
+        <div className="container mx-auto p-4 md:p-6 space-y-6">
           {/* Header - Sticky */}
-          <div className="sticky top-0 z-10 flex items-center gap-3 mb-6 -mx-4 px-4 pt-4 -mt-4 md:-mx-6 md:px-6 md:pt-6 md:-mt-6 bg-[rgb(244,241,234)]">
+          <div className="sticky top-0 z-10 flex items-center gap-3 -mx-4 px-4 pt-4 -mt-4 md:-mx-6 md:px-6 md:pt-6 md:-mt-6 bg-white shadow">
             <Button
               variant="outline"
               size="icon"
