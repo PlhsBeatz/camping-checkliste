@@ -631,7 +631,7 @@ export function PackingList({
       </div>
 
       {/* Scrollbarer Bereich: nur die Kategorien/Items scrollen */}
-      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-clip px-4 sm:px-6 pb-6">
+      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-clip px-4 sm:px-6 pb-6 pt-6">
         {mainCategories.map(mainCat => (
             <TabsContent key={mainCat} value={mainCat} className="space-y-6 mt-14 m-0">
               {Object.entries(itemsByMainCategory[mainCat] ?? {}).map(([category, categoryItems]) => {
