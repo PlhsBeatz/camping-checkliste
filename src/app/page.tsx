@@ -302,7 +302,7 @@ function HomeContent() {
     })
   }, [equipmentItems, packingItems, selectedPackProfile])
 
-  // Filter and group available equipment – ALLE Kategorien (auch leere) für Scroll-Ziel
+  // Filter and group available equipment (nur Kategorien mit verfügbaren Gegenständen)
   const groupedAvailableEquipment = useMemo(() => {
     const filtered = availableEquipment.filter(item => {
       if (!searchTerm) return true
@@ -323,20 +323,24 @@ function HomeContent() {
     })
 
     return mainCategories
+      .filter(mc => mainCategoryGroups[mc.titel])
       .sort((a, b) => (a.reihenfolge || 0) - (b.reihenfolge || 0))
-      .map(mc => ({
-        id: mc.id,
-        name: mc.titel,
-        order: mc.reihenfolge || 0,
-        categories: categories
-          .filter(c => c.hauptkategorie_id === mc.id)
-          .sort((a, b) => (a.reihenfolge || 0) - (b.reihenfolge || 0))
-          .map(c => ({
-            id: c.id,
-            name: c.titel,
-            items: mainCategoryGroups[mc.titel]?.[c.titel] ?? []
-          }))
-      }))
+      .map(mc => {
+        const mainCatGroup = mainCategoryGroups[mc.titel]!
+        return {
+          id: mc.id,
+          name: mc.titel,
+          order: mc.reihenfolge || 0,
+          categories: categories
+            .filter(c => c.hauptkategorie_id === mc.id && mainCatGroup[c.titel])
+            .sort((a, b) => (a.reihenfolge || 0) - (b.reihenfolge || 0))
+            .map(c => ({
+              id: c.id,
+              name: c.titel,
+              items: mainCatGroup[c.titel]!
+            }))
+        }
+      })
   }, [availableEquipment, searchTerm, categories, mainCategories])
 
   const currentVacation = vacations.find(v => v.id === selectedVacationId)
@@ -794,12 +798,12 @@ function HomeContent() {
   const travelerNames = vacationMitreisende.map((m) => m.name)
   const getTravelerInitials = (name: string) => getInitials(name, travelerNames)
 
-  // Add-Dialog: beim Öffnen zur aktuellen Kategorie scrollen (Ref hat immer aktuellen Kontext)
+  // Add-Dialog: beim Öffnen zur aktuellen Kategorie scrollen (einmalig, sanft)
   useEffect(() => {
     if (!showAddItemDialog) return
     const ctx = addDialogScrollContextRef.current
     if (!ctx?.mainCategory) return
-    const scrollToTarget = () => {
+    const id = setTimeout(() => {
       const scrollEl = addDialogScrollRef.current
       if (!scrollEl) return
       const allWithMain = scrollEl.querySelectorAll<HTMLElement>('[data-main-category]')
@@ -818,10 +822,8 @@ function HomeContent() {
         const scrollTop = targetRect.top - containerRect.top + scrollEl.scrollTop - 8
         scrollEl.scrollTo({ top: Math.max(0, scrollTop), behavior: 'smooth' })
       }
-    }
-    const delays = [150, 400, 700]
-    const ids = delays.map(d => setTimeout(scrollToTarget, d))
-    return () => ids.forEach(id => clearTimeout(id))
+    }, 200)
+    return () => clearTimeout(id)
   }, [showAddItemDialog])
 
   return (
@@ -1087,13 +1089,9 @@ function HomeContent() {
             ref={addDialogScrollRef}
             className="flex-1 overflow-y-auto overflow-x-hidden px-6 py-4 min-w-0"
           >
-            {availableEquipment.length === 0 && !searchTerm ? (
+            {groupedAvailableEquipment.length === 0 ? (
               <div className="text-center py-12 text-muted-foreground">
-                Alle Gegenstände sind bereits auf der Packliste
-              </div>
-            ) : groupedAvailableEquipment.length === 0 ? (
-              <div className="text-center py-12 text-muted-foreground">
-                Keine Gegenstände gefunden
+                {searchTerm ? 'Keine Gegenstände gefunden' : 'Alle Gegenstände sind bereits auf der Packliste'}
               </div>
             ) : (
               <div className="space-y-6">
