@@ -595,13 +595,13 @@ export function PackingList({
         
         {/* Main Category Tabs */}
         <Tabs value={activeMainCategory} onValueChange={setActiveMainCategory} className="w-full max-w-full">
-          <div className="bg-white overflow-x-auto overflow-y-hidden -mx-4 sm:-mx-6 pl-4 pr-4 sm:pl-6 sm:pr-6 pb-2" style={{ WebkitOverflowScrolling: 'touch' }}>
-            <TabsList className="inline-flex w-max justify-start bg-transparent border-b border-gray-200 p-0 h-auto rounded-none">
+          <div className="bg-white overflow-x-auto overflow-y-hidden -mx-4 sm:-mx-6 pl-4 pr-4 sm:pl-6 sm:pr-6 pb-1" style={{ WebkitOverflowScrolling: 'touch' }}>
+            <TabsList className="inline-flex w-max justify-start bg-transparent p-0 h-auto rounded-none">
               {mainCategories.map(mainCat => (
                 <TabsTrigger 
                   key={mainCat} 
                   value={mainCat}
-                  className="flex-shrink-0 uppercase text-xs font-semibold tracking-wide px-6 py-3 rounded-none border-b-4 border-transparent data-[state=active]:border-[#e67e22] data-[state=active]:text-[rgb(45,79,30)] data-[state=inactive]:text-[rgb(168,162,158)] hover:text-gray-900 transition-colors relative data-[state=active]:bg-transparent data-[state=inactive]:bg-transparent data-[state=active]:after:content-[''] data-[state=active]:after:absolute data-[state=active]:after:bottom-0 data-[state=active]:after:left-1/2 data-[state=active]:after:-translate-x-1/2 data-[state=active]:after:w-[70px] data-[state=active]:after:h-1 data-[state=active]:after:bg-[#e67e22] data-[state=active]:after:rounded-full data-[state=active]:border-b-transparent"
+                  className="flex-shrink-0 uppercase text-xs font-semibold tracking-wide px-6 py-3 rounded-none border-b-4 border-transparent data-[state=active]:border-[#e67e22] data-[state=active]:text-[rgb(45,79,30)] data-[state=inactive]:text-[rgb(168,162,158)] hover:text-gray-900 transition-colors relative data-[state=active]:bg-transparent data-[state=inactive]:bg-transparent data-[state=active]:after:content-[''] data-[state=active]:after:absolute data-[state=active]:after:bottom-0 data-[state=active]:after:left-1/2 data-[state=active]:after:-translate-x-1/2 data-[state=active]:after:w-[50px] data-[state=active]:after:h-1 data-[state=active]:after:bg-[#e67e22] data-[state=active]:after:rounded-full data-[state=active]:border-b-transparent data-[state=active]:shadow-none"
                 >
                   {mainCat}
                 </TabsTrigger>
