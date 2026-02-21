@@ -20,6 +20,21 @@ export default function KategorienPage() {
   const [transportVehicles, setTransportVehicles] = useState<TransportVehicle[]>([])
   const [openNewMainCategoryTrigger, setOpenNewMainCategoryTrigger] = useState(false)
 
+  // Sidebar offen: Body-Scroll sperren
+  useEffect(() => {
+    if (showNavSidebar) {
+      document.body.style.overflow = 'hidden'
+      document.documentElement.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+      document.documentElement.style.overflow = ''
+    }
+    return () => {
+      document.body.style.overflow = ''
+      document.documentElement.style.overflow = ''
+    }
+  }, [showNavSidebar])
+
   // Fetch Transport Vehicles
   useEffect(() => {
     const fetchTransport = async () => {
@@ -81,7 +96,7 @@ export default function KategorienPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background flex">
+    <div className="min-h-screen flex">
       {/* Navigation Sidebar */}
       <NavigationSidebar
         isOpen={showNavSidebar}
@@ -94,8 +109,8 @@ export default function KategorienPage() {
         "lg:ml-[280px]"
       )}>
         <div className="container mx-auto p-4 md:p-6 space-y-6">
-          {/* Header */}
-          <div className="flex items-center justify-between">
+          {/* Header - Sticky */}
+          <div className="sticky top-0 z-10 flex items-center justify-between bg-[rgb(244,241,234)] pb-4 -mx-4 px-4 -mt-4 pt-4 md:-mx-6 md:px-6 md:-mt-6 md:pt-6">
             <div className="flex items-center gap-4">
               {/* Mobile Menu Toggle */}
               <Button

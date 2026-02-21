@@ -61,6 +61,21 @@ export default function AusruestungPage() {
     standard_mitreisende: [] as string[]
   })
 
+  // Sidebar offen: Body-Scroll sperren
+  useEffect(() => {
+    if (showNavSidebar) {
+      document.body.style.overflow = 'hidden'
+      document.documentElement.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+      document.documentElement.style.overflow = ''
+    }
+    return () => {
+      document.body.style.overflow = ''
+      document.documentElement.style.overflow = ''
+    }
+  }, [showNavSidebar])
+
   // Fetch Equipment Items
   useEffect(() => {
     const fetchEquipmentItems = async () => {
@@ -367,7 +382,7 @@ export default function AusruestungPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[rgb(250,250,249)] flex">
+    <div className="min-h-screen flex">
       {/* Navigation Sidebar */}
       <NavigationSidebar
         isOpen={showNavSidebar}
@@ -381,8 +396,8 @@ export default function AusruestungPage() {
         "max-md:h-dvh max-md:min-h-dvh"
       )}>
         <div className="flex flex-col flex-1 min-h-0 min-w-0 container mx-auto p-4 md:p-6 overflow-hidden">
-          {/* Header - fixe Höhe */}
-          <div className="flex-shrink-0 flex items-center justify-between">
+          {/* Header - Sticky */}
+          <div className="sticky top-0 z-10 flex-shrink-0 flex items-center justify-between bg-[rgb(244,241,234)] pb-4 -mx-4 px-4 -mt-4 pt-4 md:-mx-6 md:px-6 md:-mt-6 md:pt-6">
             <div className="flex items-center gap-4">
               {/* Mobile Menu Toggle */}
               <Button

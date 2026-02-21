@@ -84,7 +84,7 @@ export function NavigationSidebar({ isOpen, onClose }: NavigationSidebarProps) {
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 py-4 overflow-y-auto">
+        <nav className="flex-1 py-4 overflow-y-auto overscroll-contain touch-pan-y">
           {/* Main Menu Items */}
           <div className="px-3 space-y-1">
             {menuItems.map((item) => (

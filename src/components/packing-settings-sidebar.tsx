@@ -62,12 +62,12 @@ export function PackingSettingsSidebar({
       {/* Sidebar - Slide in from RIGHT */}
       <div 
         className={cn(
-          "fixed right-0 top-0 h-full w-80 bg-white shadow-xl z-50 transform transition-transform duration-300 ease-in-out",
+          "fixed right-0 top-0 h-full w-80 bg-white shadow-xl z-50 transform transition-transform duration-300 ease-in-out flex flex-col",
           isOpen ? 'translate-x-0' : 'translate-x-full'
         )}
       >
         {/* Header - Dark Green */}
-        <div className="p-6 bg-[rgb(45,79,30)] text-white">
+        <div className="p-6 bg-[rgb(45,79,30)] text-white flex-shrink-0">
           <div className="flex items-start justify-between mb-3">
             <h2 className="text-lg font-bold">WER PACKT?</h2>
             <Button 
@@ -84,8 +84,8 @@ export function PackingSettingsSidebar({
           </p>
         </div>
 
-        {/* Content - White Background */}
-        <div className="p-6 space-y-4">
+        {/* Content - White Background, scrollbar bei vielen Mitreisenden */}
+        <div className="p-6 space-y-4 overflow-y-auto overscroll-contain flex-1 min-h-0">
           {/* Anzeige-Modus: Alles / Packliste */}
           <div>
             <div className="text-xs font-medium text-gray-600 uppercase tracking-wide mb-2">

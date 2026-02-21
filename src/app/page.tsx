@@ -99,6 +99,22 @@ function HomeContent() {
   const handleScrollContextChange = useCallback((ctx: { mainCategory: string; category: string } | null) => {
     addDialogScrollContextRef.current = ctx
   }, [])
+
+  // Sidebar offen: Body-Scroll sperren, damit beim Wischen/Scrollen in der Sidebar die Seite nicht mitscrollt
+  useEffect(() => {
+    const sidebarOpen = showNavSidebar || showPackSettings
+    if (sidebarOpen) {
+      document.body.style.overflow = 'hidden'
+      document.documentElement.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+      document.documentElement.style.overflow = ''
+    }
+    return () => {
+      document.body.style.overflow = ''
+      document.documentElement.style.overflow = ''
+    }
+  }, [showNavSidebar, showPackSettings])
   
   // FAB modal state
   const [searchTerm, setSearchTerm] = useState('')
@@ -833,7 +849,7 @@ function HomeContent() {
   }, [showAddItemDialog])
 
   return (
-    <div className="min-h-screen bg-[rgb(250,250,249)] flex max-w-full overflow-x-hidden">
+    <div className="min-h-screen flex max-w-full overflow-x-hidden">
       {/* Navigation Sidebar (Links) */}
       <NavigationSidebar
         isOpen={showNavSidebar}
@@ -849,13 +865,13 @@ function HomeContent() {
           {/* Vacation Selected */}
           {currentVacation && (
             <div className="h-full flex flex-col min-w-0">
-              {/* Header - White background, horizontale Ränder für Mobile */}
-              <div className="bg-white border-b min-w-0">
+              {/* Header - Sticky, bleibt beim Scrollen sichtbar (inkl. Tabs) */}
+              <div className="sticky top-0 z-20 bg-white border-b min-w-0 shadow-sm">
                 <div className="py-3 px-4 flex items-center justify-between gap-3 min-w-0 w-full">
                   <div className="flex items-center gap-3 min-w-0 flex-1">
-                    {/* Mobile Menu Toggle */}
+                    {/* Mobile Menu Toggle - einheitlich mit Rahmen wie auf Urlaube */}
                     <Button
-                      variant="ghost"
+                      variant="outline"
                       size="icon"
                       onClick={() => setShowNavSidebar(true)}
                       className="lg:hidden flex-shrink-0"

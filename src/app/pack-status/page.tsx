@@ -45,6 +45,21 @@ function PackStatusContent() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // Sidebar offen: Body-Scroll sperren
+  useEffect(() => {
+    if (showNavSidebar) {
+      document.body.style.overflow = 'hidden'
+      document.documentElement.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+      document.documentElement.style.overflow = ''
+    }
+    return () => {
+      document.body.style.overflow = ''
+      document.documentElement.style.overflow = ''
+    }
+  }, [showNavSidebar])
+
   useEffect(() => {
     const fetchVacations = async () => {
       try {
@@ -106,15 +121,15 @@ function PackStatusContent() {
   const currentVacation = vacations.find((v) => v.id === selectedVacationId)
 
   return (
-    <div className="min-h-screen bg-[rgb(250,250,249)] flex max-w-full overflow-x-hidden">
+    <div className="min-h-screen flex max-w-full overflow-x-hidden">
       <NavigationSidebar isOpen={showNavSidebar} onClose={() => setShowNavSidebar(false)} />
 
       <div className="flex-1 transition-all duration-300 min-w-0 lg:ml-[280px]">
         <div className="p-4 sm:p-6 max-w-4xl mx-auto">
-          {/* Header */}
-          <div className="flex items-center gap-3 mb-6">
+          {/* Header - Sticky */}
+          <div className="sticky top-0 z-10 flex items-center gap-3 mb-6 -mx-4 px-4 pt-4 -mt-4 md:-mx-6 md:px-6 md:pt-6 md:-mt-6 bg-[rgb(244,241,234)]">
             <Button
-              variant="ghost"
+              variant="outline"
               size="icon"
               onClick={() => setShowNavSidebar(true)}
               className="lg:hidden flex-shrink-0"

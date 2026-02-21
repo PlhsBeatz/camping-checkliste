@@ -599,7 +599,7 @@ export function PackingList({
           </div>
         )}
       </div>
-      <div className="space-y-6 bg-[rgb(250,250,249)] px-4 sm:px-6 pb-6 min-w-0 max-w-full overflow-x-hidden">
+      <div className="space-y-6 px-4 sm:px-6 pb-6 min-w-0 max-w-full overflow-x-hidden">
         
         {/* Main Category Tabs */}
         <Tabs value={activeMainCategory} onValueChange={setActiveMainCategory} className="w-full max-w-full">
