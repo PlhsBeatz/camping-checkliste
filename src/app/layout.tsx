@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
+import { PwaUpdatePrompt } from '@/components/pwa-update-prompt'
 import './globals.css'
 
 const geistSans = Geist({
@@ -57,6 +58,7 @@ export default function RootLayout({
         <div className="w-full max-w-full overflow-x-clip">
           {children}
         </div>
+        <PwaUpdatePrompt />
       </body>
     </html>
   )

@@ -6,6 +6,10 @@ build/
 # --- OpenNext (Cloudflare Adapter) ---
 .open-next/
 
+# --- Serwist (PWA) ---
+public/sw.js
+public/swe-worker-*.js
+
 # --- Cloudflare Wrangler ---
 # Enthält lokale Datenbanken und Caches
 .wrangler/
