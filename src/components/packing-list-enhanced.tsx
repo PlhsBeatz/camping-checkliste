@@ -351,7 +351,15 @@ export function PackingList({
   const [undoToast, setUndoToast] = useState<{ visible: boolean; itemName: string; action: () => void } | null>(null);
   const [activeMainCategory, setActiveMainCategory] = useState<string>('');
   const [firstVisibleCategory, setFirstVisibleCategory] = useState<string>('');
+  const [tabsScrollbarVisible, setTabsScrollbarVisible] = useState(false);
+  const tabsScrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const categoryRefsMap = useRef<Map<string, HTMLDivElement | null>>(new Map());
+
+  useEffect(() => {
+    return () => {
+      if (tabsScrollTimeoutRef.current) clearTimeout(tabsScrollTimeoutRef.current);
+    };
+  }, []);
 
   // Datum zu YYYY-MM-DD normalisieren (ISO, DE DD.MM.YYYY, etc.)
   const toYYYYMMDD = useMemo(() => {
@@ -595,7 +603,21 @@ export function PackingList({
         
         {/* Main Category Tabs */}
         <Tabs value={activeMainCategory} onValueChange={setActiveMainCategory} className="w-full max-w-full">
-          <div className="bg-white overflow-x-auto overflow-y-hidden -mx-4 sm:-mx-6 pl-4 pr-4 sm:pl-6 sm:pr-6 pb-1" style={{ WebkitOverflowScrolling: 'touch' }}>
+          <div
+            className={cn(
+              "tabs-scrollbar-auto bg-white overflow-x-auto overflow-y-hidden -mx-4 sm:-mx-6 pl-4 pr-4 sm:pl-6 sm:pr-6 pb-2",
+              tabsScrollbarVisible && "tabs-scrollbar-visible"
+            )}
+            style={{ WebkitOverflowScrolling: 'touch' }}
+            onScroll={() => {
+              setTabsScrollbarVisible(true);
+              if (tabsScrollTimeoutRef.current) clearTimeout(tabsScrollTimeoutRef.current);
+              tabsScrollTimeoutRef.current = setTimeout(() => {
+                setTabsScrollbarVisible(false);
+                tabsScrollTimeoutRef.current = null;
+              }, 800);
+            }}
+          >
             <TabsList className="inline-flex w-max justify-start bg-transparent p-0 h-auto rounded-none">
               {mainCategories.map(mainCat => (
                 <TabsTrigger 
