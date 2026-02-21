@@ -202,7 +202,9 @@ export function MitreisendeManager({ vacationId, onMitreisendeChange }: Mitreise
             Noch keine Mitreisenden angelegt
           </p>
         ) : (
-          allMitreisende.map((mitreisender) => (
+          [...allMitreisende]
+            .sort((a, b) => (b.is_default_member ? 1 : 0) - (a.is_default_member ? 1 : 0))
+            .map((mitreisender) => (
             <div
               key={mitreisender.id}
               className="flex items-center justify-between py-2 px-3 hover:bg-muted/50 rounded-md"

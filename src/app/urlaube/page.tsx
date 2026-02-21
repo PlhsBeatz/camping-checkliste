@@ -50,6 +50,7 @@ export default function UrlaubePage() {
     reiseziel_adresse: '',
     land_region: ''
   })
+  const [abfahrtPopoverOpen, setAbfahrtPopoverOpen] = useState(false)
 
   // Fetch Vacations
   useEffect(() => {
@@ -163,6 +164,7 @@ export default function UrlaubePage() {
   const handleCloseVacationDialog = () => {
     setShowNewVacationDialog(false)
     setEditingVacationId(null)
+    setAbfahrtPopoverOpen(false)
     setNewVacationForm({
       titel: '',
       startdatum: '',
@@ -290,17 +292,8 @@ export default function UrlaubePage() {
                       onChange={(e) => setNewVacationForm({ ...newVacationForm, land_region: e.target.value })}
                     />
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-4">
                     <div>
-                      <Label htmlFor="abfahrtdatum">Abreisedatum</Label>
-                      <Input
-                        id="abfahrtdatum"
-                        type="date"
-                        value={newVacationForm.abfahrtdatum}
-                        onChange={(e) => setNewVacationForm({ ...newVacationForm, abfahrtdatum: e.target.value })}
-                      />
-                    </div>
-                    <div className="sm:col-span-2">
                       <Label>Reisedatum *</Label>
                       <Popover>
                         <PopoverTrigger asChild>
@@ -384,6 +377,132 @@ export default function UrlaubePage() {
                           </div>
                         </PopoverContent>
                       </Popover>
+                    </div>
+
+                    {/* Abreisedatum – dezenter, nur bei Abweichung prominent */}
+                    <div className="text-sm text-muted-foreground">
+                      <Label className="text-xs font-normal text-muted-foreground">Abreisedatum (optional)</Label>
+                      {newVacationForm.abfahrtdatum ? (
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="text-foreground font-medium">
+                            {format(new Date(newVacationForm.abfahrtdatum), 'EE, dd. MMM yyyy', { locale: de })}
+                          </span>
+                          <Popover open={abfahrtPopoverOpen} onOpenChange={setAbfahrtPopoverOpen}>
+                            <PopoverTrigger asChild>
+                              <Button variant="outline" size="sm" className="h-7 text-xs">
+                                Ändern
+                              </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-0 bg-white" align="start">
+                              <Calendar
+                                mode="single"
+                                defaultMonth={new Date(newVacationForm.abfahrtdatum)}
+                                selected={new Date(newVacationForm.abfahrtdatum)}
+                                onSelect={(date) => {
+                                  if (date) {
+                                    setNewVacationForm((prev) => ({
+                                      ...prev,
+                                      abfahrtdatum: format(date, 'yyyy-MM-dd')
+                                    }))
+                                  }
+                                }}
+                                locale={de}
+                              />
+                              <div className="flex gap-2 p-3 border-t bg-muted/30">
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="flex-1 bg-[rgb(45,79,30)] text-white hover:bg-[rgb(45,79,30)]/90 hover:text-white border-[rgb(45,79,30)]"
+                                  onClick={() => setAbfahrtPopoverOpen(false)}
+                                >
+                                  OK
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="flex-1"
+                                  onClick={() => {
+                                    setNewVacationForm((prev) => ({ ...prev, abfahrtdatum: '' }))
+                                    setAbfahrtPopoverOpen(false)
+                                  }}
+                                >
+                                  Löschen
+                                </Button>
+                              </div>
+                            </PopoverContent>
+                          </Popover>
+                        </div>
+                      ) : (
+                        <Popover open={abfahrtPopoverOpen} onOpenChange={setAbfahrtPopoverOpen}>
+                          <PopoverTrigger asChild>
+                            <button
+                              type="button"
+                              className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 mt-1"
+                            >
+                              Abweichendes Abreisedatum wählen
+                            </button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0 bg-white" align="start">
+                            <Calendar
+                              mode="single"
+                              defaultMonth={
+                                newVacationForm.startdatum
+                                  ? new Date(newVacationForm.startdatum)
+                                  : new Date()
+                              }
+                              selected={undefined}
+                              onSelect={(date) => {
+                                if (date) {
+                                  setNewVacationForm((prev) => ({
+                                    ...prev,
+                                    abfahrtdatum: format(date, 'yyyy-MM-dd')
+                                  }))
+                                }
+                              }}
+                              locale={de}
+                            />
+                            <div className="flex gap-2 p-3 border-t bg-muted/30">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="flex-1 bg-[rgb(45,79,30)] text-white hover:bg-[rgb(45,79,30)]/90 hover:text-white border-[rgb(45,79,30)]"
+                                onClick={() => {
+                                  const start = newVacationForm.startdatum
+                                    ? new Date(newVacationForm.startdatum)
+                                    : new Date()
+                                  setNewVacationForm((prev) => ({
+                                    ...prev,
+                                    abfahrtdatum: format(start, 'yyyy-MM-dd')
+                                  }))
+                                  setAbfahrtPopoverOpen(false)
+                                }}
+                              >
+                                OK
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="flex-1"
+                                onClick={() => {
+                                  setNewVacationForm((prev) => ({ ...prev, abfahrtdatum: '' }))
+                                  setAbfahrtPopoverOpen(false)
+                                }}
+                              >
+                                Löschen
+                              </Button>
+                            </div>
+                          </PopoverContent>
+                        </Popover>
+                      )}
+                      {!newVacationForm.abfahrtdatum && (
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Ohne Angabe gilt das Startdatum als Abreisedatum.
+                        </p>
+                      )}
                     </div>
                   </div>
                   

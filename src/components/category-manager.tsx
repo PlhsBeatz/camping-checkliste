@@ -60,7 +60,7 @@ function SortableSubcategoryRow({
     <div
       ref={setNodeRef}
       style={style}
-      className="flex items-center gap-2 py-2 px-3 rounded-md hover:bg-muted/50"
+      className="flex items-center gap-2 py-2 rounded-md hover:bg-muted/50"
     >
       <div
         {...attributes}

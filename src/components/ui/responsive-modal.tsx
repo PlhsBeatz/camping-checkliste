@@ -74,12 +74,12 @@ export function ResponsiveModal({
       <Drawer open={open} onOpenChange={onOpenChange}>
         <DrawerContent
           className={cn(
-            'max-h-[90vh] flex flex-col',
-            noPadding ? 'p-0' : 'px-6 pb-6',
+            'max-h-[90vh] flex flex-col w-full max-w-[100vw]',
+            noPadding ? 'p-0' : 'p-0',
             contentClassName
           )}
         >
-          <DrawerHeader className={noPadding ? 'px-6 pt-6 pb-4 border-b text-left' : ''}>
+          <DrawerHeader className={noPadding ? 'px-6 pt-6 pb-4 border-b text-left' : 'px-6 pt-6 pb-4 border-b text-left'}>
             <DrawerTitle className="text-left">{title}</DrawerTitle>
             {description && (
               <DrawerDescription className="text-left">{description}</DrawerDescription>
