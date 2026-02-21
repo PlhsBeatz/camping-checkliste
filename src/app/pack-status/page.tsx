@@ -322,10 +322,11 @@ function TransportWeightCard({ data }: { data: PackStatusTransportOverview }) {
 }
 
 function EntriesOhneGewichtList({ entries }: { entries: PackStatusEntryOhneGewicht[] }) {
-  const byHauptkategorie = entries.reduce<Record<string, PackStatusEntryOhneGewicht[]>>((acc, e) => {
-    const k = e.hauptkategorie || 'Ohne Kategorie'
-    if (!acc[k]) acc[k] = []
-    acc[k].push(e)
+  // Nach Transport gruppieren, dann nach Hauptkategorie
+  const byTransport = entries.reduce<Record<string, PackStatusEntryOhneGewicht[]>>((acc, e) => {
+    const transportKey = e.transport_name?.trim() || 'Ohne Transport'
+    if (!acc[transportKey]) acc[transportKey] = []
+    acc[transportKey].push(e)
     return acc
   }, {})
 
@@ -338,23 +339,41 @@ function EntriesOhneGewichtList({ entries }: { entries: PackStatusEntryOhneGewic
   }
 
   return (
-    <div className="space-y-4">
-      {Object.entries(byHauptkategorie).map(([kategorie, items]) => (
-        <div key={kategorie}>
-          <h4 className="text-sm font-medium text-[rgb(45,79,30)] mb-2">{kategorie}</h4>
-          <ul className="space-y-1.5">
-            {items.map((e) => (
-              <li
-                key={e.id}
-                className="flex items-center justify-between text-sm py-1 px-2 rounded bg-gray-50"
-              >
-                <span>{e.was}</span>
-                <span className="text-muted-foreground tabular-nums">× {e.anzahl}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ))}
+    <div className="space-y-6">
+      {Object.entries(byTransport).map(([transportName, transportItems]) => {
+        const byHauptkategorie = transportItems.reduce<Record<string, PackStatusEntryOhneGewicht[]>>(
+          (acc, e) => {
+            const k = e.hauptkategorie || 'Ohne Kategorie'
+            if (!acc[k]) acc[k] = []
+            acc[k].push(e)
+            return acc
+          },
+          {}
+        )
+        return (
+          <div key={transportName}>
+            <h3 className="text-sm font-semibold text-[rgb(45,79,30)] mb-3">{transportName}</h3>
+            <div className="space-y-4 pl-2 border-l-2 border-gray-200">
+              {Object.entries(byHauptkategorie).map(([kategorie, items]) => (
+                <div key={`${transportName}-${kategorie}`}>
+                  <h4 className="text-xs font-medium text-muted-foreground mb-1.5">{kategorie}</h4>
+                  <ul className="space-y-1.5">
+                    {items.map((e) => (
+                      <li
+                        key={e.id}
+                        className="flex items-center justify-between text-sm py-1 px-2 rounded bg-gray-50"
+                      >
+                        <span>{e.was}</span>
+                        <span className="text-muted-foreground tabular-nums">× {e.anzahl}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          </div>
+        )
+      })}
     </div>
   )
 }

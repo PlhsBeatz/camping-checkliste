@@ -1165,6 +1165,8 @@ export interface PackStatusEntryOhneGewicht {
   was: string
   anzahl: number
   hauptkategorie: string
+  transport_id?: string | null
+  transport_name?: string | null
 }
 
 export interface PackStatusProgressHauptkategorie {
@@ -1326,26 +1328,30 @@ export async function getPackStatus(db: D1Database, vacationId: string): Promise
     })
 
     const ohneGewichtQuery = `
-      SELECT pe.id, ag.was, pe.anzahl, hk.titel as hauptkategorie
+      SELECT pe.id, ag.was, pe.anzahl, hk.titel as hauptkategorie,
+        pe.transport_id, t.name as transport_name
       FROM packlisten_eintraege pe
       JOIN ausruestungsgegenstaende ag ON pe.gegenstand_id = ag.id
       JOIN kategorien k ON ag.kategorie_id = k.id
       JOIN hauptkategorien hk ON k.hauptkategorie_id = hk.id
+      LEFT JOIN transportmittel t ON pe.transport_id = t.id
       WHERE pe.packliste_id = ? AND ag.status NOT IN ('Ausgemustert', 'Fest Installiert')
         AND (ag.einzelgewicht IS NULL OR ag.einzelgewicht = 0)
         AND COALESCE(ag.in_pauschale_inbegriffen, 0) = 0
-      ORDER BY hk.reihenfolge, ag.was
+      ORDER BY COALESCE(t.name, 'zzz'), hk.reihenfolge, ag.was
     `
     const ohneGewichtResult = await db
       .prepare(ohneGewichtQuery)
       .bind(packlisteId)
-      .all<{ id: string; was: string; anzahl: number; hauptkategorie: string }>()
+      .all<{ id: string; was: string; anzahl: number; hauptkategorie: string; transport_id: string | null; transport_name: string | null }>()
     const entriesOhneGewicht: PackStatusEntryOhneGewicht[] = (ohneGewichtResult.results || []).map(
       (r) => ({
         id: r.id,
         was: r.was,
         anzahl: r.anzahl,
-        hauptkategorie: r.hauptkategorie
+        hauptkategorie: r.hauptkategorie,
+        transport_id: r.transport_id ?? null,
+        transport_name: r.transport_name ?? null
       })
     )
 
