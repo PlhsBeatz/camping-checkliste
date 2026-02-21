@@ -353,6 +353,23 @@ export function PackingList({
   const [firstVisibleCategory, setFirstVisibleCategory] = useState<string>('');
   const categoryRefsMap = useRef<Map<string, HTMLDivElement | null>>(new Map());
 
+  // Datum zu YYYY-MM-DD normalisieren (ISO, DE DD.MM.YYYY, etc.)
+  const toYYYYMMDD = useMemo(() => {
+    return (d: string): string => {
+      if (!d) return '';
+      const s = String(d).trim();
+      const iso = /^\d{4}-\d{2}-\d{2}/.exec(s);
+      if (iso) return iso[0]!;
+      const de = /^(\d{1,2})\.(\d{1,2})\.(\d{4})/.exec(s);
+      if (de) return `${de[3]!}-${de[2]!.padStart(2, '0')}-${de[1]!.padStart(2, '0')}`;
+      const parsed = new Date(s);
+      if (!Number.isNaN(parsed.getTime())) {
+        return parsed.toISOString().slice(0, 10);
+      }
+      return '';
+    };
+  }, []);
+
   // Prüft ob ein Eintrag im aktuellen Profil sichtbar ist
   // Gefilterte Einträge: Anzeige-Modus + Profil + erst_abreisetag_gepackt
   const visibleItems = useMemo(() => {
@@ -362,16 +379,16 @@ export function PackingList({
 
     return items.filter(item => {
       if (listDisplayMode === 'packliste' && item.status === 'Immer gepackt') return false;
-      // Packliste-Modus: erst_abreisetag_gepackt nur am Abreisetag anzeigen
+      // Nur im Packliste-Modus: erst_abreisetag_gepackt nur am Abreisetag anzeigen
       if (listDisplayMode === 'packliste' && item.erst_abreisetag_gepackt && abreiseDatum) {
-        const abreiseStr = abreiseDatum.slice(0, 10);
-        if (todayStr !== abreiseStr) return false;
+        const abreiseStr = toYYYYMMDD(abreiseDatum);
+        if (abreiseStr && todayStr !== abreiseStr) return false;
       }
       if (!selectedProfile) return true;
       if (item.mitreisenden_typ === 'pauschal') return true;
       return item.mitreisende?.some(m => m.mitreisender_id === selectedProfile) ?? false;
     });
-  }, [items, listDisplayMode, selectedProfile, abreiseDatum]);
+  }, [items, listDisplayMode, selectedProfile, abreiseDatum, toYYYYMMDD]);
 
   // Group items by main category and category (nur sichtbare)
   const itemsByMainCategory = useMemo(() => {

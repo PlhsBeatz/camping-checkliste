@@ -812,18 +812,22 @@ function HomeContent() {
   useEffect(() => {
     if (!showAddItemDialog || !addDialogScrollContext?.mainCategory || !addDialogScrollRef.current) return
     const ctx = addDialogScrollContext
-    const scrollEl = addDialogScrollRef.current
-    let target = scrollEl.querySelector(
-      `[data-main-category="${CSS.escape(ctx.mainCategory)}"][data-category="${CSS.escape(ctx.category || '')}"]`
-    ) as HTMLElement | null
-    if (!target && ctx.mainCategory) {
-      target = scrollEl.querySelector(`[data-main-category="${CSS.escape(ctx.mainCategory)}"]`) as HTMLElement | null
+    const scrollToTarget = () => {
+      const scrollEl = addDialogScrollRef.current
+      if (!scrollEl) return
+      let target = scrollEl.querySelector(
+        `[data-main-category="${CSS.escape(ctx.mainCategory)}"][data-category="${CSS.escape(ctx.category || '')}"]`
+      ) as HTMLElement | null
+      if (!target) {
+        target = scrollEl.querySelector(`[data-main-category="${CSS.escape(ctx.mainCategory)}"]`) as HTMLElement | null
+      }
+      if (target) {
+        const top = target.getBoundingClientRect().top - scrollEl.getBoundingClientRect().top + scrollEl.scrollTop
+        scrollEl.scrollTo({ top: Math.max(0, top - 16), behavior: 'smooth' })
+      }
     }
-    if (target) {
-      requestAnimationFrame(() => {
-        target.scrollIntoView({ behavior: 'smooth', block: 'start' })
-      })
-    }
+    const t = setTimeout(scrollToTarget, 250)
+    return () => clearTimeout(t)
   }, [showAddItemDialog, addDialogScrollContext])
 
   return (
@@ -1096,7 +1100,7 @@ function HomeContent() {
             ) : (
               <div className="space-y-6">
                 {groupedAvailableEquipment.map(mainGroup => (
-                  <div key={mainGroup.id}>
+                  <div key={mainGroup.id} data-main-category={mainGroup.name}>
                     {/* Main Category Header */}
                     <div className="bg-[rgb(45,79,30)] text-white px-4 py-2 rounded-t-lg font-bold">
                       {mainGroup.name}
