@@ -913,7 +913,7 @@ function HomeContent() {
                   listDisplayMode={listDisplayMode}
                   onOpenSettings={() => setShowPackSettings(true)}
                   vacationMitreisende={vacationMitreisende}
-                  abreiseDatum={currentVacation?.abfahrtdatum ?? currentVacation?.startdatum ?? null}
+                  abreiseDatum={currentVacation?.abfahrtdatum?.trim() || currentVacation?.startdatum || null}
                   onScrollContextChange={handleScrollContextChange}
                 />
               </div>
