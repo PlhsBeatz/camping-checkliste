@@ -390,25 +390,6 @@ export function PackingList({
     });
   }, [items, listDisplayMode, selectedProfile, abreiseDatum, toYYYYMMDD]);
 
-  // Debug: ?debug=abreise in URL – Werte in Konsole ausgeben zur Fehlersuche
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    if (new URLSearchParams(window.location.search).get('debug') !== 'abreise') return
-    const now = new Date()
-    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
-    const abreiseStr = abreiseDatum ? toYYYYMMDD(abreiseDatum) : ''
-    const erstItems = items.filter(i => (i as { erst_abreisetag_gepackt?: boolean }).erst_abreisetag_gepackt)
-    console.log('[DEBUG abreise]', {
-      listDisplayMode,
-      todayStr,
-      abreiseDatum,
-      abreiseStr,
-      filterActive: todayStr !== abreiseStr,
-      itemsMitErstAbreisetag: erstItems.length,
-      sample: erstItems[0] ? { was: erstItems[0].was, erst_abreisetag_gepackt: (erstItems[0] as unknown as Record<string, unknown>).erst_abreisetag_gepackt, rawKeys: Object.keys(erstItems[0] as object) } : null,
-    })
-  }, [items, listDisplayMode, abreiseDatum, toYYYYMMDD])
-
   // Group items by main category and category (nur sichtbare)
   const itemsByMainCategory = useMemo(() => {
     const grouped: Record<string, Record<string, DBPackingItem[]>> = {};

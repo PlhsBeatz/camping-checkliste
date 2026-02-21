@@ -820,7 +820,13 @@ function HomeContent() {
         const containerRect = scrollEl.getBoundingClientRect()
         const targetRect = target.getBoundingClientRect()
         const scrollTop = targetRect.top - containerRect.top + scrollEl.scrollTop - 8
-        scrollEl.scrollTo({ top: Math.max(0, scrollTop), behavior: 'smooth' })
+        const finalTop = Math.max(0, scrollTop)
+        const animateDistance = 120
+        const instantTop = Math.max(0, finalTop - animateDistance)
+        scrollEl.scrollTo({ top: instantTop, behavior: 'auto' })
+        requestAnimationFrame(() => {
+          scrollEl.scrollTo({ top: finalTop, behavior: 'smooth' })
+        })
       }
     }, 200)
     return () => clearTimeout(id)
