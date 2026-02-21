@@ -605,7 +605,7 @@ export function PackingList({
         <Tabs value={activeMainCategory} onValueChange={setActiveMainCategory} className="w-full max-w-full">
           <div
             className={cn(
-              "tabs-scrollbar-auto bg-white overflow-x-auto overflow-y-hidden -mx-4 sm:-mx-6 pl-4 pr-4 sm:pl-6 sm:pr-6 pb-2",
+              "tabs-scrollbar-auto bg-white shadow overflow-x-auto overflow-y-hidden -mx-4 sm:-mx-6 pl-4 pr-4 sm:pl-6 sm:pr-6 pb-2",
               tabsScrollbarVisible && "tabs-scrollbar-visible"
             )}
             style={{ WebkitOverflowScrolling: 'touch' }}

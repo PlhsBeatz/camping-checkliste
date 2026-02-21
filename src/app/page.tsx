@@ -866,8 +866,8 @@ function HomeContent() {
           {currentVacation && (
             <div className="h-full flex flex-col min-w-0">
               {/* Header - Sticky, bleibt beim Scrollen sichtbar (inkl. Tabs) */}
-              <div className="sticky top-0 z-20 bg-white border-b min-w-0 shadow-sm">
-                <div className="py-3 px-4 flex items-center justify-between gap-3 min-w-0 w-full">
+              <div className="sticky top-0 z-20 border-b min-w-0 shadow-sm">
+                <div className="py-3 px-4 bg-white flex items-center justify-between gap-3 min-w-0 w-full">
                   <div className="flex items-center gap-3 min-w-0 flex-1">
                     {/* Mobile Menu Toggle - einheitlich mit Rahmen wie auf Urlaube */}
                     <Button
