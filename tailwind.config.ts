@@ -86,11 +86,22 @@ export default {
   				to: {
   					height: '0'
   				}
+  			},
+  			'pack-item-out': {
+  				from: {
+  					opacity: '1',
+  					transform: 'translateY(0) scale(1)'
+  				},
+  				to: {
+  					opacity: '0',
+  					transform: 'translateY(-8px) scale(0.97)'
+  				}
   			}
   		},
   		animation: {
   			'accordion-down': 'accordion-down 0.2s ease-out',
-  			'accordion-up': 'accordion-up 0.2s ease-out'
+  			'accordion-up': 'accordion-up 0.2s ease-out',
+  			'pack-item-out': 'pack-item-out 0.25s ease-out forwards'
   		}
   	}
   },

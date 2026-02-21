@@ -11,7 +11,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { MoreVertical, Edit2, Trash2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { PackingItem as DBPackingItem } from "@/lib/db";
 import { MarkAllConfirmationDialog } from "./mark-all-confirmation-dialog";
 import { UndoToast } from "./undo-toast";
@@ -63,6 +63,8 @@ const PackingItem: React.FC<PackingItemProps> = ({
   onShowToast
 }) => {
   const [showMarkAllDialog, setShowMarkAllDialog] = useState(false);
+  const [isExiting, setIsExiting] = useState(false);
+  const [hasExited, setHasExited] = useState(false);
 
   const isFullyPacked = useMemo(() => {
     if (mitreisenden_typ === 'pauschal') {
@@ -102,6 +104,20 @@ const PackingItem: React.FC<PackingItemProps> = ({
     // In Zentral/Alle view, hide if fully packed
     return isFullyPacked;
   }, [hidePackedItems, selectedProfile, selectedTravelerItem, isFullyPacked]);
+
+  // Micro-Animation beim Abhaken mit Gepacktes Ausblenden
+  useEffect(() => {
+    if (shouldHideInProfileView && hidePackedItems) {
+      setIsExiting(true);
+      const t = setTimeout(() => {
+        setHasExited(true);
+      }, 280);
+      return () => clearTimeout(t);
+    }
+    setIsExiting(false);
+    setHasExited(false);
+    return;
+  }, [shouldHideInProfileView, hidePackedItems]);
 
   // Handle pauschal toggle
   const handlePauschalToggle = () => {
@@ -157,17 +173,20 @@ const PackingItem: React.FC<PackingItemProps> = ({
     setShowMarkAllDialog(false);
   };
 
-  // Hide if packed
-  if (shouldHideInProfileView) {
+  // Hide if packed – nach Exit-Animation
+  if (hasExited) {
     return null;
   }
 
   return (
     <>
-      <div className={cn(
-        "p-4 mb-3 bg-white rounded-xl border border-gray-200 shadow-sm transition-all duration-200",
-        isFullyPacked ? 'opacity-60' : 'hover:shadow-md'
-      )}>
+      <div
+        className={cn(
+          "p-4 mb-3 bg-white rounded-xl border border-gray-200 shadow-sm transition-all duration-200 overflow-hidden",
+          isExiting && "animate-pack-item-out",
+          !isExiting && (isFullyPacked ? 'opacity-60' : 'hover:shadow-md')
+        )}
+      >
         <div className="flex items-start space-x-3">
           {/* Checkbox logic based on mode - feste Größe mit flex-shrink-0 */}
           {mitreisenden_typ === 'pauschal' && (
@@ -307,6 +326,10 @@ interface PackingListProps {
   listDisplayMode: 'alles' | 'packliste';
   onOpenSettings: () => void;
   vacationMitreisende?: Array<{ id: string; name: string }>;
+  /** Urlaubs-Abreisedatum (abfahrtdatum ?? startdatum) – für erst_abreisetag_gepackt im Packliste-Modus */
+  abreiseDatum?: string | null;
+  /** Callback wenn sich die sichtbare Kategorie ändert (für Add-Dialog-Scroll) */
+  onScrollContextChange?: (ctx: { mainCategory: string; category: string } | null) => void;
 }
 
 export function PackingList({
@@ -321,21 +344,34 @@ export function PackingList({
   hidePackedItems,
   listDisplayMode,
   onOpenSettings: _onOpenSettings,
-  vacationMitreisende = []
+  vacationMitreisende = [],
+  abreiseDatum,
+  onScrollContextChange
 }: PackingListProps) {
   const [undoToast, setUndoToast] = useState<{ visible: boolean; itemName: string; action: () => void } | null>(null);
   const [activeMainCategory, setActiveMainCategory] = useState<string>('');
+  const [firstVisibleCategory, setFirstVisibleCategory] = useState<string>('');
+  const categoryRefsMap = useRef<Map<string, HTMLDivElement | null>>(new Map());
 
   // Prüft ob ein Eintrag im aktuellen Profil sichtbar ist
-  // Gefilterte Einträge: Anzeige-Modus + Profil
+  // Gefilterte Einträge: Anzeige-Modus + Profil + erst_abreisetag_gepackt
   const visibleItems = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayStr = today.toISOString().slice(0, 10);
+
     return items.filter(item => {
       if (listDisplayMode === 'packliste' && item.status === 'Immer gepackt') return false;
+      // Packliste-Modus: erst_abreisetag_gepackt nur am Abreisetag anzeigen
+      if (listDisplayMode === 'packliste' && item.erst_abreisetag_gepackt && abreiseDatum) {
+        const abreiseStr = abreiseDatum.slice(0, 10);
+        if (todayStr !== abreiseStr) return false;
+      }
       if (!selectedProfile) return true;
       if (item.mitreisenden_typ === 'pauschal') return true;
       return item.mitreisende?.some(m => m.mitreisender_id === selectedProfile) ?? false;
     });
-  }, [items, listDisplayMode, selectedProfile]);
+  }, [items, listDisplayMode, selectedProfile, abreiseDatum]);
 
   // Group items by main category and category (nur sichtbare)
   const itemsByMainCategory = useMemo(() => {
@@ -381,6 +417,43 @@ export function PackingList({
   }, [visibleItems]);
 
   const progressPercentage = totalCount > 0 ? Math.round((packedCount / totalCount) * 100) : 0;
+
+  // IntersectionObserver: erste sichtbare Kategorie im aktiven Tab ermitteln
+  useEffect(() => {
+    if (!onScrollContextChange || !activeMainCategory) return;
+    const cats = Object.keys(itemsByMainCategory[activeMainCategory] ?? {});
+    if (cats.length === 0) {
+      onScrollContextChange({ mainCategory: activeMainCategory, category: '' });
+      return;
+    }
+    const obs = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) {
+          if (e.isIntersecting) {
+            const cat = (e.target as HTMLElement).dataset.category;
+            if (cat) {
+              setFirstVisibleCategory(cat);
+              return;
+            }
+          }
+        }
+      },
+      { root: null, rootMargin: '-10% 0px -70% 0px', threshold: 0 }
+    );
+    const order = cats;
+    for (const c of order) {
+      const el = categoryRefsMap.current.get(`${activeMainCategory}::${c}`);
+      if (el) obs.observe(el);
+    }
+    return () => obs.disconnect();
+  }, [activeMainCategory, itemsByMainCategory, onScrollContextChange]);
+
+  // Scroll-Kontext an Parent melden
+  useEffect(() => {
+    if (!onScrollContextChange) return;
+    const cat = firstVisibleCategory || (activeMainCategory ? Object.keys(itemsByMainCategory[activeMainCategory] ?? {})[0] : '') || '';
+    onScrollContextChange(activeMainCategory ? { mainCategory: activeMainCategory, category: cat } : null);
+  }, [activeMainCategory, firstVisibleCategory, itemsByMainCategory, onScrollContextChange]);
 
   // Handle mark all or unmark all for an item
   const handleMarkAllForItem = (item: DBPackingItem) => {
@@ -527,7 +600,14 @@ export function PackingList({
                 if (!shouldShowCategory(categoryItems)) return null;
                 
                 return (
-                  <div key={category}>
+                  <div
+                    key={category}
+                    ref={(el) => {
+                      categoryRefsMap.current.set(`${mainCat}::${category}`, el);
+                    }}
+                    data-category={category}
+                    data-main-category={mainCat}
+                  >
                     {/* Category Subheading */}
                     <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-3 px-1">
                       {category}

@@ -93,6 +93,8 @@ function HomeContent() {
     isProfileDelete: boolean
   } | null>(null)
   const [listDisplayMode, setListDisplayMode] = useState<'alles' | 'packliste'>('packliste')
+  const [addDialogScrollContext, setAddDialogScrollContext] = useState<{ mainCategory: string; category: string } | null>(null)
+  const addDialogScrollRef = useRef<HTMLDivElement>(null)
   
   // FAB modal state
   const [searchTerm, setSearchTerm] = useState('')
@@ -806,6 +808,24 @@ function HomeContent() {
   const travelerNames = vacationMitreisende.map((m) => m.name)
   const getTravelerInitials = (name: string) => getInitials(name, travelerNames)
 
+  // Add-Dialog: beim Öffnen zur aktuellen Kategorie scrollen (aus Packliste-Kontext)
+  useEffect(() => {
+    if (!showAddItemDialog || !addDialogScrollContext?.mainCategory || !addDialogScrollRef.current) return
+    const ctx = addDialogScrollContext
+    const scrollEl = addDialogScrollRef.current
+    let target = scrollEl.querySelector(
+      `[data-main-category="${CSS.escape(ctx.mainCategory)}"][data-category="${CSS.escape(ctx.category || '')}"]`
+    ) as HTMLElement | null
+    if (!target && ctx.mainCategory) {
+      target = scrollEl.querySelector(`[data-main-category="${CSS.escape(ctx.mainCategory)}"]`) as HTMLElement | null
+    }
+    if (target) {
+      requestAnimationFrame(() => {
+        target.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      })
+    }
+  }, [showAddItemDialog, addDialogScrollContext])
+
   return (
     <div className="min-h-screen bg-[rgb(250,250,249)] flex max-w-full overflow-x-hidden">
       {/* Navigation Sidebar (Links) */}
@@ -893,6 +913,8 @@ function HomeContent() {
                   listDisplayMode={listDisplayMode}
                   onOpenSettings={() => setShowPackSettings(true)}
                   vacationMitreisende={vacationMitreisende}
+                  abreiseDatum={currentVacation?.abfahrtdatum ?? currentVacation?.startdatum ?? null}
+                  onScrollContextChange={setAddDialogScrollContext}
                 />
               </div>
 
@@ -1063,7 +1085,10 @@ function HomeContent() {
           </div>
 
           {/* Equipment List - Scrollable */}
-          <div className="flex-1 overflow-y-auto overflow-x-hidden px-6 py-4 min-w-0">
+          <div
+            ref={addDialogScrollRef}
+            className="flex-1 overflow-y-auto overflow-x-hidden px-6 py-4 min-w-0"
+          >
             {groupedAvailableEquipment.length === 0 ? (
               <div className="text-center py-12 text-muted-foreground">
                 {searchTerm ? 'Keine Gegenstände gefunden' : 'Alle Gegenstände sind bereits auf der Packliste'}
@@ -1079,7 +1104,12 @@ function HomeContent() {
                     
                     {/* Categories */}
                     {mainGroup.categories.map(category => (
-                      <div key={category.id} className="border-x border-b last:rounded-b-lg">
+                      <div
+                        key={category.id}
+                        data-main-category={mainGroup.name}
+                        data-category={category.name}
+                        className="border-x border-b last:rounded-b-lg"
+                      >
                         {/* Category Header */}
                         <div className="bg-muted/50 px-4 py-2 font-semibold text-sm">
                           {category.name} ({category.items.length})

@@ -117,7 +117,7 @@ export function PackingSettingsSidebar({
                 Packliste
               </button>
             </div>
-            <p className="text-xs text-gray-500 mt-1.5">
+            <p className="text-xs text-gray-500 mt-1.5 min-h-[2.5rem] leading-tight">
               {listDisplayMode === 'alles'
                 ? 'Alle Einträge inkl. „Immer gepackt"'
                 : 'Ohne „Immer gepackt" (Wohnwagen-Dauerausstattung)'}
