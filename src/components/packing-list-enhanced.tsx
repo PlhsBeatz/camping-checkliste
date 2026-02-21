@@ -630,8 +630,9 @@ export function PackingList({
         </div>
       </div>
 
-      {/* Scrollbarer Bereich: nur die Kategorien/Items scrollen */}
+      {/* Scrollbarer Bereich: Hintergrund scrollt mit dem Inhalt */}
       <div className="flex-1 min-h-0 overflow-y-auto overflow-x-clip px-4 sm:px-6 pb-6 pt-6">
+        <div className="min-h-full bg-scroll-pattern">
         {mainCategories.map(mainCat => (
             <TabsContent key={mainCat} value={mainCat} className="space-y-6 mt-14 m-0">
               {Object.entries(itemsByMainCategory[mainCat] ?? {}).map(([category, categoryItems]) => {
@@ -694,6 +695,7 @@ export function PackingList({
             onDismiss={() => setUndoToast(null)}
           />
         )}
+        </div>
       </div>
     </Tabs>
   );

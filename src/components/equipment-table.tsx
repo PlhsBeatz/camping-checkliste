@@ -295,7 +295,7 @@ export const EquipmentTable = React.memo(({
     )}>
       {/* Search and Filters - overflow-x-auto auf Mobile falls Filter zu breit */}
       <div className={cn(
-        "space-y-4 border rounded-lg p-4 bg-muted/30 min-w-0 overflow-x-auto",
+        "space-y-4 bg-white border rounded-lg p-4 bg-muted/30 min-w-0 overflow-x-auto",
         dynamicHeight && "flex-shrink-0"
       )}>
         {/* Search Bar */}
