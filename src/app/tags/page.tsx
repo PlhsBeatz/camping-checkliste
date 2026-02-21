@@ -87,8 +87,8 @@ export default function TagsPage() {
             </div>
           </div>
 
-          {/* Tag Manager - direkt im Container, keine doppelte Verschachtelung */}
-          <div className="mt-4 md:mt-6 border rounded-lg p-4 md:p-6 bg-muted/30">
+          {/* Tag Manager */}
+          <div className="mt-4 md:mt-6 border rounded-lg p-4 md:p-6 bg-white shadow-sm">
             <TagManager 
               tags={tags} 
               onRefresh={handleRefresh} 

@@ -389,14 +389,15 @@ export default function AusruestungPage() {
         onClose={() => setShowNavSidebar(false)}
       />
 
-      {/* Main Content Area - gleiche Struktur wie andere Seiten */}
+      {/* Main Content Area - Flex-Layout: dynamische Höhe bis zum unteren Rand */}
       <div className={cn(
-        "flex-1 transition-all duration-300",
-        "lg:ml-[280px]"
+        "flex-1 flex flex-col min-h-0 min-w-0 transition-all duration-300",
+        "lg:ml-[280px]",
+        "max-md:h-dvh max-md:min-h-dvh"
       )}>
-        <div className="container mx-auto p-4 md:p-6 space-y-6">
-          {/* Header - Sticky, am oberen Rand wie auf anderen Seiten */}
-          <div className="sticky top-0 z-10 flex items-center justify-between bg-white shadow pb-4 -mx-4 px-4 -mt-4 pt-4 md:-mx-6 md:px-6 md:-mt-6 md:pt-6">
+        <div className="flex flex-col flex-1 min-h-0 min-w-0 container mx-auto p-4 md:p-6">
+          {/* Header - Sticky */}
+          <div className="sticky top-0 z-10 flex-shrink-0 flex items-center justify-between bg-white shadow pb-4 -mx-4 px-4 -mt-4 pt-4 md:-mx-6 md:px-6 md:-mt-6 md:pt-6">
             <div className="flex items-center gap-4">
               {/* Mobile Menu Toggle */}
               <Button
@@ -416,8 +417,8 @@ export default function AusruestungPage() {
             </div>
           </div>
 
-          {/* Equipment Table */}
-          <div className="min-h-[500px]">
+          {/* Equipment Table - füllt verfügbaren Platz, horizontales Scrollen in der Tabelle */}
+          <div className="flex-1 min-h-0 min-w-0 mt-4 md:mt-6 overflow-hidden">
               {isLoading ? (
                 <div className="flex flex-col items-center justify-center py-20 gap-4">
                   <div className="animate-spin rounded-full h-12 w-12 border-4 border-[rgb(45,79,30)] border-t-transparent"></div>
@@ -432,7 +433,7 @@ export default function AusruestungPage() {
                   tags={tags}
                   onEdit={handleEditEquipment}
                   onDelete={handleDeleteEquipment}
-                  dynamicHeight={false}
+                  dynamicHeight
                 />
               )}
           </div>

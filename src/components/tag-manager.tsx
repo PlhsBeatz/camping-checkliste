@@ -160,7 +160,7 @@ export function TagManager({ tags, onRefresh }: TagManagerProps) {
           {tags.map((tag) => (
             <div
               key={tag.id}
-              className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50"
+              className="flex items-center justify-between p-3 border rounded-lg bg-white hover:bg-muted/50"
               style={{ borderLeftWidth: '4px', borderLeftColor: tag.farbe || DEFAULT_USER_COLOR_BG }}
             >
               <div className="flex items-center gap-3 flex-1 min-w-0">

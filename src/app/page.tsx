@@ -864,9 +864,9 @@ function HomeContent() {
         <div className="h-full min-w-0">
           {/* Vacation Selected */}
           {currentVacation && (
-            <div className="h-full flex flex-col min-w-0">
-              {/* Header - Sticky, bleibt beim Scrollen sichtbar (inkl. Tabs) */}
-              <div className="sticky top-0 z-20 bg-white border-b min-w-0 shadow">
+            <div className="h-full flex flex-col min-h-0 min-w-0">
+              {/* Header - fix oben, scrollt nicht (Flex-Layout: Header+Progress+Tabs bleiben sichtbar) */}
+              <div className="flex-shrink-0 z-20 bg-white border-b min-w-0 shadow">
                 <div className="py-3 px-4 flex items-center justify-between gap-3 min-w-0 w-full">
                   <div className="flex items-center gap-3 min-w-0 flex-1">
                     {/* Mobile Menu Toggle - einheitlich mit Rahmen wie auf Urlaube */}
@@ -920,9 +920,10 @@ function HomeContent() {
                     </button>
                   )}
                 </div>
+              </div>
 
-                {/* Packing List Component includes progress and tabs */}
-                <PackingList
+              {/* Packing List: Progress + Tabs fix oben, Inhalt scrollt */}
+              <PackingList
                   items={packingItems}
                   onToggle={handleTogglePacked}
                   onSetPacked={handleSetPacked}
@@ -937,8 +938,7 @@ function HomeContent() {
                   vacationMitreisende={vacationMitreisende}
                   abreiseDatum={currentVacation?.abfahrtdatum?.trim() || currentVacation?.startdatum || null}
                   onScrollContextChange={handleScrollContextChange}
-                />
-              </div>
+              />
 
               {/* Auto-generate button - Only when list is empty */}
               {packingItems.length === 0 && (

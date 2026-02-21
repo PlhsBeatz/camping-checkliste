@@ -293,9 +293,9 @@ export const EquipmentTable = React.memo(({
       "space-y-4",
       dynamicHeight && "flex flex-col h-full min-h-0 min-w-0"
     )}>
-      {/* Search and Filters */}
+      {/* Search and Filters - overflow-x-auto auf Mobile falls Filter zu breit */}
       <div className={cn(
-        "space-y-4 border rounded-lg p-4 bg-muted/30",
+        "space-y-4 border rounded-lg p-4 bg-muted/30 min-w-0 overflow-x-auto",
         dynamicHeight && "flex-shrink-0"
       )}>
         {/* Search Bar */}
@@ -457,13 +457,12 @@ export const EquipmentTable = React.memo(({
         </div>
       </div>
 
-      {/* Tabelle - virtualisiert für 500+ Zeilen (nur ~20 sichtbare DOM-Zeilen), weißer Hintergrund */}
+      {/* Tabelle - virtualisiert, weißer Hintergrund. overflow-x-auto für horizontales Scrollen auf Mobile */}
       <div className={cn(
-        "border rounded-lg overflow-hidden min-w-0 bg-white",
+        "border rounded-lg min-w-0 bg-white overflow-x-auto overflow-y-hidden",
         dynamicHeight && "flex-1 min-h-0 flex flex-col"
       )}>
-        {/* Horizontal scrollbar auf Mobile - min-w-0 erlaubt Schrumpfen, overflow-x-auto ermöglicht Scroll */}
-        <div className="overflow-x-auto flex-1 min-h-0 min-w-0 flex flex-col">
+        <div className="flex-1 min-h-0 min-w-0 flex flex-col min-w-[1253px]">
           <div className="min-w-[1253px] flex flex-col flex-1 min-h-0">
             {/* Ein gemeinsamer vertikaler Scroll: Header + Body scrollen zusammen (paddingStart für Header) */}
             <div

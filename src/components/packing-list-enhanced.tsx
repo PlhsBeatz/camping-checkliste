@@ -580,59 +580,60 @@ export function PackingList({
   };
 
   return (
-    <>
-      <div className="px-4 bg-white">
-        {/* Progress Bar */}
-        {totalCount > 0 && (
-          <div className="space-y-2 bg-white px-1">
-            <div className="flex items-center gap-2">
-              <div className="flex-1 min-w-0 h-2.5 bg-gray-200 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-[rgb(45,79,30)] transition-all duration-500 ease-out"
-                  style={{ width: `${progressPercentage}%` }}
-                />
+    <Tabs value={activeMainCategory} onValueChange={setActiveMainCategory} className="flex flex-col flex-1 min-h-0 min-w-0 w-full max-w-full">
+      {/* Sticky-Bereich: Progress + Tabs – scrollt nie */}
+      <div className="flex-shrink-0">
+        <div className="px-4 bg-white">
+          {/* Progress Bar */}
+          {totalCount > 0 && (
+            <div className="space-y-2 bg-white px-1">
+              <div className="flex items-center gap-2">
+                <div className="flex-1 min-w-0 h-2.5 bg-gray-200 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-[rgb(45,79,30)] transition-all duration-500 ease-out"
+                    style={{ width: `${progressPercentage}%` }}
+                  />
+                </div>
+                <span className="text-xs font-medium text-accent flex-shrink-0">
+                  {progressPercentage}%
+                </span>
               </div>
-              <span className="text-xs font-medium text-accent flex-shrink-0">
-                {progressPercentage}%
-              </span>
             </div>
-          </div>
-        )}
+          )}
+        </div>
+        <div
+          className={cn(
+            "tabs-scrollbar-auto bg-white overflow-x-auto overflow-y-hidden -mx-4 sm:-mx-6 pl-4 pr-4 sm:pl-6 sm:pr-6 pb-2",
+            tabsScrollbarVisible && "tabs-scrollbar-visible"
+          )}
+          style={{ WebkitOverflowScrolling: 'touch' }}
+          onScroll={() => {
+            setTabsScrollbarVisible(true);
+            if (tabsScrollTimeoutRef.current) clearTimeout(tabsScrollTimeoutRef.current);
+            tabsScrollTimeoutRef.current = setTimeout(() => {
+              setTabsScrollbarVisible(false);
+              tabsScrollTimeoutRef.current = null;
+            }, 800);
+          }}
+        >
+          <TabsList className="inline-flex w-max justify-start bg-transparent p-0 h-auto rounded-none">
+            {mainCategories.map(mainCat => (
+              <TabsTrigger
+                key={mainCat}
+                value={mainCat}
+                className="flex-shrink-0 uppercase text-xs font-semibold tracking-wide px-6 py-3 rounded-none border-b-4 border-transparent data-[state=active]:border-[#e67e22] data-[state=active]:text-[rgb(45,79,30)] data-[state=inactive]:text-[rgb(168,162,158)] hover:text-gray-900 transition-colors relative data-[state=active]:bg-transparent data-[state=inactive]:bg-transparent data-[state=active]:after:content-[''] data-[state=active]:after:absolute data-[state=active]:after:bottom-0 data-[state=active]:after:left-1/2 data-[state=active]:after:-translate-x-1/2 data-[state=active]:after:w-[50px] data-[state=active]:after:h-1 data-[state=active]:after:bg-[#e67e22] data-[state=active]:after:rounded-full data-[state=active]:border-b-transparent data-[state=active]:shadow-none"
+              >
+                {mainCat}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </div>
       </div>
-      <div className="space-y-6 px-4 sm:px-6 pb-6 min-w-0 max-w-full overflow-x-hidden">
-        
-        {/* Main Category Tabs */}
-        <Tabs value={activeMainCategory} onValueChange={setActiveMainCategory} className="w-full max-w-full">
-          <div
-            className={cn(
-              "tabs-scrollbar-auto bg-white shadow overflow-x-auto overflow-y-hidden -mx-4 sm:-mx-6 pl-4 pr-4 sm:pl-6 sm:pr-6 pb-2",
-              tabsScrollbarVisible && "tabs-scrollbar-visible"
-            )}
-            style={{ WebkitOverflowScrolling: 'touch' }}
-            onScroll={() => {
-              setTabsScrollbarVisible(true);
-              if (tabsScrollTimeoutRef.current) clearTimeout(tabsScrollTimeoutRef.current);
-              tabsScrollTimeoutRef.current = setTimeout(() => {
-                setTabsScrollbarVisible(false);
-                tabsScrollTimeoutRef.current = null;
-              }, 800);
-            }}
-          >
-            <TabsList className="inline-flex w-max justify-start bg-transparent p-0 h-auto rounded-none">
-              {mainCategories.map(mainCat => (
-                <TabsTrigger 
-                  key={mainCat} 
-                  value={mainCat}
-                  className="flex-shrink-0 uppercase text-xs font-semibold tracking-wide px-6 py-3 rounded-none border-b-4 border-transparent data-[state=active]:border-[#e67e22] data-[state=active]:text-[rgb(45,79,30)] data-[state=inactive]:text-[rgb(168,162,158)] hover:text-gray-900 transition-colors relative data-[state=active]:bg-transparent data-[state=inactive]:bg-transparent data-[state=active]:after:content-[''] data-[state=active]:after:absolute data-[state=active]:after:bottom-0 data-[state=active]:after:left-1/2 data-[state=active]:after:-translate-x-1/2 data-[state=active]:after:w-[50px] data-[state=active]:after:h-1 data-[state=active]:after:bg-[#e67e22] data-[state=active]:after:rounded-full data-[state=active]:border-b-transparent data-[state=active]:shadow-none"
-                >
-                  {mainCat}
-                </TabsTrigger>
-              ))}
-            </TabsList>
-          </div>
 
-          {mainCategories.map(mainCat => (
-            <TabsContent key={mainCat} value={mainCat} className="space-y-6 mt-6">
+      {/* Scrollbarer Bereich: nur die Kategorien/Items scrollen */}
+      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-clip px-4 sm:px-6 pb-6">
+        {mainCategories.map(mainCat => (
+            <TabsContent key={mainCat} value={mainCat} className="space-y-6 mt-6 m-0">
               {Object.entries(itemsByMainCategory[mainCat] ?? {}).map(([category, categoryItems]) => {
                 if (!shouldShowCategory(categoryItems)) return null;
                 
@@ -684,8 +685,6 @@ export function PackingList({
               })}
             </TabsContent>
           ))}
-        </Tabs>
-
         {/* Undo Toast */}
         {undoToast && (
           <UndoToast
@@ -696,6 +695,6 @@ export function PackingList({
           />
         )}
       </div>
-      </>
+    </Tabs>
   );
 }
