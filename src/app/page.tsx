@@ -93,13 +93,11 @@ function HomeContent() {
     isProfileDelete: boolean
   } | null>(null)
   const [listDisplayMode, setListDisplayMode] = useState<'alles' | 'packliste'>('packliste')
-  const [addDialogScrollContext, setAddDialogScrollContext] = useState<{ mainCategory: string; category: string } | null>(null)
   const addDialogScrollContextRef = useRef<{ mainCategory: string; category: string } | null>(null)
   const addDialogScrollRef = useRef<HTMLDivElement>(null)
 
   const handleScrollContextChange = useCallback((ctx: { mainCategory: string; category: string } | null) => {
     addDialogScrollContextRef.current = ctx
-    setAddDialogScrollContext(ctx)
   }, [])
   
   // FAB modal state
