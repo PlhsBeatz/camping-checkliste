@@ -350,7 +350,7 @@ export async function getPackingItems(db: D1Database, vacationId: string): Promi
     const query = `
       SELECT 
         pe.id, pe.packliste_id, pe.gegenstand_id, pe.anzahl, pe.gepackt, pe.bemerkung, pe.transport_id,
-        ag.was, ag.einzelgewicht, ag.details, ag.mitreisenden_typ, ag.status, ag.erst_abreisetag_gepackt,
+        ag.was, ag.einzelgewicht, ag.details, ag.mitreisenden_typ, ag.status, ag.erst_abreisetag_gepackt as erst_abreisetag_gepackt,
         k.titel as kategorie,
         hk.titel as hauptkategorie,
         t.name as transport_name,
@@ -423,7 +423,7 @@ export async function getPackingItems(db: D1Database, vacationId: string): Promi
         details: item.details ? String(item.details) : undefined,
         einzelgewicht: item.einzelgewicht ? Number(item.einzelgewicht) : undefined,
         status: item.status ? String(item.status) : undefined,
-        erst_abreisetag_gepackt: !!item.erst_abreisetag_gepackt,
+        erst_abreisetag_gepackt: !!((item as Record<string, unknown>).erst_abreisetag_gepackt ?? (item as Record<string, unknown>)['ag.erst_abreisetag_gepackt']),
         created_at: String(item.created_at || ''),
       })
     }

@@ -445,17 +445,15 @@ export function PackingList({
     }
     const obs = new IntersectionObserver(
       (entries) => {
-        for (const e of entries) {
-          if (e.isIntersecting) {
-            const cat = (e.target as HTMLElement).dataset.category;
-            if (cat) {
-              setFirstVisibleCategory(cat);
-              return;
-            }
-          }
-        }
+        const intersecting = entries.filter(e => e.isIntersecting).map(e => e.target as HTMLElement).filter(el => el.dataset.category);
+        if (intersecting.length === 0) return;
+        const topmost = intersecting.reduce((a, b) => 
+          a.getBoundingClientRect().top < b.getBoundingClientRect().top ? a : b
+        );
+        const cat = topmost.dataset.category;
+        if (cat) setFirstVisibleCategory(cat);
       },
-      { root: null, rootMargin: '-10% 0px -70% 0px', threshold: 0 }
+      { root: null, rootMargin: '-20px 0px -60% 0px', threshold: 0 }
     );
     const order = cats;
     for (const c of order) {

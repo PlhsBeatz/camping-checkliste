@@ -302,7 +302,7 @@ function HomeContent() {
     })
   }, [equipmentItems, packingItems, selectedPackProfile])
 
-  // Filter and group available equipment
+  // Filter and group available equipment – ALLE Kategorien (auch leere) für Scroll-Ziel
   const groupedAvailableEquipment = useMemo(() => {
     const filtered = availableEquipment.filter(item => {
       if (!searchTerm) return true
@@ -310,51 +310,33 @@ function HomeContent() {
     })
 
     const mainCategoryGroups: Record<string, Record<string, EquipmentItem[]>> = {}
-    
     filtered.forEach(item => {
       const category = categories.find(c => c.id === item.kategorie_id)
       if (!category) return
-      
       const mainCategory = mainCategories.find(mc => mc.id === category.hauptkategorie_id)
       if (!mainCategory) return
-      
       const mainCategoryName = mainCategory.titel
       const categoryName = category.titel
-      
-      if (!mainCategoryGroups[mainCategoryName]) {
-        mainCategoryGroups[mainCategoryName] = {}
-      }
-      if (!mainCategoryGroups[mainCategoryName][categoryName]) {
-        mainCategoryGroups[mainCategoryName][categoryName] = []
-      }
+      if (!mainCategoryGroups[mainCategoryName]) mainCategoryGroups[mainCategoryName] = {}
+      if (!mainCategoryGroups[mainCategoryName][categoryName]) mainCategoryGroups[mainCategoryName][categoryName] = []
       mainCategoryGroups[mainCategoryName][categoryName].push(item)
     })
 
-    // Sort by main category order, then category order
-    const sortedMainCategories = mainCategories
-      .filter(mc => mainCategoryGroups[mc.titel])
-      .map(mc => {
-        const mainCatGroup = mainCategoryGroups[mc.titel]
-        if (!mainCatGroup) return null
-        
-        return {
-          id: mc.id,
-          name: mc.titel,
-          order: mc.reihenfolge || 0,
-          categories: categories
-            .filter(c => c.hauptkategorie_id === mc.id && mainCatGroup[c.titel])
-            .sort((a, b) => (a.reihenfolge || 0) - (b.reihenfolge || 0))
-            .map(c => ({
-              id: c.id,
-              name: c.titel,
-              items: mainCatGroup[c.titel] || []
-            }))
-        }
-      })
-      .filter((mc): mc is NonNullable<typeof mc> => mc !== null)
-      .sort((a, b) => a.order - b.order)
-
-    return sortedMainCategories
+    return mainCategories
+      .sort((a, b) => (a.reihenfolge || 0) - (b.reihenfolge || 0))
+      .map(mc => ({
+        id: mc.id,
+        name: mc.titel,
+        order: mc.reihenfolge || 0,
+        categories: categories
+          .filter(c => c.hauptkategorie_id === mc.id)
+          .sort((a, b) => (a.reihenfolge || 0) - (b.reihenfolge || 0))
+          .map(c => ({
+            id: c.id,
+            name: c.titel,
+            items: mainCategoryGroups[mc.titel]?.[c.titel] ?? []
+          }))
+      }))
   }, [availableEquipment, searchTerm, categories, mainCategories])
 
   const currentVacation = vacations.find(v => v.id === selectedVacationId)
@@ -814,7 +796,7 @@ function HomeContent() {
 
   // Add-Dialog: beim Öffnen zur aktuellen Kategorie scrollen (Ref hat immer aktuellen Kontext)
   useEffect(() => {
-    if (!showAddItemDialog || !addDialogScrollRef.current) return
+    if (!showAddItemDialog) return
     const ctx = addDialogScrollContextRef.current
     if (!ctx?.mainCategory) return
     const scrollToTarget = () => {
@@ -831,10 +813,13 @@ function HomeContent() {
         if (!target) target = el
       }
       if (target) {
-        target.scrollIntoView({ behavior: 'smooth', block: 'start', inline: 'nearest' })
+        const containerRect = scrollEl.getBoundingClientRect()
+        const targetRect = target.getBoundingClientRect()
+        const scrollTop = targetRect.top - containerRect.top + scrollEl.scrollTop - 8
+        scrollEl.scrollTo({ top: Math.max(0, scrollTop), behavior: 'smooth' })
       }
     }
-    const delays = [100, 300, 500]
+    const delays = [150, 400, 700]
     const ids = delays.map(d => setTimeout(scrollToTarget, d))
     return () => ids.forEach(id => clearTimeout(id))
   }, [showAddItemDialog])
@@ -1102,9 +1087,13 @@ function HomeContent() {
             ref={addDialogScrollRef}
             className="flex-1 overflow-y-auto overflow-x-hidden px-6 py-4 min-w-0"
           >
-            {groupedAvailableEquipment.length === 0 ? (
+            {availableEquipment.length === 0 && !searchTerm ? (
               <div className="text-center py-12 text-muted-foreground">
-                {searchTerm ? 'Keine Gegenstände gefunden' : 'Alle Gegenstände sind bereits auf der Packliste'}
+                Alle Gegenstände sind bereits auf der Packliste
+              </div>
+            ) : groupedAvailableEquipment.length === 0 ? (
+              <div className="text-center py-12 text-muted-foreground">
+                Keine Gegenstände gefunden
               </div>
             ) : (
               <div className="space-y-6">
