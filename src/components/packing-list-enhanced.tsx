@@ -630,9 +630,9 @@ export function PackingList({
         </div>
       </div>
 
-      {/* Scrollbarer Bereich: Hintergrund scrollt mit dem Inhalt */}
-      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-clip px-4 sm:px-6 pb-6 pt-6">
-        <div className="min-h-full bg-scroll-pattern">
+      {/* Scrollbarer Bereich: Hintergrund scrollt mit dem Inhalt, randlos */}
+      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-clip pb-6 pt-6">
+        <div className="min-h-full bg-scroll-pattern px-4 sm:px-6">
         {mainCategories.map(mainCat => (
             <TabsContent key={mainCat} value={mainCat} className="space-y-6 mt-14 m-0">
               {Object.entries(itemsByMainCategory[mainCat] ?? {}).map(([category, categoryItems]) => {
