@@ -866,7 +866,7 @@ function HomeContent() {
           {currentVacation && (
             <div className="flex-1 min-h-0 flex flex-col min-w-0">
               {/* Header - fix oben, scrollt nicht (Flex-Layout: Header+Progress+Tabs bleiben sichtbar) */}
-              <div className="flex-shrink-0 z-20 bg-white border-b min-w-0">
+              <div className="flex-shrink-0 z-20 bg-white min-w-0">
                 <div className="py-3 px-4 flex items-center justify-between gap-3 min-w-0 w-full">
                   <div className="flex items-center gap-3 min-w-0 flex-1">
                     {/* Mobile Menu Toggle - einheitlich mit Rahmen wie auf Urlaube */}
