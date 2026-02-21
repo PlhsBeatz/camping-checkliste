@@ -30,7 +30,7 @@ const serwist = new Serwist({
 
 serwist.addEventListeners()
 
-self.addEventListener('message', (event: MessageEvent) => {
+self.addEventListener('message', (event: ExtendableMessageEvent) => {
   if (event.data?.type === 'SKIP_WAITING') {
     self.skipWaiting()
   }
