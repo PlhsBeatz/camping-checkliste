@@ -373,14 +373,14 @@ export function PackingList({
   // Prüft ob ein Eintrag im aktuellen Profil sichtbar ist
   // Gefilterte Einträge: Anzeige-Modus + Profil + erst_abreisetag_gepackt
   const visibleItems = useMemo(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const todayStr = today.toISOString().slice(0, 10);
+    const now = new Date();
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
     return items.filter(item => {
       if (listDisplayMode === 'packliste' && item.status === 'Immer gepackt') return false;
       // Nur im Packliste-Modus: erst_abreisetag_gepackt nur am Abreisetag anzeigen
-      if (listDisplayMode === 'packliste' && item.erst_abreisetag_gepackt && abreiseDatum) {
+      const isErstAbreisetag = !!item.erst_abreisetag_gepackt;
+      if (listDisplayMode === 'packliste' && isErstAbreisetag && abreiseDatum) {
         const abreiseStr = toYYYYMMDD(abreiseDatum);
         if (abreiseStr && todayStr !== abreiseStr) return false;
       }

@@ -94,7 +94,13 @@ function HomeContent() {
   } | null>(null)
   const [listDisplayMode, setListDisplayMode] = useState<'alles' | 'packliste'>('packliste')
   const [addDialogScrollContext, setAddDialogScrollContext] = useState<{ mainCategory: string; category: string } | null>(null)
+  const addDialogScrollContextRef = useRef<{ mainCategory: string; category: string } | null>(null)
   const addDialogScrollRef = useRef<HTMLDivElement>(null)
+
+  const handleScrollContextChange = useCallback((ctx: { mainCategory: string; category: string } | null) => {
+    addDialogScrollContextRef.current = ctx
+    setAddDialogScrollContext(ctx)
+  }, [])
   
   // FAB modal state
   const [searchTerm, setSearchTerm] = useState('')
@@ -808,27 +814,32 @@ function HomeContent() {
   const travelerNames = vacationMitreisende.map((m) => m.name)
   const getTravelerInitials = (name: string) => getInitials(name, travelerNames)
 
-  // Add-Dialog: beim Öffnen zur aktuellen Kategorie scrollen (aus Packliste-Kontext)
+  // Add-Dialog: beim Öffnen zur aktuellen Kategorie scrollen (Ref hat immer aktuellen Kontext)
   useEffect(() => {
-    if (!showAddItemDialog || !addDialogScrollContext?.mainCategory || !addDialogScrollRef.current) return
-    const ctx = addDialogScrollContext
+    if (!showAddItemDialog || !addDialogScrollRef.current) return
+    const ctx = addDialogScrollContextRef.current
+    if (!ctx?.mainCategory) return
     const scrollToTarget = () => {
       const scrollEl = addDialogScrollRef.current
       if (!scrollEl) return
-      let target = scrollEl.querySelector(
-        `[data-main-category="${CSS.escape(ctx.mainCategory)}"][data-category="${CSS.escape(ctx.category || '')}"]`
-      ) as HTMLElement | null
-      if (!target) {
-        target = scrollEl.querySelector(`[data-main-category="${CSS.escape(ctx.mainCategory)}"]`) as HTMLElement | null
+      const allWithMain = scrollEl.querySelectorAll<HTMLElement>('[data-main-category]')
+      let target: HTMLElement | null = null
+      for (const el of allWithMain) {
+        if (el.dataset.mainCategory !== ctx.mainCategory) continue
+        if (ctx.category && el.dataset.category === ctx.category) {
+          target = el
+          break
+        }
+        if (!target) target = el
       }
       if (target) {
-        const top = target.getBoundingClientRect().top - scrollEl.getBoundingClientRect().top + scrollEl.scrollTop
-        scrollEl.scrollTo({ top: Math.max(0, top - 16), behavior: 'smooth' })
+        target.scrollIntoView({ behavior: 'smooth', block: 'start', inline: 'nearest' })
       }
     }
-    const t = setTimeout(scrollToTarget, 250)
-    return () => clearTimeout(t)
-  }, [showAddItemDialog, addDialogScrollContext])
+    const delays = [100, 300, 500]
+    const ids = delays.map(d => setTimeout(scrollToTarget, d))
+    return () => ids.forEach(id => clearTimeout(id))
+  }, [showAddItemDialog])
 
   return (
     <div className="min-h-screen bg-[rgb(250,250,249)] flex max-w-full overflow-x-hidden">
@@ -918,7 +929,7 @@ function HomeContent() {
                   onOpenSettings={() => setShowPackSettings(true)}
                   vacationMitreisende={vacationMitreisende}
                   abreiseDatum={currentVacation?.abfahrtdatum ?? currentVacation?.startdatum ?? null}
-                  onScrollContextChange={setAddDialogScrollContext}
+                  onScrollContextChange={handleScrollContextChange}
                 />
               </div>
 
