@@ -170,7 +170,7 @@ export default function UrlaubePage() {
     }
   }
 
-  const handleEditVacation = (vacation: Vacation) => {
+  const handleEditVacation = (vacation: Vacation, fromDropdown = false) => {
     setEditingVacationId(vacation.id)
     setNewVacationForm({
       titel: vacation.titel,
@@ -181,7 +181,13 @@ export default function UrlaubePage() {
       reiseziel_adresse: vacation.reiseziel_adresse || '',
       land_region: vacation.land_region || ''
     })
-    setShowNewVacationDialog(true)
+    if (fromDropdown) {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => setShowNewVacationDialog(true))
+      })
+    } else {
+      setShowNewVacationDialog(true)
+    }
   }
 
   const handleCloseVacationDialog = () => {
@@ -609,7 +615,7 @@ export default function UrlaubePage() {
                             onSelect={() => {
                               ignoreNextCardClickRef.current = true
                               setOpenMenuId(null)
-                              handleEditVacation(vacation)
+                              handleEditVacation(vacation, true)
                             }}
                           >
                             <Pencil className="h-4 w-4 mr-2" />

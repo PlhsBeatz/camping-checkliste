@@ -54,12 +54,12 @@ export function ResponsiveModal({
 }: ResponsiveModalProps) {
   const isMobile = useIsMobile()
   const openedAtRef = React.useRef<number>(0)
+  const onOpenChangeRef = React.useRef(onOpenChange)
+  onOpenChangeRef.current = onOpenChange
 
-  React.useEffect(() => {
-    if (open && isMobile) {
-      openedAtRef.current = Date.now()
-    }
-  }, [open, isMobile])
+  if (open && isMobile) {
+    openedAtRef.current = Date.now()
+  }
 
   const handleOpenChange = React.useCallback(
     (nextOpen: boolean) => {
@@ -72,13 +72,13 @@ export function ResponsiveModal({
     [onOpenChange, isMobile, open]
   )
 
-  // Smartphone Zurück-Button: Drawer schließen statt Navigation
+  // Smartphone Zurück-Button: Drawer schließen statt Navigation (Ref für stabile Deps)
   React.useEffect(() => {
     if (!open || !isMobile || typeof window === 'undefined') return
     const state = { [DRAWER_STATE_KEY]: true }
     window.history.pushState(state, '')
     const onPopState = () => {
-      onOpenChange(false)
+      onOpenChangeRef.current(false)
     }
     window.addEventListener('popstate', onPopState)
     return () => {
@@ -87,7 +87,7 @@ export function ResponsiveModal({
         window.history.back()
       }
     }
-  }, [open, isMobile, onOpenChange])
+  }, [open, isMobile])
 
   if (customContent) {
     if (isMobile) {
