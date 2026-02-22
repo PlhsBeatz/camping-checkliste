@@ -10,7 +10,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { MoreVertical, Edit2, Trash2, RotateCcw } from "lucide-react";
+import { MoreVertical, Edit2, Trash2, RotateCcw, CheckCheck } from "lucide-react";
 import { useMemo, useState, useEffect, useRef } from "react";
 import { PackingItem as DBPackingItem } from "@/lib/db";
 import { MarkAllConfirmationDialog, type TravelerForMarkAll } from "./mark-all-confirmation-dialog";
@@ -701,6 +701,9 @@ export function PackingList({
     return categoryItems.some(item => !isItemFullyPackedForView(item));
   };
 
+  const hasItems = visibleItems.length > 0;
+  const allPackedFromCurrentView = hasItems && totalCount > 0 && packedCount === totalCount;
+
   return (
     <Tabs value={activeMainCategory} onValueChange={setActiveMainCategory} className="flex flex-col flex-1 min-h-0 min-w-0 w-full max-w-full">
       {/* Sticky-Bereich: Progress + Tabs – scrollt nie. Shadow unter den Tabs. */}
@@ -723,6 +726,7 @@ export function PackingList({
             </div>
           )}
         </div>
+        {!allPackedFromCurrentView && (
         <div
           className={cn(
             "tabs-scrollbar-auto bg-white overflow-x-auto overflow-y-hidden -mx-4 sm:-mx-6 pl-4 pr-4 sm:pl-6 sm:pr-6 pb-2",
@@ -750,11 +754,33 @@ export function PackingList({
             ))}
           </TabsList>
         </div>
+        )}
       </div>
 
-      {/* Scrollbarer Bereich: Hintergrund scrollt mit dem Inhalt, randlos */}
+      {/* Scrollbarer Bereich: Inhalt oder "Alles gepackt"-Ansicht */}
       <div className="flex-1 min-h-0 overflow-y-auto overflow-x-clip">
         <div className="min-h-full bg-scroll-pattern px-4 sm:px-6 pt-6 pb-6">
+        {allPackedFromCurrentView ? (
+          <div className="flex flex-col items-center justify-center min-h-[50vh] py-12">
+            <Card className="max-w-md w-full border-[rgb(45,79,30)]/20 shadow-lg bg-white/95">
+              <CardContent className="pt-8 pb-8 px-8 text-center">
+                <div className="mx-auto w-16 h-16 rounded-full bg-[rgb(45,79,30)]/10 flex items-center justify-center mb-6">
+                  <CheckCheck className="h-9 w-9 text-[rgb(45,79,30)]" />
+                </div>
+                <h2 className="text-xl font-semibold text-[rgb(45,79,30)] mb-2">
+                  Alles gepackt!
+                </h2>
+                <p className="text-muted-foreground mb-6">
+                  Aus Ihrer aktuellen Sicht sind alle Einträge abgehakt.
+                </p>
+                <p className="text-lg font-medium text-[rgb(45,79,30)]">
+                  Schönen Urlaub!
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+        ) : (
+        <>
         {visibleMainCategories.map(mainCat => (
             <TabsContent key={mainCat} value={mainCat} className="space-y-6 mt-14 m-0">
               {Object.entries(itemsByMainCategory[mainCat] ?? {}).map(([category, categoryItems]) => {
@@ -813,6 +839,8 @@ export function PackingList({
               })}
             </TabsContent>
           ))}
+        </>
+        )}
         {/* Undo Toast */}
         {undoToast && (
           <UndoToast
