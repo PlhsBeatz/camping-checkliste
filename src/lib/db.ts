@@ -53,6 +53,9 @@ export interface PackingItemMitreisender {
   gepackt_vorgemerkt?: boolean
   /** Pro-Person-Anzahl; bei undefined wird item.anzahl verwendet */
   anzahl?: number
+  /** Pro-Person-Transport; bei undefined wird item.transport_id verwendet */
+  transport_id?: string | null
+  transport_name?: string
 }
 
 export interface Mitreisender {
@@ -418,9 +421,10 @@ export async function getPackingItems(db: D1Database, vacationId: string): Promi
 
     // Batch: alle Mitreisende für diese Urlaubs-Packliste in einer Query (Subquery, kein IN mit vielen IDs)
     const mitQuery = `
-      SELECT pem.packlisten_eintrag_id, pem.mitreisender_id, m.name as mitreisender_name, pem.gepackt, pem.gepackt_vorgemerkt, pem.anzahl
+      SELECT pem.packlisten_eintrag_id, pem.mitreisender_id, m.name as mitreisender_name, pem.gepackt, pem.gepackt_vorgemerkt, pem.anzahl, pem.transport_id as pem_transport_id, t.name as pem_transport_name
       FROM packlisten_eintrag_mitreisende pem
       JOIN mitreisende m ON pem.mitreisender_id = m.id
+      LEFT JOIN transportmittel t ON pem.transport_id = t.id
       WHERE pem.packlisten_eintrag_id IN (
         SELECT pe.id FROM packlisten_eintraege pe
         JOIN packlisten p ON pe.packliste_id = p.id
@@ -435,9 +439,11 @@ export async function getPackingItems(db: D1Database, vacationId: string): Promi
       gepackt: number
       gepackt_vorgemerkt?: number
       anzahl?: number | null
+      pem_transport_id?: string | null
+      pem_transport_name?: string | null
     }>()
     const mitRows = mitResult.results || []
-    const mitreisendeByEintrag = new Map<string, Array<{ mitreisender_id: string; mitreisender_name: string; gepackt: boolean; gepackt_vorgemerkt?: boolean; anzahl?: number }>>()
+    const mitreisendeByEintrag = new Map<string, Array<{ mitreisender_id: string; mitreisender_name: string; gepackt: boolean; gepackt_vorgemerkt?: boolean; anzahl?: number; transport_id?: string | null; transport_name?: string }>>()
     for (const m of mitRows) {
       const eid = String(m.packlisten_eintrag_id)
       const arr = mitreisendeByEintrag.get(eid) || []
@@ -447,6 +453,8 @@ export async function getPackingItems(db: D1Database, vacationId: string): Promi
         gepackt: !!m.gepackt,
         gepackt_vorgemerkt: !!m.gepackt_vorgemerkt,
         anzahl: m.anzahl != null ? Number(m.anzahl) : undefined,
+        transport_id: m.pem_transport_id != null ? String(m.pem_transport_id) : undefined,
+        transport_name: m.pem_transport_name != null ? String(m.pem_transport_name) : undefined,
       })
       mitreisendeByEintrag.set(eid, arr)
     }
@@ -1900,13 +1908,14 @@ export async function confirmVorgemerktForMitreisender(
 }
 
 /**
- * Anzahl eines Mitreisenden für einen Packlisten-Eintrag setzen
+ * Anzahl und optional Transport eines Mitreisenden für einen Packlisten-Eintrag setzen
  */
 export async function setMitreisenderAnzahl(
   db: D1Database,
   packingItemId: string,
   mitreisenderId: string,
-  anzahl: number
+  anzahl: number,
+  transportId?: string | null
 ): Promise<boolean> {
   try {
     const existing = await db
@@ -1916,10 +1925,17 @@ export async function setMitreisenderAnzahl(
 
     if (!existing) return false
 
-    await db
-      .prepare('UPDATE packlisten_eintrag_mitreisende SET anzahl = ? WHERE packlisten_eintrag_id = ? AND mitreisender_id = ?')
-      .bind(anzahl, packingItemId, mitreisenderId)
-      .run()
+    if (transportId !== undefined) {
+      await db
+        .prepare('UPDATE packlisten_eintrag_mitreisende SET anzahl = ?, transport_id = ? WHERE packlisten_eintrag_id = ? AND mitreisender_id = ?')
+        .bind(anzahl, transportId || null, packingItemId, mitreisenderId)
+        .run()
+    } else {
+      await db
+        .prepare('UPDATE packlisten_eintrag_mitreisende SET anzahl = ? WHERE packlisten_eintrag_id = ? AND mitreisender_id = ?')
+        .bind(anzahl, packingItemId, mitreisenderId)
+        .run()
+    }
     return true
   } catch (error) {
     console.error('Error setting mitreisender anzahl:', error)

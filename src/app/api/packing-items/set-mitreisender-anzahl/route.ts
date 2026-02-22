@@ -22,8 +22,9 @@ export async function PUT(request: NextRequest) {
       packingItemId?: string
       mitreisenderId?: string
       anzahl?: number
+      transportId?: string | null
     }
-    const { packingItemId, mitreisenderId, anzahl } = body
+    const { packingItemId, mitreisenderId, anzahl, transportId } = body
 
     if (!packingItemId || !mitreisenderId || anzahl === undefined || anzahl < 0) {
       return NextResponse.json(
@@ -40,7 +41,7 @@ export async function PUT(request: NextRequest) {
       }
     }
 
-    const success = await setMitreisenderAnzahl(db, packingItemId, mitreisenderId, anzahl)
+    const success = await setMitreisenderAnzahl(db, packingItemId, mitreisenderId, anzahl, transportId)
 
     if (!success) {
       return NextResponse.json(

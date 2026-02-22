@@ -720,11 +720,14 @@ function HomeContent() {
     setEditingForMitreisenderId(forProfile ? selectedPackProfile : null)
     const anzahl =
       selectedPackProfile && personEntry?.anzahl != null ? personEntry.anzahl : item.anzahl
+    const transportForForm = selectedPackProfile && personEntry?.transport_id !== undefined && personEntry?.transport_id !== null
+      ? (personEntry.transport_id ?? '')
+      : (item.transport_id || '')
     setPackingItemForm({
       gegenstandId: item.gegenstand_id,
       anzahl: String(anzahl ?? item.anzahl),
       bemerkung: item.bemerkung || '',
-      transportId: item.transport_id || ''
+      transportId: transportForForm
     })
     setShowEditItemDialog(true)
   }
@@ -746,6 +749,7 @@ function HomeContent() {
             packingItemId: editingPackingItemId,
             mitreisenderId: editingForMitreisenderId,
             anzahl: parseInt(packingItemForm.anzahl) || 1,
+            transportId: packingItemForm.transportId || null,
           }),
         })
         const data = (await res.json()) as ApiResponse<boolean>
@@ -1131,7 +1135,6 @@ function HomeContent() {
                   onChange={(e) => setPackingItemForm({ ...packingItemForm, bemerkung: e.target.value })}
                 />
               </div>
-              {selectedPackProfile === null && (
               <div>
                 <Label htmlFor="edit-transport">Transport</Label>
                 <Select
@@ -1155,8 +1158,12 @@ function HomeContent() {
                     ))}
                   </SelectContent>
                 </Select>
+                {editingForMitreisenderId && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Gilt nur für diese Person.
+                  </p>
+                )}
               </div>
-              )}
                 </>
               )}
               <Button onClick={handleUpdatePackingItem} disabled={isLoading} className="w-full">

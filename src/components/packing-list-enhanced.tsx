@@ -530,7 +530,7 @@ export function PackingList({
   const [tabsScrollbarVisible, setTabsScrollbarVisible] = useState(false);
   const tabsScrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const categoryRefsMap = useRef<Map<string, HTMLDivElement | null>>(new Map());
-  const tabTouchStartX = useRef<number | null>(null);
+  const contentTouchStart = useRef<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
     return () => {
@@ -811,20 +811,6 @@ export function PackingList({
               tabsScrollTimeoutRef.current = null;
             }, 800);
           }}
-          onTouchStart={(e) => {
-            tabTouchStartX.current = e.targetTouches[0]?.clientX ?? null;
-          }}
-          onTouchEnd={(e) => {
-            const start = tabTouchStartX.current;
-            tabTouchStartX.current = null;
-            if (start == null) return;
-            const end = e.changedTouches[0]?.clientX;
-            if (end == null) return;
-            const delta = start - end;
-            const minSwipe = 50;
-            if (delta > minSwipe) handleTabSwipe('left');
-            else if (delta < -minSwipe) handleTabSwipe('right');
-          }}
         >
           <TabsList className="inline-flex w-max justify-start bg-transparent p-0 h-auto rounded-none">
             {tabsForSwipe.map(mainCat => (
@@ -840,8 +826,28 @@ export function PackingList({
         </div>
       </div>
 
-      {/* Scrollbarer Bereich: Inhalt oder "Alles gepackt"-Ansicht */}
-      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-clip">
+      {/* Scrollbarer Bereich: Inhalt oder "Alles gepackt"-Ansicht – Wischgeste wechselt Tab */}
+      <div
+        className="flex-1 min-h-0 overflow-y-auto overflow-x-clip"
+        onTouchStart={(e) => {
+          const t = e.targetTouches[0];
+          if (t) contentTouchStart.current = { x: t.clientX, y: t.clientY };
+        }}
+        onTouchEnd={(e) => {
+          const start = contentTouchStart.current;
+          contentTouchStart.current = null;
+          if (!start) return;
+          const t = e.changedTouches[0];
+          if (!t) return;
+          const deltaX = start.x - t.clientX;
+          const deltaY = start.y - t.clientY;
+          const minSwipe = 50;
+          if (Math.abs(deltaX) >= minSwipe && Math.abs(deltaX) > Math.abs(deltaY)) {
+            if (deltaX > 0) handleTabSwipe('left');
+            else handleTabSwipe('right');
+          }
+        }}
+      >
         <div className="min-h-full bg-scroll-pattern px-4 sm:px-6 pt-6 pb-6">
         {allPackedFromCurrentView && hidePackedItems ? (
           <div className="flex flex-col items-center justify-center min-h-[50vh] py-12">

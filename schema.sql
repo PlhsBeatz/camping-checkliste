@@ -180,6 +180,7 @@ CREATE TABLE IF NOT EXISTS packlisten_eintrag_mitreisende (
     packlisten_eintrag_id TEXT NOT NULL,
     mitreisender_id TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT (datetime('now')), gepackt INTEGER NOT NULL DEFAULT 0,
+    transport_id TEXT,
     PRIMARY KEY (packlisten_eintrag_id, mitreisender_id),
     FOREIGN KEY (packlisten_eintrag_id) REFERENCES packlisten_eintraege(id) ON DELETE CASCADE,
     FOREIGN KEY (mitreisender_id) REFERENCES mitreisende(id) ON DELETE CASCADE
