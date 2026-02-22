@@ -44,14 +44,15 @@ export default function EinladungPage() {
     if (!token) return
     fetch(`/api/auth/accept-invite?token=${encodeURIComponent(token)}`)
       .then(res => res.json())
-      .then((data: { success?: boolean; mitreisender_name?: string; role?: string; error?: string }) => {
-        if (data.success && data.mitreisender_name) {
+      .then((data: unknown) => {
+        const d = data as { success?: boolean; mitreisender_name?: string; role?: string; error?: string }
+        if (d.success && d.mitreisender_name) {
           setInvitation({
-            mitreisender_name: data.mitreisender_name,
-            role: data.role ?? ''
+            mitreisender_name: d.mitreisender_name,
+            role: d.role ?? ''
           })
         } else {
-          setError(data.error ?? 'Einladung ungültig')
+          setError(d.error ?? 'Einladung ungültig')
         }
       })
       .catch(() => setError('Fehler beim Laden'))
