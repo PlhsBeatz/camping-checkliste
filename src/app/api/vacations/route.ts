@@ -1,11 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDB, getVacations, createVacation, updateVacation, deleteVacation, CloudflareEnv } from '@/lib/db'
+import { requireAuth, requireAdmin } from '@/lib/api-auth'
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    const auth = await requireAuth(request)
+    if (auth instanceof NextResponse) return auth
+    const { userContext } = auth
     const env = process.env as unknown as CloudflareEnv
     const db = getDB(env)
-    const vacations = await getVacations(db)
+    const mitreisenderFilter = userContext.role === 'gast' ? userContext.mitreisenderId : undefined
+    const vacations = await getVacations(db, mitreisenderFilter)
     return NextResponse.json({ success: true, data: vacations })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error)
@@ -15,6 +20,10 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
+    const auth = await requireAuth(request)
+    if (auth instanceof NextResponse) return auth
+    const adminErr = requireAdmin(auth.userContext)
+    if (adminErr) return adminErr
     const env = process.env as unknown as CloudflareEnv
     const db = getDB(env)
     const body = (await request.json()) as {
@@ -63,6 +72,10 @@ export async function POST(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
+    const auth = await requireAuth(request)
+    if (auth instanceof NextResponse) return auth
+    const adminErr = requireAdmin(auth.userContext)
+    if (adminErr) return adminErr
     const env = process.env as unknown as CloudflareEnv
     const db = getDB(env)
     const body = (await request.json()) as {
@@ -96,6 +109,10 @@ export async function PUT(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
+    const auth = await requireAuth(request)
+    if (auth instanceof NextResponse) return auth
+    const adminErr = requireAdmin(auth.userContext)
+    if (adminErr) return adminErr
     const env = process.env as unknown as CloudflareEnv
     const db = getDB(env)
     const { searchParams } = new URL(request.url)

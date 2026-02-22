@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDB, getEquipmentItems, CloudflareEnv } from '@/lib/db'
+import { requireAuth, requireAdmin } from '@/lib/api-auth'
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    const auth = await requireAuth(request)
+    if (auth instanceof NextResponse) return auth
     const env = process.env as unknown as CloudflareEnv
     const db = getDB(env)
     const items = await getEquipmentItems(db)
@@ -15,6 +18,10 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
+    const auth = await requireAuth(request)
+    if (auth instanceof NextResponse) return auth
+    const adminErr = requireAdmin(auth.userContext)
+    if (adminErr) return adminErr
     const env = process.env as unknown as CloudflareEnv
     const _db = getDB(env)
     const _body = (await request.json()) as Record<string, unknown>

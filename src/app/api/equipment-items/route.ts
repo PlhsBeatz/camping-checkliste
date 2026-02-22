@@ -10,6 +10,7 @@ import {
   getAllTagsForEquipment,
   CloudflareEnv,
 } from '@/lib/db'
+import { requireAuth, requireAdmin } from '@/lib/api-auth'
 
 interface EquipmentItemBody {
   was?: string
@@ -39,6 +40,8 @@ interface PutEquipmentBody extends EquipmentItemBody {
 
 export async function GET(request: NextRequest) {
   try {
+    const auth = await requireAuth(request)
+    if (auth instanceof NextResponse) return auth
     const env = process.env as unknown as CloudflareEnv
     const db = getDB(env)
     const { searchParams } = new URL(request.url)
@@ -79,6 +82,10 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const auth = await requireAuth(request)
+    if (auth instanceof NextResponse) return auth
+    const adminErr = requireAdmin(auth.userContext)
+    if (adminErr) return adminErr
     const env = process.env as unknown as CloudflareEnv
     const db = getDB(env)
     const body = (await request.json()) as PostEquipmentBody
@@ -138,6 +145,10 @@ export async function POST(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
+    const auth = await requireAuth(request)
+    if (auth instanceof NextResponse) return auth
+    const adminErr = requireAdmin(auth.userContext)
+    if (adminErr) return adminErr
     const env = process.env as unknown as CloudflareEnv
     const db = getDB(env)
     const body = (await request.json()) as PutEquipmentBody
@@ -196,6 +207,10 @@ export async function PUT(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
+    const auth = await requireAuth(request)
+    if (auth instanceof NextResponse) return auth
+    const adminErr = requireAdmin(auth.userContext)
+    if (adminErr) return adminErr
     const env = process.env as unknown as CloudflareEnv
     const db = getDB(env)
     const { searchParams } = new URL(request.url)

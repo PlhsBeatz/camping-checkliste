@@ -1,5 +1,7 @@
 'use client'
 
+import { useAuth } from '@/components/auth-provider'
+import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { NavigationSidebar } from '@/components/navigation-sidebar'
 import { TagManager } from '@/components/tag-manager'
@@ -12,8 +14,14 @@ import { getCachedTags } from '@/lib/offline-sync'
 import { cacheTags } from '@/lib/offline-db'
 
 export default function TagsPage() {
+  const { canAccessConfig, loading } = useAuth()
+  const router = useRouter()
   const [showNavSidebar, setShowNavSidebar] = useState(false)
   const [tags, setTags] = useState<Tag[]>([])
+
+  useEffect(() => {
+    if (!loading && !canAccessConfig) router.replace('/')
+  }, [loading, canAccessConfig, router])
 
   // Sidebar offen: Body-Scroll sperren
   useEffect(() => {

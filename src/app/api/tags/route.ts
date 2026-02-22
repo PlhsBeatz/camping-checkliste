@@ -7,9 +7,12 @@ import {
   deleteTag,
   CloudflareEnv 
 } from '@/lib/db'
+import { requireAuth, requireAdmin } from '@/lib/api-auth'
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    const auth = await requireAuth(request)
+    if (auth instanceof NextResponse) return auth
     const env = process.env as unknown as CloudflareEnv
     const db = getDB(env)
     const tags = await getTags(db)
@@ -23,6 +26,10 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
+    const auth = await requireAuth(request)
+    if (auth instanceof NextResponse) return auth
+    const adminErr = requireAdmin(auth.userContext)
+    if (adminErr) return adminErr
     const env = process.env as unknown as CloudflareEnv
     const db = getDB(env)
     const body = (await request.json()) as { titel?: string; farbe?: string | null; icon?: string | null; beschreibung?: string | null }
@@ -47,6 +54,10 @@ export async function POST(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
+    const auth = await requireAuth(request)
+    if (auth instanceof NextResponse) return auth
+    const adminErr = requireAdmin(auth.userContext)
+    if (adminErr) return adminErr
     const env = process.env as unknown as CloudflareEnv
     const db = getDB(env)
     const body = (await request.json()) as { id?: string; titel?: string; farbe?: string | null; icon?: string | null; beschreibung?: string | null }
@@ -71,6 +82,10 @@ export async function PUT(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
+    const auth = await requireAuth(request)
+    if (auth instanceof NextResponse) return auth
+    const adminErr = requireAdmin(auth.userContext)
+    if (adminErr) return adminErr
     const env = process.env as unknown as CloudflareEnv
     const db = getDB(env)
     const { searchParams } = new URL(request.url)

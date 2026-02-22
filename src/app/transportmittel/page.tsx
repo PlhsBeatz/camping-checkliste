@@ -1,5 +1,7 @@
 'use client'
 
+import { useAuth } from '@/components/auth-provider'
+import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { NavigationSidebar } from '@/components/navigation-sidebar'
@@ -13,8 +15,14 @@ import { getCachedTransportVehicles } from '@/lib/offline-sync'
 import { cacheTransportVehicles } from '@/lib/offline-db'
 
 export default function TransportmittelPage() {
+  const { canAccessConfig, loading } = useAuth()
+  const router = useRouter()
   const [showNavSidebar, setShowNavSidebar] = useState(false)
   const [vehicles, setVehicles] = useState<TransportVehicle[]>([])
+
+  useEffect(() => {
+    if (!loading && !canAccessConfig) router.replace('/')
+  }, [loading, canAccessConfig, router])
 
   // Sidebar offen: Body-Scroll sperren
   useEffect(() => {

@@ -8,12 +8,17 @@ import {
   deletePackingItem,
   getPacklisteId,
   getVacationIdFromPackingItem,
+  getMitreisendeForVacation,
   CloudflareEnv,
 } from '@/lib/db'
 import { notifyPackingSyncChange } from '@/lib/packing-sync'
+import { requireAuth } from '@/lib/api-auth'
+import { canAccessVacation } from '@/lib/permissions'
 
 export async function GET(request: NextRequest) {
   try {
+    const auth = await requireAuth(request)
+    if (auth instanceof NextResponse) return auth
     const { searchParams } = new URL(request.url)
     const vacationId = searchParams.get('vacationId')
 
@@ -23,6 +28,11 @@ export async function GET(request: NextRequest) {
 
     const env = process.env as unknown as CloudflareEnv
     const db = getDB(env)
+    const mitreisende = await getMitreisendeForVacation(db, vacationId)
+    const ids = mitreisende.map(m => m.id)
+    if (!canAccessVacation(auth.userContext, ids)) {
+      return NextResponse.json({ error: 'Keine Berechtigung' }, { status: 403 })
+    }
     const items = await getPackingItems(db, vacationId)
 
     return NextResponse.json({ success: true, data: items })
@@ -34,6 +44,8 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const auth = await requireAuth(request)
+    if (auth instanceof NextResponse) return auth
     const env = process.env as unknown as CloudflareEnv
     const db = getDB(env)
     const body = (await request.json()) as {
@@ -48,6 +60,11 @@ export async function POST(request: NextRequest) {
 
     if (!vacationId || !gegenstandId) {
       return NextResponse.json({ error: 'vacationId and gegenstandId are required' }, { status: 400 })
+    }
+
+    const mitreisende = await getMitreisendeForVacation(db, vacationId)
+    if (!canAccessVacation(auth.userContext, mitreisende.map(m => m.id))) {
+      return NextResponse.json({ error: 'Keine Berechtigung' }, { status: 403 })
     }
 
     const packlisteId = await getPacklisteId(db, vacationId)
@@ -73,6 +90,8 @@ export async function POST(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
+    const auth = await requireAuth(request)
+    if (auth instanceof NextResponse) return auth
     const env = process.env as unknown as CloudflareEnv
     const db = getDB(env)
     const body = (await request.json()) as {
@@ -88,6 +107,14 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'id is required' }, { status: 400 })
     }
 
+    const vacationId = await getVacationIdFromPackingItem(db, id)
+    if (vacationId) {
+      const mitreisende = await getMitreisendeForVacation(db, vacationId)
+      if (!canAccessVacation(auth.userContext, mitreisende.map(m => m.id))) {
+        return NextResponse.json({ error: 'Keine Berechtigung' }, { status: 403 })
+      }
+    }
+
     const success = await updatePackingItem(db, id, {
       gepackt,
       anzahl,
@@ -95,12 +122,9 @@ export async function PUT(request: NextRequest) {
       transport_id: transport_id ?? undefined,
     })
 
-    if (success) {
-      const vacationId = await getVacationIdFromPackingItem(db, id)
-      if (vacationId) {
-        const cfEnv = getCloudflareContext().env as unknown as CloudflareEnv
-        await notifyPackingSyncChange(cfEnv, vacationId)
-      }
+    if (success && vacationId) {
+      const cfEnv = getCloudflareContext().env as unknown as CloudflareEnv
+      await notifyPackingSyncChange(cfEnv, vacationId)
     }
 
     return NextResponse.json({ success: true, data: success })
@@ -112,6 +136,8 @@ export async function PUT(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
+    const auth = await requireAuth(request)
+    if (auth instanceof NextResponse) return auth
     const env = process.env as unknown as CloudflareEnv
     const db = getDB(env)
     const { searchParams } = new URL(request.url)
@@ -122,6 +148,12 @@ export async function DELETE(request: NextRequest) {
     }
 
     const vacationId = await getVacationIdFromPackingItem(db, id)
+    if (vacationId) {
+      const mitreisende = await getMitreisendeForVacation(db, vacationId)
+      if (!canAccessVacation(auth.userContext, mitreisende.map(m => m.id))) {
+        return NextResponse.json({ error: 'Keine Berechtigung' }, { status: 403 })
+      }
+    }
     const success = await deletePackingItem(db, id)
 
     if (!success) {

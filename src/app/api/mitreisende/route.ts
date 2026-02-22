@@ -9,6 +9,8 @@ import {
   setMitreisendeForVacation,
   CloudflareEnv
 } from '@/lib/db'
+import { requireAuth, requireAdmin } from '@/lib/api-auth'
+import { canAccessVacation } from '@/lib/permissions'
 
 /**
  * GET /api/mitreisende
@@ -16,18 +18,26 @@ import {
  */
 export async function GET(request: NextRequest) {
   try {
+    const auth = await requireAuth(request)
+    if (auth instanceof NextResponse) return auth
+    const { userContext } = auth
     const { searchParams } = new URL(request.url)
     const vacationId = searchParams.get('vacationId')
     const env = process.env as unknown as CloudflareEnv
     const db = getDB(env)
 
-    let mitreisende
     if (vacationId) {
-      mitreisende = await getMitreisendeForVacation(db, vacationId)
-    } else {
-      mitreisende = await getMitreisende(db)
+      const mitreisende = await getMitreisendeForVacation(db, vacationId)
+      const ids = mitreisende.map(m => m.id)
+      if (!canAccessVacation(userContext, ids)) {
+        return NextResponse.json({ error: 'Keine Berechtigung für diesen Urlaub' }, { status: 403 })
+      }
+      return NextResponse.json({ success: true, data: mitreisende })
     }
 
+    const adminErr = requireAdmin(userContext)
+    if (adminErr) return adminErr
+    const mitreisende = await getMitreisende(db)
     return NextResponse.json({ success: true, data: mitreisende })
   } catch (error) {
     console.error('Error in GET /api/mitreisende:', error)
@@ -42,6 +52,10 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
+    const auth = await requireAuth(request)
+    if (auth instanceof NextResponse) return auth
+    const adminErr = requireAdmin(auth.userContext)
+    if (adminErr) return adminErr
     const env = process.env as unknown as CloudflareEnv
     const db = getDB(env)
 
@@ -83,6 +97,10 @@ export async function POST(request: NextRequest) {
  */
 export async function PUT(request: NextRequest) {
   try {
+    const auth = await requireAuth(request)
+    if (auth instanceof NextResponse) return auth
+    const adminErr = requireAdmin(auth.userContext)
+    if (adminErr) return adminErr
     const env = process.env as unknown as CloudflareEnv
     const db = getDB(env)
 
@@ -137,6 +155,10 @@ export async function PUT(request: NextRequest) {
  */
 export async function DELETE(request: NextRequest) {
   try {
+    const auth = await requireAuth(request)
+    if (auth instanceof NextResponse) return auth
+    const adminErr = requireAdmin(auth.userContext)
+    if (adminErr) return adminErr
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
     const env = process.env as unknown as CloudflareEnv

@@ -133,6 +133,31 @@ export interface Tag {
   created_at: string
 }
 
+export type UserRole = 'admin' | 'kind' | 'gast'
+
+export interface User {
+  id: string
+  email: string
+  password_hash: string
+  role: UserRole
+  mitreisender_id: string | null
+  password_reset_token?: string | null
+  password_reset_expires?: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface Einladung {
+  id: string
+  token: string
+  mitreisender_id: string
+  role: 'kind' | 'gast'
+  erstellt_von: string | null
+  eingeladen_am: string
+  angenommen_am: string | null
+  ablauf: string | null
+}
+
 export interface CloudflareEnv {
   DB: D1Database
   PACKING_SYNC_DO?: DurableObjectNamespace
@@ -187,9 +212,25 @@ export async function initializeDatabase(db: D1Database): Promise<void> {
 
 /**
  * Abrufen aller Urlaubsreisen
+ * Für Gäste: optional nur Urlaube, in denen der Mitreisende enthalten ist
  */
-export async function getVacations(db: D1Database): Promise<Vacation[]> {
+export async function getVacations(
+  db: D1Database,
+  mitreisenderIdFilter?: string | null
+): Promise<Vacation[]> {
   try {
+    if (mitreisenderIdFilter) {
+      const result = await db
+        .prepare(
+          `SELECT u.* FROM urlaube u
+           INNER JOIN urlaub_mitreisende um ON u.id = um.urlaub_id
+           WHERE um.mitreisender_id = ?
+           ORDER BY u.startdatum DESC`
+        )
+        .bind(mitreisenderIdFilter)
+        .all<Vacation>()
+      return result.results || []
+    }
     const result = await db.prepare('SELECT * FROM urlaube ORDER BY startdatum DESC').all<Vacation>()
     return result.results || []
   } catch (error) {
@@ -2354,5 +2395,182 @@ export async function getEquipmentByTags(
   } catch (error) {
     console.error('Error fetching equipment by tags:', error)
     return []
+  }
+}
+
+// --- Auth: Users ---
+
+export async function getUserByEmail(db: D1Database, email: string): Promise<User | null> {
+  const row = await db
+    .prepare('SELECT * FROM users WHERE email = ?')
+    .bind(email.toLowerCase().trim())
+    .first<User>()
+  return row
+}
+
+export async function getUserById(db: D1Database, id: string): Promise<User | null> {
+  const row = await db
+    .prepare('SELECT * FROM users WHERE id = ?')
+    .bind(id)
+    .first<User>()
+  return row
+}
+
+export async function getUsersCount(db: D1Database): Promise<number> {
+  const r = await db.prepare('SELECT COUNT(*) as c FROM users').first<{ c: number }>()
+  return r?.c ?? 0
+}
+
+export async function createUser(
+  db: D1Database,
+  email: string,
+  passwordHash: string,
+  role: UserRole,
+  mitreisenderId: string | null
+): Promise<string | null> {
+  try {
+    const id = crypto.randomUUID()
+    await db
+      .prepare(
+        'INSERT INTO users (id, email, password_hash, role, mitreisender_id) VALUES (?, ?, ?, ?, ?)'
+      )
+      .bind(id, email.toLowerCase().trim(), passwordHash, role, mitreisenderId)
+      .run()
+    return id
+  } catch (error) {
+    console.error('Error creating user:', error)
+    return null
+  }
+}
+
+export async function updateUserPassword(
+  db: D1Database,
+  userId: string,
+  passwordHash: string
+): Promise<boolean> {
+  try {
+    await db
+      .prepare(
+        'UPDATE users SET password_hash = ?, password_reset_token = NULL, password_reset_expires = NULL, updated_at = datetime(\'now\') WHERE id = ?'
+      )
+      .bind(passwordHash, userId)
+      .run()
+    return true
+  } catch (error) {
+    console.error('Error updating user password:', error)
+    return false
+  }
+}
+
+export async function updateMitreisenderUserId(
+  db: D1Database,
+  mitreisenderId: string,
+  userId: string | null
+): Promise<boolean> {
+  try {
+    await db
+      .prepare('UPDATE mitreisende SET user_id = ?, updated_at = datetime(\'now\') WHERE id = ?')
+      .bind(userId, mitreisenderId)
+      .run()
+    return true
+  } catch (error) {
+    console.error('Error updating mitreisender user_id:', error)
+    return false
+  }
+}
+
+// --- Auth: Einladungen ---
+
+export async function getInvitationByToken(
+  db: D1Database,
+  token: string
+): Promise<(Einladung & { mitreisender_name: string }) | null> {
+  const row = await db
+    .prepare(
+      `SELECT e.*, m.name as mitreisender_name 
+       FROM einladungen e 
+       JOIN mitreisende m ON e.mitreisender_id = m.id 
+       WHERE e.token = ? AND e.angenommen_am IS NULL`
+    )
+    .bind(token)
+    .first<Einladung & { mitreisender_name: string }>()
+  return row
+}
+
+export async function createInvitation(
+  db: D1Database,
+  mitreisenderId: string,
+  role: 'kind' | 'gast',
+  createdByUserId: string
+): Promise<{ id: string; token: string } | null> {
+  try {
+    const id = crypto.randomUUID()
+    const token = crypto.randomUUID() + crypto.randomUUID().replace(/-/g, '')
+    await db
+      .prepare(
+        'INSERT INTO einladungen (id, token, mitreisender_id, role, erstellt_von) VALUES (?, ?, ?, ?, ?)'
+      )
+      .bind(id, token, mitreisenderId, role, createdByUserId)
+      .run()
+    return { id, token }
+  } catch (error) {
+    console.error('Error creating invitation:', error)
+    return null
+  }
+}
+
+export async function acceptInvitation(
+  db: D1Database,
+  invitationId: string
+): Promise<boolean> {
+  try {
+    await db
+      .prepare(
+        'UPDATE einladungen SET angenommen_am = datetime(\'now\') WHERE id = ?'
+      )
+      .bind(invitationId)
+      .run()
+    return true
+  } catch (error) {
+    console.error('Error accepting invitation:', error)
+    return false
+  }
+}
+
+// --- Auth: Mitreisende Berechtigungen ---
+
+export async function getMitreisendeBerechtigungen(
+  db: D1Database,
+  mitreisenderId: string
+): Promise<string[]> {
+  const rows = await db
+    .prepare('SELECT berechtigung FROM mitreisende_berechtigungen WHERE mitreisender_id = ?')
+    .bind(mitreisenderId)
+    .all<{ berechtigung: string }>()
+  return (rows.results || []).map(r => r.berechtigung)
+}
+
+export async function setMitreisendeBerechtigungen(
+  db: D1Database,
+  mitreisenderId: string,
+  berechtigungen: string[]
+): Promise<boolean> {
+  try {
+    await db
+      .prepare('DELETE FROM mitreisende_berechtigungen WHERE mitreisender_id = ?')
+      .bind(mitreisenderId)
+      .run()
+    for (const b of berechtigungen) {
+      await db
+        .prepare(
+          'INSERT INTO mitreisende_berechtigungen (mitreisender_id, berechtigung) VALUES (?, ?)'
+        )
+        .bind(mitreisenderId, b)
+        .run()
+    }
+    return true
+  } catch (error) {
+    console.error('Error setting mitreisende berechtigungen:', error)
+    return false
   }
 }

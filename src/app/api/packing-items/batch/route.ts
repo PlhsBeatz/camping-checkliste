@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getCloudflareContext } from '@opennextjs/cloudflare'
-import { getDB, addPackingItem, getPacklisteId, CloudflareEnv } from '@/lib/db'
+import { getDB, addPackingItem, getPacklisteId, getMitreisendeForVacation, CloudflareEnv } from '@/lib/db'
 import { notifyPackingSyncChange } from '@/lib/packing-sync'
+import { requireAuth } from '@/lib/api-auth'
+import { canAccessVacation } from '@/lib/permissions'
 
 /** Batch: mehrere Packlisten-Einträge in einem Request – vermeidet Worker-Überlastung */
 export async function POST(request: NextRequest) {
   try {
+    const auth = await requireAuth(request)
+    if (auth instanceof NextResponse) return auth
     const env = process.env as unknown as CloudflareEnv
     const db = getDB(env)
     const body = (await request.json()) as {
@@ -25,6 +29,11 @@ export async function POST(request: NextRequest) {
         { error: 'vacationId and non-empty items array required' },
         { status: 400 }
       )
+    }
+
+    const mitreisende = await getMitreisendeForVacation(db, vacationId)
+    if (!canAccessVacation(auth.userContext, mitreisende.map(m => m.id))) {
+      return NextResponse.json({ error: 'Keine Berechtigung' }, { status: 403 })
     }
 
     const packlisteId = await getPacklisteId(db, vacationId)

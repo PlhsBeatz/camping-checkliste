@@ -1,5 +1,7 @@
 'use client'
 
+import { useAuth } from '@/components/auth-provider'
+import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { NavigationSidebar } from '@/components/navigation-sidebar'
 import { CategoryManager } from '@/components/category-manager'
@@ -24,7 +26,13 @@ interface CategoryWithMain extends Category {
 }
 
 export default function KategorienPage() {
+  const { canAccessConfig, loading } = useAuth()
+  const router = useRouter()
   const [showNavSidebar, setShowNavSidebar] = useState(false)
+
+  useEffect(() => {
+    if (!loading && !canAccessConfig) router.replace('/')
+  }, [loading, canAccessConfig, router])
   const [categories, setCategories] = useState<CategoryWithMain[]>([])
   const [mainCategories, setMainCategories] = useState<MainCategory[]>([])
   const [transportVehicles, setTransportVehicles] = useState<TransportVehicle[]>([])

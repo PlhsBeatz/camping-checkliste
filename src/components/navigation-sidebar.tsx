@@ -3,7 +3,8 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { ChevronDown, ChevronRight, Tent } from 'lucide-react'
+import { ChevronDown, ChevronRight, Tent, LogOut } from 'lucide-react'
+import { useAuth } from '@/components/auth-provider'
 import { cn } from '@/lib/utils'
 import { subscribeToOnlineStatus } from '@/lib/offline-sync'
 
@@ -14,6 +15,7 @@ interface NavigationSidebarProps {
 
 export function NavigationSidebar({ isOpen, onClose }: NavigationSidebarProps) {
   const pathname = usePathname()
+  const { canAccessConfig, logout } = useAuth()
   const [configExpanded, setConfigExpanded] = useState(false)
   const [isOnline, setIsOnline] = useState(true)
 
@@ -110,7 +112,8 @@ export function NavigationSidebar({ isOpen, onClose }: NavigationSidebarProps) {
             ))}
           </div>
 
-          {/* Configuration Dropdown */}
+          {/* Configuration Dropdown – nur für Admin */}
+          {canAccessConfig && (
           <div className="mt-4 px-3">
             <button
               onClick={() => setConfigExpanded(!configExpanded)}
@@ -156,7 +159,19 @@ export function NavigationSidebar({ isOpen, onClose }: NavigationSidebarProps) {
               </div>
             )}
           </div>
+          )}
         </nav>
+
+        {/* Logout & Status */}
+        <div className="px-3 py-2">
+          <button
+            onClick={() => logout()}
+            className="flex items-center gap-3 w-full px-4 py-3 text-sm font-medium text-gray-700 hover:bg-[rgb(250,250,249)] rounded-lg transition-colors"
+          >
+            <LogOut className="w-5 h-5" />
+            <span className="text-xs tracking-wide">ABMELDEN</span>
+          </button>
+        </div>
 
         {/* Status Indicator */}
         <div className="p-6 bg-[rgb(250,250,249)] border-t border-gray-200">

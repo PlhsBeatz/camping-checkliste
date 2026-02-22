@@ -30,6 +30,8 @@ interface EquipmentTableProps {
   tags: Tag[]
   onEdit: (item: EquipmentItem) => void
   onDelete: (id: string) => void
+  /** Nur lesen – keine Bearbeitung/Löschung (z.B. für Kinder/Gäste) */
+  readOnly?: boolean
   /** Dynamische Höhe bis zum unteren Bildschirmrand */
   dynamicHeight?: boolean
 }
@@ -42,6 +44,7 @@ export const EquipmentTable = React.memo(({
   tags,
   onEdit,
   onDelete,
+  readOnly = false,
   dynamicHeight = false,
 }: EquipmentTableProps) => {
   const [searchTerm, setSearchTerm] = useState('')
@@ -618,6 +621,7 @@ export const EquipmentTable = React.memo(({
                       ) : null}
                     </div>
                     <div className={`px-1 py-2 sticky right-0 bg-white flex items-center justify-center ${colAlign.actions}`}>
+                      {!readOnly && (
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button variant="ghost" size="sm" className="h-7 w-7 min-w-7 p-0">
@@ -646,6 +650,7 @@ export const EquipmentTable = React.memo(({
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
+                      )}
                     </div>
                   </div>
                 )

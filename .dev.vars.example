@@ -1,0 +1,5 @@
+# Kopiere diese Datei nach .dev.vars und füge deine Werte ein.
+# .dev.vars wird von Wrangler geladen (nicht ins Repo committen).
+
+# Mind. 32 Zeichen – für JWT-Signatur der Auth-Session
+JWT_SECRET=dein-mindestens-32-zeichen-langer-geheimer-schluessel

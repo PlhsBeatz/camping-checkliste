@@ -5,11 +5,16 @@ import {
   CloudflareEnv,
   removeMitreisenderFromPackingItem,
   getVacationIdFromPackingItem,
+  getMitreisendeForVacation,
 } from '@/lib/db'
 import { notifyPackingSyncChange } from '@/lib/packing-sync'
+import { requireAuth } from '@/lib/api-auth'
+import { canAccessVacation } from '@/lib/permissions'
 
 export async function DELETE(request: NextRequest) {
   try {
+    const auth = await requireAuth(request)
+    if (auth instanceof NextResponse) return auth
     const { searchParams } = new URL(request.url)
     const packingItemId = searchParams.get('packingItemId')
     const mitreisenderId = searchParams.get('mitreisenderId')
@@ -25,6 +30,12 @@ export async function DELETE(request: NextRequest) {
     const db = getDB(env)
 
     const vacationId = await getVacationIdFromPackingItem(db, packingItemId)
+    if (vacationId) {
+      const mitreisende = await getMitreisendeForVacation(db, vacationId)
+      if (!canAccessVacation(auth.userContext, mitreisende.map(m => m.id))) {
+        return NextResponse.json({ error: 'Keine Berechtigung' }, { status: 403 })
+      }
+    }
 
     const success = await removeMitreisenderFromPackingItem(db, packingItemId, mitreisenderId)
 

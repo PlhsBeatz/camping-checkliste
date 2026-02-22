@@ -1,4 +1,5 @@
 'use client'
+import { useAuth } from '@/components/auth-provider'
 import { Button } from '@/components/ui/button'
 import { NavigationSidebar } from '@/components/navigation-sidebar'
 import { EquipmentTable } from '@/components/equipment-table'
@@ -43,6 +44,8 @@ interface CategoryWithMain extends Category {
 }
 
 export default function AusruestungPage() {
+  const { canAccessConfig } = useAuth()
+  const canEditEquipment = canAccessConfig
   const [showNavSidebar, setShowNavSidebar] = useState(false)
   const [equipmentItems, setEquipmentItems] = useState<EquipmentItem[]>([])
   const [categories, setCategories] = useState<CategoryWithMain[]>([])
@@ -479,12 +482,14 @@ export default function AusruestungPage() {
                   tags={tags}
                   onEdit={handleEditEquipment}
                   onDelete={handleDeleteEquipment}
+                  readOnly={!canEditEquipment}
                   dynamicHeight
                 />
               )}
           </div>
 
-          {/* FAB: Neuer Gegenstand - Kreisrund mit Plus (wie bei Packliste) */}
+          {/* FAB: Neuer Gegenstand – nur für Admin */}
+          {canEditEquipment && (
           <div className="fixed bottom-6 right-6 z-30">
             <Button
               size="icon"
@@ -494,6 +499,7 @@ export default function AusruestungPage() {
               <Plus className="h-6 w-6" strokeWidth={2.5} />
             </Button>
           </div>
+          )}
         </div>
       </div>
 

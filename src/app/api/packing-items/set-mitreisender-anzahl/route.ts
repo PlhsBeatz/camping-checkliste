@@ -1,15 +1,20 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { getCloudflareContext } from '@opennextjs/cloudflare'
 import {
   getDB,
   CloudflareEnv,
   setMitreisenderAnzahl,
   getVacationIdFromPackingItem,
+  getMitreisendeForVacation,
 } from '@/lib/db'
 import { notifyPackingSyncChange } from '@/lib/packing-sync'
+import { requireAuth } from '@/lib/api-auth'
+import { canAccessVacation } from '@/lib/permissions'
 
-export async function PUT(request: Request) {
+export async function PUT(request: NextRequest) {
   try {
+    const auth = await requireAuth(request)
+    if (auth instanceof NextResponse) return auth
     const env = process.env as unknown as CloudflareEnv
     const db = getDB(env)
 
@@ -27,6 +32,14 @@ export async function PUT(request: Request) {
       )
     }
 
+    const vacationId = await getVacationIdFromPackingItem(db, packingItemId)
+    if (vacationId) {
+      const mitreisende = await getMitreisendeForVacation(db, vacationId)
+      if (!canAccessVacation(auth.userContext, mitreisende.map(m => m.id))) {
+        return NextResponse.json({ error: 'Keine Berechtigung' }, { status: 403 })
+      }
+    }
+
     const success = await setMitreisenderAnzahl(db, packingItemId, mitreisenderId, anzahl)
 
     if (!success) {
@@ -36,7 +49,6 @@ export async function PUT(request: Request) {
       )
     }
 
-    const vacationId = await getVacationIdFromPackingItem(db, packingItemId)
     if (vacationId) {
       const cfEnv = getCloudflareContext().env as unknown as CloudflareEnv
       await notifyPackingSyncChange(cfEnv, vacationId)

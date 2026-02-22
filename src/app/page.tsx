@@ -25,6 +25,7 @@ import {
 import { cn, formatWeight, getInitials } from '@/lib/utils'
 import { USER_COLORS, DEFAULT_USER_COLOR_BG } from '@/lib/user-colors'
 import { useSearchParams } from 'next/navigation'
+import { useAuth } from '@/components/auth-provider'
 import { usePackingSync } from '@/hooks/use-packing-sync'
 import {
   getCachedPackingItems,
@@ -78,6 +79,7 @@ interface CategoryWithMain extends Category {
 }
 
 function HomeContent() {
+  const { user, canSelectOtherProfiles } = useAuth()
   // Data state
   const [vacations, setVacations] = useState<Vacation[]>([])
   const [packingItems, setPackingItems] = useState<PackingItem[]>([])
@@ -271,6 +273,15 @@ function HomeContent() {
     }
     fetchVacationMitreisende()
   }, [selectedVacationId])
+
+  // Kind/Gast: Eigenes Profil automatisch auswählen
+  useEffect(() => {
+    if (!canSelectOtherProfiles && user?.mitreisender_id && vacationMitreisende.length > 0) {
+      if (vacationMitreisende.some((m) => m.id === user.mitreisender_id)) {
+        setSelectedPackProfile(user.mitreisender_id)
+      }
+    }
+  }, [canSelectOtherProfiles, user?.mitreisender_id, vacationMitreisende])
 
   // Fetch Equipment Items for FAB modal
   useEffect(() => {
@@ -1098,11 +1109,15 @@ function HomeContent() {
         </div>
       </div>
 
-      {/* Pack Settings Sidebar (Rechts) */}
+      {/* Pack Settings Sidebar (Rechts) – Kind/Gast nur eigenes Profil */}
       <PackingSettingsSidebar
         isOpen={showPackSettings}
         onClose={() => setShowPackSettings(false)}
-        mitreisende={vacationMitreisende}
+        mitreisende={
+          canSelectOtherProfiles || !user?.mitreisender_id
+            ? vacationMitreisende
+            : vacationMitreisende.filter((m) => m.id === user.mitreisender_id)
+        }
         selectedProfile={selectedPackProfile}
         onProfileChange={setSelectedPackProfile}
         hidePackedItems={hidePackedItems}
