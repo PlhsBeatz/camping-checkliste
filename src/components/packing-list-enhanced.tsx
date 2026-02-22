@@ -559,19 +559,27 @@ export function PackingList({
   }, [mainCategories, activeMainCategory]);
 
   const effectivePacked = (g: boolean, v?: boolean) => g || !!v;
-  // Fortschritt abhängig von sichtbaren Einträgen (Anzeige-Modus + Profil, gepackt OR vorgemerkt zählt)
+  // Fortschritt nur über Einträge, auf die der User berechtigt ist (Profil Kinder/Gast = nur eigene Einträge)
   const { packedCount, totalCount } = useMemo(() => {
     return visibleItems.reduce((acc, item) => {
       if (item.mitreisenden_typ === 'pauschal') {
         acc.totalCount += 1;
         if (effectivePacked(item.gepackt, item.gepackt_vorgemerkt)) acc.packedCount += 1;
       } else if (item.mitreisende) {
-        acc.totalCount += item.mitreisende.length;
-        acc.packedCount += item.mitreisende.filter(m => effectivePacked(m.gepackt, m.gepackt_vorgemerkt)).length;
+        if (selectedProfile) {
+          const mine = item.mitreisende.find(m => m.mitreisender_id === selectedProfile);
+          if (mine) {
+            acc.totalCount += 1;
+            if (effectivePacked(mine.gepackt, mine.gepackt_vorgemerkt)) acc.packedCount += 1;
+          }
+        } else {
+          acc.totalCount += item.mitreisende.length;
+          acc.packedCount += item.mitreisende.filter(m => effectivePacked(m.gepackt, m.gepackt_vorgemerkt)).length;
+        }
       }
       return acc;
     }, { packedCount: 0, totalCount: 0 });
-  }, [visibleItems]);
+  }, [visibleItems, selectedProfile]);
 
   const progressPercentage = totalCount > 0 ? Math.round((packedCount / totalCount) * 100) : 0;
 
@@ -742,7 +750,7 @@ export function PackingList({
           }}
         >
           <TabsList className="inline-flex w-max justify-start bg-transparent p-0 h-auto rounded-none">
-            {!allPackedFromCurrentView && visibleMainCategories.map(mainCat => (
+            {((!allPackedFromCurrentView || !hidePackedItems) ? (hidePackedItems ? visibleMainCategories : mainCategories) : []).map(mainCat => (
               <TabsTrigger
                 key={mainCat}
                 value={mainCat}
@@ -758,7 +766,7 @@ export function PackingList({
       {/* Scrollbarer Bereich: Inhalt oder "Alles gepackt"-Ansicht */}
       <div className="flex-1 min-h-0 overflow-y-auto overflow-x-clip">
         <div className="min-h-full bg-scroll-pattern px-4 sm:px-6 pt-6 pb-6">
-        {allPackedFromCurrentView ? (
+        {allPackedFromCurrentView && hidePackedItems ? (
           <div className="flex flex-col items-center justify-center min-h-[50vh] py-12">
             <Card className="max-w-md w-full border-[rgb(45,79,30)]/20 shadow-lg bg-white/95">
               <CardContent className="pt-8 pb-8 px-8 text-center">
@@ -779,7 +787,7 @@ export function PackingList({
           </div>
         ) : (
         <>
-        {visibleMainCategories.map(mainCat => (
+        {(hidePackedItems ? visibleMainCategories : mainCategories).map(mainCat => (
             <TabsContent key={mainCat} value={mainCat} className="space-y-6 mt-14 m-0">
               {Object.entries(itemsByMainCategory[mainCat] ?? {}).map(([category, categoryItems]) => {
                 if (!shouldShowCategory(categoryItems)) return null;
