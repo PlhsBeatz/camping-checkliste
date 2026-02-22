@@ -9,6 +9,7 @@ import {
   getPacklisteId,
   getVacationIdFromPackingItem,
   getMitreisendeForVacation,
+  getPackingItemPauschalVorgemerkt,
   CloudflareEnv,
 } from '@/lib/db'
 import { notifyPackingSyncChange } from '@/lib/packing-sync'
@@ -122,6 +123,15 @@ export async function PUT(request: NextRequest) {
     }
     if (gepackt !== undefined) {
       if (gepacktRequiresParentApproval(auth.userContext)) {
+        if (!gepackt) {
+          const current = await getPackingItemPauschalVorgemerkt(db, id)
+          if (current?.gepackt_vorgemerkt && current.gepackt_vorgemerkt_durch !== auth.userContext.mitreisenderId) {
+            return NextResponse.json(
+              { error: 'Nur die eigene Vormerkung kann entfernt werden' },
+              { status: 403 }
+            )
+          }
+        }
         updates.gepackt_vorgemerkt = gepackt
         updates.gepackt_vorgemerkt_durch = gepackt ? (auth.userContext.mitreisenderId ?? null) : null
       } else {

@@ -487,6 +487,24 @@ export async function getPackingItems(db: D1Database, vacationId: string): Promi
 }
 
 /**
+ * Vorgemerk-Status eines Pauschal-Eintrags (für Kind-Berechtigung: nur eigene Vormerkung entfernen)
+ */
+export async function getPackingItemPauschalVorgemerkt(
+  db: D1Database,
+  id: string
+): Promise<{ gepackt_vorgemerkt: boolean; gepackt_vorgemerkt_durch: string | null } | null> {
+  const row = await db
+    .prepare('SELECT gepackt_vorgemerkt, gepackt_vorgemerkt_durch FROM packlisten_eintraege WHERE id = ?')
+    .bind(id)
+    .first<{ gepackt_vorgemerkt: number; gepackt_vorgemerkt_durch: string | null }>()
+  if (!row) return null
+  return {
+    gepackt_vorgemerkt: !!row.gepackt_vorgemerkt,
+    gepackt_vorgemerkt_durch: row.gepackt_vorgemerkt_durch,
+  }
+}
+
+/**
  * Aktualisieren eines Packartikels
  */
 export async function updatePackingItem(

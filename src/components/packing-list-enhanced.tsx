@@ -96,6 +96,20 @@ const PackingItem: React.FC<PackingItemProps> = ({
     return mitreisende?.filter(m => effectivePacked(m.gepackt, m.gepackt_vorgemerkt)).length ?? 0;
   }, [mitreisenden_typ, gepackt, gepackt_vorgemerkt, mitreisende]);
 
+  /** Nur final gepackt – für Admin-Anzeige x/4 Personen */
+  const packedCountFinal = useMemo(() => {
+    if (mitreisenden_typ === 'pauschal') return gepackt ? 1 : 0;
+    return mitreisende?.filter(m => m.gepackt).length ?? 0;
+  }, [mitreisenden_typ, gepackt, mitreisende]);
+
+  /** Namen der Mitreisenden mit Vormerkung – für Admin-Anzeige "(Prüfen: …)" */
+  const vorgemerktNames = useMemo(() => {
+    if (mitreisenden_typ === 'pauschal' || !mitreisende) return [];
+    return mitreisende
+      .filter(m => !!m.gepackt_vorgemerkt && !m.gepackt)
+      .map(m => m.mitreisender_name);
+  }, [mitreisenden_typ, mitreisende]);
+
   const totalCount = useMemo(() => {
     if (mitreisenden_typ === 'pauschal') return 1;
     return mitreisende?.length ?? 0;
@@ -109,6 +123,13 @@ const PackingItem: React.FC<PackingItemProps> = ({
     if (!selectedProfile || !mitreisende) return null;
     return mitreisende.find(m => m.mitreisender_id === selectedProfile);
   }, [selectedProfile, mitreisende]);
+
+  /** Gepackt für Transparenz-Anzeige (opacity-60): Pauschal oder Profil-Ansicht nutzt jeweiligen Status */
+  const isPackedForOpacity = useMemo(() => {
+    if (mitreisenden_typ === 'pauschal') return effectivePacked(gepackt, gepackt_vorgemerkt);
+    if (selectedProfile) return selectedTravelerItem ? effectivePacked(selectedTravelerItem.gepackt, selectedTravelerItem.gepackt_vorgemerkt) : false;
+    return isFullyPacked;
+  }, [mitreisenden_typ, gepackt, gepackt_vorgemerkt, selectedProfile, selectedTravelerItem, isFullyPacked]);
 
   // Check if item should be hidden in individual profile view
   const shouldHideInProfileView = useMemo(() => {
@@ -219,7 +240,7 @@ const PackingItem: React.FC<PackingItemProps> = ({
         className={cn(
           "p-4 mb-3 bg-white rounded-xl border border-gray-200 shadow-sm transition-all duration-200 overflow-hidden",
           isExiting && "animate-pack-item-out",
-          !isExiting && (isFullyPacked ? 'opacity-60' : 'hover:shadow-md')
+          !isExiting && (isPackedForOpacity ? 'opacity-60' : 'hover:shadow-md')
         )}
       >
         <div className="flex items-start space-x-3">
@@ -298,7 +319,10 @@ const PackingItem: React.FC<PackingItemProps> = ({
                 )}
                 {selectedProfile === null && (
                   <span className="text-xs text-accent font-medium">
-                    {packedCount}/{totalCount} Personen
+                    {canConfirmVorgemerkt ? packedCountFinal : packedCount}/{totalCount} Personen
+                    {canConfirmVorgemerkt && vorgemerktNames.length > 0 && (
+                      <> (Prüfen: {vorgemerktNames.join(', ')})</>
+                    )}
                   </span>
                 )}
               </div>

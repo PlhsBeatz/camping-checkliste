@@ -517,7 +517,10 @@ function HomeContent() {
   const handleTogglePacked = async (itemId: string) => {
     pendingMutationsRef.current += 1
     const item = packingItems.find(p => p.id === itemId)
-    const isPacked = item?.gepackt ?? false
+    // Kind: effectivePacked (gepackt oder vorgemerkt) für korrekten Toggle – Vormerkung entfernen möglich
+    const isPacked = item
+      ? (gepacktRequiresParentApproval ? !!(item.gepackt || item.gepackt_vorgemerkt) : !!item.gepackt)
+      : false
     const newPackedState = !isPacked
     const prevItems = packingItems
 
@@ -538,10 +541,10 @@ function HomeContent() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: itemId, gepackt: newPackedState }),
       })
-      const data = (await res.json()) as ApiResponse<boolean>
-      if (!data.success) {
+      const data = (await res.json()) as ApiResponse<boolean> & { error?: string }
+      if (!res.ok || !data.success) {
         setPackingItems(prevItems)
-        alert('Fehler beim Aktualisieren')
+        alert(data.error ?? 'Fehler beim Aktualisieren')
       }
     } catch (error) {
       console.error('Failed to toggle packed:', error)
