@@ -4,7 +4,7 @@ import { NavigationSidebar } from '@/components/navigation-sidebar'
 import { EquipmentTable } from '@/components/equipment-table'
 import { Plus, Menu } from 'lucide-react'
 import { useState, useEffect } from 'react'
-import { EquipmentItem, Category, MainCategory, TransportVehicle, Tag } from '@/lib/db'
+import { EquipmentItem, Category, MainCategory, TransportVehicle, Tag, Mitreisender } from '@/lib/db'
 import type { ApiResponse } from '@/lib/api-types'
 import { ResponsiveModal } from '@/components/ui/responsive-modal'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
@@ -206,7 +206,7 @@ export default function AusruestungPage() {
         const data = (await res.json()) as ApiResponse<{ id: string; name: string }[]>
         if (data.success && data.data) {
           setMitreisende(data.data)
-          await cacheMitreisende(data.data)
+          await cacheMitreisende(data.data as Mitreisender[])
         }
       } catch (error) {
         console.error('Failed to fetch mitreisende:', error)
