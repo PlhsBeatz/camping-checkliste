@@ -377,7 +377,7 @@ export function PackingList({
   onConfirmVorgemerkt,
   canConfirmVorgemerkt,
   canEditPauschalEntries = true,
-  isChildView = false,
+  isChildView: _isChildView = false,
   selectedProfile,
   hidePackedItems,
   listDisplayMode,
