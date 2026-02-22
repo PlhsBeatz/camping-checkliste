@@ -726,7 +726,6 @@ export function PackingList({
             </div>
           )}
         </div>
-        {!allPackedFromCurrentView && (
         <div
           className={cn(
             "tabs-scrollbar-auto bg-white overflow-x-auto overflow-y-hidden -mx-4 sm:-mx-6 pl-4 pr-4 sm:pl-6 sm:pr-6 pb-2",
@@ -743,7 +742,7 @@ export function PackingList({
           }}
         >
           <TabsList className="inline-flex w-max justify-start bg-transparent p-0 h-auto rounded-none">
-            {visibleMainCategories.map(mainCat => (
+            {!allPackedFromCurrentView && visibleMainCategories.map(mainCat => (
               <TabsTrigger
                 key={mainCat}
                 value={mainCat}
@@ -754,7 +753,6 @@ export function PackingList({
             ))}
           </TabsList>
         </div>
-        )}
       </div>
 
       {/* Scrollbarer Bereich: Inhalt oder "Alles gepackt"-Ansicht */}
