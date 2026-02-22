@@ -26,8 +26,23 @@ import { cn, formatWeight, getInitials } from '@/lib/utils'
 import { USER_COLORS, DEFAULT_USER_COLOR_BG } from '@/lib/user-colors'
 import { useSearchParams } from 'next/navigation'
 import { usePackingSync } from '@/hooks/use-packing-sync'
-import { getCachedPackingItems, subscribeToOnlineStatus } from '@/lib/offline-sync'
-import { cachePackingItems } from '@/lib/offline-db'
+import {
+  getCachedPackingItems,
+  getCachedVacations,
+  getCachedEquipment,
+  getCachedCategories,
+  getCachedMainCategories,
+  getCachedTransportVehicles,
+  subscribeToOnlineStatus,
+} from '@/lib/offline-sync'
+import {
+  cachePackingItems,
+  cacheVacations,
+  cacheEquipment,
+  cacheCategories,
+  cacheMainCategories,
+  cacheTransportVehicles,
+} from '@/lib/offline-db'
 
 const PACKABLE_STATUSES: readonly string[] = ['Normal', 'Immer gepackt']
 
@@ -140,6 +155,7 @@ function HomeContent() {
         const data = (await res.json()) as ApiResponse<Vacation[]>
         if (data.success && data.data) {
           setVacations(data.data)
+          await cacheVacations(data.data)
           const stored =
             urlVacationId && data.data.some((v: Vacation) => v.id === urlVacationId)
               ? urlVacationId
@@ -158,6 +174,20 @@ function HomeContent() {
         }
       } catch (error) {
         console.error('Failed to fetch vacations:', error)
+        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+          const cached = await getCachedVacations()
+          if (cached.length > 0) {
+            setVacations(cached)
+            const stored = typeof window !== 'undefined' ? sessionStorage.getItem('packlistVacationId') : null
+            const validStored = stored && cached.some((v: Vacation) => v.id === stored)
+            if (validStored) {
+              setSelectedVacationId(stored)
+            } else {
+              const next = findNextVacation(cached)
+              if (next) setSelectedVacationId(next.id)
+            }
+          }
+        }
       }
     }
     fetchVacations()
@@ -250,9 +280,14 @@ function HomeContent() {
         const data = (await res.json()) as ApiResponse<EquipmentItem[]>
         if (data.success && data.data) {
           setEquipmentItems(data.data)
+          await cacheEquipment(data.data)
         }
       } catch (error) {
         console.error('Failed to fetch equipment items:', error)
+        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+          const cached = await getCachedEquipment()
+          if (cached.length > 0) setEquipmentItems(cached)
+        }
       }
     }
     fetchEquipmentItems()
@@ -266,9 +301,14 @@ function HomeContent() {
         const data = (await res.json()) as ApiResponse<CategoryWithMain[]>
         if (data.success && data.data) {
           setCategories(data.data)
+          await cacheCategories(data.data)
         }
       } catch (error) {
         console.error('Failed to fetch categories:', error)
+        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+          const cached = await getCachedCategories()
+          if (cached.length > 0) setCategories(cached as CategoryWithMain[])
+        }
       }
     }
     fetchCategories()
@@ -282,9 +322,14 @@ function HomeContent() {
         const data = (await res.json()) as ApiResponse<MainCategory[]>
         if (data.success && data.data) {
           setMainCategories(data.data)
+          await cacheMainCategories(data.data)
         }
       } catch (error) {
         console.error('Failed to fetch main categories:', error)
+        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+          const cached = await getCachedMainCategories()
+          if (cached.length > 0) setMainCategories(cached)
+        }
       }
     }
     fetchMainCategories()
@@ -298,9 +343,14 @@ function HomeContent() {
         const data = (await res.json()) as ApiResponse<TransportVehicle[]>
         if (data.success && data.data) {
           setTransportVehicles(data.data)
+          await cacheTransportVehicles(data.data)
         }
       } catch (error) {
         console.error('Failed to fetch transport vehicles:', error)
+        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+          const cached = await getCachedTransportVehicles()
+          if (cached.length > 0) setTransportVehicles(cached)
+        }
       }
     }
     fetchTransportVehicles()

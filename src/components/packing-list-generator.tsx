@@ -10,6 +10,8 @@ import { Sparkles, Tag as TagIcon } from 'lucide-react'
 import { Tag, EquipmentItem } from '@/lib/db'
 import type { ApiResponse } from '@/lib/api-types'
 import { DEFAULT_USER_COLOR_BG } from '@/lib/user-colors'
+import { getCachedTags } from '@/lib/offline-sync'
+import { cacheTags } from '@/lib/offline-db'
 
 interface PackingListGeneratorProps {
   open: boolean
@@ -49,9 +51,14 @@ export function PackingListGenerator({
       const data = (await res.json()) as ApiResponse<Tag[]>
       if (data.success && data.data) {
         setTags(data.data)
+        await cacheTags(data.data)
       }
     } catch (error) {
       console.error('Failed to fetch tags:', error)
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        const cached = await getCachedTags()
+        if (cached.length > 0) setTags(cached)
+      }
     }
   }
 

@@ -8,6 +8,8 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Plus, Users } from 'lucide-react'
 import { Mitreisender } from '@/lib/db'
 import type { ApiResponse } from '@/lib/api-types'
+import { getCachedMitreisende } from '@/lib/offline-sync'
+import { cacheMitreisende } from '@/lib/offline-db'
 
 interface MitreisendeManagerProps {
   vacationId: string | null
@@ -30,7 +32,8 @@ export function MitreisendeManager({ vacationId, onMitreisendeChange }: Mitreise
         const data = (await res.json()) as ApiResponse<Mitreisender[]>
         if (data.success && data.data) {
           setAllMitreisende(data.data)
-          
+          await cacheMitreisende(data.data)
+
           // Wenn kein vacationId (= Erstell-Modus), wähle Standard-Mitreisende vor
           if (!vacationId && !initialLoadDone && data.data) {
             const defaultIds = data.data
@@ -46,6 +49,20 @@ export function MitreisendeManager({ vacationId, onMitreisendeChange }: Mitreise
         }
       } catch (error) {
         console.error('Failed to fetch mitreisende:', error)
+        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+          const cached = await getCachedMitreisende()
+          if (cached.length > 0) {
+            setAllMitreisende(cached)
+            if (!vacationId && !initialLoadDone) {
+              const defaultIds = cached.filter((m) => m.is_default_member).map((m) => m.id)
+              setVacationMitreisende(defaultIds)
+              if (onMitreisendeChange) {
+                onMitreisendeChange(cached.filter((m) => m.is_default_member))
+              }
+              setInitialLoadDone(true)
+            }
+          }
+        }
       }
     }
     fetchAllMitreisende()

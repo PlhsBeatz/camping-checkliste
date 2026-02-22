@@ -9,6 +9,8 @@ import { useState, useEffect } from 'react'
 import { TransportVehicle } from '@/lib/db'
 import type { ApiResponse } from '@/lib/api-types'
 import { cn } from '@/lib/utils'
+import { getCachedTransportVehicles } from '@/lib/offline-sync'
+import { cacheTransportVehicles } from '@/lib/offline-db'
 
 export default function TransportmittelPage() {
   const [showNavSidebar, setShowNavSidebar] = useState(false)
@@ -36,18 +38,33 @@ export default function TransportmittelPage() {
         const data = (await res.json()) as ApiResponse<TransportVehicle[]>
         if (data.success && data.data) {
           setVehicles(data.data)
+          await cacheTransportVehicles(data.data)
         }
       } catch (error) {
         console.error('Failed to fetch transport vehicles:', error)
+        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+          const cached = await getCachedTransportVehicles()
+          if (cached.length > 0) setVehicles(cached)
+        }
       }
     }
     fetchVehicles()
   }, [])
 
   const handleRefresh = async () => {
-    const res = await fetch('/api/transport-vehicles')
-    const data = (await res.json()) as ApiResponse<TransportVehicle[]>
-    if (data.success && data.data) setVehicles(data.data)
+    try {
+      const res = await fetch('/api/transport-vehicles')
+      const data = (await res.json()) as ApiResponse<TransportVehicle[]>
+      if (data.success && data.data) {
+        setVehicles(data.data)
+        await cacheTransportVehicles(data.data)
+      }
+    } catch {
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        const cached = await getCachedTransportVehicles()
+        if (cached.length > 0) setVehicles(cached)
+      }
+    }
   }
 
   return (

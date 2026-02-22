@@ -16,6 +16,8 @@ import type {
   PackStatusEntryOhneGewicht,
   PackStatusProgressHauptkategorie,
 } from '@/lib/db'
+import { getCachedVacations } from '@/lib/offline-sync'
+import { cacheVacations } from '@/lib/offline-db'
 
 const findNextVacation = (vacations: Vacation[]): Vacation | null => {
   if (vacations.length === 0) return null
@@ -67,6 +69,7 @@ function PackStatusContent() {
         const data = (await res.json()) as ApiResponse<Vacation[]>
         if (data.success && data.data) {
           setVacations(data.data)
+          await cacheVacations(data.data)
           const stored =
             urlVacationId && data.data.some((v) => v.id === urlVacationId)
               ? urlVacationId
@@ -83,6 +86,20 @@ function PackStatusContent() {
         }
       } catch (e) {
         console.error('Failed to fetch vacations:', e)
+        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+          const cached = await getCachedVacations()
+          if (cached.length > 0) {
+            setVacations(cached)
+            const stored = typeof window !== 'undefined' ? sessionStorage.getItem('packlistVacationId') : null
+            const validStored = stored && cached.some((v) => v.id === stored)
+            if (validStored) {
+              setSelectedVacationId(stored)
+            } else {
+              const next = findNextVacation(cached)
+              if (next) setSelectedVacationId(next.id)
+            }
+          }
+        }
       }
     }
     fetchVacations()

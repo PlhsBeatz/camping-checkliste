@@ -8,6 +8,8 @@ import { useState, useEffect } from 'react'
 import { Tag } from '@/lib/db'
 import type { ApiResponse } from '@/lib/api-types'
 import { cn } from '@/lib/utils'
+import { getCachedTags } from '@/lib/offline-sync'
+import { cacheTags } from '@/lib/offline-db'
 
 export default function TagsPage() {
   const [showNavSidebar, setShowNavSidebar] = useState(false)
@@ -36,19 +38,32 @@ export default function TagsPage() {
         const data = (await res.json()) as ApiResponse<Tag[]>
         if (data.success && data.data) {
           setTags(data.data)
+          await cacheTags(data.data)
         }
       } catch (error) {
         console.error('Failed to fetch tags:', error)
+        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+          const cached = await getCachedTags()
+          if (cached.length > 0) setTags(cached)
+        }
       }
     }
     fetchTags()
   }, [])
 
   const handleRefresh = async () => {
-    const res = await fetch('/api/tags')
-    const data = (await res.json()) as ApiResponse<Tag[]>
-    if (data.success && data.data) {
-      setTags(data.data)
+    try {
+      const res = await fetch('/api/tags')
+      const data = (await res.json()) as ApiResponse<Tag[]>
+      if (data.success && data.data) {
+        setTags(data.data)
+        await cacheTags(data.data)
+      }
+    } catch {
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        const cached = await getCachedTags()
+        if (cached.length > 0) setTags(cached)
+      }
     }
   }
 

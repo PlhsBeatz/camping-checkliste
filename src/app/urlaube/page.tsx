@@ -20,6 +20,8 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
 import { useRouter } from 'next/navigation'
+import { getCachedVacations } from '@/lib/offline-sync'
+import { cacheVacations } from '@/lib/offline-db'
 import { format } from 'date-fns'
 import { de } from 'date-fns/locale'
 import { Calendar as CalendarIcon } from 'lucide-react'
@@ -75,9 +77,14 @@ export default function UrlaubePage() {
         const data = (await res.json()) as ApiResponse<Vacation[]>
         if (data.success && data.data) {
           setVacations(data.data)
+          await cacheVacations(data.data)
         }
       } catch (error) {
         console.error('Failed to fetch vacations:', error)
+        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+          const cached = await getCachedVacations()
+          if (cached.length > 0) setVacations(cached)
+        }
       }
     }
     fetchVacations()

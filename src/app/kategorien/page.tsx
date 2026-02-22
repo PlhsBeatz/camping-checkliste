@@ -8,6 +8,16 @@ import { useState, useEffect } from 'react'
 import { Category, MainCategory, TransportVehicle } from '@/lib/db'
 import type { ApiResponse } from '@/lib/api-types'
 import { cn } from '@/lib/utils'
+import {
+  getCachedCategories,
+  getCachedMainCategories,
+  getCachedTransportVehicles,
+} from '@/lib/offline-sync'
+import {
+  cacheCategories,
+  cacheMainCategories,
+  cacheTransportVehicles,
+} from '@/lib/offline-db'
 
 interface CategoryWithMain extends Category {
   hauptkategorie_titel: string
@@ -41,9 +51,16 @@ export default function KategorienPage() {
       try {
         const res = await fetch('/api/transport-vehicles')
         const data = (await res.json()) as ApiResponse<TransportVehicle[]>
-        if (data.success && data.data) setTransportVehicles(data.data)
+        if (data.success && data.data) {
+          setTransportVehicles(data.data)
+          await cacheTransportVehicles(data.data)
+        }
       } catch (error) {
         console.error('Failed to fetch transport vehicles:', error)
+        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+          const cached = await getCachedTransportVehicles()
+          if (cached.length > 0) setTransportVehicles(cached)
+        }
       }
     }
     fetchTransport()
@@ -57,9 +74,14 @@ export default function KategorienPage() {
         const data = (await res.json()) as ApiResponse<CategoryWithMain[]>
         if (data.success && data.data) {
           setCategories(data.data)
+          await cacheCategories(data.data)
         }
       } catch (error) {
         console.error('Failed to fetch categories:', error)
+        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+          const cached = await getCachedCategories()
+          if (cached.length > 0) setCategories(cached as CategoryWithMain[])
+        }
       }
     }
     fetchCategories()
@@ -73,26 +95,59 @@ export default function KategorienPage() {
         const data = (await res.json()) as ApiResponse<MainCategory[]>
         if (data.success && data.data) {
           setMainCategories(data.data)
+          await cacheMainCategories(data.data)
         }
       } catch (error) {
         console.error('Failed to fetch main categories:', error)
+        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+          const cached = await getCachedMainCategories()
+          if (cached.length > 0) setMainCategories(cached)
+        }
       }
     }
     fetchMainCategories()
   }, [])
 
   const handleRefresh = async () => {
-    const catRes = await fetch('/api/categories')
-    const catData = (await catRes.json()) as ApiResponse<CategoryWithMain[]>
-    if (catData.success && catData.data) setCategories(catData.data)
-
-    const mainCatRes = await fetch('/api/main-categories')
-    const mainCatData = (await mainCatRes.json()) as ApiResponse<MainCategory[]>
-    if (mainCatData.success && mainCatData.data) setMainCategories(mainCatData.data)
-
-    const transportRes = await fetch('/api/transport-vehicles')
-    const transportData = (await transportRes.json()) as ApiResponse<TransportVehicle[]>
-    if (transportData.success && transportData.data) setTransportVehicles(transportData.data)
+    try {
+      const catRes = await fetch('/api/categories')
+      const catData = (await catRes.json()) as ApiResponse<CategoryWithMain[]>
+      if (catData.success && catData.data) {
+        setCategories(catData.data)
+        await cacheCategories(catData.data)
+      }
+    } catch {
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        const cached = await getCachedCategories()
+        if (cached.length > 0) setCategories(cached as CategoryWithMain[])
+      }
+    }
+    try {
+      const mainCatRes = await fetch('/api/main-categories')
+      const mainCatData = (await mainCatRes.json()) as ApiResponse<MainCategory[]>
+      if (mainCatData.success && mainCatData.data) {
+        setMainCategories(mainCatData.data)
+        await cacheMainCategories(mainCatData.data)
+      }
+    } catch {
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        const cached = await getCachedMainCategories()
+        if (cached.length > 0) setMainCategories(cached)
+      }
+    }
+    try {
+      const transportRes = await fetch('/api/transport-vehicles')
+      const transportData = (await transportRes.json()) as ApiResponse<TransportVehicle[]>
+      if (transportData.success && transportData.data) {
+        setTransportVehicles(transportData.data)
+        await cacheTransportVehicles(transportData.data)
+      }
+    } catch {
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        const cached = await getCachedTransportVehicles()
+        if (cached.length > 0) setTransportVehicles(cached)
+      }
+    }
   }
 
   return (

@@ -9,6 +9,8 @@ import { useState, useEffect } from 'react'
 import { Mitreisender } from '@/lib/db'
 import type { ApiResponse } from '@/lib/api-types'
 import { cn } from '@/lib/utils'
+import { getCachedMitreisende } from '@/lib/offline-sync'
+import { cacheMitreisende } from '@/lib/offline-db'
 
 export default function MitreisendePage() {
   const [showNavSidebar, setShowNavSidebar] = useState(false)
@@ -37,18 +39,33 @@ export default function MitreisendePage() {
         const data = (await res.json()) as ApiResponse<Mitreisender[]>
         if (data.success && data.data) {
           setAllMitreisende(data.data)
+          await cacheMitreisende(data.data)
         }
       } catch (error) {
         console.error('Failed to fetch mitreisende:', error)
+        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+          const cached = await getCachedMitreisende()
+          if (cached.length > 0) setAllMitreisende(cached)
+        }
       }
     }
     fetchAllMitreisende()
   }, [])
 
   const handleRefresh = async () => {
-    const res = await fetch('/api/mitreisende')
-    const data = (await res.json()) as ApiResponse<Mitreisender[]>
-    if (data.success && data.data) setAllMitreisende(data.data)
+    try {
+      const res = await fetch('/api/mitreisende')
+      const data = (await res.json()) as ApiResponse<Mitreisender[]>
+      if (data.success && data.data) {
+        setAllMitreisende(data.data)
+        await cacheMitreisende(data.data)
+      }
+    } catch {
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        const cached = await getCachedMitreisende()
+        if (cached.length > 0) setAllMitreisende(cached)
+      }
+    }
   }
 
   return (

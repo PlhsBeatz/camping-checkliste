@@ -21,6 +21,22 @@ import {
 } from '@/components/ui/select'
 import { Checkbox } from '@/components/ui/checkbox'
 import { cn, parseWeightInput } from '@/lib/utils'
+import {
+  getCachedEquipment,
+  getCachedCategories,
+  getCachedMainCategories,
+  getCachedTransportVehicles,
+  getCachedTags,
+  getCachedMitreisende,
+} from '@/lib/offline-sync'
+import {
+  cacheEquipment,
+  cacheCategories,
+  cacheMainCategories,
+  cacheTransportVehicles,
+  cacheTags,
+  cacheMitreisende,
+} from '@/lib/offline-db'
 
 interface CategoryWithMain extends Category {
   hauptkategorie_titel: string
@@ -84,9 +100,14 @@ export default function AusruestungPage() {
         const data = (await res.json()) as ApiResponse<EquipmentItem[]>
         if (data.success && data.data) {
           setEquipmentItems(data.data)
+          await cacheEquipment(data.data)
         }
       } catch (error) {
         console.error('Failed to fetch equipment items:', error)
+        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+          const cached = await getCachedEquipment()
+          if (cached.length > 0) setEquipmentItems(cached)
+        }
       } finally {
         setIsLoading(false)
       }
@@ -101,9 +122,14 @@ export default function AusruestungPage() {
         const data = (await res.json()) as ApiResponse<CategoryWithMain[]>
         if (data.success && data.data) {
           setCategories(data.data)
+          await cacheCategories(data.data)
         }
       } catch (error) {
         console.error('Failed to fetch categories:', error)
+        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+          const cached = await getCachedCategories()
+          if (cached.length > 0) setCategories(cached as CategoryWithMain[])
+        }
       }
     }
     fetchCategories()
@@ -117,9 +143,14 @@ export default function AusruestungPage() {
         const data = (await res.json()) as ApiResponse<MainCategory[]>
         if (data.success && data.data) {
           setMainCategories(data.data)
+          await cacheMainCategories(data.data)
         }
       } catch (error) {
         console.error('Failed to fetch main categories:', error)
+        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+          const cached = await getCachedMainCategories()
+          if (cached.length > 0) setMainCategories(cached)
+        }
       }
     }
     fetchMainCategories()
@@ -133,9 +164,14 @@ export default function AusruestungPage() {
         const data = (await res.json()) as ApiResponse<TransportVehicle[]>
         if (data.success && data.data) {
           setTransportVehicles(data.data)
+          await cacheTransportVehicles(data.data)
         }
       } catch (error) {
         console.error('Failed to fetch transport vehicles:', error)
+        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+          const cached = await getCachedTransportVehicles()
+          if (cached.length > 0) setTransportVehicles(cached)
+        }
       }
     }
     fetchTransportVehicles()
@@ -149,9 +185,14 @@ export default function AusruestungPage() {
         const data = (await res.json()) as ApiResponse<Tag[]>
         if (data.success && data.data) {
           setTags(data.data)
+          await cacheTags(data.data)
         }
       } catch (error) {
         console.error('Failed to fetch tags:', error)
+        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+          const cached = await getCachedTags()
+          if (cached.length > 0) setTags(cached)
+        }
       }
     }
     fetchTags()
@@ -165,9 +206,14 @@ export default function AusruestungPage() {
         const data = (await res.json()) as ApiResponse<{ id: string; name: string }[]>
         if (data.success && data.data) {
           setMitreisende(data.data)
+          await cacheMitreisende(data.data)
         }
       } catch (error) {
         console.error('Failed to fetch mitreisende:', error)
+        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+          const cached = await getCachedMitreisende()
+          if (cached.length > 0) setMitreisende(cached.map((m) => ({ id: m.id, name: m.name })))
+        }
       }
     }
     fetchMitreisende()
