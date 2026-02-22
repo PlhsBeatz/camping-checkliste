@@ -1796,10 +1796,10 @@ export async function togglePackingItemForMitreisender(
       .first<{ gepackt: number }>()
     
     if (existing) {
-      // Update
+      // Update – beim Abhaken auch vorgemerkt zurücksetzen
       await db
-        .prepare('UPDATE packlisten_eintrag_mitreisende SET gepackt = ? WHERE packlisten_eintrag_id = ? AND mitreisender_id = ?')
-        .bind(gepackt ? 1 : 0, packlistenEintragId, mitreisenderId)
+        .prepare('UPDATE packlisten_eintrag_mitreisende SET gepackt = ?, gepackt_vorgemerkt = ? WHERE packlisten_eintrag_id = ? AND mitreisender_id = ?')
+        .bind(gepackt ? 1 : 0, gepackt ? 0 : 0, packlistenEintragId, mitreisenderId)
         .run()
     } else {
       // Insert

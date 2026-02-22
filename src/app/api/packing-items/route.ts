@@ -126,6 +126,11 @@ export async function PUT(request: NextRequest) {
         updates.gepackt_vorgemerkt_durch = gepackt ? (auth.userContext.mitreisenderId ?? null) : null
       } else {
         updates.gepackt = gepackt
+        // Admin: Beim Abhaken auch Vormerkung zurücksetzen
+        if (!gepackt) {
+          updates.gepackt_vorgemerkt = false
+          updates.gepackt_vorgemerkt_durch = null
+        }
       }
     }
     const success = await updatePackingItem(db, id, updates)

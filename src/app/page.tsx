@@ -484,13 +484,13 @@ function HomeContent() {
   const handleSetPacked = async (itemId: string, gepackt: boolean) => {
     pendingMutationsRef.current += 1
     const prevItems = packingItems
-    // Optimistic update: bei Kind mit vorgemerkt → gepackt_vorgemerkt setzen
+    // Optimistic update: bei Kind mit vorgemerkt → gepackt_vorgemerkt setzen; bei Admin Abhaken/Vormerkung entfernen
     setPackingItems(prev =>
       prev.map(item =>
         item.id === itemId
           ? gepacktRequiresParentApproval
             ? { ...item, gepackt_vorgemerkt: gepackt, gepackt_vorgemerkt_durch: gepackt ? user?.mitreisender_id ?? undefined : undefined }
-            : { ...item, gepackt }
+            : { ...item, gepackt, ...(gepackt === false && { gepackt_vorgemerkt: false, gepackt_vorgemerkt_durch: undefined }) }
           : item
       )
     )
@@ -557,12 +557,12 @@ function HomeContent() {
     const newStatus = !currentStatus
     const prevItems = packingItems
 
-    // Optimistic update: bei Kind mit vorgemerkt → gepackt_vorgemerkt, sonst gepackt
+    // Optimistic update: bei Kind mit vorgemerkt → gepackt_vorgemerkt, sonst gepackt (+ Vormerkung zurücksetzen)
     const updateField = gepacktRequiresParentApproval
       ? (m: { mitreisender_id: string; mitreisender_name: string; gepackt: boolean; gepackt_vorgemerkt?: boolean; anzahl?: number }) =>
           ({ ...m, gepackt_vorgemerkt: newStatus } as typeof m)
       : (m: { mitreisender_id: string; mitreisender_name: string; gepackt: boolean; gepackt_vorgemerkt?: boolean; anzahl?: number }) =>
-          ({ ...m, gepackt: newStatus } as typeof m)
+          ({ ...m, gepackt: newStatus, ...(newStatus === false && { gepackt_vorgemerkt: false }) } as typeof m)
     const newMitEntry = gepacktRequiresParentApproval
       ? { mitreisender_id: mitreisenderId, mitreisender_name: vacationMitreisende.find(m => m.id === mitreisenderId)?.name ?? '', gepackt: false, gepackt_vorgemerkt: true }
       : { mitreisender_id: mitreisenderId, mitreisender_name: vacationMitreisende.find(m => m.id === mitreisenderId)?.name ?? '', gepackt: true }
@@ -659,6 +659,14 @@ function HomeContent() {
       setPackingItems(prevItems)
     } finally {
       pendingMutationsRef.current -= 1
+    }
+  }
+
+  const handleRemoveVorgemerkt = (packingItemId: string, mitreisenderId?: string) => {
+    if (mitreisenderId) {
+      handleToggleMitreisender(packingItemId, mitreisenderId, true)
+    } else {
+      handleSetPacked(packingItemId, false)
     }
   }
 
@@ -1048,6 +1056,7 @@ function HomeContent() {
                   onEdit={handleEditPackingItem}
                   onDelete={handleDeletePackingItem}
                   onConfirmVorgemerkt={handleConfirmVorgemerkt}
+                  onRemoveVorgemerkt={handleRemoveVorgemerkt}
                   canConfirmVorgemerkt={canAccessConfig}
                   selectedProfile={selectedPackProfile}
                   hidePackedItems={hidePackedItems}

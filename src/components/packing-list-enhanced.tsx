@@ -10,7 +10,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { MoreVertical, Edit2, Trash2, CheckCheck } from "lucide-react";
+import { MoreVertical, Edit2, Trash2, RotateCcw } from "lucide-react";
 import { useMemo, useState, useEffect, useRef } from "react";
 import { PackingItem as DBPackingItem } from "@/lib/db";
 import { MarkAllConfirmationDialog } from "./mark-all-confirmation-dialog";
@@ -34,8 +34,10 @@ interface PackingItemProps {
   onEdit: (item: DBPackingItem) => void;
   /** id + optional forMitreisenderId (nur diesen Mitreisenden entfernen) */
   onDelete: (id: string, forMitreisenderId?: string | null) => void;
-  /** Admin: vorgemerkte Einträge bestätigen */
+  /** Admin: vorgemerkte Einträge bestätigen (Checkbox-Klick) */
   onConfirmVorgemerkt?: (packingItemId: string, mitreisenderId?: string) => void;
+  /** Admin: Vormerkung entfernen (Drei-Punkte-Menü) */
+  onRemoveVorgemerkt?: (packingItemId: string, mitreisenderId?: string) => void;
   canConfirmVorgemerkt?: boolean;
   details?: string;
   fullItem: DBPackingItem;
@@ -61,6 +63,7 @@ const PackingItem: React.FC<PackingItemProps> = ({
   onEdit,
   onDelete,
   onConfirmVorgemerkt,
+  onRemoveVorgemerkt,
   canConfirmVorgemerkt,
   details,
   fullItem,
@@ -80,6 +83,12 @@ const PackingItem: React.FC<PackingItemProps> = ({
     }
     return (mitreisende?.length ?? 0) > 0 && mitreisende?.every(m => effectivePacked(m.gepackt, m.gepackt_vorgemerkt));
   }, [mitreisenden_typ, gepackt, gepackt_vorgemerkt, mitreisende]);
+
+  /** Nur final gepackt (gepackt=true), nicht vorgemerkt – für Eltern bei „Gepacktes ausblenden“ */
+  const isFullyPackedFinal = useMemo(() => {
+    if (mitreisenden_typ === 'pauschal') return gepackt;
+    return (mitreisende?.length ?? 0) > 0 && mitreisende?.every(m => m.gepackt);
+  }, [mitreisenden_typ, gepackt, mitreisende]);
 
   // Calculate packed count for individual items (gepackt OR vorgemerkt zählt als gepackt für Anzeige)
   const packedCount = useMemo(() => {
@@ -105,13 +114,15 @@ const PackingItem: React.FC<PackingItemProps> = ({
   const shouldHideInProfileView = useMemo(() => {
     if (!hidePackedItems) return false;
     if (selectedProfile) {
-      // In individual profile view, hide if packed (or vorgemerkt) for THIS profile
-      const packed = selectedTravelerItem ? effectivePacked(selectedTravelerItem.gepackt, selectedTravelerItem.gepackt_vorgemerkt) : false;
+      // Eltern: Nur final gepackt ausblenden, vorgemerkt bleibt sichtbar
+      const packed = selectedTravelerItem
+        ? (canConfirmVorgemerkt ? selectedTravelerItem.gepackt : effectivePacked(selectedTravelerItem.gepackt, selectedTravelerItem.gepackt_vorgemerkt))
+        : false;
       return packed;
     }
-    // In Zentral/Alle view, hide if fully packed
-    return isFullyPacked;
-  }, [hidePackedItems, selectedProfile, selectedTravelerItem, isFullyPacked]);
+    // Zentral/Alle: Eltern nur bei isFullyPackedFinal ausblenden
+    return canConfirmVorgemerkt ? isFullyPackedFinal : isFullyPacked;
+  }, [hidePackedItems, selectedProfile, selectedTravelerItem, isFullyPacked, isFullyPackedFinal, canConfirmVorgemerkt]);
 
   // Micro-Animation beim Abhaken mit Gepacktes Ausblenden
   useEffect(() => {
@@ -130,6 +141,10 @@ const PackingItem: React.FC<PackingItemProps> = ({
   // Handle pauschal toggle
   const handlePauschalToggle = () => {
     if (canTogglePauschal) {
+      if (isVorgemerktPauschal && canConfirmVorgemerkt && onConfirmVorgemerkt) {
+        onConfirmVorgemerkt(id);
+        return;
+      }
       const wasUnpacked = !gepackt;
       const itemId = id; // Capture id in closure
       onToggle(itemId);
@@ -153,6 +168,10 @@ const PackingItem: React.FC<PackingItemProps> = ({
   // Handle individual toggle (for selected profile)
   const handleIndividualToggle = () => {
     if (selectedProfile) {
+      if (selectedTravelerVorgemerkt && canConfirmVorgemerkt && onConfirmVorgemerkt) {
+        onConfirmVorgemerkt(id, selectedProfile);
+        return;
+      }
       const currentEffective = selectedTravelerItem ? effectivePacked(selectedTravelerItem.gepackt, selectedTravelerItem.gepackt_vorgemerkt) : false;
       const wasUnpacked = !currentEffective;
       const itemId = id;
@@ -300,12 +319,12 @@ const PackingItem: React.FC<PackingItemProps> = ({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              {canConfirmVorgemerkt && onConfirmVorgemerkt && (isVorgemerktPauschal || selectedTravelerVorgemerkt) && (
+              {canConfirmVorgemerkt && onRemoveVorgemerkt && (isVorgemerktPauschal || selectedTravelerVorgemerkt) && (
                 <DropdownMenuItem
-                  onClick={() => onConfirmVorgemerkt(id, selectedTravelerVorgemerkt ? selectedProfile ?? undefined : undefined)}
+                  onClick={() => onRemoveVorgemerkt(id, selectedTravelerVorgemerkt ? selectedProfile ?? undefined : undefined)}
                 >
-                  <CheckCheck className="h-4 w-4 mr-2" />
-                  Bestätigen
+                  <RotateCcw className="h-4 w-4 mr-2" />
+                  Vormerkung entfernen
                 </DropdownMenuItem>
               )}
               <DropdownMenuItem onClick={() => onEdit(fullItem)}>
@@ -352,6 +371,7 @@ interface PackingListProps {
   /** id + optional mitreisenderId: bei Profil-Ansicht nur diesen Mitreisenden entfernen */
   onDelete: (id: string, forMitreisenderId?: string | null) => void;
   onConfirmVorgemerkt?: (packingItemId: string, mitreisenderId?: string) => void;
+  onRemoveVorgemerkt?: (packingItemId: string, mitreisenderId?: string) => void;
   canConfirmVorgemerkt?: boolean;
   canEditPauschalEntries?: boolean;
   isChildView?: boolean;
@@ -375,6 +395,7 @@ export function PackingList({
   onEdit,
   onDelete,
   onConfirmVorgemerkt,
+  onRemoveVorgemerkt,
   canConfirmVorgemerkt,
   canEditPauschalEntries = true,
   isChildView: _isChildView = false,
@@ -714,6 +735,7 @@ export function PackingList({
                               onEdit={onEdit}
                               onDelete={onDelete}
                               onConfirmVorgemerkt={onConfirmVorgemerkt}
+                              onRemoveVorgemerkt={onRemoveVorgemerkt}
                               canConfirmVorgemerkt={canConfirmVorgemerkt}
                               details={item.details}
                               fullItem={item}
