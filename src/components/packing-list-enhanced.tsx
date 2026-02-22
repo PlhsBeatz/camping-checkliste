@@ -105,9 +105,9 @@ const PackingItem: React.FC<PackingItemProps> = ({
   const shouldHideInProfileView = useMemo(() => {
     if (!hidePackedItems) return false;
     if (selectedProfile) {
-      // In individual profile view, hide if packed for THIS profile
-      // If no entry exists yet for this traveler, don't hide it
-      return selectedTravelerItem?.gepackt ?? false;
+      // In individual profile view, hide if packed (or vorgemerkt) for THIS profile
+      const packed = selectedTravelerItem ? effectivePacked(selectedTravelerItem.gepackt, selectedTravelerItem.gepackt_vorgemerkt) : false;
+      return packed;
     }
     // In Zentral/Alle view, hide if fully packed
     return isFullyPacked;
@@ -210,7 +210,7 @@ const PackingItem: React.FC<PackingItemProps> = ({
                 className={cn(
                   "h-6 w-6 min-h-6 min-w-6 rounded-md border-2 border-gray-300",
                   isVorgemerktPauschal
-                    ? "data-[state=checked]:bg-amber-500 data-[state=checked]:border-amber-500"
+                    ? "data-[state=checked]:bg-[rgb(230,126,34)] data-[state=checked]:border-[rgb(230,126,34)]"
                     : "data-[state=checked]:bg-[rgb(45,79,30)] data-[state=checked]:border-[rgb(45,79,30)]"
                 )}
               />
@@ -226,7 +226,7 @@ const PackingItem: React.FC<PackingItemProps> = ({
                 className={cn(
                   "h-6 w-6 min-h-6 min-w-6 rounded-md border-2 border-gray-300",
                   selectedTravelerVorgemerkt
-                    ? "data-[state=checked]:bg-amber-500 data-[state=checked]:border-amber-500"
+                    ? "data-[state=checked]:bg-[rgb(230,126,34)] data-[state=checked]:border-[rgb(230,126,34)]"
                     : "data-[state=checked]:bg-[rgb(45,79,30)] data-[state=checked]:border-[rgb(45,79,30)]"
                 )}
               />
@@ -353,6 +353,8 @@ interface PackingListProps {
   onDelete: (id: string, forMitreisenderId?: string | null) => void;
   onConfirmVorgemerkt?: (packingItemId: string, mitreisenderId?: string) => void;
   canConfirmVorgemerkt?: boolean;
+  canEditPauschalEntries?: boolean;
+  isChildView?: boolean;
   selectedProfile: string | null;
   hidePackedItems: boolean;
   listDisplayMode: 'alles' | 'packliste';
@@ -374,6 +376,8 @@ export function PackingList({
   onDelete,
   onConfirmVorgemerkt,
   canConfirmVorgemerkt,
+  canEditPauschalEntries = true,
+  isChildView = false,
   selectedProfile,
   hidePackedItems,
   listDisplayMode,
@@ -427,10 +431,12 @@ export function PackingList({
         if (abreiseStr && todayStr !== abreiseStr) return false;
       }
       if (!selectedProfile) return true;
-      if (item.mitreisenden_typ === 'pauschal') return true;
+      if (item.mitreisenden_typ === 'pauschal') {
+        return canEditPauschalEntries;
+      }
       return item.mitreisende?.some(m => m.mitreisender_id === selectedProfile) ?? false;
     });
-  }, [items, listDisplayMode, selectedProfile, abreiseDatum, toYYYYMMDD]);
+  }, [items, listDisplayMode, selectedProfile, abreiseDatum, toYYYYMMDD, canEditPauschalEntries]);
 
   // Group items by main category and category (nur sichtbare)
   const itemsByMainCategory = useMemo(() => {

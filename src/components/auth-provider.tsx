@@ -26,6 +26,8 @@ interface AuthContextValue {
   canSelectOtherProfiles: boolean
   /** Kind mit Berechtigung: Gepackt-Anzeige erfordert Eltern-Bestätigung */
   gepacktRequiresParentApproval: boolean
+  /** Kind darf pauschale Einträge bearbeiten/sehen */
+  canEditPauschalEntries: boolean
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
@@ -63,6 +65,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const canAccessConfig = user?.role === 'admin'
   const canSelectOtherProfiles = user?.role === 'admin'
   const gepacktRequiresParentApproval = !canAccessConfig && (user?.permissions?.includes('gepackt_erfordert_elternkontrolle') ?? false)
+  const canEditPauschalEntries = canAccessConfig || (user?.permissions?.includes('can_edit_pauschal_entries') ?? false)
 
   return (
     <AuthContext.Provider
@@ -73,7 +76,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         refetch: fetchUser,
         canAccessConfig,
         canSelectOtherProfiles,
-        gepacktRequiresParentApproval
+        gepacktRequiresParentApproval,
+        canEditPauschalEntries
       }}
     >
       {children}

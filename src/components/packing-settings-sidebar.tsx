@@ -24,6 +24,8 @@ interface PackingSettingsSidebarProps {
   onHidePackedChange: (hide: boolean) => void
   listDisplayMode: 'alles' | 'packliste'
   onListDisplayModeChange: (mode: 'alles' | 'packliste') => void
+  /** False für Kinder: „Zentral/Alle“-Option ausblenden */
+  showAlleOption?: boolean
 }
 
 export function PackingSettingsSidebar({
@@ -35,7 +37,8 @@ export function PackingSettingsSidebar({
   hidePackedItems,
   onHidePackedChange,
   listDisplayMode,
-  onListDisplayModeChange
+  onListDisplayModeChange,
+  showAlleOption = true
 }: PackingSettingsSidebarProps) {
   const travelerNames = mitreisende.map((m) => m.name)
   const getTravelerInitials = (name: string) => getInitials(name, travelerNames)
@@ -124,7 +127,8 @@ export function PackingSettingsSidebar({
             </p>
           </div>
 
-          {/* Zentral / Alle Option */}
+          {/* Zentral / Alle Option – nur für Admin */}
+          {showAlleOption && (
           <button
             onClick={() => onProfileChange(null)}
             className={cn(
@@ -147,6 +151,7 @@ export function PackingSettingsSidebar({
               </div>
             </div>
           </button>
+          )}
 
           {/* Mitreisende Grid */}
           {mitreisende.length > 0 && (

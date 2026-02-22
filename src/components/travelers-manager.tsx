@@ -123,6 +123,7 @@ export function TravelersManager({ travelers, onRefresh }: TravelersManagerProps
   const [inviteTraveler, setInviteTraveler] = useState<Mitreisender | null>(null)
   const [inviteRole, setInviteRole] = useState<'admin' | 'kind' | 'gast'>('kind')
   const [inviteLink, setInviteLink] = useState<string | null>(null)
+  const [inviteBerechtigungen, setInviteBerechtigungen] = useState<string[]>([])
   const [isLoading, setIsLoading] = useState(false)
 
   const [form, setForm] = useState({
@@ -304,6 +305,7 @@ export function TravelersManager({ travelers, onRefresh }: TravelersManagerProps
     setInviteTraveler(traveler)
     setInviteRole('kind')
     setInviteLink(null)
+    setInviteBerechtigungen([])
   }
 
   const handleAssignMe = async () => {
@@ -335,6 +337,18 @@ export function TravelersManager({ travelers, onRefresh }: TravelersManagerProps
     if (!inviteTraveler) return
     setIsLoading(true)
     try {
+      if (inviteRole === 'kind') {
+        const permRes = await fetch(`/api/mitreisende/${inviteTraveler.id}/berechtigungen`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ berechtigungen: inviteBerechtigungen })
+        })
+        const permData = (await permRes.json()) as { success?: boolean }
+        if (!permData.success) {
+          alert('Berechtigungen konnten nicht gespeichert werden.')
+          return
+        }
+      }
       const res = await fetch('/api/auth/invite', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -599,6 +613,32 @@ export function TravelersManager({ travelers, onRefresh }: TravelersManagerProps
                   </SelectContent>
                 </Select>
               </div>
+              {inviteRole === 'kind' && (
+                <div className="space-y-3 pt-2 border-t">
+                  <Label>Berechtigungen (für Kind)</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Diese Einstellungen gelten, sobald die Einladung angenommen wurde.
+                  </p>
+                  <div className="space-y-2">
+                    {BERECHTIGUNGEN_OPTIONS.map((opt) => (
+                      <div key={opt.key} className="flex items-center space-x-2">
+                        <Checkbox
+                          id={`invite-perm-${opt.key}`}
+                          checked={inviteBerechtigungen.includes(opt.key)}
+                          onCheckedChange={(checked) => {
+                            setInviteBerechtigungen(prev =>
+                              checked ? [...prev, opt.key] : prev.filter((k) => k !== opt.key)
+                            )
+                          }}
+                        />
+                        <label htmlFor={`invite-perm-${opt.key}`} className="text-sm font-medium leading-none cursor-pointer">
+                          {opt.label}
+                        </label>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               <Button onClick={handleCreateInvite} disabled={isLoading} className="w-full">
                 {isLoading ? 'Wird erstellt...' : 'Einladung erstellen'}
               </Button>

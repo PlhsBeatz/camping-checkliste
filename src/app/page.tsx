@@ -79,7 +79,7 @@ interface CategoryWithMain extends Category {
 }
 
 function HomeContent() {
-  const { user, canSelectOtherProfiles, canAccessConfig, gepacktRequiresParentApproval } = useAuth()
+  const { user, canSelectOtherProfiles, canAccessConfig, gepacktRequiresParentApproval, canEditPauschalEntries } = useAuth()
   // Data state
   const [vacations, setVacations] = useState<Vacation[]>([])
   const [packingItems, setPackingItems] = useState<PackingItem[]>([])
@@ -1051,6 +1051,8 @@ function HomeContent() {
                   canConfirmVorgemerkt={canAccessConfig}
                   selectedProfile={selectedPackProfile}
                   hidePackedItems={hidePackedItems}
+                  canEditPauschalEntries={canEditPauschalEntries}
+                  isChildView={!canSelectOtherProfiles}
                   listDisplayMode={listDisplayMode}
                   onOpenSettings={() => setShowPackSettings(true)}
                   vacationMitreisende={vacationMitreisende}
@@ -1181,6 +1183,7 @@ function HomeContent() {
         onHidePackedChange={setHidePackedItems}
         listDisplayMode={listDisplayMode}
         onListDisplayModeChange={setListDisplayMode}
+        showAlleOption={canSelectOtherProfiles}
       />
 
       {/* FAB Button für Gegenstand hinzufügen - Kreisrund mit weißem Plus */}
