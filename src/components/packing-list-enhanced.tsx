@@ -132,6 +132,19 @@ const PackingItem: React.FC<PackingItemProps> = ({
     return mitreisende.find(m => m.mitreisender_id === selectedProfile);
   }, [selectedProfile, mitreisende]);
 
+  /** Transport für Pill: im Personen-Profil der Person-Transport, im Alle-Profil Haupt + ggf. weiteres mit "+" */
+  const displayTransportName = useMemo(() => {
+    if (selectedProfile !== null) {
+      const person = fullItem.mitreisende?.find(m => m.mitreisender_id === selectedProfile);
+      return person?.transport_name ?? fullItem.transport_name ?? null;
+    }
+    const main = fullItem.transport_name ?? null;
+    const personTransports = (fullItem.mitreisende ?? []).map(m => m.transport_name).filter(Boolean) as string[];
+    const others = [...new Set(personTransports)].filter(t => t !== main);
+    if (others.length === 0) return main;
+    return [main, ...others].filter(Boolean).join('+');
+  }, [fullItem, selectedProfile]);
+
   /** Gepackt für Transparenz-Anzeige (opacity-60): Admin nur bei final gepackt, sonst auch vorgemerkt */
   const isPackedForOpacity = useMemo(() => {
     if (canConfirmVorgemerkt) {
@@ -412,9 +425,9 @@ const PackingItem: React.FC<PackingItemProps> = ({
 
           {/* Transport-Pill und Three-dot menu */}
           <div className="flex items-center gap-1 flex-shrink-0">
-            {transport_name && (
+            {displayTransportName && (
               <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-md">
-                {transport_name}
+                {displayTransportName}
               </span>
             )}
             <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
@@ -779,15 +792,23 @@ export function PackingList({
     }
   };
 
-  // Tab-Leiste zum aktiven Tab scrollen, wenn er nicht vollständig sichtbar ist (z. B. nach Swipe)
+  // Tab-Leiste zum aktiven Tab scrollen (nur den Tab-Container, nicht die ganze Seite)
   useEffect(() => {
     let rafId: number | null = null;
     if (tabsForSwipe.length > 0) {
       const scrollEl = tabsScrollContainerRef.current;
       const activeTrigger = scrollEl?.querySelector<HTMLElement>('[data-state="active"]');
-      if (activeTrigger) {
+      if (scrollEl && activeTrigger) {
         rafId = requestAnimationFrame(() => {
-          activeTrigger.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+          const container = scrollEl;
+          const trigger = activeTrigger;
+          const triggerLeft = trigger.offsetLeft;
+          const triggerWidth = trigger.offsetWidth;
+          const containerWidth = container.clientWidth;
+          const maxScroll = container.scrollWidth - containerWidth;
+          // Tab sichtbar machen: Trigger möglichst zentriert, ohne die Seite zu scrollen
+          const targetScroll = Math.max(0, Math.min(maxScroll, triggerLeft - containerWidth / 2 + triggerWidth / 2));
+          container.scrollTo({ left: targetScroll, behavior: 'smooth' });
         });
       }
     }
