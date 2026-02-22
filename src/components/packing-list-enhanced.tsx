@@ -16,7 +16,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { MoreVertical, Edit2, Trash2, RotateCcw, CheckCheck } from "lucide-react";
-import { useMemo, useState, useEffect, useRef } from "react";
+import { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import { PackingItem as DBPackingItem } from "@/lib/db";
 import { MarkAllConfirmationDialog, type TravelerForMarkAll } from "./mark-all-confirmation-dialog";
 import { UndoToast } from "./undo-toast";
@@ -60,7 +60,7 @@ const PackingItem: React.FC<PackingItemProps> = ({
   gepackt,
   gepackt_vorgemerkt,
   bemerkung,
-  transport_name,
+  transport_name: _transport_name,
   mitreisenden_typ,
   mitreisende,
   onToggle,
@@ -736,7 +736,7 @@ export function PackingList({
   };
 
   // Ist ein Eintrag vollständig gepackt (aus Sicht des aktuellen Profils/Berechtigungen)?
-  const isItemFullyPackedForView = (item: DBPackingItem) => {
+  const isItemFullyPackedForView = useCallback((item: DBPackingItem) => {
     if (item.mitreisenden_typ === 'pauschal') {
       return canConfirmVorgemerkt ? item.gepackt : (item.gepackt || !!item.gepackt_vorgemerkt);
     }
@@ -748,7 +748,7 @@ export function PackingList({
     return (item.mitreisende?.length ?? 0) > 0 && item.mitreisende!.every(m =>
       canConfirmVorgemerkt ? m.gepackt : (m.gepackt || !!m.gepackt_vorgemerkt)
     );
-  };
+  }, [selectedProfile, canConfirmVorgemerkt]);
 
   // Hauptkategorien ausblenden, die vollständig abgehakt sind (bei Gepacktes ausblenden)
   const visibleMainCategories = useMemo(() => {
@@ -758,7 +758,7 @@ export function PackingList({
       const allItems = Object.values(cats).flat();
       return allItems.some(item => !isItemFullyPackedForView(item));
     });
-  }, [mainCategories, itemsByMainCategory, hidePackedItems, selectedProfile, canConfirmVorgemerkt]);
+  }, [mainCategories, itemsByMainCategory, hidePackedItems, isItemFullyPackedForView]);
 
   // Aktive Tab setzen/korrigieren: erste sichtbare oder wenn aktuelle ausgeblendet
   useEffect(() => {
