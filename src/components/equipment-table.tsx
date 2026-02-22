@@ -55,6 +55,8 @@ export const EquipmentTable = React.memo(({
   const [filterTag, setFilterTag] = useState<string>('all')
   const [filterStandard, setFilterStandard] = useState<string>('all')
   const [showFilters, setShowFilters] = useState(false)
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null)
+  const [openLinksMenuId, setOpenLinksMenuId] = useState<string | null>(null)
 
   // Get category name by ID
   const getCategoryName = useCallback((categoryId: string) => {
@@ -596,7 +598,7 @@ export const EquipmentTable = React.memo(({
                     </div>
                     <div className={`px-4 py-2 flex items-center ${colAlign.links}`}>
                       {item.links && item.links.length > 0 ? (
-                        <DropdownMenu>
+                        <DropdownMenu open={openLinksMenuId === item.id} onOpenChange={(o) => setOpenLinksMenuId(o ? item.id : null)}>
                           <DropdownMenuTrigger asChild>
                             <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
                               <ExternalLink className="h-4 w-4 text-blue-600" />
@@ -606,8 +608,8 @@ export const EquipmentTable = React.memo(({
                             {item.links.map((link, idx) => (
                               <DropdownMenuItem
                                 key={idx}
-                                onSelect={(e) => {
-                                  e.preventDefault()
+                                onSelect={() => {
+                                  setOpenLinksMenuId(null)
                                   window.open(link.url, '_blank')
                                 }}
                                 className="cursor-pointer"
@@ -622,7 +624,7 @@ export const EquipmentTable = React.memo(({
                     </div>
                     <div className={`px-1 py-2 sticky right-0 bg-white flex items-center justify-center ${colAlign.actions}`}>
                       {!readOnly && (
-                      <DropdownMenu>
+                      <DropdownMenu open={openMenuId === item.id} onOpenChange={(o) => setOpenMenuId(o ? item.id : null)}>
                         <DropdownMenuTrigger asChild>
                           <Button variant="ghost" size="sm" className="h-7 w-7 min-w-7 p-0">
                             <MoreVertical className="h-4 w-4" />
@@ -630,8 +632,8 @@ export const EquipmentTable = React.memo(({
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem
-                            onSelect={(e) => {
-                              e.preventDefault()
+                            onSelect={() => {
+                              setOpenMenuId(null)
                               onEdit(item)
                             }}
                           >
@@ -639,8 +641,8 @@ export const EquipmentTable = React.memo(({
                             Bearbeiten
                           </DropdownMenuItem>
                           <DropdownMenuItem
-                            onSelect={(e) => {
-                              e.preventDefault()
+                            onSelect={() => {
+                              setOpenMenuId(null)
                               onDelete(item.id)
                             }}
                             className="text-destructive"

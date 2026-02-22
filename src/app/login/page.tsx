@@ -7,7 +7,7 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Tent } from 'lucide-react'
+import { AppLogo } from '@/components/app-logo'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -54,15 +54,7 @@ function LoginForm() {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-[rgb(250,250,249)] p-4">
       <div className="w-full max-w-sm space-y-8">
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-14 h-14 bg-[rgb(45,79,30)] rounded-xl flex items-center justify-center">
-            <Tent className="w-8 h-8 text-white" />
-          </div>
-          <div className="text-center">
-            <h1 className="text-2xl font-bold text-[rgb(45,79,30)]">CAMPPACK</h1>
-            <p className="text-sm text-gray-600">Anmelden</p>
-          </div>
-        </div>
+        <AppLogo size="default" variant="centered" subtitle="Anmelden" />
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           {error && (

@@ -49,6 +49,7 @@ function TravelerRow({
   onDelete: (id: string) => void
   onInvite: (t: Mitreisender) => void
 }) {
+  const [menuOpen, setMenuOpen] = useState(false)
   return (
     <div
       className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 bg-white"
@@ -67,7 +68,7 @@ function TravelerRow({
           )}
         </div>
       </div>
-      <DropdownMenu>
+      <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
             <MoreVertical className="h-4 w-4" />
@@ -76,8 +77,8 @@ function TravelerRow({
         <DropdownMenuContent align="end">
           {!traveler.user_id && (
             <DropdownMenuItem
-              onSelect={(e) => {
-                e.preventDefault()
+              onSelect={() => {
+                setMenuOpen(false)
                 onInvite(traveler)
               }}
             >
@@ -86,8 +87,8 @@ function TravelerRow({
             </DropdownMenuItem>
           )}
           <DropdownMenuItem
-            onSelect={(e) => {
-              e.preventDefault()
+            onSelect={() => {
+              setMenuOpen(false)
               onEdit(traveler)
             }}
           >
@@ -95,8 +96,8 @@ function TravelerRow({
             Bearbeiten
           </DropdownMenuItem>
           <DropdownMenuItem
-            onSelect={(e) => {
-              e.preventDefault()
+            onSelect={() => {
+              setMenuOpen(false)
               onDelete(traveler.id)
             }}
             className="text-destructive focus:text-destructive"

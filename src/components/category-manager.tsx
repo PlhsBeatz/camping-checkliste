@@ -49,6 +49,7 @@ function SortableSubcategoryRow({
   onDelete: () => void
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: cat.id })
+  const [menuOpen, setMenuOpen] = useState(false)
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -79,18 +80,18 @@ function SortableSubcategoryRow({
           </span>
         )}
       </div>
-      <DropdownMenu>
+      <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0">
             <MoreVertical className="h-4 w-4" />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          <DropdownMenuItem onSelect={(e) => { e.preventDefault(); onEdit() }}>
+          <DropdownMenuItem onSelect={() => { setMenuOpen(false); onEdit() }}>
             <Pencil className="h-4 w-4 mr-2" />
             Bearbeiten
           </DropdownMenuItem>
-          <DropdownMenuItem onSelect={(e) => { e.preventDefault(); onDelete() }} className="text-destructive focus:text-destructive">
+          <DropdownMenuItem onSelect={() => { setMenuOpen(false); onDelete() }} className="text-destructive focus:text-destructive">
             <Trash2 className="h-4 w-4 mr-2" />
             Löschen
           </DropdownMenuItem>
@@ -116,6 +117,7 @@ function SortableMainCategoryRow({
   children: React.ReactNode
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: mainCat.id })
+  const [menuOpen, setMenuOpen] = useState(false)
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -143,18 +145,18 @@ function SortableMainCategoryRow({
             </span>
           )}
         </div>
-        <DropdownMenu>
+        <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
               <MoreVertical className="h-4 w-4" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem onSelect={(e) => { e.preventDefault(); onEdit() }}>
+            <DropdownMenuItem onSelect={() => { setMenuOpen(false); onEdit() }}>
               <Pencil className="h-4 w-4 mr-2" />
               Bearbeiten
             </DropdownMenuItem>
-            <DropdownMenuItem onSelect={(e) => { e.preventDefault(); onDelete() }} className="text-destructive focus:text-destructive">
+            <DropdownMenuItem onSelect={() => { setMenuOpen(false); onDelete() }} className="text-destructive focus:text-destructive">
               <Trash2 className="h-4 w-4 mr-2" />
               Löschen
             </DropdownMenuItem>

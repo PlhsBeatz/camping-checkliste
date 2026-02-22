@@ -26,6 +26,7 @@ export function TagManager({ tags, onRefresh }: TagManagerProps) {
   const [editingTag, setEditingTag] = useState<Tag | null>(null)
   const [deleteTagId, setDeleteTagId] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
+  const [tagMenuOpen, setTagMenuOpen] = useState<string | null>(null)
 
   const [form, setForm] = useState({
     titel: '',
@@ -182,7 +183,7 @@ export function TagManager({ tags, onRefresh }: TagManagerProps) {
                 </div>
               </div>
               <div className="ml-2">
-                <DropdownMenu>
+                <DropdownMenu open={tagMenuOpen === tag.id} onOpenChange={(o) => setTagMenuOpen(o ? tag.id : null)}>
                   <DropdownMenuTrigger asChild>
                     <Button variant="ghost" size="sm" className="h-7 w-7 min-w-7 p-0">
                       <MoreVertical className="h-4 w-4" />
@@ -190,8 +191,8 @@ export function TagManager({ tags, onRefresh }: TagManagerProps) {
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
                     <DropdownMenuItem
-                      onSelect={(e) => {
-                        e.preventDefault()
+                      onSelect={() => {
+                        setTagMenuOpen(null)
                         openEdit(tag)
                       }}
                     >
@@ -199,8 +200,8 @@ export function TagManager({ tags, onRefresh }: TagManagerProps) {
                       Bearbeiten
                     </DropdownMenuItem>
                     <DropdownMenuItem
-                      onSelect={(e) => {
-                        e.preventDefault()
+                      onSelect={() => {
+                        setTagMenuOpen(null)
                         handleDelete(tag.id)
                       }}
                       className="text-destructive focus:text-destructive"

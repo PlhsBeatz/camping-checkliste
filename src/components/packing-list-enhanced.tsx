@@ -75,6 +75,7 @@ const PackingItem: React.FC<PackingItemProps> = ({
   const [showMarkAllDialog, setShowMarkAllDialog] = useState(false);
   const [isExiting, setIsExiting] = useState(false);
   const [hasExited, setHasExited] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const effectivePacked = (g: boolean, v?: boolean) => g || !!v;
   const isFullyPacked = useMemo(() => {
@@ -341,7 +342,7 @@ const PackingItem: React.FC<PackingItemProps> = ({
                 {transport_name}
               </span>
             )}
-            <DropdownMenu>
+            <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
             <DropdownMenuTrigger asChild>
               <Button
                 variant="ghost"
@@ -354,19 +355,30 @@ const PackingItem: React.FC<PackingItemProps> = ({
             <DropdownMenuContent align="end">
               {canConfirmVorgemerkt && onRemoveVorgemerkt && (isVorgemerktPauschal || selectedTravelerVorgemerkt) && (
                 <DropdownMenuItem
-                  onClick={() => onRemoveVorgemerkt(id, selectedTravelerVorgemerkt ? selectedProfile ?? undefined : undefined)}
+                  onSelect={() => {
+                    setMenuOpen(false)
+                    onRemoveVorgemerkt(id, selectedTravelerVorgemerkt ? selectedProfile ?? undefined : undefined)
+                  }}
                 >
                   <RotateCcw className="h-4 w-4 mr-2" />
                   Vormerkung entfernen
                 </DropdownMenuItem>
               )}
-              <DropdownMenuItem onClick={() => onEdit(fullItem)}>
+              <DropdownMenuItem
+                onSelect={() => {
+                  setMenuOpen(false)
+                  onEdit(fullItem)
+                }}
+              >
                 <Edit2 className="h-4 w-4 mr-2" />
                 Bearbeiten
               </DropdownMenuItem>
               {!(selectedProfile && mitreisenden_typ === 'pauschal') && (
                 <DropdownMenuItem 
-                  onClick={() => onDelete(id, selectedProfile)}
+                  onSelect={() => {
+                    setMenuOpen(false)
+                    onDelete(id, selectedProfile)
+                  }}
                   className="text-destructive focus:text-destructive"
                 >
                   <Trash2 className="h-4 w-4 mr-2" />

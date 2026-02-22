@@ -20,6 +20,8 @@ const useIsMobile = () => {
   return !!isMobile
 }
 
+const DRAWER_STATE_KEY = 'responsive_modal_drawer'
+
 export interface ResponsiveModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -49,6 +51,23 @@ export function ResponsiveModal({
   customContent = false,
 }: ResponsiveModalProps) {
   const isMobile = useIsMobile()
+
+  // Smartphone Zurück-Button: Drawer schließen statt Navigation
+  React.useEffect(() => {
+    if (!open || !isMobile || typeof window === 'undefined') return
+    const state = { [DRAWER_STATE_KEY]: true }
+    window.history.pushState(state, '')
+    const onPopState = () => {
+      onOpenChange(false)
+    }
+    window.addEventListener('popstate', onPopState)
+    return () => {
+      window.removeEventListener('popstate', onPopState)
+      if (window.history.state?.[DRAWER_STATE_KEY]) {
+        window.history.back()
+      }
+    }
+  }, [open, isMobile, onOpenChange])
 
   if (customContent) {
     if (isMobile) {

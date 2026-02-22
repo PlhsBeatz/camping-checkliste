@@ -36,6 +36,7 @@ function TransportmittelRow({
   onEdit: (v: TransportVehicle) => void
   onDelete: (id: string) => void
 }) {
+  const [menuOpen, setMenuOpen] = useState(false)
   const nutzlast = vehicle.zul_gesamtgewicht - vehicle.eigengewicht
   const festgewichtTotal = 'festgewichtTotal' in vehicle ? vehicle.festgewichtTotal : 0
   return (
@@ -56,7 +57,7 @@ function TransportmittelRow({
           </p>
         </div>
       </div>
-      <DropdownMenu>
+      <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
             <MoreVertical className="h-4 w-4" />
@@ -64,8 +65,8 @@ function TransportmittelRow({
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           <DropdownMenuItem
-            onSelect={(e) => {
-              e.preventDefault()
+            onSelect={() => {
+              setMenuOpen(false)
               onEdit(vehicle)
             }}
           >
@@ -73,8 +74,8 @@ function TransportmittelRow({
             Bearbeiten
           </DropdownMenuItem>
           <DropdownMenuItem
-            onSelect={(e) => {
-              e.preventDefault()
+            onSelect={() => {
+              setMenuOpen(false)
               onDelete(vehicle.id)
             }}
             className="text-destructive focus:text-destructive"

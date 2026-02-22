@@ -3,7 +3,8 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { ChevronDown, ChevronRight, Tent, LogOut } from 'lucide-react'
+import { ChevronDown, ChevronRight, LogOut } from 'lucide-react'
+import { AppLogo } from '@/components/app-logo'
 import { useAuth } from '@/components/auth-provider'
 import { cn } from '@/lib/utils'
 import { subscribeToOnlineStatus } from '@/lib/offline-sync'
@@ -26,7 +27,7 @@ export function NavigationSidebar({ isOpen, onClose }: NavigationSidebarProps) {
   const menuItems = [
     {
       icon: 'checklist',
-      label: 'AKTUELLE PACKLISTE',
+      label: 'PACKLISTE',
       href: '/',
       active: pathname === '/'
     },
@@ -38,7 +39,7 @@ export function NavigationSidebar({ isOpen, onClose }: NavigationSidebarProps) {
     },
     {
       icon: 'event',
-      label: 'MEINE URLAUBE',
+      label: 'URLAUBE',
       href: '/urlaube',
       active: pathname.startsWith('/urlaube')
     },
@@ -76,15 +77,7 @@ export function NavigationSidebar({ isOpen, onClose }: NavigationSidebarProps) {
       >
         {/* Logo & Version */}
         <div className="p-6 bg-[rgb(250,250,249)]">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-[rgb(45,79,30)] rounded-lg flex items-center justify-center flex-shrink-0">
-              <Tent className="w-6 h-6 text-white" />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold text-[rgb(45,79,30)] leading-tight">CAMPPACK</h1>
-              <p className="text-xs text-[rgb(45,79,30)]/60">v 0.3 PRO</p>
-            </div>
-          </div>
+          <AppLogo showVersion size="compact" />
         </div>
 
         {/* Navigation */}

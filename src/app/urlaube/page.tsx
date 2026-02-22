@@ -42,6 +42,7 @@ export default function UrlaubePage() {
   const [editingVacationId, setEditingVacationId] = useState<string | null>(null)
   const [vacationMitreisende, setVacationMitreisende] = useState<Mitreisender[]>([])
   const [deleteVacationId, setDeleteVacationId] = useState<string | null>(null)
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null)
   
   const [newVacationForm, setNewVacationForm] = useState({
     titel: '',
@@ -581,7 +582,7 @@ export default function UrlaubePage() {
                           </div>
                         </CardDescription>
                       </div>
-                      <DropdownMenu>
+                      <DropdownMenu open={openMenuId === vacation.id} onOpenChange={(o) => setOpenMenuId(o ? vacation.id : null)}>
                         <DropdownMenuTrigger asChild>
                           <Button
                             variant="ghost"
@@ -594,8 +595,8 @@ export default function UrlaubePage() {
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
                           <DropdownMenuItem
-                            onSelect={(e) => {
-                              e.preventDefault()
+                            onSelect={() => {
+                              setOpenMenuId(null)
                               handleEditVacation(vacation)
                             }}
                           >
@@ -603,8 +604,8 @@ export default function UrlaubePage() {
                             Bearbeiten
                           </DropdownMenuItem>
                           <DropdownMenuItem
-                            onSelect={(e) => {
-                              e.preventDefault()
+                            onSelect={() => {
+                              setOpenMenuId(null)
                               handleDeleteVacation(vacation.id)
                             }}
                             className="text-destructive focus:text-destructive"
