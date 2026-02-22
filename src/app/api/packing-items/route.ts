@@ -13,7 +13,7 @@ import {
 } from '@/lib/db'
 import { notifyPackingSyncChange } from '@/lib/packing-sync'
 import { requireAuth } from '@/lib/api-auth'
-import { canAccessVacation } from '@/lib/permissions'
+import { canAccessVacation, gepacktRequiresParentApproval } from '@/lib/permissions'
 
 export async function GET(request: NextRequest) {
   try {
@@ -115,12 +115,20 @@ export async function PUT(request: NextRequest) {
       }
     }
 
-    const success = await updatePackingItem(db, id, {
-      gepackt,
+    const updates: { gepackt?: boolean; gepackt_vorgemerkt?: boolean; gepackt_vorgemerkt_durch?: string | null; anzahl?: number; bemerkung?: string | null; transport_id?: string | null } = {
       anzahl,
       bemerkung,
       transport_id: transport_id ?? undefined,
-    })
+    }
+    if (gepackt !== undefined) {
+      if (gepacktRequiresParentApproval(auth.userContext)) {
+        updates.gepackt_vorgemerkt = gepackt
+        updates.gepackt_vorgemerkt_durch = gepackt ? (auth.userContext.mitreisenderId ?? null) : null
+      } else {
+        updates.gepackt = gepackt
+      }
+    }
+    const success = await updatePackingItem(db, id, updates)
 
     if (success && vacationId) {
       const cfEnv = getCloudflareContext().env as unknown as CloudflareEnv

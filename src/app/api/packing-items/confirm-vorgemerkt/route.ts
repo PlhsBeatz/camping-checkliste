@@ -3,32 +3,33 @@ import { getCloudflareContext } from '@opennextjs/cloudflare'
 import {
   getDB,
   CloudflareEnv,
-  togglePackingItemForMitreisender,
-  togglePackingItemVorgemerktForMitreisender,
+  confirmVorgemerktPauschal,
+  confirmVorgemerktForMitreisender,
   getVacationIdFromPackingItem,
   getMitreisendeForVacation,
 } from '@/lib/db'
 import { notifyPackingSyncChange } from '@/lib/packing-sync'
-import { requireAuth } from '@/lib/api-auth'
-import { canAccessVacation, gepacktRequiresParentApproval } from '@/lib/permissions'
+import { requireAuth, requireAdmin } from '@/lib/api-auth'
+import { canAccessVacation } from '@/lib/permissions'
 
-export async function PUT(request: NextRequest) {
+export async function POST(request: NextRequest) {
   try {
     const auth = await requireAuth(request)
     if (auth instanceof NextResponse) return auth
+    const adminCheck = requireAdmin(auth.userContext)
+    if (adminCheck) return adminCheck
+
     const env = process.env as unknown as CloudflareEnv
     const db = getDB(env)
-
     const body = (await request.json()) as {
-      packingItemId?: string
+      packingItemId: string
       mitreisenderId?: string
-      gepackt?: boolean
     }
-    const { packingItemId, mitreisenderId, gepackt } = body
+    const { packingItemId, mitreisenderId } = body
 
-    if (!packingItemId || !mitreisenderId || gepackt === undefined) {
+    if (!packingItemId) {
       return NextResponse.json(
-        { success: false, error: 'Missing required fields' },
+        { success: false, error: 'packingItemId erforderlich' },
         { status: 400 }
       )
     }
@@ -41,15 +42,17 @@ export async function PUT(request: NextRequest) {
       }
     }
 
-    const useVorgemerkt = gepacktRequiresParentApproval(auth.userContext)
-    const success = useVorgemerkt
-      ? await togglePackingItemVorgemerktForMitreisender(db, packingItemId, mitreisenderId, gepackt)
-      : await togglePackingItemForMitreisender(db, packingItemId, mitreisenderId, gepackt)
+    let success: boolean
+    if (mitreisenderId) {
+      success = await confirmVorgemerktForMitreisender(db, packingItemId, mitreisenderId)
+    } else {
+      success = await confirmVorgemerktPauschal(db, packingItemId)
+    }
 
     if (!success) {
       return NextResponse.json(
-        { success: false, error: 'Failed to update status' },
-        { status: 500 }
+        { success: false, error: 'Keine vorgemerkten Einträge gefunden' },
+        { status: 400 }
       )
     }
 
@@ -60,7 +63,7 @@ export async function PUT(request: NextRequest) {
 
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error('Error toggling mitreisender status:', error)
+    console.error('Error confirming vorgemerkt:', error)
     return NextResponse.json(
       { success: false, error: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }

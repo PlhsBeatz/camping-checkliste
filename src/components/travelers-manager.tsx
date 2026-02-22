@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { ResponsiveModal } from '@/components/ui/responsive-modal'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Button } from '@/components/ui/button'
@@ -11,7 +11,14 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Trash2, Plus, Star, MoreVertical, Pencil } from 'lucide-react'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { Trash2, Plus, Star, MoreVertical, Pencil, Mail, Copy } from 'lucide-react'
 import { Mitreisender } from '@/lib/db'
 import type { ApiResponse } from '@/lib/api-types'
 import { USER_COLORS, DEFAULT_USER_COLOR_BG } from '@/lib/user-colors'
@@ -32,12 +39,14 @@ function TravelerRow({
   index,
   onEdit,
   onDelete,
+  onInvite,
 }: {
   traveler: Mitreisender
   initials: string
   index: number
   onEdit: (t: Mitreisender) => void
   onDelete: (id: string) => void
+  onInvite: (t: Mitreisender) => void
 }) {
   return (
     <div
@@ -64,6 +73,15 @@ function TravelerRow({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
+          <DropdownMenuItem
+            onSelect={(e) => {
+              e.preventDefault()
+              onInvite(traveler)
+            }}
+          >
+            <Mail className="h-4 w-4 mr-2" />
+            Einladung erstellen
+          </DropdownMenuItem>
           <DropdownMenuItem
             onSelect={(e) => {
               e.preventDefault()
@@ -98,6 +116,9 @@ export function TravelersManager({ travelers, onRefresh }: TravelersManagerProps
   const [showDialog, setShowDialog] = useState(false)
   const [editingTraveler, setEditingTraveler] = useState<Mitreisender | null>(null)
   const [deleteTravelerId, setDeleteTravelerId] = useState<string | null>(null)
+  const [inviteTraveler, setInviteTraveler] = useState<Mitreisender | null>(null)
+  const [inviteRole, setInviteRole] = useState<'kind' | 'gast'>('kind')
+  const [inviteLink, setInviteLink] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
 
   const [form, setForm] = useState({
@@ -106,6 +127,12 @@ export function TravelersManager({ travelers, onRefresh }: TravelersManagerProps
     isDefaultMember: false,
     farbe: DEFAULT_USER_COLOR_BG
   })
+  const [formBerechtigungen, setFormBerechtigungen] = useState<string[]>([])
+
+  const BERECHTIGUNGEN_OPTIONS = [
+    { key: 'can_edit_pauschal_entries', label: 'Pauschale Einträge bearbeiten' },
+    { key: 'gepackt_erfordert_elternkontrolle', label: 'Gepackt erfordert Elternkontrolle' },
+  ] as const
 
   const handleCreate = async () => {
     if (!form.name.trim()) {
@@ -161,14 +188,24 @@ export function TravelersManager({ travelers, onRefresh }: TravelersManagerProps
         })
       })
       const data = (await res.json()) as ApiResponse<unknown>
-      if (data.success) {
-        setShowDialog(false)
-        setEditingTraveler(null)
-        setForm({ name: '', userId: '', isDefaultMember: false, farbe: DEFAULT_USER_COLOR_BG })
-        onRefresh()
-      } else {
+      if (!data.success) {
         alert('Fehler: ' + (data.error ?? 'Unbekannt'))
+        return
       }
+      const permRes = await fetch(`/api/mitreisende/${editingTraveler.id}/berechtigungen`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ berechtigungen: formBerechtigungen })
+      })
+      const permData = (await permRes.json()) as ApiResponse<unknown>
+      if (!permData.success) {
+        alert('Mitreisender aktualisiert, aber Berechtigungen konnten nicht gespeichert werden.')
+      }
+      setShowDialog(false)
+      setEditingTraveler(null)
+      setForm({ name: '', userId: '', isDefaultMember: false, farbe: DEFAULT_USER_COLOR_BG })
+      setFormBerechtigungen([])
+      onRefresh()
     } catch (error) {
       console.error('Failed to update traveler:', error)
       alert('Fehler beim Aktualisieren')
@@ -212,13 +249,69 @@ export function TravelersManager({ travelers, onRefresh }: TravelersManagerProps
       isDefaultMember: traveler.is_default_member,
       farbe: traveler.farbe || DEFAULT_USER_COLOR_BG
     })
+    setFormBerechtigungen([])
     setShowDialog(true)
   }
+
+  useEffect(() => {
+    if (!editingTraveler) {
+      setFormBerechtigungen([])
+      return
+    }
+    const fetchBerechtigungen = async () => {
+      try {
+        const res = await fetch(`/api/mitreisende/${editingTraveler.id}/berechtigungen`)
+        const data = (await res.json()) as { success?: boolean; data?: string[] }
+        if (data.success && Array.isArray(data.data)) {
+          setFormBerechtigungen(data.data)
+        }
+      } catch {
+        // ignore
+      }
+    }
+    fetchBerechtigungen()
+  }, [editingTraveler])
 
   const openNew = () => {
     setEditingTraveler(null)
     setForm({ name: '', userId: '', isDefaultMember: false, farbe: DEFAULT_USER_COLOR_BG })
     setShowDialog(true)
+  }
+
+  const openInvite = (traveler: Mitreisender) => {
+    setInviteTraveler(traveler)
+    setInviteRole('kind')
+    setInviteLink(null)
+  }
+
+  const handleCreateInvite = async () => {
+    if (!inviteTraveler) return
+    setIsLoading(true)
+    try {
+      const res = await fetch('/api/auth/invite', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mitreisenderId: inviteTraveler.id, role: inviteRole })
+      })
+      const data = (await res.json()) as { success?: boolean; link?: string; error?: string }
+      if (data.success && data.link) {
+        setInviteLink(data.link)
+      } else {
+        alert('Fehler: ' + (data.error ?? 'Unbekannt'))
+      }
+    } catch (error) {
+      console.error('Failed to create invite:', error)
+      alert('Fehler beim Erstellen der Einladung')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const copyInviteLink = () => {
+    if (inviteLink && navigator.clipboard) {
+      navigator.clipboard.writeText(inviteLink)
+      alert('Link kopiert!')
+    }
   }
 
   // Separate default and non-default travelers
@@ -248,6 +341,7 @@ export function TravelersManager({ travelers, onRefresh }: TravelersManagerProps
                 index={idx}
                 onEdit={openEdit}
                 onDelete={handleDelete}
+                onInvite={openInvite}
               />
             ))}
           </div>
@@ -274,6 +368,7 @@ export function TravelersManager({ travelers, onRefresh }: TravelersManagerProps
                 index={defaultTravelers.length + idx}
                 onEdit={openEdit}
                 onDelete={handleDelete}
+                onInvite={openInvite}
               />
             ))}
           </div>
@@ -360,6 +455,37 @@ export function TravelersManager({ travelers, onRefresh }: TravelersManagerProps
                 </p>
               </div>
             </div>
+            {editingTraveler && (
+              <div className="space-y-3 pt-2 border-t">
+                <Label>Berechtigungen (für Kind)</Label>
+                <p className="text-xs text-muted-foreground">
+                  Diese Einstellungen gelten, wenn der Mitreisende als Kind eingeladen wurde.
+                </p>
+                <div className="space-y-2">
+                  {BERECHTIGUNGEN_OPTIONS.map((opt) => (
+                    <div key={opt.key} className="flex items-center space-x-2">
+                      <Checkbox
+                        id={`perm-${opt.key}`}
+                        checked={formBerechtigungen.includes(opt.key)}
+                        onCheckedChange={(checked) => {
+                          setFormBerechtigungen(prev =>
+                            checked
+                              ? [...prev, opt.key]
+                              : prev.filter((k) => k !== opt.key)
+                          )
+                        }}
+                      />
+                      <label
+                        htmlFor={`perm-${opt.key}`}
+                        className="text-sm font-medium leading-none cursor-pointer"
+                      >
+                        {opt.label}
+                      </label>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             <Button
               onClick={editingTraveler ? handleUpdate : handleCreate}
               disabled={isLoading}
@@ -368,6 +494,52 @@ export function TravelersManager({ travelers, onRefresh }: TravelersManagerProps
               {isLoading ? 'Wird gespeichert...' : editingTraveler ? 'Aktualisieren' : 'Erstellen'}
             </Button>
           </div>
+      </ResponsiveModal>
+
+      {/* Einladung erstellen Modal */}
+      <ResponsiveModal
+        open={!!inviteTraveler}
+        onOpenChange={(open) => !open && setInviteTraveler(null)}
+        title="Einladung erstellen"
+        description={`Einladungslink für ${inviteTraveler?.name ?? ''} erstellen`}
+        contentClassName="max-w-lg"
+      >
+        <div className="space-y-4 px-6 pt-4 pb-6">
+          {!inviteLink ? (
+            <>
+              <div>
+                <Label>Rolle</Label>
+                <Select value={inviteRole} onValueChange={(v) => setInviteRole(v as 'kind' | 'gast')}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="kind">Kind</SelectItem>
+                    <SelectItem value="gast">Gast</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <Button onClick={handleCreateInvite} disabled={isLoading} className="w-full">
+                {isLoading ? 'Wird erstellt...' : 'Einladung erstellen'}
+              </Button>
+            </>
+          ) : (
+            <>
+              <p className="text-sm text-muted-foreground">
+                Teilen Sie diesen Link mit {inviteTraveler?.name}. Der Link ist zeitlich begrenzt gültig.
+              </p>
+              <div className="flex gap-2">
+                <Input value={inviteLink} readOnly className="font-mono text-xs" />
+                <Button variant="outline" size="icon" onClick={copyInviteLink} title="Link kopieren">
+                  <Copy className="h-4 w-4" />
+                </Button>
+              </div>
+              <Button variant="secondary" onClick={() => setInviteTraveler(null)} className="w-full">
+                Schließen
+              </Button>
+            </>
+          )}
+        </div>
       </ResponsiveModal>
 
       {/* Mitreisender löschen – Bestätigung */}

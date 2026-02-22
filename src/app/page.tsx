@@ -79,7 +79,7 @@ interface CategoryWithMain extends Category {
 }
 
 function HomeContent() {
-  const { user, canSelectOtherProfiles } = useAuth()
+  const { user, canSelectOtherProfiles, canAccessConfig, gepacktRequiresParentApproval } = useAuth()
   // Data state
   const [vacations, setVacations] = useState<Vacation[]>([])
   const [packingItems, setPackingItems] = useState<PackingItem[]>([])
@@ -484,10 +484,14 @@ function HomeContent() {
   const handleSetPacked = async (itemId: string, gepackt: boolean) => {
     pendingMutationsRef.current += 1
     const prevItems = packingItems
-    // Optimistic update: packingItems direkt aktualisieren → sofortige UI-Aktualisierung
+    // Optimistic update: bei Kind mit vorgemerkt → gepackt_vorgemerkt setzen
     setPackingItems(prev =>
       prev.map(item =>
-        item.id === itemId ? { ...item, gepackt } : item
+        item.id === itemId
+          ? gepacktRequiresParentApproval
+            ? { ...item, gepackt_vorgemerkt: gepackt, gepackt_vorgemerkt_durch: gepackt ? user?.mitreisender_id ?? undefined : undefined }
+            : { ...item, gepackt }
+          : item
       )
     )
     try {
@@ -517,10 +521,14 @@ function HomeContent() {
     const newPackedState = !isPacked
     const prevItems = packingItems
 
-    // Optimistic update: packingItems direkt aktualisieren → Checkbox/Ausblenden sofort
+    // Optimistic update: bei Kind mit vorgemerkt → gepackt_vorgemerkt
     setPackingItems(prev =>
       prev.map(p =>
-        p.id === itemId ? { ...p, gepackt: newPackedState } : p
+        p.id === itemId
+          ? gepacktRequiresParentApproval
+            ? { ...p, gepackt_vorgemerkt: newPackedState, gepackt_vorgemerkt_durch: newPackedState ? user?.mitreisender_id ?? undefined : undefined }
+            : { ...p, gepackt: newPackedState }
+          : p
       )
     )
 
@@ -549,7 +557,16 @@ function HomeContent() {
     const newStatus = !currentStatus
     const prevItems = packingItems
 
-    // Optimistic update: mitreisende-Eintrag in packingItems sofort aktualisieren
+    // Optimistic update: bei Kind mit vorgemerkt → gepackt_vorgemerkt, sonst gepackt
+    const updateField = gepacktRequiresParentApproval
+      ? (m: { mitreisender_id: string; mitreisender_name: string; gepackt: boolean; gepackt_vorgemerkt?: boolean; anzahl?: number }) =>
+          ({ ...m, gepackt_vorgemerkt: newStatus } as typeof m)
+      : (m: { mitreisender_id: string; mitreisender_name: string; gepackt: boolean; gepackt_vorgemerkt?: boolean; anzahl?: number }) =>
+          ({ ...m, gepackt: newStatus } as typeof m)
+    const newMitEntry = gepacktRequiresParentApproval
+      ? { mitreisender_id: mitreisenderId, mitreisender_name: vacationMitreisende.find(m => m.id === mitreisenderId)?.name ?? '', gepackt: false, gepackt_vorgemerkt: true }
+      : { mitreisender_id: mitreisenderId, mitreisender_name: vacationMitreisende.find(m => m.id === mitreisenderId)?.name ?? '', gepackt: true }
+
     setPackingItems(prev =>
       prev.map(p => {
         if (p.id !== itemId) return p
@@ -558,11 +575,10 @@ function HomeContent() {
         let updatedMitreisende: typeof mitreisende
         if (existingIdx >= 0) {
           updatedMitreisende = mitreisende.map((m, i) =>
-            i === existingIdx ? { ...m, gepackt: newStatus } : m
+            i === existingIdx ? updateField(m) : m
           )
         } else if (newStatus) {
-          const name = vacationMitreisende.find(m => m.id === mitreisenderId)?.name ?? ''
-          updatedMitreisende = [...mitreisende, { mitreisender_id: mitreisenderId, mitreisender_name: name, gepackt: true }]
+          updatedMitreisende = [...mitreisende, newMitEntry]
         } else {
           return p
         }
@@ -596,7 +612,11 @@ function HomeContent() {
     pendingMutationsRef.current += 1
     const prevItems = packingItems
 
-    // Optimistic update für alle Änderungen
+    const newEntry = (id: string, name: string, status: boolean) =>
+      gepacktRequiresParentApproval
+        ? { mitreisender_id: id, mitreisender_name: name, gepackt: false, gepackt_vorgemerkt: status }
+        : { mitreisender_id: id, mitreisender_name: name, gepackt: status }
+
     setPackingItems(prev =>
       prev.map(p => {
         if (p.id !== packingItemId) return p
@@ -605,12 +625,12 @@ function HomeContent() {
         const updated = mitreisende.map(m => {
           const newStatus = updateMap.get(m.mitreisender_id)
           if (newStatus === undefined) return m
-          return { ...m, gepackt: newStatus }
+          return gepacktRequiresParentApproval ? { ...m, gepackt_vorgemerkt: newStatus } : { ...m, gepackt: newStatus }
         })
         updates.forEach(u => {
           if (!updated.some(m => m.mitreisender_id === u.mitreisenderId) && u.newStatus) {
             const name = vacationMitreisende.find(m => m.id === u.mitreisenderId)?.name ?? ''
-            updated.push({ mitreisender_id: u.mitreisenderId, mitreisender_name: name, gepackt: true })
+            updated.push(newEntry(u.mitreisenderId, name, u.newStatus))
           }
         })
         return { ...p, mitreisende: updated }
@@ -637,6 +657,41 @@ function HomeContent() {
     } catch (error) {
       console.error('Failed to toggle multiple mitreisende:', error)
       setPackingItems(prevItems)
+    } finally {
+      pendingMutationsRef.current -= 1
+    }
+  }
+
+  const handleConfirmVorgemerkt = async (packingItemId: string, mitreisenderId?: string) => {
+    pendingMutationsRef.current += 1
+    const prevItems = packingItems
+    setPackingItems(prev =>
+      prev.map(p => {
+        if (p.id !== packingItemId) return p
+        if (mitreisenderId) {
+          const mitreisende = (p.mitreisende ?? []).map(m =>
+            m.mitreisender_id === mitreisenderId ? { ...m, gepackt: true, gepackt_vorgemerkt: false } : m
+          )
+          return { ...p, mitreisende }
+        }
+        return { ...p, gepackt: true, gepackt_vorgemerkt: false, gepackt_vorgemerkt_durch: undefined }
+      })
+    )
+    try {
+      const res = await fetch('/api/packing-items/confirm-vorgemerkt', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ packingItemId, mitreisenderId }),
+      })
+      const data = (await res.json()) as ApiResponse<boolean>
+      if (!data.success) {
+        setPackingItems(prevItems)
+        alert('Fehler beim Bestätigen')
+      }
+    } catch (error) {
+      console.error('Failed to confirm vorgemerkt:', error)
+      setPackingItems(prevItems)
+      alert('Fehler beim Bestätigen')
     } finally {
       pendingMutationsRef.current -= 1
     }
@@ -992,6 +1047,8 @@ function HomeContent() {
                   onToggleMultipleMitreisende={handleToggleMultipleMitreisende}
                   onEdit={handleEditPackingItem}
                   onDelete={handleDeletePackingItem}
+                  onConfirmVorgemerkt={handleConfirmVorgemerkt}
+                  canConfirmVorgemerkt={canAccessConfig}
                   selectedProfile={selectedPackProfile}
                   hidePackedItems={hidePackedItems}
                   listDisplayMode={listDisplayMode}

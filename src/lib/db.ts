@@ -25,6 +25,9 @@ export interface PackingItem {
   gegenstand_id: string
   anzahl: number
   gepackt: boolean
+  /** Vorgemerkt durch Kind (noch nicht von Admin bestätigt) */
+  gepackt_vorgemerkt?: boolean
+  gepackt_vorgemerkt_durch?: string | null
   bemerkung?: string | null
   transport_id?: string | null
   transport_name?: string
@@ -46,6 +49,8 @@ export interface PackingItemMitreisender {
   mitreisender_id: string
   mitreisender_name: string
   gepackt: boolean
+  /** Vorgemerkt (noch nicht von Admin bestätigt) */
+  gepackt_vorgemerkt?: boolean
   /** Pro-Person-Anzahl; bei undefined wird item.anzahl verwendet */
   anzahl?: number
 }
@@ -390,7 +395,7 @@ export async function getPackingItems(db: D1Database, vacationId: string): Promi
   try {
     const query = `
       SELECT 
-        pe.id, pe.packliste_id, pe.gegenstand_id, pe.anzahl, pe.gepackt, pe.bemerkung, pe.transport_id,
+        pe.id, pe.packliste_id, pe.gegenstand_id, pe.anzahl, pe.gepackt, pe.gepackt_vorgemerkt, pe.gepackt_vorgemerkt_durch, pe.bemerkung, pe.transport_id,
         ag.was, ag.einzelgewicht, ag.details, ag.mitreisenden_typ, ag.status, ag.erst_abreisetag_gepackt as erst_abreisetag_gepackt,
         k.titel as kategorie,
         hk.titel as hauptkategorie,
@@ -411,7 +416,7 @@ export async function getPackingItems(db: D1Database, vacationId: string): Promi
 
     // Batch: alle Mitreisende für diese Urlaubs-Packliste in einer Query (Subquery, kein IN mit vielen IDs)
     const mitQuery = `
-      SELECT pem.packlisten_eintrag_id, pem.mitreisender_id, m.name as mitreisender_name, pem.gepackt, pem.anzahl
+      SELECT pem.packlisten_eintrag_id, pem.mitreisender_id, m.name as mitreisender_name, pem.gepackt, pem.gepackt_vorgemerkt, pem.anzahl
       FROM packlisten_eintrag_mitreisende pem
       JOIN mitreisende m ON pem.mitreisender_id = m.id
       WHERE pem.packlisten_eintrag_id IN (
@@ -426,10 +431,11 @@ export async function getPackingItems(db: D1Database, vacationId: string): Promi
       mitreisender_id: string
       mitreisender_name: string
       gepackt: number
+      gepackt_vorgemerkt?: number
       anzahl?: number | null
     }>()
     const mitRows = mitResult.results || []
-    const mitreisendeByEintrag = new Map<string, Array<{ mitreisender_id: string; mitreisender_name: string; gepackt: boolean; anzahl?: number }>>()
+    const mitreisendeByEintrag = new Map<string, Array<{ mitreisender_id: string; mitreisender_name: string; gepackt: boolean; gepackt_vorgemerkt?: boolean; anzahl?: number }>>()
     for (const m of mitRows) {
       const eid = String(m.packlisten_eintrag_id)
       const arr = mitreisendeByEintrag.get(eid) || []
@@ -437,6 +443,7 @@ export async function getPackingItems(db: D1Database, vacationId: string): Promi
         mitreisender_id: String(m.mitreisender_id),
         mitreisender_name: String(m.mitreisender_name),
         gepackt: !!m.gepackt,
+        gepackt_vorgemerkt: !!m.gepackt_vorgemerkt,
         anzahl: m.anzahl != null ? Number(m.anzahl) : undefined,
       })
       mitreisendeByEintrag.set(eid, arr)
@@ -453,6 +460,8 @@ export async function getPackingItems(db: D1Database, vacationId: string): Promi
         gegenstand_id: String(item.gegenstand_id),
         anzahl: Number(item.anzahl),
         gepackt: !!item.gepackt,
+        gepackt_vorgemerkt: !!((item as Record<string, unknown>).gepackt_vorgemerkt),
+        gepackt_vorgemerkt_durch: (item as Record<string, unknown>).gepackt_vorgemerkt_durch as string | null | undefined,
         bemerkung: item.bemerkung ? String(item.bemerkung) : null,
         transport_id: item.transport_id ? String(item.transport_id) : undefined,
         transport_name: item.transport_name ? String(item.transport_name) : undefined,
@@ -483,6 +492,8 @@ export async function updatePackingItem(
   id: string,
   updates: {
     gepackt?: boolean
+    gepackt_vorgemerkt?: boolean
+    gepackt_vorgemerkt_durch?: string | null
     anzahl?: number
     bemerkung?: string | null
     transport_id?: string | null
@@ -495,6 +506,14 @@ export async function updatePackingItem(
     if (updates.gepackt !== undefined) {
       fields.push('gepackt = ?')
       values.push(updates.gepackt ? 1 : 0)
+    }
+    if (updates.gepackt_vorgemerkt !== undefined) {
+      fields.push('gepackt_vorgemerkt = ?')
+      values.push(updates.gepackt_vorgemerkt ? 1 : 0)
+    }
+    if (updates.gepackt_vorgemerkt_durch !== undefined) {
+      fields.push('gepackt_vorgemerkt_durch = ?')
+      values.push(updates.gepackt_vorgemerkt_durch || null)
     }
     if (updates.anzahl !== undefined) {
       fields.push('anzahl = ?')
@@ -1780,6 +1799,72 @@ export async function togglePackingItemForMitreisender(
     return true
   } catch (error) {
     console.error('Error toggling packing item for mitreisender:', error)
+    return false
+  }
+}
+
+/**
+ * Vorgemerkt setzen statt gepackt (für Kinder mit gepackt_erfordert_elternkontrolle)
+ */
+export async function togglePackingItemVorgemerktForMitreisender(
+  db: D1Database,
+  packlistenEintragId: string,
+  mitreisenderId: string,
+  vorgemerkt: boolean
+): Promise<boolean> {
+  try {
+    const existing = await db
+      .prepare('SELECT gepackt, gepackt_vorgemerkt FROM packlisten_eintrag_mitreisende WHERE packlisten_eintrag_id = ? AND mitreisender_id = ?')
+      .bind(packlistenEintragId, mitreisenderId)
+      .first<{ gepackt: number; gepackt_vorgemerkt: number }>()
+
+    if (existing) {
+      await db
+        .prepare('UPDATE packlisten_eintrag_mitreisende SET gepackt_vorgemerkt = ? WHERE packlisten_eintrag_id = ? AND mitreisender_id = ?')
+        .bind(vorgemerkt ? 1 : 0, packlistenEintragId, mitreisenderId)
+        .run()
+    } else {
+      await db
+        .prepare('INSERT INTO packlisten_eintrag_mitreisende (packlisten_eintrag_id, mitreisender_id, gepackt, gepackt_vorgemerkt) VALUES (?, ?, 0, ?)')
+        .bind(packlistenEintragId, mitreisenderId, vorgemerkt ? 1 : 0)
+        .run()
+    }
+    return true
+  } catch (error) {
+    console.error('Error toggling vorgemerkt for mitreisender:', error)
+    return false
+  }
+}
+
+/**
+ * Vorgemerkte Einträge bestätigen (Admin setzt gepackt=1, vorgemerkt=0)
+ */
+export async function confirmVorgemerktPauschal(db: D1Database, packlistenEintragId: string): Promise<boolean> {
+  try {
+    const r = await db
+      .prepare('UPDATE packlisten_eintraege SET gepackt = 1, gepackt_vorgemerkt = 0, gepackt_vorgemerkt_durch = NULL, updated_at = datetime(\'now\') WHERE id = ? AND gepackt_vorgemerkt = 1')
+      .bind(packlistenEintragId)
+      .run()
+    return (r.meta?.changes ?? 0) > 0
+  } catch (error) {
+    console.error('Error confirming vorgemerkt pauschal:', error)
+    return false
+  }
+}
+
+export async function confirmVorgemerktForMitreisender(
+  db: D1Database,
+  packlistenEintragId: string,
+  mitreisenderId: string
+): Promise<boolean> {
+  try {
+    const r = await db
+      .prepare('UPDATE packlisten_eintrag_mitreisende SET gepackt = 1, gepackt_vorgemerkt = 0 WHERE packlisten_eintrag_id = ? AND mitreisender_id = ? AND gepackt_vorgemerkt = 1')
+      .bind(packlistenEintragId, mitreisenderId)
+      .run()
+    return (r.meta?.changes ?? 0) > 0
+  } catch (error) {
+    console.error('Error confirming vorgemerkt for mitreisender:', error)
     return false
   }
 }

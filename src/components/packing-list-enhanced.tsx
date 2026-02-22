@@ -10,7 +10,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { MoreVertical, Edit2, Trash2 } from "lucide-react";
+import { MoreVertical, Edit2, Trash2, CheckCheck } from "lucide-react";
 import { useMemo, useState, useEffect, useRef } from "react";
 import { PackingItem as DBPackingItem } from "@/lib/db";
 import { MarkAllConfirmationDialog } from "./mark-all-confirmation-dialog";
@@ -22,10 +22,11 @@ interface PackingItemProps {
   was: string;
   anzahl: number;
   gepackt: boolean;
+  gepackt_vorgemerkt?: boolean;
+  mitreisende?: Array<{ mitreisender_id: string; mitreisender_name: string; gepackt: boolean; gepackt_vorgemerkt?: boolean; anzahl?: number }>;
   bemerkung?: string | null;
   transport_name?: string | null;
   mitreisenden_typ: 'pauschal' | 'alle' | 'ausgewaehlte';
-  mitreisende?: Array<{ mitreisender_id: string; mitreisender_name: string; gepackt: boolean; anzahl?: number }>;
   onToggle: (id: string) => void;
   /** Explizites Setzen des Gepackt-Status (für Undo bei Pauschal – vermeidet Stale-Closure) */
   onSetPacked?: (id: string, gepackt: boolean) => void;
@@ -33,6 +34,9 @@ interface PackingItemProps {
   onEdit: (item: DBPackingItem) => void;
   /** id + optional forMitreisenderId (nur diesen Mitreisenden entfernen) */
   onDelete: (id: string, forMitreisenderId?: string | null) => void;
+  /** Admin: vorgemerkte Einträge bestätigen */
+  onConfirmVorgemerkt?: (packingItemId: string, mitreisenderId?: string) => void;
+  canConfirmVorgemerkt?: boolean;
   details?: string;
   fullItem: DBPackingItem;
   selectedProfile: string | null;
@@ -46,6 +50,7 @@ const PackingItem: React.FC<PackingItemProps> = ({
   was,
   anzahl,
   gepackt,
+  gepackt_vorgemerkt,
   bemerkung,
   transport_name,
   mitreisenden_typ,
@@ -55,6 +60,8 @@ const PackingItem: React.FC<PackingItemProps> = ({
   onToggleMitreisender,
   onEdit,
   onDelete,
+  onConfirmVorgemerkt,
+  canConfirmVorgemerkt,
   details,
   fullItem,
   selectedProfile,
@@ -66,18 +73,19 @@ const PackingItem: React.FC<PackingItemProps> = ({
   const [isExiting, setIsExiting] = useState(false);
   const [hasExited, setHasExited] = useState(false);
 
+  const effectivePacked = (g: boolean, v?: boolean) => g || !!v;
   const isFullyPacked = useMemo(() => {
     if (mitreisenden_typ === 'pauschal') {
-      return gepackt;
+      return effectivePacked(gepackt, gepackt_vorgemerkt);
     }
-    return (mitreisende?.length ?? 0) > 0 && mitreisende?.every(m => m.gepackt);
-  }, [mitreisenden_typ, gepackt, mitreisende]);
+    return (mitreisende?.length ?? 0) > 0 && mitreisende?.every(m => effectivePacked(m.gepackt, m.gepackt_vorgemerkt));
+  }, [mitreisenden_typ, gepackt, gepackt_vorgemerkt, mitreisende]);
 
-  // Calculate packed count for individual items
+  // Calculate packed count for individual items (gepackt OR vorgemerkt zählt als gepackt für Anzeige)
   const packedCount = useMemo(() => {
-    if (mitreisenden_typ === 'pauschal') return gepackt ? 1 : 0;
-    return mitreisende?.filter(m => m.gepackt).length ?? 0;
-  }, [mitreisenden_typ, gepackt, mitreisende]);
+    if (mitreisenden_typ === 'pauschal') return effectivePacked(gepackt, gepackt_vorgemerkt) ? 1 : 0;
+    return mitreisende?.filter(m => effectivePacked(m.gepackt, m.gepackt_vorgemerkt)).length ?? 0;
+  }, [mitreisenden_typ, gepackt, gepackt_vorgemerkt, mitreisende]);
 
   const totalCount = useMemo(() => {
     if (mitreisenden_typ === 'pauschal') return 1;
@@ -139,13 +147,17 @@ const PackingItem: React.FC<PackingItemProps> = ({
     }
   };
 
+  const isVorgemerktPauschal = !!gepackt_vorgemerkt && !gepackt;
+  const selectedTravelerVorgemerkt = selectedTravelerItem ? (!!selectedTravelerItem.gepackt_vorgemerkt && !selectedTravelerItem.gepackt) : false;
+
   // Handle individual toggle (for selected profile)
   const handleIndividualToggle = () => {
     if (selectedProfile) {
-      const wasUnpacked = !(selectedTravelerItem?.gepackt ?? false);
+      const currentEffective = selectedTravelerItem ? effectivePacked(selectedTravelerItem.gepackt, selectedTravelerItem.gepackt_vorgemerkt) : false;
+      const wasUnpacked = !currentEffective;
       const itemId = id;
       const profileId = selectedProfile;
-      const currentStatus = selectedTravelerItem?.gepackt ?? false;
+      const currentStatus = currentEffective;
       onToggleMitreisender(itemId, profileId, currentStatus);
       if (hidePackedItems && wasUnpacked && onShowToast) {
         // Create undo action - use setTimeout to ensure state has updated
@@ -193,9 +205,14 @@ const PackingItem: React.FC<PackingItemProps> = ({
             <div className="mt-0.5 flex-shrink-0">
               <Checkbox
                 id={`item-${id}`}
-                checked={gepackt}
+                checked={effectivePacked(gepackt, gepackt_vorgemerkt)}
                 onCheckedChange={handlePauschalToggle}
-                className="h-6 w-6 min-h-6 min-w-6 rounded-md border-2 border-gray-300 data-[state=checked]:bg-[rgb(45,79,30)] data-[state=checked]:border-[rgb(45,79,30)]"
+                className={cn(
+                  "h-6 w-6 min-h-6 min-w-6 rounded-md border-2 border-gray-300",
+                  isVorgemerktPauschal
+                    ? "data-[state=checked]:bg-amber-500 data-[state=checked]:border-amber-500"
+                    : "data-[state=checked]:bg-[rgb(45,79,30)] data-[state=checked]:border-[rgb(45,79,30)]"
+                )}
               />
             </div>
           )}
@@ -204,9 +221,14 @@ const PackingItem: React.FC<PackingItemProps> = ({
             <div className="mt-0.5 flex-shrink-0">
               <Checkbox
                 id={`item-${id}`}
-                checked={selectedTravelerItem?.gepackt ?? false}
+                checked={selectedTravelerItem ? effectivePacked(selectedTravelerItem.gepackt, selectedTravelerItem.gepackt_vorgemerkt) : false}
                 onCheckedChange={handleIndividualToggle}
-                className="h-6 w-6 min-h-6 min-w-6 rounded-md border-2 border-gray-300 data-[state=checked]:bg-[rgb(45,79,30)] data-[state=checked]:border-[rgb(45,79,30)]"
+                className={cn(
+                  "h-6 w-6 min-h-6 min-w-6 rounded-md border-2 border-gray-300",
+                  selectedTravelerVorgemerkt
+                    ? "data-[state=checked]:bg-amber-500 data-[state=checked]:border-amber-500"
+                    : "data-[state=checked]:bg-[rgb(45,79,30)] data-[state=checked]:border-[rgb(45,79,30)]"
+                )}
               />
             </div>
           )}
@@ -278,6 +300,14 @@ const PackingItem: React.FC<PackingItemProps> = ({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
+              {canConfirmVorgemerkt && onConfirmVorgemerkt && (isVorgemerktPauschal || selectedTravelerVorgemerkt) && (
+                <DropdownMenuItem
+                  onClick={() => onConfirmVorgemerkt(id, selectedTravelerVorgemerkt ? selectedProfile ?? undefined : undefined)}
+                >
+                  <CheckCheck className="h-4 w-4 mr-2" />
+                  Bestätigen
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem onClick={() => onEdit(fullItem)}>
                 <Edit2 className="h-4 w-4 mr-2" />
                 Bearbeiten
@@ -321,6 +351,8 @@ interface PackingListProps {
   onEdit: (item: DBPackingItem) => void;
   /** id + optional mitreisenderId: bei Profil-Ansicht nur diesen Mitreisenden entfernen */
   onDelete: (id: string, forMitreisenderId?: string | null) => void;
+  onConfirmVorgemerkt?: (packingItemId: string, mitreisenderId?: string) => void;
+  canConfirmVorgemerkt?: boolean;
   selectedProfile: string | null;
   hidePackedItems: boolean;
   listDisplayMode: 'alles' | 'packliste';
@@ -340,6 +372,8 @@ export function PackingList({
   onToggleMultipleMitreisende,
   onEdit,
   onDelete,
+  onConfirmVorgemerkt,
+  canConfirmVorgemerkt,
   selectedProfile,
   hidePackedItems,
   listDisplayMode,
@@ -427,15 +461,16 @@ export function PackingList({
     }
   }, [mainCategories, activeMainCategory]);
 
-  // Fortschritt abhängig von sichtbaren Einträgen (Anzeige-Modus + Profil)
+  const effectivePacked = (g: boolean, v?: boolean) => g || !!v;
+  // Fortschritt abhängig von sichtbaren Einträgen (Anzeige-Modus + Profil, gepackt OR vorgemerkt zählt)
   const { packedCount, totalCount } = useMemo(() => {
     return visibleItems.reduce((acc, item) => {
       if (item.mitreisenden_typ === 'pauschal') {
         acc.totalCount += 1;
-        if (item.gepackt) acc.packedCount += 1;
+        if (effectivePacked(item.gepackt, item.gepackt_vorgemerkt)) acc.packedCount += 1;
       } else if (item.mitreisende) {
         acc.totalCount += item.mitreisende.length;
-        acc.packedCount += item.mitreisende.filter(m => m.gepackt).length;
+        acc.packedCount += item.mitreisende.filter(m => effectivePacked(m.gepackt, m.gepackt_vorgemerkt)).length;
       }
       return acc;
     }, { packedCount: 0, totalCount: 0 });
@@ -662,6 +697,7 @@ export function PackingList({
                               was={item.was}
                               anzahl={item.anzahl}
                               gepackt={item.gepackt}
+                              gepackt_vorgemerkt={item.gepackt_vorgemerkt}
                               bemerkung={item.bemerkung}
                               transport_name={item.transport_name}
                               mitreisenden_typ={item.mitreisenden_typ}
@@ -671,6 +707,8 @@ export function PackingList({
                               onToggleMitreisender={onToggleMitreisender}
                               onEdit={onEdit}
                               onDelete={onDelete}
+                              onConfirmVorgemerkt={onConfirmVorgemerkt}
+                              canConfirmVorgemerkt={canConfirmVorgemerkt}
                               details={item.details}
                               fullItem={item}
                               selectedProfile={selectedProfile}
