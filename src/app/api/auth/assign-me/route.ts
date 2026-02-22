@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const userId = auth.session.id
+    const userId = auth.userContext.userId
     await updateUserMitreisender(db, userId, mitreisenderId)
     await updateMitreisenderUserId(db, mitreisenderId, userId)
 
