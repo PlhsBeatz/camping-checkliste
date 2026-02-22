@@ -40,6 +40,8 @@ export interface ResponsiveModalProps {
  * Responsive Modal: Drawer auf Smartphone (<640px), Dialog auf Desktop.
  * Für Neu- und Bearbeiten-Formulare optimiert.
  */
+const OPEN_GRACE_MS = 350
+
 export function ResponsiveModal({
   open,
   onOpenChange,
@@ -51,6 +53,24 @@ export function ResponsiveModal({
   customContent = false,
 }: ResponsiveModalProps) {
   const isMobile = useIsMobile()
+  const openedAtRef = React.useRef<number>(0)
+
+  React.useEffect(() => {
+    if (open && isMobile) {
+      openedAtRef.current = Date.now()
+    }
+  }, [open, isMobile])
+
+  const handleOpenChange = React.useCallback(
+    (nextOpen: boolean) => {
+      if (!nextOpen && isMobile && open) {
+        const elapsed = Date.now() - openedAtRef.current
+        if (elapsed < OPEN_GRACE_MS) return
+      }
+      onOpenChange(nextOpen)
+    },
+    [onOpenChange, isMobile, open]
+  )
 
   // Smartphone Zurück-Button: Drawer schließen statt Navigation
   React.useEffect(() => {
@@ -72,7 +92,7 @@ export function ResponsiveModal({
   if (customContent) {
     if (isMobile) {
       return (
-        <Drawer open={open} onOpenChange={onOpenChange}>
+        <Drawer open={open} onOpenChange={handleOpenChange}>
           <DrawerContent className={cn('max-h-[90vh] flex flex-col p-0', contentClassName)}>
             {children}
           </DrawerContent>
@@ -80,7 +100,7 @@ export function ResponsiveModal({
       )
     }
     return (
-      <Dialog open={open} onOpenChange={onOpenChange}>
+      <Dialog open={open} onOpenChange={handleOpenChange}>
         <DialogContent className={cn('p-0', contentClassName)}>
           {children}
         </DialogContent>
@@ -90,7 +110,7 @@ export function ResponsiveModal({
 
   if (isMobile) {
     return (
-      <Drawer open={open} onOpenChange={onOpenChange}>
+      <Drawer open={open} onOpenChange={handleOpenChange}>
         <DrawerContent
           className={cn(
             'max-h-[90vh] flex flex-col w-full max-w-[100vw]',
@@ -113,7 +133,7 @@ export function ResponsiveModal({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className={cn(contentClassName)}>
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
