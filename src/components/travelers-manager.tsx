@@ -209,7 +209,7 @@ export function TravelersManager({ travelers, onRefresh }: TravelersManagerProps
           alert('Mitreisender aktualisiert, aber Benutzer-Rolle konnte nicht geändert werden.')
         }
       }
-      if (editingTraveler.user_id && (editingTraveler.user_role === 'kind' || editingTraveler.user_role === 'gast')) {
+      if (editingTraveler.user_id && formUserRole && (formUserRole === 'kind' || formUserRole === 'gast')) {
         const permRes = await fetch(`/api/mitreisende/${editingTraveler.id}/berechtigungen`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
@@ -499,7 +499,14 @@ export function TravelersManager({ travelers, onRefresh }: TravelersManagerProps
                 </p>
                 <Select
                   value={formUserRole}
-                  onValueChange={(v) => setFormUserRole(v as 'admin' | 'kind' | 'gast')}
+                  onValueChange={(v) => {
+                    const newRole = v as 'admin' | 'kind' | 'gast'
+                    setFormUserRole(newRole)
+                    // Berechtigungen filtern: Gast hat nur can_edit_pauschal_entries
+                    if (newRole === 'gast') {
+                      setFormBerechtigungen(prev => prev.filter(p => p === 'can_edit_pauschal_entries'))
+                    }
+                  }}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Rolle wählen" />
@@ -548,16 +555,16 @@ export function TravelersManager({ travelers, onRefresh }: TravelersManagerProps
                 </p>
               </div>
             </div>
-            {editingTraveler?.user_id && (editingTraveler?.user_role === 'kind' || editingTraveler?.user_role === 'gast') && (
+            {editingTraveler?.user_id && formUserRole && (formUserRole === 'kind' || formUserRole === 'gast') && (
               <div className="space-y-3 pt-2 border-t">
-                <Label>Berechtigungen (für {editingTraveler?.user_role === 'kind' ? 'Kind' : 'Gast'})</Label>
+                <Label>Berechtigungen (für {formUserRole === 'kind' ? 'Kind' : 'Gast'})</Label>
                 <p className="text-xs text-muted-foreground">
-                  {editingTraveler?.user_role === 'kind'
+                  {formUserRole === 'kind'
                     ? 'Diese Einstellungen gelten, wenn der Mitreisende als Kind eingeladen wurde.'
                     : 'Diese Einstellungen gelten, wenn der Mitreisende als Gast eingeladen wurde.'}
                 </p>
                 <div className="space-y-2">
-                  {(editingTraveler?.user_role === 'kind' ? BERECHTIGUNGEN_OPTIONS : BERECHTIGUNGEN_OPTIONS.filter(o => o.key === 'can_edit_pauschal_entries')).map((opt) => (
+                  {(formUserRole === 'kind' ? BERECHTIGUNGEN_OPTIONS : BERECHTIGUNGEN_OPTIONS.filter(o => o.key === 'can_edit_pauschal_entries')).map((opt) => (
                     <div key={opt.key} className="flex items-center space-x-2">
                       <Checkbox
                         id={`perm-${opt.key}`}
