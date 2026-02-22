@@ -2,6 +2,7 @@
 
 import { Suspense, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { useAuth } from '@/components/auth-provider'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -20,6 +21,7 @@ type FormData = z.infer<typeof schema>
 
 function LoginForm() {
   const router = useRouter()
+  const { refetch } = useAuth()
   const searchParams = useSearchParams()
   const callbackUrl = searchParams.get('callbackUrl') ?? '/'
   const [error, setError] = useState<string | null>(null)
@@ -44,6 +46,7 @@ function LoginForm() {
       setError(json.error ?? 'Login fehlgeschlagen')
       return
     }
+    await refetch()
     router.push(callbackUrl)
     router.refresh()
   }
@@ -97,19 +100,12 @@ function LoginForm() {
           </Button>
         </form>
 
-        <p className="text-center text-sm text-gray-600 space-x-4">
+        <p className="text-center text-sm text-gray-600">
           <Link
             href="/passwort-vergessen"
             className="text-[rgb(45,79,30)] hover:underline"
           >
             Passwort vergessen?
-          </Link>
-          <span>·</span>
-          <Link
-            href="/bootstrap"
-            className="text-[rgb(45,79,30)] hover:underline"
-          >
-            Ersteinrichtung
           </Link>
         </p>
       </div>
