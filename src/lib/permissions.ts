@@ -47,7 +47,7 @@ export function hasPermission(ctx: UserContext, key: string): boolean {
   return ctx.permissions.includes(key)
 }
 
-/** Darf Kind/Gast pauschal Einträge bearbeiten? */
+/** Darf Kind oder Gast pauschal Einträge bearbeiten? (Checkbox bei Kind & Gast) */
 export function canEditPauschalEntries(ctx: UserContext): boolean {
   if (ctx.role === 'admin') return true
   return hasPermission(ctx, 'can_edit_pauschal_entries')

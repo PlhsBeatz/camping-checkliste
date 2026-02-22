@@ -26,7 +26,7 @@ interface AuthContextValue {
   canSelectOtherProfiles: boolean
   /** Kind mit Berechtigung: Gepackt-Anzeige erfordert Eltern-Bestätigung */
   gepacktRequiresParentApproval: boolean
-  /** Kind darf pauschale Einträge bearbeiten/sehen */
+  /** Kind/Gast darf pauschale Einträge bearbeiten/sehen (wenn Berechtigung gesetzt) */
   canEditPauschalEntries: boolean
 }
 

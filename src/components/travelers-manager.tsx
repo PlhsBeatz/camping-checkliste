@@ -209,7 +209,7 @@ export function TravelersManager({ travelers, onRefresh }: TravelersManagerProps
           alert('Mitreisender aktualisiert, aber Benutzer-Rolle konnte nicht geändert werden.')
         }
       }
-      if (editingTraveler.user_id && editingTraveler.user_role === 'kind') {
+      if (editingTraveler.user_id && (editingTraveler.user_role === 'kind' || editingTraveler.user_role === 'gast')) {
         const permRes = await fetch(`/api/mitreisende/${editingTraveler.id}/berechtigungen`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
@@ -337,7 +337,7 @@ export function TravelersManager({ travelers, onRefresh }: TravelersManagerProps
     if (!inviteTraveler) return
     setIsLoading(true)
     try {
-      if (inviteRole === 'kind') {
+      if (inviteRole === 'kind' || inviteRole === 'gast') {
         const permRes = await fetch(`/api/mitreisende/${inviteTraveler.id}/berechtigungen`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
@@ -548,14 +548,16 @@ export function TravelersManager({ travelers, onRefresh }: TravelersManagerProps
                 </p>
               </div>
             </div>
-            {editingTraveler?.user_id && editingTraveler?.user_role === 'kind' && (
+            {editingTraveler?.user_id && (editingTraveler?.user_role === 'kind' || editingTraveler?.user_role === 'gast') && (
               <div className="space-y-3 pt-2 border-t">
-                <Label>Berechtigungen (für Kind)</Label>
+                <Label>Berechtigungen (für {editingTraveler?.user_role === 'kind' ? 'Kind' : 'Gast'})</Label>
                 <p className="text-xs text-muted-foreground">
-                  Diese Einstellungen gelten, wenn der Mitreisende als Kind eingeladen wurde.
+                  {editingTraveler?.user_role === 'kind'
+                    ? 'Diese Einstellungen gelten, wenn der Mitreisende als Kind eingeladen wurde.'
+                    : 'Diese Einstellungen gelten, wenn der Mitreisende als Gast eingeladen wurde.'}
                 </p>
                 <div className="space-y-2">
-                  {BERECHTIGUNGEN_OPTIONS.map((opt) => (
+                  {(editingTraveler?.user_role === 'kind' ? BERECHTIGUNGEN_OPTIONS : BERECHTIGUNGEN_OPTIONS.filter(o => o.key === 'can_edit_pauschal_entries')).map((opt) => (
                     <div key={opt.key} className="flex items-center space-x-2">
                       <Checkbox
                         id={`perm-${opt.key}`}
@@ -613,14 +615,14 @@ export function TravelersManager({ travelers, onRefresh }: TravelersManagerProps
                   </SelectContent>
                 </Select>
               </div>
-              {inviteRole === 'kind' && (
+              {(inviteRole === 'kind' || inviteRole === 'gast') && (
                 <div className="space-y-3 pt-2 border-t">
-                  <Label>Berechtigungen (für Kind)</Label>
+                  <Label>Berechtigungen (für {inviteRole === 'kind' ? 'Kind' : 'Gast'})</Label>
                   <p className="text-xs text-muted-foreground">
                     Diese Einstellungen gelten, sobald die Einladung angenommen wurde.
                   </p>
                   <div className="space-y-2">
-                    {BERECHTIGUNGEN_OPTIONS.map((opt) => (
+                    {(inviteRole === 'kind' ? BERECHTIGUNGEN_OPTIONS : BERECHTIGUNGEN_OPTIONS.filter(o => o.key === 'can_edit_pauschal_entries')).map((opt) => (
                       <div key={opt.key} className="flex items-center space-x-2">
                         <Checkbox
                           id={`invite-perm-${opt.key}`}
