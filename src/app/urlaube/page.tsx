@@ -11,7 +11,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Vacation, Mitreisender } from '@/lib/db'
 import type { ApiResponse } from '@/lib/api-types'
 import { ResponsiveModal } from '@/components/ui/responsive-modal'
@@ -230,6 +230,17 @@ export default function UrlaubePage() {
   const handleSelectVacation = (vacationId: string) => {
     // Navigate to home page with selected vacation
     router.push(`/?vacation=${vacationId}`)
+  }
+
+  // Verhindert, dass der Card-Touch (nach Dropdown-Auswahl) als Klick zählt – nur auf Mobile relevant
+  const ignoreNextCardClickRef = useRef(false)
+
+  const handleCardClick = (vacationId: string) => {
+    if (ignoreNextCardClickRef.current) {
+      ignoreNextCardClickRef.current = false
+      return
+    }
+    handleSelectVacation(vacationId)
   }
 
   return (
@@ -566,7 +577,7 @@ export default function UrlaubePage() {
                 <Card
                   key={vacation.id}
                   className="cursor-pointer hover:shadow-md transition-shadow"
-                  onClick={() => handleSelectVacation(vacation.id)}
+                  onClick={() => handleCardClick(vacation.id)}
                 >
                   <CardHeader>
                     <div className="flex justify-between items-start">
@@ -596,6 +607,7 @@ export default function UrlaubePage() {
                         <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
                           <DropdownMenuItem
                             onSelect={() => {
+                              ignoreNextCardClickRef.current = true
                               setOpenMenuId(null)
                               handleEditVacation(vacation)
                             }}
@@ -605,6 +617,7 @@ export default function UrlaubePage() {
                           </DropdownMenuItem>
                           <DropdownMenuItem
                             onSelect={() => {
+                              ignoreNextCardClickRef.current = true
                               setOpenMenuId(null)
                               handleDeleteVacation(vacation.id)
                             }}
