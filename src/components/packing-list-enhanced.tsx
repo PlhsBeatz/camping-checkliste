@@ -114,7 +114,11 @@ const PackingItem: React.FC<PackingItemProps> = ({
   const shouldHideInProfileView = useMemo(() => {
     if (!hidePackedItems) return false;
     if (selectedProfile) {
-      // Eltern: Nur final gepackt ausblenden, vorgemerkt bleibt sichtbar
+      if (mitreisenden_typ === 'pauschal') {
+        // Pauschal: Status auf Item-Ebene (gepackt, gepackt_vorgemerkt)
+        return canConfirmVorgemerkt ? gepackt : effectivePacked(gepackt, gepackt_vorgemerkt);
+      }
+      // Mitreisender-Einträge: Eltern nur final gepackt ausblenden
       const packed = selectedTravelerItem
         ? (canConfirmVorgemerkt ? selectedTravelerItem.gepackt : effectivePacked(selectedTravelerItem.gepackt, selectedTravelerItem.gepackt_vorgemerkt))
         : false;
@@ -122,7 +126,7 @@ const PackingItem: React.FC<PackingItemProps> = ({
     }
     // Zentral/Alle: Eltern nur bei isFullyPackedFinal ausblenden
     return canConfirmVorgemerkt ? isFullyPackedFinal : isFullyPacked;
-  }, [hidePackedItems, selectedProfile, selectedTravelerItem, isFullyPacked, isFullyPackedFinal, canConfirmVorgemerkt]);
+  }, [hidePackedItems, selectedProfile, selectedTravelerItem, mitreisenden_typ, gepackt, gepackt_vorgemerkt, canConfirmVorgemerkt, isFullyPacked, isFullyPackedFinal]);
 
   // Micro-Animation beim Abhaken mit Gepacktes Ausblenden
   useEffect(() => {
