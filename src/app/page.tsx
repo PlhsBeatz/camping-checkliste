@@ -1125,7 +1125,6 @@ function HomeContent() {
                 />
               </div>
               {!editingForMitreisenderId && (
-                <>
               <div>
                 <Label htmlFor="edit-bemerkung">Bemerkung (optional)</Label>
                 <Input
@@ -1135,6 +1134,7 @@ function HomeContent() {
                   onChange={(e) => setPackingItemForm({ ...packingItemForm, bemerkung: e.target.value })}
                 />
               </div>
+              )}
               <div>
                 <Label htmlFor="edit-transport">Transport</Label>
                 <Select
@@ -1164,8 +1164,6 @@ function HomeContent() {
                   </p>
                 )}
               </div>
-                </>
-              )}
               <Button onClick={handleUpdatePackingItem} disabled={isLoading} className="w-full">
                 {isLoading ? 'Wird aktualisiert...' : 'Aktualisieren'}
               </Button>

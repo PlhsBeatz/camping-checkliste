@@ -15,7 +15,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { MoreVertical, Edit2, Trash2, RotateCcw, CheckCheck, Check, Circle } from "lucide-react";
+import { MoreVertical, Edit2, Trash2, RotateCcw, CheckCheck } from "lucide-react";
 import { useMemo, useState, useEffect, useRef } from "react";
 import { PackingItem as DBPackingItem } from "@/lib/db";
 import { MarkAllConfirmationDialog, type TravelerForMarkAll } from "./mark-all-confirmation-dialog";
@@ -379,13 +379,16 @@ const PackingItem: React.FC<PackingItemProps> = ({
                               key={m.mitreisender_id}
                               className="flex items-center gap-2 px-3 py-2 text-sm"
                             >
-                              {packed ? (
-                                <Check className="h-4 w-4 text-[rgb(45,79,30)] shrink-0" />
-                              ) : vorgemerkt ? (
-                                <Circle className="h-4 w-4 text-amber-500 shrink-0" />
-                              ) : (
-                                <Circle className="h-4 w-4 text-muted-foreground/50 shrink-0" />
-                              )}
+                              <Checkbox
+                                checked={packed || vorgemerkt}
+                                disabled
+                                className={cn(
+                                  "h-4 w-4 min-h-4 min-w-4 rounded-md border-2 border-gray-300 shrink-0 cursor-default",
+                                  packed && "data-[state=checked]:bg-[rgb(45,79,30)] data-[state=checked]:border-[rgb(45,79,30)]",
+                                  vorgemerkt && !packed && "data-[state=checked]:bg-[rgb(230,126,34)] data-[state=checked]:border-[rgb(230,126,34)]"
+                                )}
+                                aria-hidden
+                              />
                               <span className={cn(
                                 "truncate",
                                 packed && "text-muted-foreground",
@@ -529,6 +532,7 @@ export function PackingList({
   const [firstVisibleCategory, setFirstVisibleCategory] = useState<string>('');
   const [tabsScrollbarVisible, setTabsScrollbarVisible] = useState(false);
   const tabsScrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const tabsScrollContainerRef = useRef<HTMLDivElement | null>(null);
   const categoryRefsMap = useRef<Map<string, HTMLDivElement | null>>(new Map());
   const contentTouchStart = useRef<{ x: number; y: number } | null>(null);
 
@@ -775,6 +779,23 @@ export function PackingList({
     }
   };
 
+  // Tab-Leiste zum aktiven Tab scrollen, wenn er nicht vollständig sichtbar ist (z. B. nach Swipe)
+  useEffect(() => {
+    let rafId: number | null = null;
+    if (tabsForSwipe.length > 0) {
+      const scrollEl = tabsScrollContainerRef.current;
+      const activeTrigger = scrollEl?.querySelector<HTMLElement>('[data-state="active"]');
+      if (activeTrigger) {
+        rafId = requestAnimationFrame(() => {
+          activeTrigger.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+        });
+      }
+    }
+    return () => {
+      if (rafId != null) cancelAnimationFrame(rafId);
+    };
+  }, [activeMainCategory, tabsForSwipe.length]);
+
   return (
     <Tabs value={activeMainCategory} onValueChange={setActiveMainCategory} className="flex flex-col flex-1 min-h-0 min-w-0 w-full max-w-full">
       {/* Sticky-Bereich: Progress + Tabs – scrollt nie. Shadow unter den Tabs. */}
@@ -798,6 +819,7 @@ export function PackingList({
           )}
         </div>
         <div
+          ref={tabsScrollContainerRef}
           className={cn(
             "tabs-scrollbar-auto bg-white overflow-x-auto overflow-y-hidden -mx-4 sm:-mx-6 pl-4 pr-4 sm:pl-6 sm:pr-6 pb-2",
             tabsScrollbarVisible && "tabs-scrollbar-visible"
