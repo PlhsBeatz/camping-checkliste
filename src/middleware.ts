@@ -13,7 +13,7 @@ const PUBLIC_PATHS = [
 
 function isPublicPath(pathname: string): boolean {
   if (PUBLIC_PATHS.some(p => pathname === p || pathname.startsWith(p + '/'))) return true
-  if (pathname.startsWith('/_next') || pathname.startsWith('/icon') || pathname === '/manifest.json' || pathname === '/apple-icon') return true
+  if (pathname.startsWith('/_next') || pathname.startsWith('/icon') || pathname.startsWith('/icons/') || pathname === '/manifest.json' || pathname === '/apple-icon') return true
   if (pathname === '/' || pathname === '') return false
   if (pathname.match(/\.(ico|png|jpg|jpeg|svg|css|js|woff2?)$/)) return true
   return false

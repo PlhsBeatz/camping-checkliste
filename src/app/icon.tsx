@@ -1,5 +1,6 @@
 import { ImageResponse } from 'next/og'
 
+/** Zelt-Icon wie im CAMPPACK-Logo – mit 20% Safe-Zone für Maskable-Icons (Android) */
 const tentSvg = (
   <svg
     width="100%"
@@ -10,7 +11,6 @@ const tentSvg = (
     strokeWidth="2"
     strokeLinecap="round"
     strokeLinejoin="round"
-    style={{ padding: '15%' }}
   >
     <path d="M3.5 21 12 3l8.5 18H3.5Z" />
     <path d="M12 3v18" />
@@ -50,6 +50,7 @@ export default async function Icon({
           justifyContent: 'center',
           background: 'rgb(45, 79, 30)',
           borderRadius: radius,
+          padding: '10%',
         }}
       >
         {tentSvg}
