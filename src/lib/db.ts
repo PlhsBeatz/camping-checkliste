@@ -59,6 +59,8 @@ export interface Mitreisender {
   id: string
   name: string
   user_id?: string | null
+  /** Rolle des zugeordneten Users (nur wenn user_id gesetzt) */
+  user_role?: 'admin' | 'kind' | 'gast' | null
   is_default_member: boolean
   farbe?: string | null
   created_at: string
@@ -1557,8 +1559,18 @@ export async function getPacklisteId(db: D1Database, vacationId: string): Promis
  */
 export async function getMitreisende(db: D1Database): Promise<Mitreisender[]> {
   try {
-    const result = await db.prepare('SELECT * FROM mitreisende ORDER BY name').all<Mitreisender>()
-    return result.results || []
+    const result = await db
+      .prepare(`
+        SELECT m.*, u.role as user_role
+        FROM mitreisende m
+        LEFT JOIN users u ON m.user_id = u.id
+        ORDER BY m.name
+      `)
+      .all<Mitreisender & { user_role?: string }>()
+    return (result.results || []).map((r) => ({
+      ...r,
+      user_role: r.user_role as Mitreisender['user_role'] | undefined
+    }))
   } catch (error) {
     console.error('Error fetching mitreisende:', error)
     return []
@@ -2528,6 +2540,40 @@ export async function createUser(
   }
 }
 
+export async function updateUserRole(
+  db: D1Database,
+  userId: string,
+  role: UserRole
+): Promise<boolean> {
+  try {
+    await db
+      .prepare('UPDATE users SET role = ?, updated_at = datetime(\'now\') WHERE id = ?')
+      .bind(role, userId)
+      .run()
+    return true
+  } catch (error) {
+    console.error('Error updating user role:', error)
+    return false
+  }
+}
+
+export async function updateUserMitreisender(
+  db: D1Database,
+  userId: string,
+  mitreisenderId: string | null
+): Promise<boolean> {
+  try {
+    await db
+      .prepare('UPDATE users SET mitreisender_id = ?, updated_at = datetime(\'now\') WHERE id = ?')
+      .bind(mitreisenderId, userId)
+      .run()
+    return true
+  } catch (error) {
+    console.error('Error updating user mitreisender:', error)
+    return false
+  }
+}
+
 export async function updateUserPassword(
   db: D1Database,
   userId: string,
@@ -2585,7 +2631,7 @@ export async function getInvitationByToken(
 export async function createInvitation(
   db: D1Database,
   mitreisenderId: string,
-  role: 'kind' | 'gast',
+  role: 'admin' | 'kind' | 'gast',
   createdByUserId: string
 ): Promise<{ id: string; token: string } | null> {
   try {

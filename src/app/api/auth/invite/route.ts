@@ -14,19 +14,27 @@ export async function POST(request: NextRequest) {
 
     const body = (await request.json()) as {
       mitreisenderId?: string
-      role?: 'kind' | 'gast'
+      role?: 'admin' | 'kind' | 'gast'
     }
     const { mitreisenderId, role } = body
 
-    if (!mitreisenderId || !role || (role !== 'kind' && role !== 'gast')) {
+    if (!mitreisenderId || !role || !['admin', 'kind', 'gast'].includes(role)) {
       return NextResponse.json(
-        { success: false, error: 'mitreisenderId und role (kind|gast) erforderlich' },
+        { success: false, error: 'mitreisenderId und role (admin|kind|gast) erforderlich' },
         { status: 400 }
       )
     }
 
     const env = process.env as unknown as CloudflareEnv
     const db = getDB(env)
+    const mitreisender = await db.prepare('SELECT user_id FROM mitreisende WHERE id = ?').bind(mitreisenderId).first<{ user_id: string | null }>()
+    if (mitreisender?.user_id) {
+      return NextResponse.json(
+        { success: false, error: 'Dieser Mitreisende hat bereits einen zugeordneten Benutzer' },
+        { status: 400 }
+      )
+    }
+
     const invite = await createInvitation(db, mitreisenderId, role, session.id)
     if (!invite) {
       return NextResponse.json(

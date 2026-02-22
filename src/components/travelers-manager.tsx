@@ -20,6 +20,7 @@ import {
 } from '@/components/ui/select'
 import { Trash2, Plus, Star, MoreVertical, Pencil, Mail, Copy } from 'lucide-react'
 import { Mitreisender } from '@/lib/db'
+import { useAuth } from '@/components/auth-provider'
 import type { ApiResponse } from '@/lib/api-types'
 import { USER_COLORS, DEFAULT_USER_COLOR_BG } from '@/lib/user-colors'
 import { getInitials } from '@/lib/utils'
@@ -73,15 +74,17 @@ function TravelerRow({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          <DropdownMenuItem
-            onSelect={(e) => {
-              e.preventDefault()
-              onInvite(traveler)
-            }}
-          >
-            <Mail className="h-4 w-4 mr-2" />
-            Einladung erstellen
-          </DropdownMenuItem>
+          {!traveler.user_id && (
+            <DropdownMenuItem
+              onSelect={(e) => {
+                e.preventDefault()
+                onInvite(traveler)
+              }}
+            >
+              <Mail className="h-4 w-4 mr-2" />
+              Einladung erstellen
+            </DropdownMenuItem>
+          )}
           <DropdownMenuItem
             onSelect={(e) => {
               e.preventDefault()
@@ -113,11 +116,12 @@ interface TravelersManagerProps {
 }
 
 export function TravelersManager({ travelers, onRefresh }: TravelersManagerProps) {
+  const { canAccessConfig } = useAuth()
   const [showDialog, setShowDialog] = useState(false)
   const [editingTraveler, setEditingTraveler] = useState<Mitreisender | null>(null)
   const [deleteTravelerId, setDeleteTravelerId] = useState<string | null>(null)
   const [inviteTraveler, setInviteTraveler] = useState<Mitreisender | null>(null)
-  const [inviteRole, setInviteRole] = useState<'kind' | 'gast'>('kind')
+  const [inviteRole, setInviteRole] = useState<'admin' | 'kind' | 'gast'>('kind')
   const [inviteLink, setInviteLink] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
 
@@ -128,6 +132,7 @@ export function TravelersManager({ travelers, onRefresh }: TravelersManagerProps
     farbe: DEFAULT_USER_COLOR_BG
   })
   const [formBerechtigungen, setFormBerechtigungen] = useState<string[]>([])
+  const [formUserRole, setFormUserRole] = useState<'admin' | 'kind' | 'gast' | ''>('')
 
   const BERECHTIGUNGEN_OPTIONS = [
     { key: 'can_edit_pauschal_entries', label: 'Pauschale Einträge bearbeiten' },
@@ -192,19 +197,33 @@ export function TravelersManager({ travelers, onRefresh }: TravelersManagerProps
         alert('Fehler: ' + (data.error ?? 'Unbekannt'))
         return
       }
-      const permRes = await fetch(`/api/mitreisende/${editingTraveler.id}/berechtigungen`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ berechtigungen: formBerechtigungen })
-      })
-      const permData = (await permRes.json()) as ApiResponse<unknown>
-      if (!permData.success) {
-        alert('Mitreisender aktualisiert, aber Berechtigungen konnten nicht gespeichert werden.')
+      if (editingTraveler.user_id && formUserRole && formUserRole !== editingTraveler.user_role) {
+        const roleRes = await fetch(`/api/users/${editingTraveler.user_id}/role`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ role: formUserRole })
+        })
+        const roleData = (await roleRes.json()) as ApiResponse<unknown>
+        if (!roleData.success) {
+          alert('Mitreisender aktualisiert, aber Benutzer-Rolle konnte nicht geändert werden.')
+        }
+      }
+      if (editingTraveler.user_id && editingTraveler.user_role === 'kind') {
+        const permRes = await fetch(`/api/mitreisende/${editingTraveler.id}/berechtigungen`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ berechtigungen: formBerechtigungen })
+        })
+        const permData = (await permRes.json()) as ApiResponse<unknown>
+        if (!permData.success) {
+          alert('Mitreisender aktualisiert, aber Berechtigungen konnten nicht gespeichert werden.')
+        }
       }
       setShowDialog(false)
       setEditingTraveler(null)
       setForm({ name: '', userId: '', isDefaultMember: false, farbe: DEFAULT_USER_COLOR_BG })
       setFormBerechtigungen([])
+      setFormUserRole('')
       onRefresh()
     } catch (error) {
       console.error('Failed to update traveler:', error)
@@ -249,6 +268,7 @@ export function TravelersManager({ travelers, onRefresh }: TravelersManagerProps
       isDefaultMember: traveler.is_default_member,
       farbe: traveler.farbe || DEFAULT_USER_COLOR_BG
     })
+    setFormUserRole(traveler.user_role || '')
     setFormBerechtigungen([])
     setShowDialog(true)
   }
@@ -256,8 +276,10 @@ export function TravelersManager({ travelers, onRefresh }: TravelersManagerProps
   useEffect(() => {
     if (!editingTraveler) {
       setFormBerechtigungen([])
+      setFormUserRole('')
       return
     }
+    setFormUserRole(editingTraveler.user_role || '')
     const fetchBerechtigungen = async () => {
       try {
         const res = await fetch(`/api/mitreisende/${editingTraveler.id}/berechtigungen`)
@@ -282,6 +304,31 @@ export function TravelersManager({ travelers, onRefresh }: TravelersManagerProps
     setInviteTraveler(traveler)
     setInviteRole('kind')
     setInviteLink(null)
+  }
+
+  const handleAssignMe = async () => {
+    if (!editingTraveler || editingTraveler.user_id) return
+    setIsLoading(true)
+    try {
+      const res = await fetch('/api/auth/assign-me', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mitreisenderId: editingTraveler.id })
+      })
+      const data = (await res.json()) as { success?: boolean; error?: string }
+      if (data.success) {
+        onRefresh()
+        setShowDialog(false)
+        setEditingTraveler(null)
+      } else {
+        alert('Fehler: ' + (data.error ?? 'Unbekannt'))
+      }
+    } catch (error) {
+      console.error('Failed to assign me:', error)
+      alert('Fehler bei der Zuordnung')
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   const handleCreateInvite = async () => {
@@ -419,6 +466,38 @@ export function TravelersManager({ travelers, onRefresh }: TravelersManagerProps
                 Dieses Feld wird für die zukünftige Benutzer-Authentifizierung verwendet
               </p>
             </div>
+            {editingTraveler && !editingTraveler.user_id && canAccessConfig && (
+              <div className="space-y-2 pt-2 border-t">
+                <Label>Benutzer zuordnen</Label>
+                <p className="text-xs text-muted-foreground">
+                  Ordnen Sie sich als Admin diesem Mitreisenden zu, um Ihr Profil mit der Packliste zu verknüpfen.
+                </p>
+                <Button variant="outline" onClick={handleAssignMe} disabled={isLoading}>
+                  Mich diesem Mitreisenden zuordnen
+                </Button>
+              </div>
+            )}
+            {editingTraveler?.user_id && (
+              <div className="space-y-2 pt-2 border-t">
+                <Label>Benutzer-Rolle</Label>
+                <p className="text-xs text-muted-foreground">
+                  Die Rolle des zugeordneten Benutzers. Wird beim Speichern übernommen.
+                </p>
+                <Select
+                  value={formUserRole}
+                  onValueChange={(v) => setFormUserRole(v as 'admin' | 'kind' | 'gast')}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Rolle wählen" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="admin">Admin</SelectItem>
+                    <SelectItem value="kind">Kind</SelectItem>
+                    <SelectItem value="gast">Gast</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <div>
               <Label htmlFor="traveler-farbe">Farbe</Label>
               <div className="flex flex-wrap gap-2 mt-2">
@@ -455,7 +534,7 @@ export function TravelersManager({ travelers, onRefresh }: TravelersManagerProps
                 </p>
               </div>
             </div>
-            {editingTraveler && (
+            {editingTraveler?.user_id && editingTraveler?.user_role === 'kind' && (
               <div className="space-y-3 pt-2 border-t">
                 <Label>Berechtigungen (für Kind)</Label>
                 <p className="text-xs text-muted-foreground">
@@ -509,11 +588,12 @@ export function TravelersManager({ travelers, onRefresh }: TravelersManagerProps
             <>
               <div>
                 <Label>Rolle</Label>
-                <Select value={inviteRole} onValueChange={(v) => setInviteRole(v as 'kind' | 'gast')}>
+                <Select value={inviteRole} onValueChange={(v) => setInviteRole(v as 'admin' | 'kind' | 'gast')}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="admin">Admin</SelectItem>
                     <SelectItem value="kind">Kind</SelectItem>
                     <SelectItem value="gast">Gast</SelectItem>
                   </SelectContent>
