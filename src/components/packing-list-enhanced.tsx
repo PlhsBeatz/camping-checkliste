@@ -13,7 +13,7 @@ import {
 import { MoreVertical, Edit2, Trash2, RotateCcw } from "lucide-react";
 import { useMemo, useState, useEffect, useRef } from "react";
 import { PackingItem as DBPackingItem } from "@/lib/db";
-import { MarkAllConfirmationDialog } from "./mark-all-confirmation-dialog";
+import { MarkAllConfirmationDialog, type TravelerForMarkAll } from "./mark-all-confirmation-dialog";
 import { UndoToast } from "./undo-toast";
 import { cn } from "@/lib/utils";
 
@@ -43,7 +43,8 @@ interface PackingItemProps {
   fullItem: DBPackingItem;
   selectedProfile: string | null;
   hidePackedItems: boolean;
-  onMarkAllConfirm?: () => void;
+  vacationMitreisende?: Array<{ id: string; name: string }>;
+  onMarkAllConfirm?: (selectedTravelerIds: string[]) => void;
   onShowToast?: (itemName: string, travelerName: string | undefined, undoAction: () => void) => void;
 }
 
@@ -69,6 +70,7 @@ const PackingItem: React.FC<PackingItemProps> = ({
   fullItem,
   selectedProfile,
   hidePackedItems,
+  vacationMitreisende = [],
   onMarkAllConfirm,
   onShowToast
 }) => {
@@ -223,17 +225,40 @@ const PackingItem: React.FC<PackingItemProps> = ({
 
   // Handle "mark all" or "unmark all" toggle (for Zentral/Alle mode)
   const handleMarkAllToggle = () => {
-    if (selectedProfile === null && mitreisenden_typ !== 'pauschal') {
+    if (selectedProfile === null && mitreisenden_typ !== 'pauschal' && travelersForMarkAll.length > 0) {
       setShowMarkAllDialog(true);
     }
   };
 
-  const confirmMarkAll = () => {
+  const confirmMarkAll = (selectedTravelerIds: string[]) => {
     if (onMarkAllConfirm) {
-      onMarkAllConfirm();
+      onMarkAllConfirm(selectedTravelerIds);
     }
     setShowMarkAllDialog(false);
   };
+
+  const travelersForMarkAll: TravelerForMarkAll[] = useMemo(() => {
+    let list = mitreisende ?? [];
+    if (list.length === 0 && mitreisenden_typ === 'alle' && vacationMitreisende.length > 0) {
+      list = vacationMitreisende.map(m => ({
+        mitreisender_id: m.id,
+        mitreisender_name: m.name,
+        gepackt: false
+      }));
+    }
+    if (isFullyPacked) {
+      return list.filter(m => m.gepackt).map(m => ({
+        id: m.mitreisender_id,
+        name: m.mitreisender_name,
+        isCurrentlyPacked: true
+      }));
+    }
+    return list.filter(m => !m.gepackt).map(m => ({
+      id: m.mitreisender_id,
+      name: m.mitreisender_name,
+      isCurrentlyPacked: false
+    }));
+  }, [mitreisende, mitreisenden_typ, vacationMitreisende, isFullyPacked]);
 
   // Hide if packed – nach Exit-Animation
   if (hasExited) {
@@ -392,13 +417,13 @@ const PackingItem: React.FC<PackingItemProps> = ({
       </div>
 
       {/* Mark All Confirmation Dialog */}
-      {mitreisende && (
+      {travelersForMarkAll.length > 0 && (
         <MarkAllConfirmationDialog
           isOpen={showMarkAllDialog}
           onClose={() => setShowMarkAllDialog(false)}
           onConfirm={confirmMarkAll}
           _itemName={was}
-          travelerNames={mitreisende.map(m => m.mitreisender_name)}
+          travelers={travelersForMarkAll}
           isUnmarkMode={isFullyPacked}
         />
       )}
@@ -585,12 +610,11 @@ export function PackingList({
     onScrollContextChange(activeMainCategory ? { mainCategory: activeMainCategory, category: cat } : null);
   }, [activeMainCategory, firstVisibleCategory, itemsByMainCategory, onScrollContextChange]);
 
-  // Handle mark all or unmark all for an item
-  const handleMarkAllForItem = (item: DBPackingItem) => {
-    // Get the list of mitreisende to work with
+  // Handle mark all or unmark all for an item (nur für die ausgewählten Mitreisenden)
+  const handleMarkAllForItem = (item: DBPackingItem, selectedTravelerIds: string[]) => {
+    if (selectedTravelerIds.length === 0) return;
+
     let mitreisendeToProcess = item.mitreisende || [];
-    
-    // If mitreisende array is empty but mitreisenden_typ is 'alle', use all vacation mitreisende
     if (mitreisendeToProcess.length === 0 && item.mitreisenden_typ === 'alle' && vacationMitreisende.length > 0) {
       mitreisendeToProcess = vacationMitreisende.map(m => ({
         mitreisender_id: m.id,
@@ -598,69 +622,34 @@ export function PackingList({
         gepackt: false
       }));
     }
-    
-    if (mitreisendeToProcess.length === 0) {
-      console.warn('handleMarkAllForItem: No mitreisende found for item', item.id, item.mitreisenden_typ);
-      return;
-    }
-    
-    // Check if all are already packed
+
     const allPacked = mitreisendeToProcess.every(m => m.gepackt);
-    
-    if (allPacked) {
-      // Unmark all
-      const travelerNames: string[] = [];
-      const updates: Array<{ mitreisenderId: string; newStatus: boolean }> = [];
-      
-      mitreisendeToProcess.forEach(m => {
-        updates.push({ mitreisenderId: m.mitreisender_id, newStatus: false });
-        travelerNames.push(m.mitreisender_name);
-      });
 
-      // Unmark all travelers in a single batch
-      onToggleMultipleMitreisende(item.id, updates);
+    const updates: Array<{ mitreisenderId: string; newStatus: boolean }> = [];
+    const travelerNames: string[] = [];
 
-      // Show undo toast only if hidePackedItems is active
-      if (hidePackedItems && travelerNames.length > 0) {
-        const itemId = item.id
-        setUndoToast({
-          visible: true,
-          itemName: `${item.was} (${travelerNames.join(', ')})`,
-          action: () => {
-            const undoUpdates = updates.map(u => ({ ...u, newStatus: true }))
-            setTimeout(() => onToggleMultipleMitreisende(itemId, undoUpdates), 100)
-          }
-        });
-      }
-    } else {
-      // Mark all unpacked travelers
-      const travelerNames: string[] = [];
-      const updates: Array<{ mitreisenderId: string; newStatus: boolean }> = [];
-      
-      mitreisendeToProcess.forEach(m => {
-        if (!m.gepackt) {
-          updates.push({ mitreisenderId: m.mitreisender_id, newStatus: true });
-          travelerNames.push(m.mitreisender_name);
+    selectedTravelerIds.forEach(id => {
+      const m = mitreisendeToProcess.find(t => t.mitreisender_id === id);
+      if (!m) return;
+      const newStatus = !allPacked; // mark or unmark
+      updates.push({ mitreisenderId: id, newStatus });
+      travelerNames.push(m.mitreisender_name);
+    });
+
+    if (updates.length === 0) return;
+
+    onToggleMultipleMitreisende(item.id, updates);
+
+    if (hidePackedItems && travelerNames.length > 0) {
+      const itemId = item.id;
+      setUndoToast({
+        visible: true,
+        itemName: `${item.was} (${travelerNames.join(', ')})`,
+        action: () => {
+          const undoUpdates = updates.map(u => ({ ...u, newStatus: !u.newStatus }));
+          setTimeout(() => onToggleMultipleMitreisende(itemId, undoUpdates), 100);
         }
       });
-
-      // Mark all travelers in a single batch
-      if (updates.length > 0) {
-        onToggleMultipleMitreisende(item.id, updates);
-
-        // Show undo toast only if hidePackedItems is active
-        if (hidePackedItems && travelerNames.length > 0) {
-          const itemId = item.id
-          setUndoToast({
-            visible: true,
-            itemName: `${item.was} (${travelerNames.join(', ')})`,
-            action: () => {
-              const undoUpdates = updates.map(u => ({ ...u, newStatus: false }))
-              setTimeout(() => onToggleMultipleMitreisende(itemId, undoUpdates), 100)
-            }
-          });
-        }
-      }
     }
   };
 
@@ -673,17 +662,43 @@ export function PackingList({
     });
   };
 
+  // Ist ein Eintrag vollständig gepackt (aus Sicht des aktuellen Profils/Berechtigungen)?
+  const isItemFullyPackedForView = (item: DBPackingItem) => {
+    if (item.mitreisenden_typ === 'pauschal') {
+      return canConfirmVorgemerkt ? item.gepackt : (item.gepackt || !!item.gepackt_vorgemerkt);
+    }
+    if (selectedProfile) {
+      const m = item.mitreisende?.find(t => t.mitreisender_id === selectedProfile);
+      if (!m) return true;
+      return canConfirmVorgemerkt ? m.gepackt : (m.gepackt || !!m.gepackt_vorgemerkt);
+    }
+    return (item.mitreisende?.length ?? 0) > 0 && item.mitreisende!.every(m =>
+      canConfirmVorgemerkt ? m.gepackt : (m.gepackt || !!m.gepackt_vorgemerkt)
+    );
+  };
+
+  // Hauptkategorien ausblenden, die vollständig abgehakt sind (bei Gepacktes ausblenden)
+  const visibleMainCategories = useMemo(() => {
+    if (!hidePackedItems) return mainCategories;
+    return mainCategories.filter(mainCat => {
+      const cats = itemsByMainCategory[mainCat] ?? {};
+      const allItems = Object.values(cats).flat();
+      return allItems.some(item => !isItemFullyPackedForView(item));
+    });
+  }, [mainCategories, itemsByMainCategory, hidePackedItems, selectedProfile, canConfirmVorgemerkt]);
+
+  // Aktive Tab setzen/korrigieren: erste sichtbare oder wenn aktuelle ausgeblendet
+  useEffect(() => {
+    if (visibleMainCategories.length === 0) return;
+    if (!activeMainCategory || !visibleMainCategories.includes(activeMainCategory)) {
+      setActiveMainCategory(visibleMainCategories[0]!);
+    }
+  }, [visibleMainCategories, activeMainCategory]);
+
   // Kategorien anzeigen: wenn hidePackedItems, nur wenn mind. ein Eintrag ungepackt
   const shouldShowCategory = (categoryItems: DBPackingItem[]) => {
     if (!hidePackedItems) return true;
-    return categoryItems.some(item => {
-      if (item.mitreisenden_typ === 'pauschal') return !item.gepackt;
-      const travelerItem = selectedProfile
-        ? item.mitreisende?.find(m => m.mitreisender_id === selectedProfile)
-        : null;
-      if (travelerItem) return !travelerItem.gepackt;
-      return item.mitreisende?.some(m => !m.gepackt) ?? false;
-    });
+    return categoryItems.some(item => !isItemFullyPackedForView(item));
   };
 
   return (
@@ -724,7 +739,7 @@ export function PackingList({
           }}
         >
           <TabsList className="inline-flex w-max justify-start bg-transparent p-0 h-auto rounded-none">
-            {mainCategories.map(mainCat => (
+            {visibleMainCategories.map(mainCat => (
               <TabsTrigger
                 key={mainCat}
                 value={mainCat}
@@ -740,7 +755,7 @@ export function PackingList({
       {/* Scrollbarer Bereich: Hintergrund scrollt mit dem Inhalt, randlos */}
       <div className="flex-1 min-h-0 overflow-y-auto overflow-x-clip">
         <div className="min-h-full bg-scroll-pattern px-4 sm:px-6 pt-6 pb-6">
-        {mainCategories.map(mainCat => (
+        {visibleMainCategories.map(mainCat => (
             <TabsContent key={mainCat} value={mainCat} className="space-y-6 mt-14 m-0">
               {Object.entries(itemsByMainCategory[mainCat] ?? {}).map(([category, categoryItems]) => {
                 if (!shouldShowCategory(categoryItems)) return null;
@@ -786,7 +801,8 @@ export function PackingList({
                               fullItem={item}
                               selectedProfile={selectedProfile}
                               hidePackedItems={hidePackedItems}
-                              onMarkAllConfirm={() => handleMarkAllForItem(item)}
+                              vacationMitreisende={vacationMitreisende}
+                              onMarkAllConfirm={(ids) => handleMarkAllForItem(item, ids)}
                               onShowToast={showToast}
                             />
                           ))}
