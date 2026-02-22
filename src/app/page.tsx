@@ -1131,6 +1131,7 @@ function HomeContent() {
                   onChange={(e) => setPackingItemForm({ ...packingItemForm, bemerkung: e.target.value })}
                 />
               </div>
+              {selectedPackProfile === null && (
               <div>
                 <Label htmlFor="edit-transport">Transport</Label>
                 <Select
@@ -1155,6 +1156,7 @@ function HomeContent() {
                   </SelectContent>
                 </Select>
               </div>
+              )}
                 </>
               )}
               <Button onClick={handleUpdatePackingItem} disabled={isLoading} className="w-full">

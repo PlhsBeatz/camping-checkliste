@@ -10,7 +10,12 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { MoreVertical, Edit2, Trash2, RotateCcw, CheckCheck } from "lucide-react";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { MoreVertical, Edit2, Trash2, RotateCcw, CheckCheck, Check, Circle } from "lucide-react";
 import { useMemo, useState, useEffect, useRef } from "react";
 import { PackingItem as DBPackingItem } from "@/lib/db";
 import { MarkAllConfirmationDialog, type TravelerForMarkAll } from "./mark-all-confirmation-dialog";
@@ -348,13 +353,55 @@ const PackingItem: React.FC<PackingItemProps> = ({
                     Für {selectedTravelerItem.mitreisender_name}
                   </span>
                 )}
-                {selectedProfile === null && (
-                  <span className="text-xs text-accent font-medium">
-                    {canConfirmVorgemerkt ? packedCountFinal : packedCount}/{totalCount} Personen
-                    {canConfirmVorgemerkt && vorgemerktNames.length > 0 && (
-                      <> (Prüfen: {vorgemerktNames.join(', ')})</>
-                    )}
-                  </span>
+                {selectedProfile === null && mitreisende && mitreisende.length > 0 && (
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <button
+                        type="button"
+                        className="text-xs text-accent font-medium hover:underline focus:outline-none focus:ring-2 focus:ring-primary/20 rounded px-1 -mx-1"
+                      >
+                        {canConfirmVorgemerkt ? packedCountFinal : packedCount}/{totalCount} Personen
+                        {canConfirmVorgemerkt && vorgemerktNames.length > 0 && (
+                          <> (Prüfen: {vorgemerktNames.join(', ')})</>
+                        )}
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-64 p-0" align="start">
+                      <div className="p-2 border-b bg-muted/30">
+                        <p className="text-xs font-semibold text-foreground">Gepackt pro Person</p>
+                      </div>
+                      <ul className="max-h-48 overflow-y-auto py-1">
+                        {mitreisende.map((m) => {
+                          const packed = canConfirmVorgemerkt ? m.gepackt : (m.gepackt || !!m.gepackt_vorgemerkt);
+                          const vorgemerkt = !!m.gepackt_vorgemerkt && !m.gepackt;
+                          return (
+                            <li
+                              key={m.mitreisender_id}
+                              className="flex items-center gap-2 px-3 py-2 text-sm"
+                            >
+                              {packed ? (
+                                <Check className="h-4 w-4 text-[rgb(45,79,30)] shrink-0" />
+                              ) : vorgemerkt ? (
+                                <Circle className="h-4 w-4 text-amber-500 shrink-0" />
+                              ) : (
+                                <Circle className="h-4 w-4 text-muted-foreground/50 shrink-0" />
+                              )}
+                              <span className={cn(
+                                "truncate",
+                                packed && "text-muted-foreground",
+                                vorgemerkt && "text-amber-700"
+                              )}>
+                                {m.mitreisender_name}
+                              </span>
+                              {vorgemerkt && canConfirmVorgemerkt && (
+                                <span className="text-xs text-amber-600 ml-auto shrink-0">Prüfen</span>
+                              )}
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </PopoverContent>
+                  </Popover>
                 )}
               </div>
             )}
@@ -483,6 +530,7 @@ export function PackingList({
   const [tabsScrollbarVisible, setTabsScrollbarVisible] = useState(false);
   const tabsScrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const categoryRefsMap = useRef<Map<string, HTMLDivElement | null>>(new Map());
+  const tabTouchStartX = useRef<number | null>(null);
 
   useEffect(() => {
     return () => {
@@ -712,6 +760,21 @@ export function PackingList({
   const hasItems = visibleItems.length > 0;
   const allPackedFromCurrentView = hasItems && totalCount > 0 && packedCount === totalCount;
 
+  const tabsForSwipe = allPackedFromCurrentView && hidePackedItems
+    ? []
+    : (hidePackedItems ? visibleMainCategories : mainCategories);
+
+  const handleTabSwipe = (direction: 'left' | 'right') => {
+    if (tabsForSwipe.length === 0) return;
+    const idx = tabsForSwipe.indexOf(activeMainCategory);
+    if (idx < 0) return;
+    if (direction === 'left' && idx < tabsForSwipe.length - 1) {
+      setActiveMainCategory(tabsForSwipe[idx + 1]!);
+    } else if (direction === 'right' && idx > 0) {
+      setActiveMainCategory(tabsForSwipe[idx - 1]!);
+    }
+  };
+
   return (
     <Tabs value={activeMainCategory} onValueChange={setActiveMainCategory} className="flex flex-col flex-1 min-h-0 min-w-0 w-full max-w-full">
       {/* Sticky-Bereich: Progress + Tabs – scrollt nie. Shadow unter den Tabs. */}
@@ -748,9 +811,23 @@ export function PackingList({
               tabsScrollTimeoutRef.current = null;
             }, 800);
           }}
+          onTouchStart={(e) => {
+            tabTouchStartX.current = e.targetTouches[0]?.clientX ?? null;
+          }}
+          onTouchEnd={(e) => {
+            const start = tabTouchStartX.current;
+            tabTouchStartX.current = null;
+            if (start == null) return;
+            const end = e.changedTouches[0]?.clientX;
+            if (end == null) return;
+            const delta = start - end;
+            const minSwipe = 50;
+            if (delta > minSwipe) handleTabSwipe('left');
+            else if (delta < -minSwipe) handleTabSwipe('right');
+          }}
         >
           <TabsList className="inline-flex w-max justify-start bg-transparent p-0 h-auto rounded-none">
-            {((!allPackedFromCurrentView || !hidePackedItems) ? (hidePackedItems ? visibleMainCategories : mainCategories) : []).map(mainCat => (
+            {tabsForSwipe.map(mainCat => (
               <TabsTrigger
                 key={mainCat}
                 value={mainCat}
@@ -787,7 +864,7 @@ export function PackingList({
           </div>
         ) : (
         <>
-        {(hidePackedItems ? visibleMainCategories : mainCategories).map(mainCat => (
+        {tabsForSwipe.map(mainCat => (
             <TabsContent key={mainCat} value={mainCat} className="space-y-6 mt-14 m-0">
               {Object.entries(itemsByMainCategory[mainCat] ?? {}).map(([category, categoryItems]) => {
                 if (!shouldShowCategory(categoryItems)) return null;
