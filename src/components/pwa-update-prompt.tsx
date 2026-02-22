@@ -90,7 +90,7 @@ export function PwaUpdatePrompt() {
 
   return (
     <div className="fixed bottom-4 left-4 right-4 z-50 md:left-auto md:right-4 md:max-w-sm">
-      <div className="rounded-lg border bg-background p-4 shadow-lg">
+      <div className="rounded-lg border bg-white p-4 shadow-lg">
         <p className="text-sm font-medium">
           {isUpdating ? 'Aktualisiere...' : 'Neue Version verfügbar'}
         </p>

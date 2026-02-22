@@ -124,12 +124,17 @@ const PackingItem: React.FC<PackingItemProps> = ({
     return mitreisende.find(m => m.mitreisender_id === selectedProfile);
   }, [selectedProfile, mitreisende]);
 
-  /** Gepackt für Transparenz-Anzeige (opacity-60): Pauschal oder Profil-Ansicht nutzt jeweiligen Status */
+  /** Gepackt für Transparenz-Anzeige (opacity-60): Admin nur bei final gepackt, sonst auch vorgemerkt */
   const isPackedForOpacity = useMemo(() => {
+    if (canConfirmVorgemerkt) {
+      if (mitreisenden_typ === 'pauschal') return gepackt;
+      if (selectedProfile) return selectedTravelerItem ? !!selectedTravelerItem.gepackt : false;
+      return isFullyPackedFinal;
+    }
     if (mitreisenden_typ === 'pauschal') return effectivePacked(gepackt, gepackt_vorgemerkt);
     if (selectedProfile) return selectedTravelerItem ? effectivePacked(selectedTravelerItem.gepackt, selectedTravelerItem.gepackt_vorgemerkt) : false;
     return isFullyPacked;
-  }, [mitreisenden_typ, gepackt, gepackt_vorgemerkt, selectedProfile, selectedTravelerItem, isFullyPacked]);
+  }, [canConfirmVorgemerkt, mitreisenden_typ, gepackt, gepackt_vorgemerkt, selectedProfile, selectedTravelerItem, isFullyPacked, isFullyPackedFinal]);
 
   // Check if item should be hidden in individual profile view
   const shouldHideInProfileView = useMemo(() => {
