@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDB, getUserByEmail, CloudflareEnv } from '@/lib/db'
-import { hashPassword, verifyPassword, createToken } from '@/lib/auth'
+import { verifyPassword, createToken } from '@/lib/auth'
 
 export async function POST(request: NextRequest) {
   try {
