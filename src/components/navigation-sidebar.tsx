@@ -1,14 +1,11 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { 
-  ChevronDown,
-  ChevronRight,
-  Tent
-} from 'lucide-react'
+import { ChevronDown, ChevronRight, Tent } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { subscribeToOnlineStatus } from '@/lib/offline-sync'
 
 interface NavigationSidebarProps {
   isOpen: boolean
@@ -18,6 +15,11 @@ interface NavigationSidebarProps {
 export function NavigationSidebar({ isOpen, onClose }: NavigationSidebarProps) {
   const pathname = usePathname()
   const [configExpanded, setConfigExpanded] = useState(false)
+  const [isOnline, setIsOnline] = useState(true)
+
+  useEffect(() => {
+    return subscribeToOnlineStatus(setIsOnline)
+  }, [])
 
   const menuItems = [
     {
@@ -159,8 +161,15 @@ export function NavigationSidebar({ isOpen, onClose }: NavigationSidebarProps) {
         {/* Status Indicator */}
         <div className="p-6 bg-[rgb(250,250,249)] border-t border-gray-200">
           <div className="flex items-center gap-2 text-xs text-gray-600">
-            <div className="w-2 h-2 bg-green-500 rounded-full" />
-            <span className="tracking-wide">ONLINE & SYNCHRONISIERT</span>
+            <div
+              className={cn(
+                'w-2 h-2 rounded-full',
+                isOnline ? 'bg-green-500' : 'bg-amber-500'
+              )}
+            />
+            <span className="tracking-wide">
+              {isOnline ? 'ONLINE & SYNCHRONISIERT' : 'OFFLINE – Daten aus Cache'}
+            </span>
           </div>
         </div>
       </aside>
