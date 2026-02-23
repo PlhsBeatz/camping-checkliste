@@ -81,8 +81,8 @@ export function AddSingleItemDialog({
   useEffect(() => {
     if (open && form.saveToEquipment && tags.length === 0 && tagsProp.length === 0) {
       fetch('/api/tags')
-        .then((r) => r.json())
-        .then((d: ApiResponse<Array<{ id: string; titel: string }>>) => {
+        .then((r) => r.json() as Promise<ApiResponse<Array<{ id: string; titel: string }>>>>)
+        .then((d) => {
           if (d.success && d.data) setTags(d.data)
         })
         .catch(() => {})
@@ -92,8 +92,8 @@ export function AddSingleItemDialog({
   useEffect(() => {
     if (open && form.saveToEquipment && mitreisende.length === 0 && mitreisendeProp.length === 0) {
       fetch('/api/mitreisende')
-        .then((r) => r.json())
-        .then((d: ApiResponse<Array<{ id: string; name: string }>>) => {
+        .then((r) => r.json() as Promise<ApiResponse<Array<{ id: string; name: string }>>>>)
+        .then((d) => {
           if (d.success && d.data) setMitreisende(d.data)
         })
         .catch(() => {})
