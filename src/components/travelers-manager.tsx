@@ -49,6 +49,7 @@ function TravelerRow({
   onDelete,
   onInvite,
   onResetPassword,
+  resettingUserId,
 }: {
   traveler: Mitreisender
   initials: string
@@ -57,6 +58,7 @@ function TravelerRow({
   onDelete: (id: string) => void
   onInvite: (t: Mitreisender) => void
   onResetPassword?: (t: Mitreisender) => void
+  resettingUserId?: string | null
 }) {
   const [menuOpen, setMenuOpen] = useState(false)
   return (
@@ -104,9 +106,10 @@ function TravelerRow({
                 setMenuOpen(false)
                 onResetPassword(traveler)
               }}
+              disabled={resettingUserId === traveler.user_id}
             >
               <KeyRound className="h-4 w-4 mr-2" />
-              Passwort zurücksetzen
+              {resettingUserId === traveler.user_id ? 'Wird zurückgesetzt…' : 'Passwort zurücksetzen'}
             </DropdownMenuItem>
           )}
           <DropdownMenuItem
@@ -489,6 +492,7 @@ export function TravelersManager({ travelers, onRefresh }: TravelersManagerProps
                 onDelete={handleDelete}
                 onInvite={openInvite}
                 onResetPassword={canAccessConfig ? handleResetPassword : undefined}
+                resettingUserId={resettingUserId}
               />
             ))}
           </div>
@@ -517,6 +521,7 @@ export function TravelersManager({ travelers, onRefresh }: TravelersManagerProps
                 onDelete={handleDelete}
                 onInvite={openInvite}
                 onResetPassword={canAccessConfig ? handleResetPassword : undefined}
+                resettingUserId={resettingUserId}
               />
             ))}
           </div>
