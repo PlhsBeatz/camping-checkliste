@@ -93,6 +93,8 @@ export default function UrlaubePage() {
     land_region: ''
   })
   const [abfahrtPopoverOpen, setAbfahrtPopoverOpen] = useState(false)
+  const [rangePopoverOpen, setRangePopoverOpen] = useState(false)
+  const [draftRange, setDraftRange] = useState<DateRange | undefined>(undefined)
 
   // Sidebar offen: Body-Scroll sperren
   useEffect(() => {
@@ -374,7 +376,19 @@ export default function UrlaubePage() {
                   <div className="space-y-4">
                     <div>
                       <Label>Reisedatum *</Label>
-                      <Popover>
+                      <Popover
+                        open={rangePopoverOpen}
+                        onOpenChange={(open) => {
+                          setRangePopoverOpen(open)
+                          if (open) {
+                            const from = newVacationForm.startdatum ? new Date(newVacationForm.startdatum) : undefined
+                            const to = newVacationForm.enddatum ? new Date(newVacationForm.enddatum) : undefined
+                            setDraftRange(from ? { from, to: to ?? from } : undefined)
+                          } else {
+                            setDraftRange(undefined)
+                          }
+                        }}
+                      >
                         <PopoverTrigger asChild>
                           <Button
                             variant="outline"
@@ -394,38 +408,60 @@ export default function UrlaubePage() {
                           </Button>
                         </PopoverTrigger>
                         <PopoverContent
-                          className="fixed inset-x-4 top-4 w-[calc(100vw-2rem)] max-h-[90vh] overflow-y-auto p-0 sm:static sm:w-auto sm:max-h-none sm:overflow-visible"
+                          className="fixed left-1/2 top-1/2 w-[calc(100vw-2rem)] -translate-x-1/2 -translate-y-1/2 max-h-[90vh] overflow-y-auto p-0 sm:static sm:w-auto sm:max-h-none sm:overflow-visible sm:translate-x-0 sm:translate-y-0"
                           align="start"
                           side="bottom"
                         >
                           <Calendar
                             mode="range"
                             defaultMonth={
-                              newVacationForm.startdatum
-                                ? new Date(newVacationForm.startdatum)
-                                : new Date()
+                              draftRange?.from
+                                ? draftRange.from
+                                : newVacationForm.startdatum
+                                  ? new Date(newVacationForm.startdatum)
+                                  : new Date()
                             }
                             selected={
-                              newVacationForm.startdatum && newVacationForm.enddatum
+                              draftRange ??
+                              (newVacationForm.startdatum && newVacationForm.enddatum
                                 ? {
                                     from: new Date(newVacationForm.startdatum),
                                     to: new Date(newVacationForm.enddatum)
                                   }
-                                : undefined
+                                : undefined)
                             }
                             onSelect={(range: DateRange | undefined) => {
                               if (range?.from) {
-                                setNewVacationForm((prev) => ({
-                                  ...prev,
-                                  startdatum: format(range.from!, 'yyyy-MM-dd'),
-                                  enddatum: range.to ? format(range.to, 'yyyy-MM-dd') : format(range.from!, 'yyyy-MM-dd')
-                                }))
+                                setDraftRange({
+                                  from: range.from,
+                                  to: range.to ?? range.from
+                                })
                               }
                             }}
                             locale={de}
                             numberOfMonths={2}
                             components={{ Caption: RangeCalendarCaption }}
                           />
+                          <div className="flex gap-2 p-3 border-t bg-muted/30">
+                            <Button
+                              type="button"
+                              size="sm"
+                              className="flex-1 bg-[rgb(45,79,30)] text-white hover:bg-[rgb(45,79,30)]/90 hover:text-white border-[rgb(45,79,30)]"
+                              disabled={!draftRange?.from}
+                              onClick={() => {
+                                if (!draftRange?.from) return
+                                setNewVacationForm((prev) => ({
+                                  ...prev,
+                                  startdatum: format(draftRange.from!, 'yyyy-MM-dd'),
+                                  enddatum: format((draftRange.to ?? draftRange.from)!, 'yyyy-MM-dd')
+                                }))
+                                setRangePopoverOpen(false)
+                                setDraftRange(undefined)
+                              }}
+                            >
+                              OK
+                            </Button>
+                          </div>
                         </PopoverContent>
                       </Popover>
                     </div>
