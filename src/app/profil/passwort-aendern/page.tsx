@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { NavigationSidebar } from '@/components/navigation-sidebar'
 import { Menu } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -115,22 +116,29 @@ export default function PasswortAendernPage() {
   }
 
   return (
-    <div className="min-h-screen flex bg-[rgb(250,250,249)]">
+    <div className="min-h-screen flex">
       <NavigationSidebar isOpen={showNavSidebar} onClose={() => setShowNavSidebar(false)} />
-      <div className="flex-1 flex flex-col min-w-0">
-        <header className="sticky top-0 z-30 flex items-center gap-3 px-4 py-3 bg-white border-b border-gray-200 lg:px-6">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="lg:hidden"
-            onClick={() => setShowNavSidebar(true)}
-          >
-            <Menu className="h-5 w-5" />
-          </Button>
-          <h1 className="text-lg font-semibold text-[rgb(45,79,30)]">Passwort ändern</h1>
-        </header>
+      <div className={cn('flex-1 transition-all duration-300', 'lg:ml-[280px]')}>
+        <div className="container mx-auto p-4 md:p-6 space-y-6">
+          <div className="sticky top-0 z-10 flex items-center justify-between bg-white shadow pb-4 -mx-4 px-4 -mt-4 pt-4 md:-mx-6 md:px-6 md:-mt-6 md:pt-6">
+            <div className="flex items-center gap-4">
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => setShowNavSidebar(true)}
+                className="lg:hidden"
+              >
+                <Menu className="h-5 w-5" />
+              </Button>
+              <div>
+                <h1 className="text-lg sm:text-xl font-bold tracking-tight text-[rgb(45,79,30)]">
+                  Passwort ändern
+                </h1>
+              </div>
+            </div>
+          </div>
 
-        <main className="flex-1 p-4 lg:p-6 max-w-md">
+        <main className="max-w-md">
           <Card className="border-gray-200">
             <CardHeader>
               <CardTitle className="text-base">
@@ -251,6 +259,7 @@ export default function PasswortAendernPage() {
             </CardContent>
           </Card>
         </main>
+        </div>
       </div>
     </div>
   )

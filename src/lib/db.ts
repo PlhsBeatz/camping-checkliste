@@ -62,6 +62,8 @@ export interface Mitreisender {
   id: string
   name: string
   user_id?: string | null
+  /** E-Mail des zugeordneten Users (nur wenn user_id gesetzt) */
+  user_email?: string | null
   /** Rolle des zugeordneten Users (nur wenn user_id gesetzt) */
   user_role?: 'admin' | 'kind' | 'gast' | null
   is_default_member: boolean
@@ -1589,14 +1591,15 @@ export async function getMitreisende(db: D1Database): Promise<Mitreisender[]> {
   try {
     const result = await db
       .prepare(`
-        SELECT m.*, u.role as user_role
+        SELECT m.*, u.email as user_email, u.role as user_role
         FROM mitreisende m
         LEFT JOIN users u ON m.user_id = u.id
         ORDER BY m.name
       `)
-      .all<Mitreisender & { user_role?: string }>()
+      .all<Mitreisender & { user_email?: string | null; user_role?: string }>()
     return (result.results || []).map((r) => ({
       ...r,
+      user_email: r.user_email ?? null,
       user_role: r.user_role as Mitreisender['user_role'] | undefined
     }))
   } catch (error) {

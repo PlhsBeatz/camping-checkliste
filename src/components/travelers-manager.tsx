@@ -18,7 +18,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Trash2, Plus, Star, MoreVertical, Pencil, Mail, Copy } from 'lucide-react'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Trash2, Plus, Star, MoreVertical, Pencil, Mail, Copy, KeyRound, Share2 } from 'lucide-react'
 import { Mitreisender } from '@/lib/db'
 import { useAuth } from '@/components/auth-provider'
 import type { ApiResponse } from '@/lib/api-types'
@@ -41,6 +48,7 @@ function TravelerRow({
   onEdit,
   onDelete,
   onInvite,
+  onResetPassword,
 }: {
   traveler: Mitreisender
   initials: string
@@ -48,6 +56,7 @@ function TravelerRow({
   onEdit: (t: Mitreisender) => void
   onDelete: (id: string) => void
   onInvite: (t: Mitreisender) => void
+  onResetPassword?: (t: Mitreisender) => void
 }) {
   const [menuOpen, setMenuOpen] = useState(false)
   return (
@@ -64,7 +73,10 @@ function TravelerRow({
         <div>
           <p className="font-medium">{traveler.name}</p>
           {traveler.user_id && (
-            <p className="text-xs text-muted-foreground">User-ID: {traveler.user_id}</p>
+            <p className="text-xs text-muted-foreground">
+              {traveler.user_email ?? '–'}
+              {traveler.user_role != null && ` · ${traveler.user_role === 'admin' ? 'Admin' : traveler.user_role === 'kind' ? 'Kind' : 'Gast'}`}
+            </p>
           )}
         </div>
       </div>
@@ -84,6 +96,17 @@ function TravelerRow({
             >
               <Mail className="h-4 w-4 mr-2" />
               Einladung erstellen
+            </DropdownMenuItem>
+          )}
+          {traveler.user_id && onResetPassword && (
+            <DropdownMenuItem
+              onSelect={() => {
+                setMenuOpen(false)
+                onResetPassword(traveler)
+              }}
+            >
+              <KeyRound className="h-4 w-4 mr-2" />
+              Passwort zurücksetzen
             </DropdownMenuItem>
           )}
           <DropdownMenuItem
@@ -126,6 +149,9 @@ export function TravelersManager({ travelers, onRefresh }: TravelersManagerProps
   const [inviteLink, setInviteLink] = useState<string | null>(null)
   const [inviteBerechtigungen, setInviteBerechtigungen] = useState<string[]>([])
   const [isLoading, setIsLoading] = useState(false)
+  const [resetResult, setResetResult] = useState<{ email: string; temporaryPassword: string } | null>(null)
+  const [copyFeedback, setCopyFeedback] = useState(false)
+  const [resettingUserId, setResettingUserId] = useState<string | null>(null)
 
   const [form, setForm] = useState({
     name: '',
@@ -376,6 +402,64 @@ export function TravelersManager({ travelers, onRefresh }: TravelersManagerProps
     }
   }
 
+  const handleResetPassword = async (traveler: Mitreisender) => {
+    if (!traveler.user_id) return
+    setResettingUserId(traveler.user_id)
+    setResetResult(null)
+    try {
+      const res = await fetch('/api/auth/password-reset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: traveler.user_id })
+      })
+      const data = (await res.json()) as {
+        success?: boolean
+        temporaryPassword?: string
+        email?: string
+        error?: string
+      }
+      if (data.success && data.temporaryPassword != null) {
+        setResetResult({
+          email: data.email ?? '',
+          temporaryPassword: data.temporaryPassword
+        })
+      } else {
+        alert(data.error ?? 'Passwort konnte nicht zurückgesetzt werden')
+      }
+    } catch {
+      alert('Fehler beim Zurücksetzen')
+    } finally {
+      setResettingUserId(null)
+    }
+  }
+
+  const copyResetPassword = () => {
+    if (!resetResult) return
+    navigator.clipboard?.writeText(resetResult.temporaryPassword).then(() => {
+      setCopyFeedback(true)
+      setTimeout(() => setCopyFeedback(false), 2000)
+    })
+  }
+
+  const shareResetPassword = () => {
+    if (!resetResult) return
+    const text = `Neues Passwort für ${resetResult.email}:\n\n${resetResult.temporaryPassword}\n\nBitte nach dem ersten Login unter „Mein Profil“ → „Passwort ändern“ ein eigenes Passwort setzen.`
+    if (typeof navigator !== 'undefined' && 'share' in navigator) {
+      navigator.share({
+        title: 'Passwort zurückgesetzt',
+        text
+      }).catch(() => {
+        navigator.clipboard?.writeText(text)
+        setCopyFeedback(true)
+        setTimeout(() => setCopyFeedback(false), 2000)
+      })
+    } else {
+      navigator.clipboard?.writeText(text)
+      setCopyFeedback(true)
+      setTimeout(() => setCopyFeedback(false), 2000)
+    }
+  }
+
   // Separate default and non-default travelers
   const defaultTravelers = travelers.filter(t => t.is_default_member)
   const otherTravelers = travelers.filter(t => !t.is_default_member)
@@ -404,6 +488,7 @@ export function TravelersManager({ travelers, onRefresh }: TravelersManagerProps
                 onEdit={openEdit}
                 onDelete={handleDelete}
                 onInvite={openInvite}
+                onResetPassword={canAccessConfig ? handleResetPassword : undefined}
               />
             ))}
           </div>
@@ -431,6 +516,7 @@ export function TravelersManager({ travelers, onRefresh }: TravelersManagerProps
                 onEdit={openEdit}
                 onDelete={handleDelete}
                 onInvite={openInvite}
+                onResetPassword={canAccessConfig ? handleResetPassword : undefined}
               />
             ))}
           </div>
@@ -681,6 +767,39 @@ export function TravelersManager({ travelers, onRefresh }: TravelersManagerProps
         onConfirm={executeDeleteTraveler}
         isLoading={isLoading}
       />
+
+      {/* Passwort zurückgesetzt – temporäres Passwort anzeigen */}
+      <Dialog open={!!resetResult} onOpenChange={(open) => !open && setResetResult(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Passwort zurückgesetzt</DialogTitle>
+            <DialogDescription>
+              Das temporäre Passwort für <strong>{resetResult?.email}</strong> wurde erstellt. Der
+              Benutzer muss sich damit anmelden und unter „Mein Profil“ → „Passwort ändern“ ein
+              neues Passwort setzen.
+            </DialogDescription>
+          </DialogHeader>
+          {resetResult && (
+            <div className="space-y-4">
+              <div className="rounded-lg bg-gray-100 p-4 font-mono text-sm break-all select-all">
+                {resetResult.temporaryPassword}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button onClick={copyResetPassword} variant="outline" className="flex items-center gap-2">
+                  <Copy className="h-4 w-4" />
+                  {copyFeedback ? 'Kopiert!' : 'Kopieren'}
+                </Button>
+                {typeof navigator !== 'undefined' && 'share' in navigator && (
+                  <Button onClick={shareResetPassword} variant="outline" className="flex items-center gap-2">
+                    <Share2 className="h-4 w-4" />
+                    Teilen
+                  </Button>
+                )}
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
