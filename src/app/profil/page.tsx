@@ -8,7 +8,6 @@ import { Button } from '@/components/ui/button'
 import { NavigationSidebar } from '@/components/navigation-sidebar'
 import { Menu, KeyRound } from 'lucide-react'
 import { useState, useEffect } from 'react'
-import { cn } from '@/lib/utils'
 
 export default function ProfilPage() {
   const { user, loading } = useAuth()
