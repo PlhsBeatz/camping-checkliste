@@ -408,7 +408,7 @@ export default function UrlaubePage() {
                           </Button>
                         </PopoverTrigger>
                         <PopoverContent
-                          className="fixed left-1/2 top-1/2 w-[calc(100vw-2rem)] -translate-x-1/2 -translate-y-1/2 max-h-[90vh] overflow-y-auto p-0 sm:static sm:w-auto sm:max-h-none sm:overflow-visible sm:translate-x-0 sm:translate-y-0"
+                          className="date-range-picker-mobile w-auto p-0 overflow-y-auto"
                           align="start"
                           side="bottom"
                         >
