@@ -15,6 +15,8 @@ export interface AuthUser {
   role: 'admin' | 'kind' | 'gast'
   mitreisender_id: string | null
   permissions: string[]
+  /** Nach Admin-Passwort-Reset: Passwort muss geändert werden */
+  must_change_password?: boolean
 }
 
 interface AuthContextValue {

@@ -28,7 +28,8 @@ export async function GET(request: NextRequest) {
         email: user.email,
         role: user.role,
         mitreisender_id: user.mitreisender_id,
-        permissions
+        permissions,
+        must_change_password: !!(user as { must_change_password?: number }).must_change_password
       }
     })
   } catch (error) {

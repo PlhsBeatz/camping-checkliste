@@ -5,7 +5,8 @@ import { verifyPassword, createToken } from '@/lib/auth'
 export async function POST(request: NextRequest) {
   try {
     const body = (await request.json()) as { email?: string; password?: string }
-    const email = body.email?.trim()
+    // E-Mail wie in createUser/getUserByEmail normalisieren (lowercase), damit Login konsistent ist
+    const email = body.email?.trim()?.toLowerCase()
     const password = body.password
 
     if (!email || !password) {

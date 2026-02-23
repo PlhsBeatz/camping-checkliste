@@ -153,6 +153,8 @@ export interface User {
   mitreisender_id: string | null
   password_reset_token?: string | null
   password_reset_expires?: string | null
+  /** Nach Admin-Passwort-Reset: User muss beim nächsten Login Passwort ändern */
+  must_change_password?: number
   created_at: string
   updated_at: string
 }
@@ -2552,6 +2554,29 @@ export async function getUsersCount(db: D1Database): Promise<number> {
   return r?.c ?? 0
 }
 
+/** Alle User (für Admin: Passwort zurücksetzen, etc.) */
+export async function getUsers(
+  db: D1Database
+): Promise<Array<{ id: string; email: string; role: UserRole; mitreisender_id: string | null; mitreisender_name?: string | null }>> {
+  try {
+    const result = await db
+      .prepare(
+        'SELECT u.id, u.email, u.role, u.mitreisender_id, m.name as mitreisender_name FROM users u LEFT JOIN mitreisende m ON u.mitreisender_id = m.id ORDER BY u.email'
+      )
+      .all<{ id: string; email: string; role: string; mitreisender_id: string | null; mitreisender_name: string | null }>()
+    return (result.results || []).map((r) => ({
+      id: r.id,
+      email: r.email,
+      role: r.role as UserRole,
+      mitreisender_id: r.mitreisender_id,
+      mitreisender_name: r.mitreisender_name ?? null
+    }))
+  } catch (error) {
+    console.error('Error fetching users:', error)
+    return []
+  }
+}
+
 export async function createUser(
   db: D1Database,
   email: string,
@@ -2611,18 +2636,45 @@ export async function updateUserMitreisender(
 export async function updateUserPassword(
   db: D1Database,
   userId: string,
-  passwordHash: string
+  passwordHash: string,
+  setMustChangePassword?: boolean
 ): Promise<boolean> {
   try {
-    await db
-      .prepare(
-        'UPDATE users SET password_hash = ?, password_reset_token = NULL, password_reset_expires = NULL, updated_at = datetime(\'now\') WHERE id = ?'
-      )
-      .bind(passwordHash, userId)
-      .run()
+    if (setMustChangePassword === true) {
+      await db
+        .prepare(
+          'UPDATE users SET password_hash = ?, password_reset_token = NULL, password_reset_expires = NULL, must_change_password = 1, updated_at = datetime(\'now\') WHERE id = ?'
+        )
+        .bind(passwordHash, userId)
+        .run()
+    } else {
+      await db
+        .prepare(
+          'UPDATE users SET password_hash = ?, password_reset_token = NULL, password_reset_expires = NULL, updated_at = datetime(\'now\') WHERE id = ?'
+        )
+        .bind(passwordHash, userId)
+        .run()
+    }
     return true
   } catch (error) {
     console.error('Error updating user password:', error)
+    return false
+  }
+}
+
+/** must_change_password zurücksetzen (nach eigener Passwortänderung) */
+export async function clearUserMustChangePassword(
+  db: D1Database,
+  userId: string
+): Promise<boolean> {
+  try {
+    await db
+      .prepare('UPDATE users SET must_change_password = 0, updated_at = datetime(\'now\') WHERE id = ?')
+      .bind(userId)
+      .run()
+    return true
+  } catch (error) {
+    console.error('Error clearing must_change_password:', error)
     return false
   }
 }
