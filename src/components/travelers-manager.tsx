@@ -447,19 +447,20 @@ export function TravelersManager({ travelers, onRefresh }: TravelersManagerProps
   const shareResetPassword = () => {
     if (!resetResult) return
     const text = `Neues Passwort für ${resetResult.email}:\n\n${resetResult.temporaryPassword}\n\nBitte nach dem ersten Login unter „Mein Profil“ → „Passwort ändern“ ein eigenes Passwort setzen.`
+    const copyToClipboard = () => {
+      if (typeof navigator !== 'undefined' && navigator.clipboard) {
+        navigator.clipboard.writeText(text)
+      }
+      setCopyFeedback(true)
+      setTimeout(() => setCopyFeedback(false), 2000)
+    }
     if (typeof navigator !== 'undefined' && 'share' in navigator) {
       navigator.share({
         title: 'Passwort zurückgesetzt',
         text
-      }).catch(() => {
-        navigator.clipboard?.writeText(text)
-        setCopyFeedback(true)
-        setTimeout(() => setCopyFeedback(false), 2000)
-      })
+      }).catch(copyToClipboard)
     } else {
-      navigator.clipboard?.writeText(text)
-      setCopyFeedback(true)
-      setTimeout(() => setCopyFeedback(false), 2000)
+      copyToClipboard()
     }
   }
 
