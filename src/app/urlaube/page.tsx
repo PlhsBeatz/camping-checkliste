@@ -394,7 +394,7 @@ export default function UrlaubePage() {
                           </Button>
                         </PopoverTrigger>
                         <PopoverContent
-                          className="w-auto p-0 max-sm:!fixed max-sm:!top-4 max-sm:!left-4 max-sm:!right-4 max-sm:!w-[calc(100vw-2rem)] max-sm:max-h-[85vh] max-sm:overflow-y-auto"
+                          className="fixed inset-x-4 top-4 w-[calc(100vw-2rem)] max-h-[90vh] overflow-y-auto p-0 sm:static sm:w-auto sm:max-h-none sm:overflow-visible"
                           align="start"
                           side="bottom"
                         >
