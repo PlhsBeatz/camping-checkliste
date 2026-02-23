@@ -4,6 +4,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { PackingList } from '@/components/packing-list-enhanced'
 import { PackingListGenerator } from '@/components/packing-list-generator'
+import { AddSingleItemDialog } from '@/components/add-single-item-dialog'
 import { NavigationSidebar } from '@/components/navigation-sidebar'
 import { PackingSettingsSidebar } from '@/components/packing-settings-sidebar'
 import { Plus, Sparkles, Menu, Search, Users } from 'lucide-react'
@@ -112,6 +113,8 @@ function HomeContent() {
   const [listDisplayMode, setListDisplayMode] = useState<'alles' | 'packliste'>('packliste')
   const addDialogScrollContextRef = useRef<{ mainCategory: string; category: string } | null>(null)
   const addDialogScrollRef = useRef<HTMLDivElement>(null)
+  const [showAddSingleItemDialog, setShowAddSingleItemDialog] = useState(false)
+  const [addSingleItemInitialName, setAddSingleItemInitialName] = useState('')
 
   const handleScrollContextChange = useCallback((ctx: { mainCategory: string; category: string } | null) => {
     addDialogScrollContextRef.current = ctx
@@ -1233,8 +1236,18 @@ function HomeContent() {
         contentClassName="max-w-4xl max-h-[90vh] sm:max-h-[90vh] h-[85vh] sm:h-auto flex flex-col"
       >
         <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
-          <div className="px-6 pt-6 pb-4 border-b flex-shrink-0">
+          <div className="px-6 pt-6 pb-4 border-b flex-shrink-0 flex items-center justify-between gap-2">
             <h2 className="text-lg font-semibold">Gegenstände hinzufügen</h2>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setAddSingleItemInitialName('')
+                setShowAddSingleItemDialog(true)
+              }}
+            >
+              Neu
+            </Button>
           </div>
 
           {/* Search Bar */}
@@ -1256,8 +1269,23 @@ function HomeContent() {
             className="flex-1 overflow-y-auto overflow-x-hidden px-6 py-4 min-w-0"
           >
             {groupedAvailableEquipment.length === 0 ? (
-              <div className="text-center py-12 text-muted-foreground">
-                {searchTerm ? 'Keine Gegenstände gefunden' : 'Alle Gegenstände sind bereits auf der Packliste'}
+              <div className="text-center py-12 text-muted-foreground space-y-4">
+                <p>
+                  {searchTerm ? 'Keine Gegenstände gefunden' : 'Alle Gegenstände sind bereits auf der Packliste'}
+                </p>
+                {searchTerm && (
+                  <Button
+                    variant="default"
+                    size="sm"
+                    className="bg-[rgb(45,79,30)] hover:bg-[rgb(45,79,30)]/90"
+                    onClick={() => {
+                      setAddSingleItemInitialName(searchTerm)
+                      setShowAddSingleItemDialog(true)
+                    }}
+                  >
+                    Neu anlegen
+                  </Button>
+                )}
               </div>
             ) : (
               <div className="space-y-6">
@@ -1345,6 +1373,28 @@ function HomeContent() {
         onOpenChange={setShowGeneratorDialog}
         vacationId={selectedVacationId || ''}
         onGenerate={handleGeneratePackingList}
+      />
+
+      {/* Neu anlegen (temporär oder in Ausrüstung) */}
+      <AddSingleItemDialog
+        open={showAddSingleItemDialog}
+        onOpenChange={setShowAddSingleItemDialog}
+        initialName={addSingleItemInitialName}
+        vacationId={selectedVacationId || ''}
+        vacationMitreisende={vacationMitreisende}
+        selectedPackProfile={selectedPackProfile}
+        categories={categories}
+        transportVehicles={transportVehicles}
+        onSuccess={async () => {
+          if (selectedVacationId) {
+            const res = await fetch(`/api/packing-items?vacationId=${selectedVacationId}`)
+            const data = (await res.json()) as ApiResponse<PackingItem[]>
+            if (data.success && data.data) setPackingItems(data.data)
+          }
+          const eqRes = await fetch('/api/equipment-items')
+          const eqData = (await eqRes.json()) as ApiResponse<EquipmentItem[]>
+          if (eqData.success && eqData.data) setEquipmentItems(eqData.data)
+        }}
       />
     </div>
   )

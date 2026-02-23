@@ -15,7 +15,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { MoreVertical, Edit2, Trash2, RotateCcw, CheckCheck } from "lucide-react";
+import { MoreVertical, Edit2, Trash2, RotateCcw, CheckCheck, Clock } from "lucide-react";
 import { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import { PackingItem as DBPackingItem } from "@/lib/db";
 import { MarkAllConfirmationDialog, type TravelerForMarkAll } from "./mark-all-confirmation-dialog";
@@ -51,6 +51,7 @@ interface PackingItemProps {
   vacationMitreisende?: Array<{ id: string; name: string }>;
   onMarkAllConfirm?: (selectedTravelerIds: string[]) => void;
   onShowToast?: (itemName: string, travelerName: string | undefined, undoAction: () => void) => void;
+  isTemporaer?: boolean;
 }
 
 const PackingItem: React.FC<PackingItemProps> = ({
@@ -77,7 +78,8 @@ const PackingItem: React.FC<PackingItemProps> = ({
   hidePackedItems,
   vacationMitreisende = [],
   onMarkAllConfirm,
-  onShowToast
+  onShowToast,
+  isTemporaer = false
 }) => {
   const [showMarkAllDialog, setShowMarkAllDialog] = useState(false);
   const [personListPopoverOpen, setPersonListPopoverOpen] = useState(false);
@@ -353,6 +355,11 @@ const PackingItem: React.FC<PackingItemProps> = ({
           
           <div className="flex-grow min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
+              {isTemporaer && (
+                <span className="flex-shrink-0 text-muted-foreground" title="Nur für diese Packliste">
+                  <Clock className="h-3.5 w-3.5" aria-hidden />
+                </span>
+              )}
               <label
                 htmlFor={`item-${id}`}
                 className={cn(
@@ -979,6 +986,7 @@ export function PackingList({
                               id={item.id}
                               was={item.was}
                               anzahl={item.anzahl}
+                              isTemporaer={item.is_temporaer}
                               gepackt={item.gepackt}
                               gepackt_vorgemerkt={item.gepackt_vorgemerkt}
                               bemerkung={item.bemerkung}

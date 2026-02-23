@@ -5,6 +5,7 @@ import {
   getPackingItems,
   updatePackingItem,
   addPackingItem,
+  addTemporaryPackingItem,
   deletePackingItem,
   getPacklisteId,
   getVacationIdFromPackingItem,
@@ -56,11 +57,14 @@ export async function POST(request: NextRequest) {
       bemerkung?: string | null
       transportId?: string | null
       mitreisende?: string[]
+      temporary?: boolean
+      was?: string
+      kategorieId?: string
     }
-    const { vacationId, gegenstandId, anzahl, bemerkung, transportId, mitreisende } = body
+    const { vacationId, gegenstandId, anzahl, bemerkung, transportId, mitreisende, temporary, was, kategorieId } = body
 
-    if (!vacationId || !gegenstandId) {
-      return NextResponse.json({ error: 'vacationId and gegenstandId are required' }, { status: 400 })
+    if (!vacationId) {
+      return NextResponse.json({ error: 'vacationId is required' }, { status: 400 })
     }
 
     const vacationMitreisende = await getMitreisendeForVacation(db, vacationId)
@@ -73,7 +77,23 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Packliste not found' }, { status: 404 })
     }
 
-    const itemId = await addPackingItem(db, packlisteId, gegenstandId, anzahl || 1, bemerkung, transportId, mitreisende)
+    let itemId: string | null
+
+    if (temporary && was != null && was.trim() !== '' && kategorieId) {
+      itemId = await addTemporaryPackingItem(
+        db,
+        packlisteId,
+        was.trim(),
+        kategorieId,
+        anzahl ?? 1,
+        bemerkung,
+        transportId
+      )
+    } else if (gegenstandId) {
+      itemId = await addPackingItem(db, packlisteId, gegenstandId, anzahl || 1, bemerkung, transportId, mitreisende)
+    } else {
+      return NextResponse.json({ error: 'gegenstandId or (temporary, was, kategorieId) required' }, { status: 400 })
+    }
 
     if (!itemId) {
       return NextResponse.json({ error: 'Failed to add packing item' }, { status: 400 })

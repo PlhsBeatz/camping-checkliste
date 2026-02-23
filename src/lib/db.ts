@@ -33,7 +33,7 @@ export interface PackingItem {
   transport_name?: string
   mitreisenden_typ: 'pauschal' | 'alle' | 'ausgewaehlte'
   mitreisende?: PackingItemMitreisender[] // Zugeordnete Mitreisende mit Gepackt-Status
-  was: string // Gejoint aus ausruestungsgegenstaende
+  was: string // Gejoint aus ausruestungsgegenstaende oder temporär: aus packlisten_eintraege_temporaer
   kategorie: string // Gejoint
   hauptkategorie: string // Gejoint
   details?: string
@@ -43,6 +43,11 @@ export interface PackingItem {
   /** Erst am Abreisetag zu packen – im Packliste-Modus nur an diesem Tag anzeigen */
   erst_abreisetag_gepackt?: boolean
   created_at: string
+  /** Nur für diese Packliste, nicht in der Ausrüstung gespeichert */
+  is_temporaer?: boolean
+  /** Intern für Sortierung (hauptkategorie/kategorie Reihenfolge) */
+  orderHk?: number
+  orderK?: number
 }
 
 export interface PackingItemMitreisender {
@@ -408,6 +413,8 @@ export async function getPackingItems(db: D1Database, vacationId: string): Promi
         ag.was, ag.einzelgewicht, ag.details, ag.mitreisenden_typ, ag.status, ag.erst_abreisetag_gepackt as erst_abreisetag_gepackt,
         k.titel as kategorie,
         hk.titel as hauptkategorie,
+        hk.reihenfolge as hk_reihenfolge,
+        k.reihenfolge as k_reihenfolge,
         t.name as transport_name,
         pe.created_at
       FROM packlisten_eintraege pe
@@ -489,8 +496,63 @@ export async function getPackingItems(db: D1Database, vacationId: string): Promi
         status: item.status ? String(item.status) : undefined,
         erst_abreisetag_gepackt: !!((item as Record<string, unknown>).erst_abreisetag_gepackt ?? (item as Record<string, unknown>)['ag.erst_abreisetag_gepackt']),
         created_at: String(item.created_at || ''),
+        orderHk: item.hk_reihenfolge != null ? Number(item.hk_reihenfolge) : undefined,
+        orderK: item.k_reihenfolge != null ? Number(item.k_reihenfolge) : undefined,
       })
     }
+
+    // Temporäre Einträge (nur diese Packliste, nicht in Ausrüstung)
+    const packlisteIdResult = await db.prepare('SELECT id FROM packlisten WHERE urlaub_id = ?').bind(vacationId).first<{ id: string }>()
+    const packlisteId = packlisteIdResult?.id
+    if (packlisteId) {
+      const tempQuery = `
+        SELECT pet.id, pet.packliste_id, pet.was, pet.anzahl, pet.gepackt, pet.gepackt_vorgemerkt, pet.gepackt_vorgemerkt_durch, pet.bemerkung, pet.transport_id,
+               k.titel as kategorie, hk.titel as hauptkategorie, hk.reihenfolge as hk_reihenfolge, k.reihenfolge as k_reihenfolge,
+               t.name as transport_name, pet.created_at
+        FROM packlisten_eintraege_temporaer pet
+        JOIN kategorien k ON pet.kategorie_id = k.id
+        JOIN hauptkategorien hk ON k.hauptkategorie_id = hk.id
+        LEFT JOIN transportmittel t ON pet.transport_id = t.id
+        WHERE pet.packliste_id = ?
+        ORDER BY hk.reihenfolge, k.reihenfolge, pet.was
+      `
+      const tempResult = await db.prepare(tempQuery).bind(packlisteId).all<Record<string, unknown>>()
+      const tempRows = tempResult.results || []
+      for (const row of tempRows) {
+        items.push({
+          id: String(row.id),
+          packliste_id: String(row.packliste_id),
+          gegenstand_id: '',
+          anzahl: Number(row.anzahl),
+          gepackt: !!row.gepackt,
+          gepackt_vorgemerkt: !!((row as Record<string, unknown>).gepackt_vorgemerkt),
+          gepackt_vorgemerkt_durch: (row as Record<string, unknown>).gepackt_vorgemerkt_durch as string | null | undefined,
+          bemerkung: row.bemerkung ? String(row.bemerkung) : null,
+          transport_id: row.transport_id ? String(row.transport_id) : undefined,
+          transport_name: row.transport_name ? String(row.transport_name) : undefined,
+          mitreisenden_typ: 'pauschal',
+          mitreisende: [],
+          was: String(row.was),
+          kategorie: String(row.kategorie),
+          hauptkategorie: String(row.hauptkategorie),
+          created_at: String(row.created_at || ''),
+          is_temporaer: true,
+          orderHk: row.hk_reihenfolge != null ? Number(row.hk_reihenfolge) : undefined,
+          orderK: row.k_reihenfolge != null ? Number(row.k_reihenfolge) : undefined,
+        })
+      }
+    }
+
+    items.sort((a, b) => {
+      const hkA = a.orderHk ?? 999
+      const hkB = b.orderHk ?? 999
+      if (hkA !== hkB) return hkA - hkB
+      const kA = a.orderK ?? 999
+      const kB = b.orderK ?? 999
+      if (kA !== kB) return kA - kB
+      return a.was.localeCompare(b.was)
+    })
+
     return items
   } catch (error) {
     console.error('Error fetching packing items:', error)
@@ -505,10 +567,16 @@ export async function getPackingItemPauschalVorgemerkt(
   db: D1Database,
   id: string
 ): Promise<{ gepackt_vorgemerkt: boolean; gepackt_vorgemerkt_durch: string | null } | null> {
-  const row = await db
+  let row = await db
     .prepare('SELECT gepackt_vorgemerkt, gepackt_vorgemerkt_durch FROM packlisten_eintraege WHERE id = ?')
     .bind(id)
     .first<{ gepackt_vorgemerkt: number; gepackt_vorgemerkt_durch: string | null }>()
+  if (!row) {
+    row = await db
+      .prepare('SELECT gepackt_vorgemerkt, gepackt_vorgemerkt_durch FROM packlisten_eintraege_temporaer WHERE id = ?')
+      .bind(id)
+      .first<{ gepackt_vorgemerkt: number; gepackt_vorgemerkt_durch: string | null }>()
+  }
   if (!row) return null
   return {
     gepackt_vorgemerkt: !!row.gepackt_vorgemerkt,
@@ -564,7 +632,40 @@ export async function updatePackingItem(
 
     values.push(id)
     const query = `UPDATE packlisten_eintraege SET ${fields.join(', ')}, updated_at = datetime('now') WHERE id = ?`
-    await db.prepare(query).bind(...values).run()
+    const r = await db.prepare(query).bind(...values).run()
+    if (r.meta.changes > 0) return true
+
+    // Temporärer Eintrag: gleiche Felder (gepackt, gepackt_vorgemerkt, anzahl, bemerkung, transport_id)
+    const tempFields: string[] = []
+    const tempValues: (string | number | null)[] = []
+    if (updates.gepackt !== undefined) {
+      tempFields.push('gepackt = ?')
+      tempValues.push(updates.gepackt ? 1 : 0)
+    }
+    if (updates.gepackt_vorgemerkt !== undefined) {
+      tempFields.push('gepackt_vorgemerkt = ?')
+      tempValues.push(updates.gepackt_vorgemerkt ? 1 : 0)
+    }
+    if (updates.gepackt_vorgemerkt_durch !== undefined) {
+      tempFields.push('gepackt_vorgemerkt_durch = ?')
+      tempValues.push(updates.gepackt_vorgemerkt_durch || null)
+    }
+    if (updates.anzahl !== undefined) {
+      tempFields.push('anzahl = ?')
+      tempValues.push(updates.anzahl)
+    }
+    if (updates.bemerkung !== undefined) {
+      tempFields.push('bemerkung = ?')
+      tempValues.push(updates.bemerkung || '')
+    }
+    if (updates.transport_id !== undefined) {
+      tempFields.push('transport_id = ?')
+      tempValues.push(updates.transport_id || null)
+    }
+    if (tempFields.length === 0) return true
+    tempValues.push(id)
+    const tempQuery = `UPDATE packlisten_eintraege_temporaer SET ${tempFields.join(', ')}, updated_at = datetime('now') WHERE id = ?`
+    await db.prepare(tempQuery).bind(...tempValues).run()
     return true
   } catch (error) {
     console.error('Error updating packing item:', error)
@@ -1511,7 +1612,7 @@ export async function addPackingItem(
       )
       .bind(id, packlisteId, gegenstandId, anzahl, bemerkung || null, transportId || null)
       .run()
-    
+
     // Add mitreisende associations if provided
     if (mitreisende && mitreisende.length > 0) {
       for (const mitreisenderId of mitreisende) {
@@ -1521,7 +1622,7 @@ export async function addPackingItem(
           .run()
       }
     }
-    
+
     return id
   } catch (error) {
     console.error('Error adding packing item:', error)
@@ -1530,11 +1631,40 @@ export async function addPackingItem(
 }
 
 /**
- * Löschen eines Packartikels
+ * Temporären Packlisteneintrag hinzufügen (nur diese Packliste, nicht in Ausrüstung)
+ */
+export async function addTemporaryPackingItem(
+  db: D1Database,
+  packlisteId: string,
+  was: string,
+  kategorieId: string,
+  anzahl: number,
+  bemerkung?: string | null,
+  transportId?: string | null
+): Promise<string | null> {
+  try {
+    const id = crypto.randomUUID()
+    await db
+      .prepare(
+        `INSERT INTO packlisten_eintraege_temporaer (id, packliste_id, was, kategorie_id, anzahl, bemerkung, transport_id) VALUES (?, ?, ?, ?, ?, ?, ?)`
+      )
+      .bind(id, packlisteId, was.trim(), kategorieId, anzahl, bemerkung || null, transportId || null)
+      .run()
+    return id
+  } catch (error) {
+    console.error('Error adding temporary packing item:', error)
+    return null
+  }
+}
+
+/**
+ * Löschen eines Packartikels (normal oder temporär)
  */
 export async function deletePackingItem(db: D1Database, id: string): Promise<boolean> {
   try {
-    await db.prepare('DELETE FROM packlisten_eintraege WHERE id = ?').bind(id).run()
+    const r1 = await db.prepare('DELETE FROM packlisten_eintraege WHERE id = ?').bind(id).run()
+    if (r1.meta.changes && r1.meta.changes > 0) return true
+    await db.prepare('DELETE FROM packlisten_eintraege_temporaer WHERE id = ?').bind(id).run()
     return true
   } catch (error) {
     console.error('Error deleting packing item:', error)
@@ -1543,7 +1673,7 @@ export async function deletePackingItem(db: D1Database, id: string): Promise<boo
 }
 
 /**
- * Abrufen der Urlaubs-ID zu einem Packlisten-Eintrag
+ * Abrufen der Urlaubs-ID zu einem Packlisten-Eintrag (normal oder temporär)
  */
 export async function getVacationIdFromPackingItem(
   db: D1Database,
@@ -1558,7 +1688,16 @@ export async function getVacationIdFromPackingItem(
       )
       .bind(packingItemId)
       .first<{ urlaub_id: string }>()
-    return result?.urlaub_id ?? null
+    if (result?.urlaub_id) return result.urlaub_id
+    const tempResult = await db
+      .prepare(
+        `SELECT p.urlaub_id FROM packlisten p
+         JOIN packlisten_eintraege_temporaer pet ON pet.packliste_id = p.id
+         WHERE pet.id = ?`
+      )
+      .bind(packingItemId)
+      .first<{ urlaub_id: string }>()
+    return tempResult?.urlaub_id ?? null
   } catch (error) {
     console.error('Error fetching vacation id from packing item:', error)
     return null
