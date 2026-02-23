@@ -84,6 +84,7 @@ const PackingItem: React.FC<PackingItemProps> = ({
   const [isExiting, setIsExiting] = useState(false);
   const [hasExited, setHasExited] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const previousShouldHideRef = useRef<boolean | 'init'>('init');
 
   const effectivePacked = (g: boolean, v?: boolean) => g || !!v;
   const isFullyPacked = useMemo(() => {
@@ -176,18 +177,29 @@ const PackingItem: React.FC<PackingItemProps> = ({
     return canConfirmVorgemerkt ? isFullyPackedFinal : isFullyPacked;
   }, [hidePackedItems, selectedProfile, selectedTravelerItem, mitreisenden_typ, gepackt, gepackt_vorgemerkt, canConfirmVorgemerkt, isFullyPacked, isFullyPackedFinal]);
 
-  // Micro-Animation beim Abhaken mit Gepacktes Ausblenden
+  // Micro-Animation nur beim Abhaken (Übergang sichtbar → ausblenden), nicht beim Tab-Wechsel (bereits ausgeblendet)
   useEffect(() => {
-    if (shouldHideInProfileView && hidePackedItems) {
-      setIsExiting(true);
-      const t = setTimeout(() => {
-        setHasExited(true);
-      }, 280);
-      return () => clearTimeout(t);
+    if (previousShouldHideRef.current === 'init') {
+      const hide = !!shouldHideInProfileView && hidePackedItems;
+      previousShouldHideRef.current = !!shouldHideInProfileView;
+      if (hide) setHasExited(true);
+      return undefined;
     }
+    if (shouldHideInProfileView && hidePackedItems) {
+      const wasVisible = !previousShouldHideRef.current;
+      previousShouldHideRef.current = true;
+      if (wasVisible) {
+        setIsExiting(true);
+        const t = setTimeout(() => setHasExited(true), 280);
+        return () => clearTimeout(t);
+      }
+      setHasExited(true);
+      return undefined;
+    }
+    previousShouldHideRef.current = !!shouldHideInProfileView;
     setIsExiting(false);
     setHasExited(false);
-    return;
+    return undefined;
   }, [shouldHideInProfileView, hidePackedItems]);
 
   // Handle pauschal toggle
@@ -554,6 +566,7 @@ export function PackingList({
   const [activeMainCategory, setActiveMainCategory] = useState<string>('');
   const [firstVisibleCategory, setFirstVisibleCategory] = useState<string>('');
   const [tabsScrollbarVisible, setTabsScrollbarVisible] = useState(false);
+  const [tabSwipeDirection, setTabSwipeDirection] = useState<'left' | 'right' | null>(null);
   const tabsScrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const tabsScrollContainerRef = useRef<HTMLDivElement | null>(null);
   const categoryRefsMap = useRef<Map<string, HTMLDivElement | null>>(new Map());
@@ -796,11 +809,20 @@ export function PackingList({
     const idx = tabsForSwipe.indexOf(activeMainCategory);
     if (idx < 0) return;
     if (direction === 'left' && idx < tabsForSwipe.length - 1) {
+      setTabSwipeDirection('left');
       setActiveMainCategory(tabsForSwipe[idx + 1]!);
     } else if (direction === 'right' && idx > 0) {
+      setTabSwipeDirection('right');
       setActiveMainCategory(tabsForSwipe[idx - 1]!);
     }
   };
+
+  // Swipe-Microanimation zurücksetzen nach Ende der Animation
+  useEffect(() => {
+    if (tabSwipeDirection === null) return;
+    const t = setTimeout(() => setTabSwipeDirection(null), 240);
+    return () => clearTimeout(t);
+  }, [tabSwipeDirection, activeMainCategory]);
 
   // Tab-Leiste zum aktiven Tab scrollen (nur den Tab-Container, nicht die ganze Seite)
   useEffect(() => {
@@ -901,7 +923,13 @@ export function PackingList({
           }
         }}
       >
-        <div className="min-h-full bg-scroll-pattern px-4 sm:px-6 pt-6 pb-6">
+        <div
+          className={cn(
+            "min-h-full bg-scroll-pattern px-4 sm:px-6 pt-6 pb-6",
+            tabSwipeDirection === 'left' && "animate-tab-swipe-in-from-right",
+            tabSwipeDirection === 'right' && "animate-tab-swipe-in-from-left"
+          )}
+        >
         {allPackedFromCurrentView && hidePackedItems ? (
           <div className="flex flex-col items-center justify-center min-h-[50vh] py-12">
             <Card className="max-w-md w-full border-[rgb(45,79,30)]/20 shadow-lg bg-white/95">
