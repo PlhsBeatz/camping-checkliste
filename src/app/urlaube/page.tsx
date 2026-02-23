@@ -429,40 +429,47 @@ export default function UrlaubePage() {
                             }}
                           >
                             <DialogContent className="p-0 gap-0 w-[calc(100vw-2rem)] max-w-[420px] max-h-[90vh] overflow-y-auto">
-                              <DialogHeader className="px-4 pt-4 pb-0">
+                              <DialogHeader className="px-3 pt-2 pb-0">
                                 <DialogTitle>Reisedatum wählen</DialogTitle>
                               </DialogHeader>
-                              <Calendar
-                                mode="range"
-                                defaultMonth={
-                                  draftRange?.from
-                                    ? draftRange.from
-                                    : newVacationForm.startdatum
-                                      ? new Date(newVacationForm.startdatum)
-                                      : new Date()
-                                }
-                                selected={
-                                  draftRange ??
-                                  (newVacationForm.startdatum && newVacationForm.enddatum
-                                    ? {
-                                        from: new Date(newVacationForm.startdatum),
-                                        to: new Date(newVacationForm.enddatum)
-                                      }
-                                    : undefined)
-                                }
-                                onSelect={(range: DateRange | undefined) => {
-                                  if (range?.from) {
-                                    setDraftRange({
-                                      from: range.from,
-                                      to: range.to ?? range.from
-                                    })
+                              <div className="flex justify-center w-full px-2">
+                                <Calendar
+                                  mode="range"
+                                  className="p-2"
+                                  classNames={{
+                                    months: 'flex flex-col sm:flex-row space-y-1 sm:space-x-4 sm:space-y-0',
+                                    month: 'space-y-1'
+                                  }}
+                                  defaultMonth={
+                                    draftRange?.from
+                                      ? draftRange.from
+                                      : newVacationForm.startdatum
+                                        ? new Date(newVacationForm.startdatum)
+                                        : new Date()
                                   }
-                                }}
-                                locale={de}
-                                numberOfMonths={2}
-                                components={{ Caption: RangeCalendarCaption }}
-                              />
-                              <div className="flex gap-2 p-3 border-t bg-muted/30">
+                                  selected={
+                                    draftRange ??
+                                    (newVacationForm.startdatum && newVacationForm.enddatum
+                                      ? {
+                                          from: new Date(newVacationForm.startdatum),
+                                          to: new Date(newVacationForm.enddatum)
+                                        }
+                                      : undefined)
+                                  }
+                                  onSelect={(range: DateRange | undefined) => {
+                                    if (range?.from) {
+                                      setDraftRange({
+                                        from: range.from,
+                                        to: range.to ?? range.from
+                                      })
+                                    }
+                                  }}
+                                  locale={de}
+                                  numberOfMonths={2}
+                                  components={{ Caption: RangeCalendarCaption }}
+                                />
+                              </div>
+                              <div className="flex gap-2 p-2 border-t bg-muted/30">
                                 <Button
                                   type="button"
                                   size="sm"
