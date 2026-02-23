@@ -80,6 +80,7 @@ const PackingItem: React.FC<PackingItemProps> = ({
   onShowToast
 }) => {
   const [showMarkAllDialog, setShowMarkAllDialog] = useState(false);
+  const [personListPopoverOpen, setPersonListPopoverOpen] = useState(false);
   const [isExiting, setIsExiting] = useState(false);
   const [hasExited, setHasExited] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -97,6 +98,12 @@ const PackingItem: React.FC<PackingItemProps> = ({
     if (mitreisenden_typ === 'pauschal') return gepackt;
     return (mitreisende?.length ?? 0) > 0 && mitreisende?.every(m => m.gepackt);
   }, [mitreisenden_typ, gepackt, mitreisende]);
+
+  /** Alle haben mind. vorgemerkt, aber nicht alle final gepackt → grauer Kasten im Alle-Profil */
+  const isAllVorgemerktButNotAllPacked = useMemo(() => {
+    if (mitreisenden_typ === 'pauschal') return false;
+    return isFullyPacked && !isFullyPackedFinal;
+  }, [mitreisenden_typ, isFullyPacked, isFullyPackedFinal]);
 
   // Calculate packed count for individual items (gepackt OR vorgemerkt zählt als gepackt für Anzeige)
   const packedCount = useMemo(() => {
@@ -243,7 +250,13 @@ const PackingItem: React.FC<PackingItemProps> = ({
 
   // Handle "mark all" or "unmark all" toggle (for Zentral/Alle mode)
   const handleMarkAllToggle = () => {
-    if (selectedProfile === null && mitreisenden_typ !== 'pauschal' && travelersForMarkAll.length > 0) {
+    if (selectedProfile !== null || mitreisenden_typ === 'pauschal') return;
+    // Grauer Zustand: Alle vorgemerkt, nicht alle gepackt → Popover öffnen zum Abhaken der vorgemerkten
+    if (isAllVorgemerktButNotAllPacked) {
+      setPersonListPopoverOpen(true);
+      return;
+    }
+    if (travelersForMarkAll.length > 0) {
       setShowMarkAllDialog(true);
     }
   };
@@ -332,7 +345,12 @@ const PackingItem: React.FC<PackingItemProps> = ({
                 id={`item-${id}`}
                 checked={isFullyPacked}
                 onCheckedChange={handleMarkAllToggle}
-                className="h-6 w-6 min-h-6 min-w-6 rounded-md border-2 border-gray-300 data-[state=checked]:bg-[rgb(45,79,30)] data-[state=checked]:border-[rgb(45,79,30)]"
+                className={cn(
+                  "h-6 w-6 min-h-6 min-w-6 rounded-md border-2 border-gray-300",
+                  isAllVorgemerktButNotAllPacked
+                    ? "data-[state=checked]:bg-gray-400 data-[state=checked]:border-gray-400"
+                    : "data-[state=checked]:bg-[rgb(45,79,30)] data-[state=checked]:border-[rgb(45,79,30)]"
+                )}
               />
             </div>
           )}
@@ -343,7 +361,9 @@ const PackingItem: React.FC<PackingItemProps> = ({
                 htmlFor={`item-${id}`}
                 className={cn(
                   "text-sm font-medium leading-none cursor-pointer transition-colors",
-                  isFullyPacked ? 'line-through text-muted-foreground' : 'text-foreground'
+                  (selectedProfile === null && mitreisenden_typ !== 'pauschal' ? isFullyPackedFinal : isFullyPacked)
+                    ? 'line-through text-muted-foreground'
+                    : 'text-foreground'
                 )}
               >
                 {was}{' '}
@@ -367,7 +387,7 @@ const PackingItem: React.FC<PackingItemProps> = ({
                   </span>
                 )}
                 {selectedProfile === null && mitreisende && mitreisende.length > 0 && (
-                  <Popover>
+                  <Popover open={personListPopoverOpen} onOpenChange={setPersonListPopoverOpen}>
                     <PopoverTrigger asChild>
                       <button
                         type="button"
@@ -387,10 +407,16 @@ const PackingItem: React.FC<PackingItemProps> = ({
                         {mitreisende.map((m) => {
                           const packed = canConfirmVorgemerkt ? m.gepackt : (m.gepackt || !!m.gepackt_vorgemerkt);
                           const vorgemerkt = !!m.gepackt_vorgemerkt && !m.gepackt;
+                          const canConfirmThis = vorgemerkt && canConfirmVorgemerkt && onConfirmVorgemerkt;
                           return (
                             <li
                               key={m.mitreisender_id}
-                              className="flex items-center gap-2 px-3 py-2 text-sm"
+                              className={cn(
+                                "flex items-center gap-2 px-3 py-2 text-sm",
+                                canConfirmThis && "cursor-pointer hover:bg-muted/50 active:bg-muted transition-colors"
+                              )}
+                              onClick={canConfirmThis ? () => { onConfirmVorgemerkt(id, m.mitreisender_id); } : undefined}
+                              role={canConfirmThis ? "button" : undefined}
                             >
                               <Checkbox
                                 checked={packed || vorgemerkt}
@@ -410,7 +436,7 @@ const PackingItem: React.FC<PackingItemProps> = ({
                                 {m.mitreisender_name}
                               </span>
                               {vorgemerkt && canConfirmVorgemerkt && (
-                                <span className="text-xs text-amber-600 ml-auto shrink-0">Prüfen</span>
+                                <span className="text-xs text-amber-600 ml-auto shrink-0">Klicken zum Abhaken</span>
                               )}
                             </li>
                           );
