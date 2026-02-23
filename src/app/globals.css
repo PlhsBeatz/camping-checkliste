@@ -165,15 +165,18 @@
     background-repeat: repeat;
   }
 
-  /* Daterangepicker auf Mobile: mittig und voll sichtbar (überschreibt Radix-Position) */
-  @media (max-width: 640px) {
+  /* Daterangepicker (Touch-Geräte): mittig und voll sichtbar (überschreibt Radix-Position) */
+  @media (hover: none) and (pointer: coarse), (max-width: 900px) {
     .date-range-picker-mobile {
       position: fixed !important;
+      inset: auto !important;
+      right: auto !important;
+      bottom: auto !important;
       left: 50% !important;
       top: 50% !important;
       transform: translate(-50%, -50%) !important;
       width: calc(100vw - 2rem) !important;
-      max-width: 360px;
+      max-width: 420px;
       max-height: 90vh !important;
       margin: 0 !important;
     }
