@@ -26,12 +26,51 @@ import { format } from 'date-fns'
 import { de } from 'date-fns/locale'
 import { Calendar as CalendarIcon } from 'lucide-react'
 import type { DateRange } from 'react-day-picker'
+import { useNavigation, type CaptionProps } from 'react-day-picker'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { Calendar } from '@/components/ui/calendar'
+import { buttonVariants } from '@/components/ui/button'
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover'
+
+/** Caption mit eigener Navigation pro Monat (für Mobile, wenn zwei Monate untereinander stehen) */
+function RangeCalendarCaption(props: CaptionProps) {
+  const { goToMonth, nextMonth, previousMonth } = useNavigation()
+  return (
+    <div className="flex justify-between items-center pt-1 w-full gap-1">
+      <button
+        type="button"
+        disabled={!previousMonth}
+        onClick={() => previousMonth && goToMonth(previousMonth)}
+        className={cn(
+          buttonVariants({ variant: 'outline' }),
+          'h-7 w-7 shrink-0 bg-transparent p-0 opacity-50 hover:opacity-100 disabled:opacity-30'
+        )}
+        aria-label="Vorheriger Monat"
+      >
+        <ChevronLeft className="h-4 w-4" />
+      </button>
+      <span className="text-sm font-medium">
+        {format(props.displayMonth, 'MMMM yyyy', { locale: de })}
+      </span>
+      <button
+        type="button"
+        disabled={!nextMonth}
+        onClick={() => nextMonth && goToMonth(nextMonth)}
+        className={cn(
+          buttonVariants({ variant: 'outline' }),
+          'h-7 w-7 shrink-0 bg-transparent p-0 opacity-50 hover:opacity-100 disabled:opacity-30'
+        )}
+        aria-label="Nächster Monat"
+      >
+        <ChevronRight className="h-4 w-4" />
+      </button>
+    </div>
+  )
+}
 
 export default function UrlaubePage() {
   const router = useRouter()
@@ -354,7 +393,11 @@ export default function UrlaubePage() {
                             )}
                           </Button>
                         </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0" align="start">
+                        <PopoverContent
+                          className="w-auto p-0 max-sm:!fixed max-sm:!top-4 max-sm:!left-4 max-sm:!right-4 max-sm:!w-[calc(100vw-2rem)] max-sm:max-h-[85vh] max-sm:overflow-y-auto"
+                          align="start"
+                          side="bottom"
+                        >
                           <Calendar
                             mode="range"
                             defaultMonth={
@@ -381,47 +424,15 @@ export default function UrlaubePage() {
                             }}
                             locale={de}
                             numberOfMonths={2}
+                            components={{ Caption: RangeCalendarCaption }}
                           />
-                          <div className="flex gap-2 p-3 border-t bg-muted/30">
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              className="flex-1 bg-[rgb(45,79,30)] text-white hover:bg-[rgb(45,79,30)]/90 hover:text-white border-[rgb(45,79,30)]"
-                              onClick={() => {
-                                const today = new Date()
-                                setNewVacationForm((prev) => ({
-                                  ...prev,
-                                  startdatum: format(today, 'yyyy-MM-dd'),
-                                  enddatum: format(today, 'yyyy-MM-dd')
-                                }))
-                              }}
-                            >
-                              Heute
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              className="flex-1 bg-[rgb(45,79,30)] text-white hover:bg-[rgb(45,79,30)]/90 hover:text-white border-[rgb(45,79,30)]"
-                              onClick={() => {
-                                setNewVacationForm((prev) => ({
-                                  ...prev,
-                                  startdatum: '',
-                                  enddatum: ''
-                                }))
-                              }}
-                            >
-                              Löschen
-                            </Button>
-                          </div>
                         </PopoverContent>
                       </Popover>
                     </div>
 
-                    {/* Abreisedatum – dezenter, nur bei Abweichung prominent */}
+                    {/* Reisebeginn – dezenter, nur bei Abweichung prominent */}
                     <div className="text-sm text-muted-foreground">
-                      <Label className="text-xs font-normal text-muted-foreground">Abreisedatum (optional)</Label>
+                      <Label className="text-xs font-normal text-muted-foreground">Reisebeginn (optional)</Label>
                       {newVacationForm.abfahrtdatum ? (
                         <div className="flex items-center gap-2 mt-1">
                           <span className="text-foreground font-medium">
@@ -481,7 +492,7 @@ export default function UrlaubePage() {
                               type="button"
                               className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 mt-1"
                             >
-                              Abweichendes Abreisedatum wählen
+                              Reisebeginn wählen
                             </button>
                           </PopoverTrigger>
                           <PopoverContent className="w-auto p-0 bg-white" align="start">
@@ -540,7 +551,7 @@ export default function UrlaubePage() {
                       )}
                       {!newVacationForm.abfahrtdatum && (
                         <p className="text-xs text-muted-foreground mt-0.5">
-                          Ohne Angabe gilt das Startdatum als Abreisedatum.
+                          Ohne Angabe gilt das Startdatum als Reisebeginn.
                         </p>
                       )}
                     </div>
@@ -594,7 +605,7 @@ export default function UrlaubePage() {
                             {vacation.reiseziel_name && <p>📍 {vacation.reiseziel_name}</p>}
                             {vacation.reiseziel_adresse && <p className="text-xs">   {vacation.reiseziel_adresse}</p>}
                             {vacation.land_region && <p>🌍 {vacation.land_region}</p>}
-                            {vacation.abfahrtdatum && <p>🚗 Abreise: {vacation.abfahrtdatum}</p>}
+                            {vacation.abfahrtdatum && <p>🚗 Reisebeginn: {vacation.abfahrtdatum}</p>}
                             <p>📅 {vacation.startdatum} bis {vacation.enddatum}</p>
                           </div>
                         </CardDescription>
