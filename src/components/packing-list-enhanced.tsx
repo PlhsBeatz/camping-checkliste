@@ -99,12 +99,6 @@ const PackingItem: React.FC<PackingItemProps> = ({
     return (mitreisende?.length ?? 0) > 0 && mitreisende?.every(m => m.gepackt);
   }, [mitreisenden_typ, gepackt, mitreisende]);
 
-  /** Alle haben mind. vorgemerkt, aber nicht alle final gepackt → grauer Kasten im Alle-Profil */
-  const isAllVorgemerktButNotAllPacked = useMemo(() => {
-    if (mitreisenden_typ === 'pauschal') return false;
-    return isFullyPacked && !isFullyPackedFinal;
-  }, [mitreisenden_typ, isFullyPacked, isFullyPackedFinal]);
-
   // Calculate packed count for individual items (gepackt OR vorgemerkt zählt als gepackt für Anzeige)
   const packedCount = useMemo(() => {
     if (mitreisenden_typ === 'pauschal') return effectivePacked(gepackt, gepackt_vorgemerkt) ? 1 : 0;
@@ -250,13 +244,7 @@ const PackingItem: React.FC<PackingItemProps> = ({
 
   // Handle "mark all" or "unmark all" toggle (for Zentral/Alle mode)
   const handleMarkAllToggle = () => {
-    if (selectedProfile !== null || mitreisenden_typ === 'pauschal') return;
-    // Grauer Zustand: Alle vorgemerkt, nicht alle gepackt → Popover öffnen zum Abhaken der vorgemerkten
-    if (isAllVorgemerktButNotAllPacked) {
-      setPersonListPopoverOpen(true);
-      return;
-    }
-    if (travelersForMarkAll.length > 0) {
+    if (selectedProfile === null && mitreisenden_typ !== 'pauschal' && travelersForMarkAll.length > 0) {
       setShowMarkAllDialog(true);
     }
   };
@@ -277,7 +265,8 @@ const PackingItem: React.FC<PackingItemProps> = ({
         gepackt: false
       }));
     }
-    if (isFullyPacked) {
+    // Nur wenn alle final gepackt: Unmark-Dialog (Zurücksetzen); sonst Abhaken-Dialog mit noch nicht gepackten
+    if (isFullyPackedFinal) {
       return list.filter(m => m.gepackt).map(m => ({
         id: m.mitreisender_id,
         name: m.mitreisender_name,
@@ -289,7 +278,7 @@ const PackingItem: React.FC<PackingItemProps> = ({
       name: m.mitreisender_name,
       isCurrentlyPacked: false
     }));
-  }, [mitreisende, mitreisenden_typ, vacationMitreisende, isFullyPacked]);
+  }, [mitreisende, mitreisenden_typ, vacationMitreisende, isFullyPackedFinal]);
 
   // Hide if packed – nach Exit-Animation
   if (hasExited) {
@@ -343,14 +332,9 @@ const PackingItem: React.FC<PackingItemProps> = ({
             <div className="mt-0.5 flex-shrink-0">
               <Checkbox
                 id={`item-${id}`}
-                checked={isFullyPacked}
+                checked={isFullyPackedFinal}
                 onCheckedChange={handleMarkAllToggle}
-                className={cn(
-                  "h-6 w-6 min-h-6 min-w-6 rounded-md border-2 border-gray-300",
-                  isAllVorgemerktButNotAllPacked
-                    ? "data-[state=checked]:bg-gray-400 data-[state=checked]:border-gray-400"
-                    : "data-[state=checked]:bg-[rgb(45,79,30)] data-[state=checked]:border-[rgb(45,79,30)]"
-                )}
+                className="h-6 w-6 min-h-6 min-w-6 rounded-md border-2 border-gray-300 data-[state=checked]:bg-[rgb(45,79,30)] data-[state=checked]:border-[rgb(45,79,30)]"
               />
             </div>
           )}
@@ -513,7 +497,7 @@ const PackingItem: React.FC<PackingItemProps> = ({
           onConfirm={confirmMarkAll}
           _itemName={was}
           travelers={travelersForMarkAll}
-          isUnmarkMode={isFullyPacked}
+          isUnmarkMode={isFullyPackedFinal}
         />
       )}
     </>
