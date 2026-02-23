@@ -221,7 +221,7 @@ export default function BenutzerPage() {
                   <Copy className="h-4 w-4" />
                   {copyFeedback ? 'Kopiert!' : 'Kopieren'}
                 </Button>
-                {typeof navigator !== 'undefined' && navigator.share && (
+                {typeof navigator !== 'undefined' && 'share' in navigator && (
                   <Button onClick={sharePassword} variant="outline" className="flex items-center gap-2">
                     <Share2 className="h-4 w-4" />
                     Teilen
