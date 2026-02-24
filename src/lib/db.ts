@@ -2161,18 +2161,35 @@ export async function removeMitreisenderFromPackingItem(
   mitreisenderId: string
 ): Promise<boolean> {
   try {
+    // Normaler Eintrag: Zuordnung aus packlisten_eintrag_mitreisende entfernen
     await db
       .prepare('DELETE FROM packlisten_eintrag_mitreisende WHERE packlisten_eintrag_id = ? AND mitreisender_id = ?')
       .bind(packingItemId, mitreisenderId)
       .run()
 
-    const remaining = await db
+    // Temporärer Eintrag: Zuordnung aus packlisten_eintrag_mitreisende_temporaer entfernen
+    await db
+      .prepare(
+        'DELETE FROM packlisten_eintrag_mitreisende_temporaer WHERE packlisten_eintrag_id = ? AND mitreisender_id = ?'
+      )
+      .bind(packingItemId, mitreisenderId)
+      .run()
+
+    const remainingNormal = await db
       .prepare('SELECT 1 FROM packlisten_eintrag_mitreisende WHERE packlisten_eintrag_id = ? LIMIT 1')
       .bind(packingItemId)
       .first()
 
-    if (!remaining) {
+    const remainingTemp = await db
+      .prepare('SELECT 1 FROM packlisten_eintrag_mitreisende_temporaer WHERE packlisten_eintrag_id = ? LIMIT 1')
+      .bind(packingItemId)
+      .first()
+
+    // Wenn keine Mitreisenden mehr übrig sind (weder normal noch temporär),
+    // den gesamten Packlisteneintrag entfernen (egal ob normal oder temporär).
+    if (!remainingNormal && !remainingTemp) {
       await db.prepare('DELETE FROM packlisten_eintraege WHERE id = ?').bind(packingItemId).run()
+      await db.prepare('DELETE FROM packlisten_eintraege_temporaer WHERE id = ?').bind(packingItemId).run()
     }
     return true
   } catch (error) {

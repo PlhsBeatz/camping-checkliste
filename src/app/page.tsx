@@ -799,12 +799,21 @@ function HomeContent() {
 
   const handleDeletePackingItem = (id: string, forMitreisenderId?: string | null) => {
     const item = packingItems.find((p) => p.id === id)
-    if (forMitreisenderId && item?.mitreisenden_typ === 'pauschal') {
+    // Pauschale Einträge dürfen im Personenprofil grundsätzlich nur im Profil "Alle" entfernt werden –
+    // Ausnahme: temporäre Einträge (nur für diese Packliste), die aus jedem Profil löschbar sein sollen.
+    if (forMitreisenderId && item?.mitreisenden_typ === 'pauschal' && !item?.is_temporaer) {
       alert('Pauschale Einträge können nur im Packprofil „Alle" entfernt werden.')
       return
     }
-    const isProfileDelete = !!forMitreisenderId
-    setDeletePackingItemConfirm({ id, forMitreisenderId, isProfileDelete })
+    const isTemporaerPauschal = !!item?.is_temporaer && item?.mitreisenden_typ === 'pauschal'
+    // Temporär + pauschal: immer Gesamteintrag löschen (nicht nur ein Mitreisender),
+    // daher hier kein Profil-Deletepfad.
+    const isProfileDelete = !!forMitreisenderId && !isTemporaerPauschal
+    setDeletePackingItemConfirm({
+      id,
+      forMitreisenderId: isProfileDelete ? forMitreisenderId : null,
+      isProfileDelete,
+    })
   }
 
   const executeDeletePackingItem = async () => {
