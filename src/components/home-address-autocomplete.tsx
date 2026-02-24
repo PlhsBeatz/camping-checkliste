@@ -122,8 +122,9 @@ export function HomeAddressAutocomplete(props: HomeAddressAutocompleteProps) {
           }
         }
 
-        autocompleteEl.addEventListener('gmp-select', onSelect as EventListener)
-        ;(autocompleteEl as unknown as { _gmpSelectHandler: EventListener })._gmpSelectHandler = onSelect as EventListener
+        const selectHandler = onSelect as unknown as EventListener
+        autocompleteEl.addEventListener('gmp-select', selectHandler)
+        ;(autocompleteEl as unknown as { _gmpSelectHandler: EventListener })._gmpSelectHandler = selectHandler
 
         // Wert vom Parent in das Element übernehmen
         if (value) (autocompleteEl as { value: string }).value = value
