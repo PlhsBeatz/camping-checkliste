@@ -398,7 +398,13 @@ export const EquipmentTable = React.memo(({
             </div>
 
             <div>
-              <Label>Standard (⭐)</Label>
+              <Label className="flex items-center gap-2">
+                <Star
+                  className="h-4 w-4"
+                  style={{ color: 'rgb(230,126,34)', fill: 'rgb(230,126,34)' }}
+                />
+                <span>Standard</span>
+              </Label>
               <Select value={filterStandard} onValueChange={setFilterStandard}>
                 <SelectTrigger>
                   <SelectValue placeholder="Alle" />
