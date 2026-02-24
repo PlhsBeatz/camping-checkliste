@@ -15,6 +15,19 @@ export class PackingSyncDO extends DurableObject<PackingSyncEnv> {
 
   constructor(ctx: DurableObjectState, _env: PackingSyncEnv) {
     super(ctx, _env)
+
+    // Bereits bestehende (hibernierende) WebSockets beim Aufwachen wiederherstellen
+    this.ctx.getWebSockets().forEach((ws) => {
+      const attachment = ws.deserializeAttachment() as { id?: string } | null
+      if (attachment?.id) {
+        this.sessions.set(ws, { id: attachment.id })
+      }
+    })
+
+    // Ping/Pong auf Protokoll-Ebene, ohne das DO zu wecken
+    this.ctx.setWebSocketAutoResponse(
+      new WebSocketRequestResponsePair('ping', 'pong')
+    )
   }
 
   async fetch(request: Request): Promise<Response> {
@@ -35,33 +48,19 @@ export class PackingSyncDO extends DurableObject<PackingSyncEnv> {
     }
 
     const webSocketPair = new WebSocketPair()
-    const client = webSocketPair[0]
-    const server = webSocketPair[1]
+    const [client, server] = Object.values(webSocketPair)
 
     if (!client || !server) {
       return new Response('Invalid WebSocket pair', { status: 500 })
     }
 
-    server.accept()
+    // Hibernation-fähige WebSocket-Verbindung akzeptieren
+    this.ctx.acceptWebSocket(server)
 
     const id = crypto.randomUUID()
+    // Verbindung an das DO „anhängen“, damit sie nach Hibernation rekonstruierbar ist
+    server.serializeAttachment({ id })
     this.sessions.set(server, { id })
-
-    server.addEventListener('message', (event: MessageEvent) => {
-      // Echo oder Pong für Keepalive – Clients können optional Ping senden
-      try {
-        const data = typeof event.data === 'string' ? event.data : ''
-        if (data === 'ping') {
-          server.send('pong')
-        }
-      } catch {
-        // Ignorieren bei Fehlern
-      }
-    })
-
-    server.addEventListener('close', () => {
-      this.sessions.delete(server)
-    })
 
     return new Response(null, {
       status: 101,
@@ -69,6 +68,7 @@ export class PackingSyncDO extends DurableObject<PackingSyncEnv> {
     })
   }
 
+  // Broadcast-Nachricht an alle verbundenen WebSockets senden
   private broadcastToAll(message: object): void {
     const payload = JSON.stringify(message)
     this.sessions.forEach((_, ws) => {
@@ -78,5 +78,11 @@ export class PackingSyncDO extends DurableObject<PackingSyncEnv> {
         // Verbindung evtl. schon geschlossen
       }
     })
+  }
+
+  // Wird vom Runtime aufgerufen, wenn eine WebSocket-Verbindung sauber schließt
+  async webSocketClose(ws: WebSocket, _code: number, _reason: string, _wasClean: boolean): Promise<void> {
+    ws.close()
+    this.sessions.delete(ws)
   }
 }

@@ -4,6 +4,7 @@ import { useEffect, useRef } from 'react'
 
 /** Kurzer Debounce nur um nahezu gleichzeitige Broadcasts zu bündeln (z.B. Batch-API) */
 const SYNC_DEBOUNCE_MS = 80
+const PING_INTERVAL_MS = 30_000
 
 /**
  * WebSocket-Hook für Echtzeit-Sync der Packliste via Durable Object.
@@ -26,6 +27,8 @@ export function usePackingSync(
 
     let ws: WebSocket | null = null
     let reconnectTimeout: ReturnType<typeof setTimeout>
+    let pingInterval: ReturnType<typeof setInterval> | null = null
+    let reconnectDelay = 3000
     let debounceTimeout: ReturnType<typeof setTimeout> | null = null
 
     const scheduleUpdate = () => {
@@ -39,6 +42,7 @@ export function usePackingSync(
     const connect = () => {
       try {
         ws = new WebSocket(wsUrl)
+        reconnectDelay = 3000
         ws.onmessage = (event) => {
           try {
             const data = JSON.parse(event.data as string) as { type?: string }
@@ -51,15 +55,35 @@ export function usePackingSync(
         }
         ws.onclose = () => {
           ws = null
-          // Reconnect nach 3 Sekunden
-          reconnectTimeout = setTimeout(connect, 3000)
+          if (pingInterval) {
+            clearInterval(pingInterval)
+            pingInterval = null
+          }
+          // Reconnect mit einfachem Backoff + Jitter
+          const jitter = Math.floor(Math.random() * 500)
+          reconnectTimeout = setTimeout(connect, reconnectDelay + jitter)
+          reconnectDelay = Math.min(reconnectDelay * 2, 30_000)
         }
         ws.onerror = () => {
           ws?.close()
         }
+
+        if (!pingInterval) {
+          pingInterval = setInterval(() => {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+              try {
+                ws.send('ping')
+              } catch {
+                // Ignorieren, der Reconnect kümmert sich
+              }
+            }
+          }, PING_INTERVAL_MS)
+        }
       } catch (err) {
         console.warn('PackingSync WebSocket connect failed:', err)
-        reconnectTimeout = setTimeout(connect, 3000)
+        const jitter = Math.floor(Math.random() * 500)
+        reconnectTimeout = setTimeout(connect, reconnectDelay + jitter)
+        reconnectDelay = Math.min(reconnectDelay * 2, 30_000)
       }
     }
 
@@ -67,6 +91,9 @@ export function usePackingSync(
 
     return () => {
       clearTimeout(reconnectTimeout)
+       if (pingInterval) {
+        clearInterval(pingInterval)
+      }
       if (debounceTimeout) clearTimeout(debounceTimeout)
       ws?.close()
     }
