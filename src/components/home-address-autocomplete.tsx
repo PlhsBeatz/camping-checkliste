@@ -67,6 +67,7 @@ export function HomeAddressAutocomplete(props: HomeAddressAutocompleteProps) {
   }, [])
 
   // Places-Bibliothek laden und PlaceAutocompleteElement nutzen (neue API)
+  // Container wird nie mit display:none versteckt, sondern per z-index überlagert, damit das Widget korrekt initialisiert
   useEffect(() => {
     if (!scriptLoaded || !window.google?.maps?.importLibrary || !containerRef.current) return
 
@@ -183,25 +184,28 @@ export function HomeAddressAutocomplete(props: HomeAddressAutocompleteProps) {
   const showFallback = !placesAvailable
 
   return (
-    <div className="relative w-full">
-      {showFallback && (
-        <Input
-          ref={inputRef}
-          value={value}
-          onChange={(e) => {
-            const v = e.target.value
-            onChange(v)
-            onResolve({ address: v, lat: null, lng: null })
-          }}
-          placeholder={placeholder ?? 'Heimatadresse eingeben'}
-          autoComplete="off"
-        />
-      )}
+    <div className="relative w-full" style={{ minHeight: 40 }}>
+      {/* Container immer im DOM und sichtbar (nur per z-index überlagert), damit das Google-Widget nicht in display:none hängt */}
       <div
         ref={containerRef}
-        className={showFallback ? 'hidden' : 'block'}
-        style={showFallback ? undefined : { minHeight: 40 }}
+        className="block w-full"
+        style={{ minHeight: 40, position: 'relative', zIndex: showFallback ? 0 : 1 }}
       />
+      {showFallback && (
+        <div className="absolute inset-0 z-10">
+          <Input
+            ref={inputRef}
+            value={value}
+            onChange={(e) => {
+              const v = e.target.value
+              onChange(v)
+              onResolve({ address: v, lat: null, lng: null })
+            }}
+            placeholder={placeholder ?? 'Heimatadresse eingeben'}
+            autoComplete="off"
+          />
+        </div>
+      )}
     </div>
   )
 }
