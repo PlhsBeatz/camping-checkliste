@@ -4,4 +4,7 @@ interface CloudflareEnv {
 	DB: D1Database;
 	ASSETS: Fetcher;
 	PACKING_SYNC_DO?: DurableObjectNamespace;
+	NEXTJS_ENV?: string;
+	NEXT_PUBLIC_GOOGLE_MAPS_API_KEY?: string;
+	GOOGLE_MAPS_API_KEY?: string;
 }
