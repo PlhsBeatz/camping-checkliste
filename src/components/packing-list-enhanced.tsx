@@ -490,7 +490,7 @@ const PackingItem: React.FC<PackingItemProps> = ({
                 <Edit2 className="h-4 w-4 mr-2" />
                 Bearbeiten
               </DropdownMenuItem>
-              {!(selectedProfile && mitreisenden_typ === 'pauschal') && (
+              {!(selectedProfile && mitreisenden_typ === 'pauschal' && !isTemporaer) && (
                 <DropdownMenuItem 
                   onSelect={() => {
                     setMenuOpen(false)

@@ -87,7 +87,8 @@ export async function POST(request: NextRequest) {
         kategorieId,
         anzahl ?? 1,
         bemerkung,
-        transportId
+        transportId,
+        mitreisende
       )
     } else if (gegenstandId) {
       itemId = await addPackingItem(db, packlisteId, gegenstandId, anzahl || 1, bemerkung, transportId, mitreisende)

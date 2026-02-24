@@ -197,6 +197,7 @@ export function AddSingleItemDialog({
             kategorieId: form.kategorie_id,
             anzahl,
             transportId: form.transport_id === 'none' ? null : form.transport_id,
+            mitreisende: selectedPackProfile ? [selectedPackProfile] : undefined,
           }),
         })
         const data = (await res.json()) as ApiResponse<unknown>

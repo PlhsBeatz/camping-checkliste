@@ -75,17 +75,23 @@ export function ResponsiveModal({
   // Smartphone Zurück-Button: Drawer schließen statt Navigation (Ref für stabile Deps)
   React.useEffect(() => {
     if (!open || !isMobile || typeof window === 'undefined') return
-    const state = { [DRAWER_STATE_KEY]: true }
+
+    // eigenen History-State für diesen Drawer markieren
+    const state = { ...(window.history.state || {}), [DRAWER_STATE_KEY]: true }
     window.history.pushState(state, '')
-    const onPopState = () => {
-      onOpenChangeRef.current(false)
+
+    const onPopState = (event: PopStateEvent) => {
+      // Nur diesen Drawer schließen, Navigation nicht weiter kaskadieren
+      if (event.state && event.state[DRAWER_STATE_KEY]) {
+        onOpenChangeRef.current(false)
+      }
     }
+
     window.addEventListener('popstate', onPopState)
     return () => {
+      // Listener wieder entfernen – die History-Einträge bleiben bestehen,
+      // beeinflussen aber das Verhalten nicht mehr, sobald der Drawer zu ist.
       window.removeEventListener('popstate', onPopState)
-      if (window.history.state?.[DRAWER_STATE_KEY]) {
-        window.history.back()
-      }
     }
   }, [open, isMobile])
 
