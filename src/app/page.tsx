@@ -799,13 +799,22 @@ function HomeContent() {
 
   const handleDeletePackingItem = (id: string, forMitreisenderId?: string | null) => {
     const item = packingItems.find((p) => p.id === id)
+    if (!item) {
+      setDeletePackingItemConfirm({ id, forMitreisenderId: null, isProfileDelete: false })
+      return
+    }
+
+    // Temporär-ähnlich: echte temporäre Einträge oder solche ohne Equipment-Referenz
+    const isTempLike = !!item.is_temporaer || !item.gegenstand_id
+
     // Pauschale Einträge dürfen im Personenprofil grundsätzlich nur im Profil "Alle" entfernt werden –
-    // Ausnahme: temporäre Einträge (nur für diese Packliste), die aus jedem Profil löschbar sein sollen.
-    if (forMitreisenderId && item?.mitreisenden_typ === 'pauschal' && !item?.is_temporaer) {
+    // Ausnahme: temporäre/„temp-like“ Einträge, die aus jedem Profil löschbar sein sollen.
+    if (forMitreisenderId && item.mitreisenden_typ === 'pauschal' && !isTempLike) {
       alert('Pauschale Einträge können nur im Packprofil „Alle" entfernt werden.')
       return
     }
-    const isTemporaerPauschal = !!item?.is_temporaer && item?.mitreisenden_typ === 'pauschal'
+
+    const isTemporaerPauschal = isTempLike && item.mitreisenden_typ === 'pauschal'
     // Temporär + pauschal: immer Gesamteintrag löschen (nicht nur ein Mitreisender),
     // daher hier kein Profil-Deletepfad.
     const isProfileDelete = !!forMitreisenderId && !isTemporaerPauschal
@@ -1395,6 +1404,10 @@ function HomeContent() {
         categories={categories}
         transportVehicles={transportVehicles}
         onSuccess={async () => {
+          // Nach dem Hinzufügen (insbesondere temporär) beide Dialoge schließen:
+          // den „Neu“-Dialog und die ursprüngliche Auswahl-Liste.
+          setShowAddSingleItemDialog(false)
+          setShowAddItemDialog(false)
           if (selectedVacationId) {
             const res = await fetch(`/api/packing-items?vacationId=${selectedVacationId}`)
             const data = (await res.json()) as ApiResponse<PackingItem[]>
