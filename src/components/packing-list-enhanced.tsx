@@ -654,12 +654,15 @@ export function PackingList({
   }, [mainCategories, activeMainCategory]);
 
   const effectivePacked = (g: boolean, v?: boolean) => g || !!v;
-  // Fortschritt nur über Einträge, auf die der User berechtigt ist (Profil Kinder/Gast = nur eigene Einträge)
+  // Fortschritt: Im Packprofil einer Person nur Einträge, die der Person zugeordnet sind; im Alle-Profil alle sichtbaren.
   const { packedCount, totalCount } = useMemo(() => {
     return visibleItems.reduce((acc, item) => {
       if (item.mitreisenden_typ === 'pauschal') {
-        acc.totalCount += 1;
-        if (effectivePacked(item.gepackt, item.gepackt_vorgemerkt)) acc.packedCount += 1;
+        // Pauschal nur im Alle-Profil in den Fortschritt einrechnen (nicht personenzugeordnet)
+        if (!selectedProfile) {
+          acc.totalCount += 1;
+          if (effectivePacked(item.gepackt, item.gepackt_vorgemerkt)) acc.packedCount += 1;
+        }
       } else if (item.mitreisende) {
         if (selectedProfile) {
           const mine = item.mitreisende.find(m => m.mitreisender_id === selectedProfile);
