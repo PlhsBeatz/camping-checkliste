@@ -138,8 +138,12 @@ export function HomeAddressAutocomplete(props: HomeAddressAutocompleteProps) {
         }
         if (inputPart && inputPart.addEventListener) {
           inputPart.addEventListener('input', onInput)
-          autocompleteEl._inputListener = onInput
-          autocompleteEl._inputPart = inputPart
+          const elWithCleanup = autocompleteEl as AutocompleteEl & {
+            _inputListener?: () => void
+            _inputPart?: HTMLInputElement
+          }
+          elWithCleanup._inputListener = onInput
+          elWithCleanup._inputPart = inputPart
         }
 
         containerRef.current.innerHTML = ''
