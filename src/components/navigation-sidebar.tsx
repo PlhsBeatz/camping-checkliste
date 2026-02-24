@@ -55,7 +55,8 @@ export function NavigationSidebar({ isOpen, onClose }: NavigationSidebarProps) {
     { label: 'KATEGORIEN', href: '/kategorien' },
     { label: 'TAGS & LABELS', href: '/tags' },
     { label: 'MITREISENDE', href: '/mitreisende' },
-    { label: 'TRANSPORTMITTEL', href: '/transportmittel' }
+    { label: 'TRANSPORTMITTEL', href: '/transportmittel' },
+    { label: 'CAMPINGPLÄTZE', href: '/campingplaetze' }
   ]
 
   return (

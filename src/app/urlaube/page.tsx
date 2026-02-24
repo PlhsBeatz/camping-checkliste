@@ -12,7 +12,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { useState, useEffect, useRef } from 'react'
-import { Vacation, Mitreisender } from '@/lib/db'
+import { Vacation, Mitreisender, Campingplatz } from '@/lib/db'
 import type { ApiResponse } from '@/lib/api-types'
 import { ResponsiveModal } from '@/components/ui/responsive-modal'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
@@ -102,6 +102,16 @@ export default function UrlaubePage() {
   const [vacationMitreisende, setVacationMitreisende] = useState<Mitreisender[]>([])
   const [deleteVacationId, setDeleteVacationId] = useState<string | null>(null)
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
+  const [vacationCampingplaetze, setVacationCampingplaetze] = useState<
+    Record<string, Campingplatz[]>
+  >({})
+  const [selectedVacationForCamping, setSelectedVacationForCamping] = useState<Vacation | null>(null)
+  const [allCampingplaetze, setAllCampingplaetze] = useState<Campingplatz[]>([])
+  const [campingSelectionIds, setCampingSelectionIds] = useState<string[]>([])
+  const [routeLoadingId, setRouteLoadingId] = useState<string | null>(null)
+  const [routeInfo, setRouteInfo] = useState<
+    Record<string, { distanceKm: number; durationMinutes: number; provider: string }>
+  >({})
   
   const [newVacationForm, setNewVacationForm] = useState({
     titel: '',
@@ -151,6 +161,45 @@ export default function UrlaubePage() {
     }
     fetchVacations()
   }, [])
+
+  // Campingplätze für alle Urlaube laden (lazy)
+  useEffect(() => {
+    const loadCamping = async () => {
+      try {
+        const resAll = await fetch('/api/campingplaetze')
+        const dataAll = (await resAll.json()) as ApiResponse<Campingplatz[]>
+        if (dataAll.success && dataAll.data) {
+          setAllCampingplaetze(dataAll.data)
+        }
+      } catch (error) {
+        console.error('Failed to fetch campingplaetze:', error)
+      }
+    }
+    void loadCamping()
+  }, [])
+
+  useEffect(() => {
+    const loadPerVacation = async () => {
+      const map: Record<string, Campingplatz[]> = {}
+      for (const v of vacations) {
+        try {
+          const res = await fetch(
+            `/api/vacations/campingplaetze?urlaubId=${encodeURIComponent(v.id)}`
+          )
+          const data = (await res.json()) as ApiResponse<Campingplatz[]>
+          if (data.success && data.data) {
+            map[v.id] = data.data
+          }
+        } catch {
+          // ignorieren
+        }
+      }
+      setVacationCampingplaetze(map)
+    }
+    if (vacations.length > 0) {
+      void loadPerVacation()
+    }
+  }, [vacations])
 
   // Sortieren nach Startdatum (chronologisch), vergangene ausblenden (Enddatum > 7 Tage zurück)
   const displayedVacations = (() => {
@@ -297,6 +346,86 @@ export default function UrlaubePage() {
   const handleSelectVacation = (vacationId: string) => {
     // Navigate to home page with selected vacation
     router.push(`/?vacation=${vacationId}`)
+  }
+
+  const openCampingDialogForVacation = (vacation: Vacation) => {
+    setSelectedVacationForCamping(vacation)
+    const existing = vacationCampingplaetze[vacation.id] ?? []
+    setCampingSelectionIds(existing.map((c) => c.id))
+  }
+
+  const toggleCampingSelection = (id: string) => {
+    setCampingSelectionIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    )
+  }
+
+  const saveCampingSelection = async () => {
+    if (!selectedVacationForCamping) return
+    setIsLoading(true)
+    try {
+      const res = await fetch('/api/vacations/campingplaetze', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          urlaubId: selectedVacationForCamping.id,
+          campingplatzIds: campingSelectionIds,
+        }),
+      })
+      const data = (await res.json()) as { success?: boolean; error?: string }
+      if (!data.success) {
+        alert('Fehler beim Speichern der Campingplätze: ' + (data.error ?? 'Unbekannt'))
+      } else {
+        const selected = allCampingplaetze.filter((c) =>
+          campingSelectionIds.includes(c.id)
+        )
+        setVacationCampingplaetze((prev) => ({
+          ...prev,
+          [selectedVacationForCamping.id]: selected,
+        }))
+        setSelectedVacationForCamping(null)
+      }
+    } catch (error) {
+      console.error('Failed to save vacation campingplaetze:', error)
+      alert('Fehler beim Speichern der Campingplätze.')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const calculateRoute = async (campingplatzId: string) => {
+    setRouteLoadingId(campingplatzId)
+    try {
+      const res = await fetch('/api/routes/campingplatz', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ campingplatzId }),
+      })
+      const data = (await res.json()) as {
+        success?: boolean
+        error?: string
+        data?: { distanceKm: number; durationMinutes: number; provider: string }
+      }
+      if (!data.success || !data.data) {
+        alert('Fehler bei der Routenberechnung: ' + (data.error ?? 'Unbekannt'))
+        return
+      }
+      setRouteInfo((prev) => ({
+        ...prev,
+        [campingplatzId]: data.data!,
+      }))
+    } catch (error) {
+      console.error('Failed to calculate route:', error)
+      alert('Fehler bei der Routenberechnung.')
+    } finally {
+      setRouteLoadingId(null)
+    }
+  }
+
+  const openInAdacMaps = (campingplatz: Campingplatz) => {
+    const label = `${campingplatz.name}, ${campingplatz.ort}`
+    const url = `https://maps.adac.de/?poi=${encodeURIComponent(label)}`
+    window.open(url, '_blank')
   }
 
   // Verhindert, dass der Card-Touch (nach Dropdown-Auswahl) als Klick zählt – nur auf Mobile relevant
@@ -808,6 +937,78 @@ export default function UrlaubePage() {
                     >
                       Packliste öffnen
                     </Button>
+                    <div className="mt-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium">Campingplätze</span>
+                        <Button
+                          variant="outline"
+                          size="xs"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            openCampingDialogForVacation(vacation)
+                          }}
+                        >
+                          Verwalten
+                        </Button>
+                      </div>
+                      <div className="space-y-1">
+                        {(vacationCampingplaetze[vacation.id] ?? []).length === 0 ? (
+                          <p className="text-xs text-muted-foreground">
+                            Noch keine Campingplätze zugeordnet.
+                          </p>
+                        ) : (
+                          (vacationCampingplaetze[vacation.id] ?? []).map((cp) => {
+                            const r = routeInfo[cp.id]
+                            return (
+                              <div
+                                key={cp.id}
+                                className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-dashed px-2 py-1.5 text-xs"
+                              >
+                                <div>
+                                  <div className="font-medium">
+                                    {cp.name} ({cp.platz_typ})
+                                  </div>
+                                  <div className="text-[11px] text-muted-foreground">
+                                    {cp.ort}, {cp.land}
+                                  </div>
+                                  {r && (
+                                    <div className="text-[11px] text-muted-foreground mt-0.5">
+                                      Entfernung ca. {r.distanceKm.toFixed(1).replace('.', ',')} km,{' '}
+                                      {Math.round(r.durationMinutes)} Min. ({r.provider})
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="flex flex-col gap-1">
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="xs"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      void calculateRoute(cp.id)
+                                    }}
+                                    disabled={routeLoadingId === cp.id}
+                                  >
+                                    {routeLoadingId === cp.id ? 'Berechne…' : 'Route berechnen'}
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="xs"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      openInAdacMaps(cp)
+                                    }}
+                                  >
+                                    In ADAC Maps öffnen
+                                  </Button>
+                                </div>
+                              </div>
+                            )
+                          })
+                        )}
+                      </div>
+                    </div>
                   </CardContent>
                 </Card>
               ))
@@ -839,6 +1040,68 @@ export default function UrlaubePage() {
           </Button>
         </div>
       </div>
+
+      <ResponsiveModal
+        open={!!selectedVacationForCamping}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSelectedVacationForCamping(null)
+            setCampingSelectionIds([])
+          }
+        }}
+        title="Campingplätze zuordnen"
+        description="Wählen Sie die Campingplätze aus, die diesem Urlaub zugeordnet werden sollen."
+        contentClassName="max-w-xl max-h-[90vh] overflow-y-auto"
+      >
+        {selectedVacationForCamping && (
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Urlaub: <span className="font-medium">{selectedVacationForCamping.titel}</span>
+            </p>
+            <div className="space-y-2 max-h-[50vh] overflow-y-auto border rounded-md p-2">
+              {allCampingplaetze.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  Noch keine Campingplätze angelegt.
+                </p>
+              ) : (
+                allCampingplaetze
+                  .filter((c) => !c.is_archived)
+                  .sort((a, b) => a.name.localeCompare(b.name))
+                  .map((c) => (
+                    <label
+                      key={c.id}
+                      className="flex items-start gap-2 text-sm cursor-pointer rounded-md px-2 py-1 hover:bg-muted/60"
+                    >
+                      <input
+                        type="checkbox"
+                        className="mt-0.5 h-3 w-3"
+                        checked={campingSelectionIds.includes(c.id)}
+                        onChange={() => toggleCampingSelection(c.id)}
+                      />
+                      <div>
+                        <div className="font-medium text-xs">
+                          {c.name} ({c.platz_typ})
+                        </div>
+                        <div className="text-[11px] text-muted-foreground">
+                          {c.ort}, {c.land}
+                          {c.bundesland && ` (${c.bundesland})`}
+                        </div>
+                      </div>
+                    </label>
+                  ))
+              )}
+            </div>
+            <Button
+              type="button"
+              onClick={saveCampingSelection}
+              disabled={isLoading}
+              className="w-full"
+            >
+              {isLoading ? 'Speichert…' : 'Zuordnung speichern'}
+            </Button>
+          </div>
+        )}
+      </ResponsiveModal>
     </div>
   )
 }
