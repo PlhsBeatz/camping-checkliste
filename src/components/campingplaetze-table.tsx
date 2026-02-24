@@ -18,7 +18,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Search, Filter, MoreVertical, Pencil, Trash2 } from 'lucide-react'
+import { Search, Filter, MoreVertical, Pencil, Trash2, Route } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface CampingplaetzeTableProps {
@@ -129,6 +129,33 @@ export function CampingplaetzeTable({
       controller.abort()
     }
   }, [filtered, distances])
+
+  const groupedByRegion = useMemo(() => {
+    const map: Record<
+      string,
+      {
+        land: string
+        bundesland: string
+        items: Campingplatz[]
+      }
+    > = {}
+    for (const item of filtered) {
+      const land = item.land || ''
+      const bundesland = item.bundesland ?? ''
+      const key = `${land}|||${bundesland}`
+      if (!map[key]) {
+        map[key] = { land, bundesland, items: [] }
+      }
+      map[key].items.push(item)
+    }
+    return Object.values(map).sort((a, b) => {
+      return (
+        a.land.localeCompare(b.land) ||
+        a.bundesland.localeCompare(b.bundesland) ||
+        (a.items[0]?.ort || '').localeCompare(b.items[0]?.ort || '')
+      )
+    })
+  }, [filtered])
 
   return (
     <div className="space-y-4">
@@ -258,119 +285,134 @@ export function CampingplaetzeTable({
         </div>
       </div>
 
-      <div className="border rounded-lg bg-white overflow-hidden">
+      <div>
         {filtered.length === 0 ? (
           <div className="py-12 text-center text-muted-foreground">
             Keine Campingplätze gefunden.
           </div>
         ) : (
-          <div className="p-4 space-y-3">
-            {filtered
-              .slice()
-              .sort(
-                (a, b) =>
-                  a.land.localeCompare(b.land) ||
-                  (a.bundesland ?? '').localeCompare(b.bundesland ?? '') ||
-                  a.ort.localeCompare(b.ort) ||
-                  a.name.localeCompare(b.name)
-              )
-              .map((item) => {
-                const route = distances[item.id]
-                return (
-                  <div
-                    key={item.id}
-                    className={cn(
-                      'bg-white rounded-xl border border-gray-200 shadow-sm px-4 py-3 flex items-start justify-between gap-3',
-                      item.is_archived && 'opacity-60 bg-muted/60'
-                    )}
-                  >
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold text-sm">{item.name}</span>
-                      </div>
-                      <div className="text-xs text-gray-600">
-                        {item.ort}, {item.land}
-                        {item.bundesland && ` (${item.bundesland})`}
-                      </div>
-                      {route && (
-                        <div className="text-xs text-gray-600">
-                          Entfernung zur Heimat:{' '}
-                          {Math.round(route.distanceKm)} km
-                          {route.durationMinutes != null &&
-                            ` (~${Math.round(route.durationMinutes)} min)`}
-                        </div>
-                      )}
-                      {(item.webseite || item.video_link) && (
-                        <div className="flex flex-wrap gap-2 text-xs mt-1">
-                          {item.webseite && (
-                            <button
-                              type="button"
-                              className="underline text-blue-600 hover:text-blue-800"
-                              onClick={() => window.open(item.webseite!, '_blank')}
-                            >
-                              Webseite
-                            </button>
+          <div className="space-y-4">
+            {groupedByRegion.map((group) => (
+              <div key={`${group.land}-${group.bundesland}`} className="space-y-2">
+                <div className="text-xs font-semibold tracking-wide text-[rgb(45,79,30)] px-1 mt-2">
+                  {group.bundesland || 'Ohne Bundesland'}
+                  <span className="text-muted-foreground"> · {group.land}</span>
+                </div>
+                <div className="space-y-2">
+                  {group.items
+                    .slice()
+                    .sort(
+                      (a, b) =>
+                        a.ort.localeCompare(b.ort) || a.name.localeCompare(b.name)
+                    )
+                    .map((item) => {
+                      const route = distances[item.id]
+                      return (
+                        <div
+                          key={item.id}
+                          className={cn(
+                            'bg-white rounded-xl border border-gray-200 shadow-sm px-4 py-3 flex items-start justify-between gap-3',
+                            item.is_archived && 'opacity-60 bg-muted/60'
                           )}
-                          {item.video_link && (
-                            <button
-                              type="button"
-                              className="underline text-blue-600 hover:text-blue-800"
-                              onClick={() => window.open(item.video_link!, '_blank')}
+                        >
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2">
+                              <span className="font-semibold text-sm">{item.name}</span>
+                            </div>
+                            <div className="text-xs text-gray-600">
+                              {item.ort}, {item.land}
+                              {item.bundesland && ` (${item.bundesland})`}
+                            </div>
+                            {route && (
+                              <div className="flex items-center gap-1 text-xs text-gray-600 mt-0.5">
+                                <Route className="h-3.5 w-3.5 text-[rgb(45,79,30)]" />
+                                <span>
+                                  {Math.round(route.distanceKm)} km
+                                  {route.durationMinutes != null && (() => {
+                                    const hours = Math.floor(route.durationMinutes / 60)
+                                    const minutes = Math.round(route.durationMinutes % 60)
+                                    const parts: string[] = []
+                                    if (hours > 0) parts.push(`${hours} h`)
+                                    if (minutes > 0 || hours === 0) parts.push(`${minutes} min`)
+                                    return ` · ${parts.join(' ')}`
+                                  })()}
+                                </span>
+                              </div>
+                            )}
+                            {(item.webseite || item.video_link) && (
+                              <div className="flex flex-wrap gap-2 text-xs mt-1">
+                                {item.webseite && (
+                                  <button
+                                    type="button"
+                                    className="underline text-blue-600 hover:text-blue-800"
+                                    onClick={() => window.open(item.webseite!, '_blank')}
+                                  >
+                                    Webseite
+                                  </button>
+                                )}
+                                {item.video_link && (
+                                  <button
+                                    type="button"
+                                    className="underline text-blue-600 hover:text-blue-800"
+                                    onClick={() => window.open(item.video_link!, '_blank')}
+                                  >
+                                    Video
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex flex-col items-end gap-2">
+                            <span className="inline-flex items-center rounded-full bg-emerald-100 text-emerald-800 px-2 py-0.5 text-xs">
+                              {item.platz_typ}
+                            </span>
+                            {item.is_archived && (
+                              <span className="inline-flex items-center rounded-full bg-gray-200 text-gray-700 px-2 py-0.5 text-xs">
+                                Archiviert
+                              </span>
+                            )}
+                            <DropdownMenu
+                              open={openMenuId === item.id}
+                              onOpenChange={(o) => setOpenMenuId(o ? item.id : null)}
                             >
-                              Video
-                            </button>
-                          )}
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-8 w-8 p-0"
+                                >
+                                  <MoreVertical className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem
+                                  onSelect={() => {
+                                    setOpenMenuId(null)
+                                    onEdit(item)
+                                  }}
+                                >
+                                  <Pencil className="h-4 w-4 mr-2" />
+                                  Bearbeiten
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onSelect={() => {
+                                    setOpenMenuId(null)
+                                    onDelete(item)
+                                  }}
+                                  className="text-destructive"
+                                >
+                                  <Trash2 className="h-4 w-4 mr-2" />
+                                  Löschen / Archivieren
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
                         </div>
-                      )}
-                    </div>
-                    <div className="flex flex-col items-end gap-2">
-                      <span className="inline-flex items-center rounded-full bg-emerald-100 text-emerald-800 px-2 py-0.5 text-xs">
-                        {item.platz_typ}
-                      </span>
-                      {item.is_archived && (
-                        <span className="inline-flex items-center rounded-full bg-gray-200 text-gray-700 px-2 py-0.5 text-xs">
-                          Archiviert
-                        </span>
-                      )}
-                      <DropdownMenu
-                        open={openMenuId === item.id}
-                        onOpenChange={(o) => setOpenMenuId(o ? item.id : null)}
-                      >
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 w-8 p-0"
-                          >
-                            <MoreVertical className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem
-                            onSelect={() => {
-                              setOpenMenuId(null)
-                              onEdit(item)
-                            }}
-                          >
-                            <Pencil className="h-4 w-4 mr-2" />
-                            Bearbeiten
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onSelect={() => {
-                              setOpenMenuId(null)
-                              onDelete(item)
-                            }}
-                            className="text-destructive"
-                          >
-                            <Trash2 className="h-4 w-4 mr-2" />
-                            Löschen / Archivieren
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
-                  </div>
-                )
-              })}
+                      )
+                    })}
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>
