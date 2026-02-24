@@ -150,6 +150,36 @@ export interface Tag {
   created_at: string
 }
 
+export type CampingplatzTyp = 'Durchreise' | 'Urlaubsplatz' | 'Stellplatz'
+
+export interface Campingplatz {
+  id: string
+  name: string
+  land: string
+  bundesland?: string | null
+  ort: string
+  webseite?: string | null
+  video_link?: string | null
+  platz_typ: CampingplatzTyp
+  pros: string[]
+  cons: string[]
+  adresse?: string | null
+  lat?: number | null
+  lng?: number | null
+  is_archived: boolean
+  created_at: string
+  updated_at?: string
+}
+
+export interface CampingplatzRouteCacheEntry {
+  user_id: string
+  campingplatz_id: string
+  distance_km: number
+  duration_min: number
+  provider: 'google' | 'haversine'
+  updated_at: string
+}
+
 export type UserRole = 'admin' | 'kind' | 'gast'
 
 export interface User {
@@ -162,6 +192,10 @@ export interface User {
   password_reset_expires?: string | null
   /** Nach Admin-Passwort-Reset: User muss beim nächsten Login Passwort ändern */
   must_change_password?: number
+  /** Heimatadresse für Routenberechnung (frei formatiert) */
+  heimat_adresse?: string | null
+  heimat_lat?: number | null
+  heimat_lng?: number | null
   created_at: string
   updated_at: string
 }
@@ -2772,9 +2806,417 @@ export async function getUserById(db: D1Database, id: string): Promise<User | nu
   return row
 }
 
+/** Heimatadresse und Koordinaten für den eingeloggten User aktualisieren */
+export async function updateUserHomeLocation(
+  db: D1Database,
+  userId: string,
+  data: { heimat_adresse: string | null; heimat_lat: number | null; heimat_lng: number | null }
+): Promise<boolean> {
+  try {
+    await db
+      .prepare(
+        'UPDATE users SET heimat_adresse = ?, heimat_lat = ?, heimat_lng = ?, updated_at = datetime(\'now\') WHERE id = ?'
+      )
+      .bind(data.heimat_adresse, data.heimat_lat, data.heimat_lng, userId)
+      .run()
+    return true
+  } catch (error) {
+    console.error('Error updating user home location:', error)
+    return false
+  }
+}
+
 export async function getUsersCount(db: D1Database): Promise<number> {
   const r = await db.prepare('SELECT COUNT(*) as c FROM users').first<{ c: number }>()
   return r?.c ?? 0
+}
+
+// --- Campingplätze & Routen-Cache ---
+
+/** Alle (nicht archivierten) Campingplätze abrufen, optional inkl. Archiv */
+export async function getCampingplaetze(
+  db: D1Database,
+  options?: { includeArchived?: boolean }
+): Promise<Campingplatz[]> {
+  try {
+    const includeArchived = options?.includeArchived ?? false
+    const query = includeArchived
+      ? 'SELECT * FROM campingplaetze ORDER BY land, bundesland, ort, name'
+      : 'SELECT * FROM campingplaetze WHERE is_archived = 0 ORDER BY land, bundesland, ort, name'
+    const result = await db.prepare(query).all<Record<string, unknown>>()
+    const rows = result.results || []
+    return rows.map((row) => ({
+      id: String(row.id),
+      name: String(row.name),
+      land: String(row.land),
+      bundesland: row.bundesland != null ? String(row.bundesland) : null,
+      ort: String(row.ort),
+      webseite: row.webseite != null ? String(row.webseite) : null,
+      video_link: row.video_link != null ? String(row.video_link) : null,
+      platz_typ: String(row.platz_typ) as CampingplatzTyp,
+      pros: row.pros ? JSON.parse(String(row.pros)) : [],
+      cons: row.cons ? JSON.parse(String(row.cons)) : [],
+      adresse: row.adresse != null ? String(row.adresse) : null,
+      lat: row.lat != null ? Number(row.lat) : null,
+      lng: row.lng != null ? Number(row.lng) : null,
+      is_archived: !!(row.is_archived ?? 0),
+      created_at: String(row.created_at || ''),
+      updated_at: row.updated_at != null ? String(row.updated_at) : undefined,
+    }))
+  } catch (error) {
+    console.error('Error fetching campingplaetze:', error)
+    return []
+  }
+}
+
+export async function getCampingplatzById(
+  db: D1Database,
+  id: string
+): Promise<Campingplatz | null> {
+  try {
+    const row = await db.prepare('SELECT * FROM campingplaetze WHERE id = ?').bind(id).first<
+      Record<string, unknown>
+    >()
+    if (!row) return null
+    return {
+      id: String(row.id),
+      name: String(row.name),
+      land: String(row.land),
+      bundesland: row.bundesland != null ? String(row.bundesland) : null,
+      ort: String(row.ort),
+      webseite: row.webseite != null ? String(row.webseite) : null,
+      video_link: row.video_link != null ? String(row.video_link) : null,
+      platz_typ: String(row.platz_typ) as CampingplatzTyp,
+      pros: row.pros ? JSON.parse(String(row.pros)) : [],
+      cons: row.cons ? JSON.parse(String(row.cons)) : [],
+      adresse: row.adresse != null ? String(row.adresse) : null,
+      lat: row.lat != null ? Number(row.lat) : null,
+      lng: row.lng != null ? Number(row.lng) : null,
+      is_archived: !!(row.is_archived ?? 0),
+      created_at: String(row.created_at || ''),
+      updated_at: row.updated_at != null ? String(row.updated_at) : undefined,
+    }
+  } catch (error) {
+    console.error('Error fetching campingplatz by id:', error)
+    return null
+  }
+}
+
+export async function createCampingplatz(
+  db: D1Database,
+  data: {
+    name: string
+    land: string
+    bundesland?: string | null
+    ort: string
+    webseite?: string | null
+    video_link?: string | null
+    platz_typ: CampingplatzTyp
+    pros?: string[]
+    cons?: string[]
+    adresse?: string | null
+    lat?: number | null
+    lng?: number | null
+  }
+): Promise<Campingplatz | null> {
+  try {
+    const id = crypto.randomUUID()
+    await db
+      .prepare(
+        `INSERT INTO campingplaetze 
+         (id, name, land, bundesland, ort, webseite, video_link, platz_typ, pros, cons, adresse, lat, lng) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .bind(
+        id,
+        data.name,
+        data.land,
+        data.bundesland ?? null,
+        data.ort,
+        data.webseite ?? null,
+        data.video_link ?? null,
+        data.platz_typ,
+        JSON.stringify(data.pros ?? []),
+        JSON.stringify(data.cons ?? []),
+        data.adresse ?? null,
+        data.lat ?? null,
+        data.lng ?? null
+      )
+      .run()
+    return getCampingplatzById(db, id)
+  } catch (error) {
+    console.error('Error creating campingplatz:', error)
+    return null
+  }
+}
+
+export async function updateCampingplatz(
+  db: D1Database,
+  id: string,
+  updates: Partial<{
+    name: string
+    land: string
+    bundesland: string | null
+    ort: string
+    webseite: string | null
+    video_link: string | null
+    platz_typ: CampingplatzTyp
+    pros: string[]
+    cons: string[]
+    adresse: string | null
+    lat: number | null
+    lng: number | null
+    is_archived: boolean
+  }>
+): Promise<Campingplatz | null> {
+  try {
+    const fields: string[] = []
+    const values: (string | number | null)[] = []
+
+    if (updates.name !== undefined) {
+      fields.push('name = ?')
+      values.push(updates.name)
+    }
+    if (updates.land !== undefined) {
+      fields.push('land = ?')
+      values.push(updates.land)
+    }
+    if (updates.bundesland !== undefined) {
+      fields.push('bundesland = ?')
+      values.push(updates.bundesland)
+    }
+    if (updates.ort !== undefined) {
+      fields.push('ort = ?')
+      values.push(updates.ort)
+    }
+    if (updates.webseite !== undefined) {
+      fields.push('webseite = ?')
+      values.push(updates.webseite)
+    }
+    if (updates.video_link !== undefined) {
+      fields.push('video_link = ?')
+      values.push(updates.video_link)
+    }
+    if (updates.platz_typ !== undefined) {
+      fields.push('platz_typ = ?')
+      values.push(updates.platz_typ)
+    }
+    if (updates.pros !== undefined) {
+      fields.push('pros = ?')
+      values.push(JSON.stringify(updates.pros ?? []))
+    }
+    if (updates.cons !== undefined) {
+      fields.push('cons = ?')
+      values.push(JSON.stringify(updates.cons ?? []))
+    }
+    if (updates.adresse !== undefined) {
+      fields.push('adresse = ?')
+      values.push(updates.adresse)
+    }
+    if (updates.lat !== undefined) {
+      fields.push('lat = ?')
+      values.push(updates.lat)
+    }
+    if (updates.lng !== undefined) {
+      fields.push('lng = ?')
+      values.push(updates.lng)
+    }
+    if (updates.is_archived !== undefined) {
+      fields.push('is_archived = ?')
+      values.push(updates.is_archived ? 1 : 0)
+    }
+
+    if (fields.length === 0) {
+      return getCampingplatzById(db, id)
+    }
+
+    fields.push('updated_at = datetime(\'now\')')
+    values.push(id)
+
+    const query = `UPDATE campingplaetze SET ${fields.join(', ')} WHERE id = ?`
+    await db.prepare(query).bind(...values).run()
+    return getCampingplatzById(db, id)
+  } catch (error) {
+    console.error('Error updating campingplatz:', error)
+    return null
+  }
+}
+
+export async function deleteCampingplatz(db: D1Database, id: string): Promise<boolean> {
+  try {
+    await db.prepare('DELETE FROM campingplaetze WHERE id = ?').bind(id).run()
+    return true
+  } catch (error) {
+    console.error('Error deleting campingplatz:', error)
+    return false
+  }
+}
+
+export async function archiveCampingplatz(
+  db: D1Database,
+  id: string
+): Promise<boolean> {
+  try {
+    await db
+      .prepare(
+        'UPDATE campingplaetze SET is_archived = 1, updated_at = datetime(\'now\') WHERE id = ?'
+      )
+      .bind(id)
+      .run()
+    return true
+  } catch (error) {
+    console.error('Error archiving campingplatz:', error)
+    return false
+  }
+}
+
+// Verknüpfung Urlaube <-> Campingplätze
+export async function getCampingplaetzeForVacation(
+  db: D1Database,
+  vacationId: string
+): Promise<Campingplatz[]> {
+  try {
+    const result = await db
+      .prepare(
+        `SELECT c.* 
+         FROM urlaub_campingplaetze uc
+         JOIN campingplaetze c ON uc.campingplatz_id = c.id
+         WHERE uc.urlaub_id = ?
+         ORDER BY c.land, c.bundesland, c.ort, c.name`
+      )
+      .bind(vacationId)
+      .all<Record<string, unknown>>()
+    const rows = result.results || []
+    return rows.map((row) => ({
+      id: String(row.id),
+      name: String(row.name),
+      land: String(row.land),
+      bundesland: row.bundesland != null ? String(row.bundesland) : null,
+      ort: String(row.ort),
+      webseite: row.webseite != null ? String(row.webseite) : null,
+      video_link: row.video_link != null ? String(row.video_link) : null,
+      platz_typ: String(row.platz_typ) as CampingplatzTyp,
+      pros: row.pros ? JSON.parse(String(row.pros)) : [],
+      cons: row.cons ? JSON.parse(String(row.cons)) : [],
+      adresse: row.adresse != null ? String(row.adresse) : null,
+      lat: row.lat != null ? Number(row.lat) : null,
+      lng: row.lng != null ? Number(row.lng) : null,
+      is_archived: !!(row.is_archived ?? 0),
+      created_at: String(row.created_at || ''),
+      updated_at: row.updated_at != null ? String(row.updated_at) : undefined,
+    }))
+  } catch (error) {
+    console.error('Error fetching campingplaetze for vacation:', error)
+    return []
+  }
+}
+
+export async function setCampingplaetzeForVacation(
+  db: D1Database,
+  vacationId: string,
+  campingplatzIds: string[]
+): Promise<boolean> {
+  try {
+    await db
+      .prepare('DELETE FROM urlaub_campingplaetze WHERE urlaub_id = ?')
+      .bind(vacationId)
+      .run()
+    for (const cid of campingplatzIds) {
+      await db
+        .prepare(
+          'INSERT INTO urlaub_campingplaetze (urlaub_id, campingplatz_id) VALUES (?, ?)'
+        )
+        .bind(vacationId, cid)
+        .run()
+    }
+    return true
+  } catch (error) {
+    console.error('Error setting campingplaetze for vacation:', error)
+    return false
+  }
+}
+
+// Routen-Cache
+export async function getRouteForUserAndCampingplatz(
+  db: D1Database,
+  userId: string,
+  campingplatzId: string
+): Promise<CampingplatzRouteCacheEntry | null> {
+  try {
+    const row = await db
+      .prepare(
+        'SELECT * FROM campingplatz_routen_cache WHERE user_id = ? AND campingplatz_id = ?'
+      )
+      .bind(userId, campingplatzId)
+      .first<CampingplatzRouteCacheEntry>()
+    return row || null
+  } catch (error) {
+    console.error('Error fetching route cache entry:', error)
+    return null
+  }
+}
+
+export async function setRouteForUserAndCampingplatz(
+  db: D1Database,
+  entry: CampingplatzRouteCacheEntry
+): Promise<boolean> {
+  try {
+    await db
+      .prepare(
+        `INSERT INTO campingplatz_routen_cache 
+           (user_id, campingplatz_id, distance_km, duration_min, provider, updated_at)
+         VALUES (?, ?, ?, ?, ?, datetime('now'))
+         ON CONFLICT(user_id, campingplatz_id) DO UPDATE SET
+           distance_km = excluded.distance_km,
+           duration_min = excluded.duration_min,
+           provider = excluded.provider,
+           updated_at = datetime('now')`
+      )
+      .bind(
+        entry.user_id,
+        entry.campingplatz_id,
+        entry.distance_km,
+        entry.duration_min,
+        entry.provider
+      )
+      .run()
+    return true
+  } catch (error) {
+    console.error('Error setting route cache entry:', error)
+    return false
+  }
+}
+
+export async function deleteRoutesForUser(
+  db: D1Database,
+  userId: string
+): Promise<boolean> {
+  try {
+    await db
+      .prepare('DELETE FROM campingplatz_routen_cache WHERE user_id = ?')
+      .bind(userId)
+      .run()
+    return true
+  } catch (error) {
+    console.error('Error deleting route cache entries for user:', error)
+    return false
+  }
+}
+
+export async function deleteRoutesForCampingplatz(
+  db: D1Database,
+  campingplatzId: string
+): Promise<boolean> {
+  try {
+    await db
+      .prepare('DELETE FROM campingplatz_routen_cache WHERE campingplatz_id = ?')
+      .bind(campingplatzId)
+      .run()
+    return true
+  } catch (error) {
+    console.error('Error deleting route cache entries for campingplatz:', error)
+    return false
+  }
 }
 
 /** Alle User (für Admin: Passwort zurücksetzen, etc.) */
