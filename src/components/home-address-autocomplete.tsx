@@ -71,16 +71,21 @@ export function HomeAddressAutocomplete(props: HomeAddressAutocompleteProps) {
     if (!scriptLoaded || !window.google?.maps?.importLibrary || !containerRef.current) return
 
     let mounted = true
-    let autocompleteEl: HTMLElement & { value: string; addEventListener: Function; removeEventListener: Function } | null = null
+    type AutocompleteEl = HTMLElement & {
+      value: string
+      addEventListener: (type: string, listener: EventListenerOrEventListenerObject) => void
+      removeEventListener: (type: string, listener: EventListenerOrEventListenerObject) => void
+    }
+    let autocompleteEl: AutocompleteEl | null = null
 
     async function init() {
       try {
-        const { PlaceAutocompleteElement } = await window.google!.maps!.importLibrary('places') as {
+        const { PlaceAutocompleteElement } = (await window.google!.maps!.importLibrary('places')) as {
           PlaceAutocompleteElement: new (opts?: {
             placeholder?: string
             requestedLanguage?: string
             includedRegionCodes?: string[]
-          }) => HTMLElement & { value: string; addEventListener: Function; removeEventListener: Function }
+          }) => AutocompleteEl
         }
         if (!mounted || !containerRef.current) return
 
@@ -88,7 +93,7 @@ export function HomeAddressAutocomplete(props: HomeAddressAutocompleteProps) {
           placeholder: placeholder ?? 'Heimatadresse eingeben',
           requestedLanguage: 'de',
           includedRegionCodes: ['de', 'at', 'ch'],
-        }) as HTMLElement & { value: string; addEventListener: Function; removeEventListener: Function }
+        }) as AutocompleteEl
 
         autocompleteEl.className = 'home-address-autocomplete-input'
         Object.assign(autocompleteEl.style, {
@@ -160,6 +165,8 @@ export function HomeAddressAutocomplete(props: HomeAddressAutocompleteProps) {
       }
       elementRef.current = null
     }
+    // value absichtlich nicht in deps: wird im nächsten useEffect synchron gehalten, um Re-Mount des Widgets zu vermeiden
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scriptLoaded, placeholder, onChange, onResolve])
 
   // Wert-Prop in das Google-Element übernehmen
