@@ -3,20 +3,33 @@
 import { useEffect, useRef, useState } from 'react'
 import { Input } from '@/components/ui/input'
 
-declare global {
-  interface Window {
-    google?: {
-      maps?: {
-        importLibrary: (name: string) => Promise<unknown>
-      }
-    }
-  }
+type GooglePlaceLocation = {
+  lat: () => number
+  lng: () => number
 }
 
-interface PlaceLike {
-  formattedAddress?: string
-  location?: { lat: () => number; lng: () => number }
-  fetchFields: (opts: { fields: string[] }) => Promise<void>
+type GooglePlaceGeometry = {
+  location?: GooglePlaceLocation
+}
+
+type GooglePlaceResult = {
+  formatted_address?: string
+  geometry?: GooglePlaceGeometry
+}
+
+type GoogleAutocomplete = {
+  addListener: (event: string, handler: () => void) => void
+  getPlace: () => GooglePlaceResult
+}
+
+type GoogleMapsPlaces = {
+  Autocomplete: new (input: HTMLInputElement, opts: unknown) => GoogleAutocomplete
+}
+
+declare const google: {
+  maps: {
+    places: GoogleMapsPlaces
+  }
 }
 
 interface HomeAddressAutocompleteProps {
@@ -26,196 +39,94 @@ interface HomeAddressAutocompleteProps {
   placeholder?: string
 }
 
-const BOOTSTRAP_LOADER = `(g=>{var h,a,k,p="The Google Maps JavaScript API",c="google",l="importLibrary",q="__ib__",m=document,b=window;b=b[c]||(b[c]={});var d=b.maps||(b.maps={}),r=new Set,e=new URLSearchParams,u=()=>h||(h=new Promise(async(f,n)=>{await (a=m.createElement("script"));e.set("libraries",[...r]+"");for(k in g)e.set(k.replace(/[A-Z]/g,t=>"_"+t[0].toLowerCase()),g[k]);e.set("callback",c+".maps."+q);a.src=\`https://maps.\${c}apis.com/maps/api/js?\`+e;d[q]=f;a.onerror=()=>h=n(Error(p+" could not load."));a.nonce=m.querySelector("script[nonce]")?.nonce||"";m.head.append(a)}));d[l]?console.warn(p+" only loads once. Ignoring:",g):d[l]=(f,...n)=>r.add(f)&&u().then(()=>d[l](f,...n))})`;
-
 export function HomeAddressAutocomplete(props: HomeAddressAutocompleteProps) {
   const { value, onChange, onResolve, placeholder } = props
   const inputRef = useRef<HTMLInputElement | null>(null)
-  const containerRef = useRef<HTMLDivElement | null>(null)
-  const elementRef = useRef<HTMLElement | null>(null)
   const [scriptLoaded, setScriptLoaded] = useState(false)
   const [placesAvailable, setPlacesAvailable] = useState(false)
 
-  // Bootstrap Loader (neue Maps JS API) mit key + v=weekly laden
-  // Hinweis: NEXT_PUBLIC_GOOGLE_MAPS_API_KEY muss für den Client verfügbar sein (z. B. .env.local mit NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=...)
   useEffect(() => {
     if (typeof window === 'undefined') return
 
-    const w = window as Window
-    if (w.google?.maps?.importLibrary) {
+    const anyWindow = window as typeof window & {
+      google?: { maps?: { places?: unknown } }
+    }
+    const existing = anyWindow.google?.maps?.places
+    if (existing) {
       setScriptLoaded(true)
+      setPlacesAvailable(true)
       return
     }
 
     const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
     if (!apiKey) {
       setScriptLoaded(true)
+      setPlacesAvailable(false)
       return
     }
 
-    const scriptId = 'google-maps-bootstrap'
+    const scriptId = 'google-maps-places-script'
     if (document.getElementById(scriptId)) {
       setScriptLoaded(true)
       return
     }
 
-    const scriptContent = `${BOOTSTRAP_LOADER}({key:"${apiKey.replace(/"/g, '\\"')}",v:"weekly",language:"de"});`
     const script = document.createElement('script')
     script.id = scriptId
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&language=de`
     script.async = true
-    const blob = new Blob([scriptContent], { type: 'application/javascript' })
-    script.src = URL.createObjectURL(blob)
     script.onload = () => {
-      URL.revokeObjectURL(script.src)
       setScriptLoaded(true)
+      const w = window as typeof window & {
+        google?: { maps?: { places?: unknown } }
+      }
+      setPlacesAvailable(!!w.google?.maps?.places)
     }
     script.onerror = () => {
-      URL.revokeObjectURL(script.src)
       setScriptLoaded(true)
+      setPlacesAvailable(false)
     }
     document.head.appendChild(script)
   }, [])
 
-  // Places-Bibliothek laden und PlaceAutocompleteElement nutzen (neue API)
-  // Container wird nie mit display:none versteckt, sondern per z-index überlagert, damit das Widget korrekt initialisiert
   useEffect(() => {
-    if (!scriptLoaded || !window.google?.maps?.importLibrary || !containerRef.current) return
+    if (!scriptLoaded || !placesAvailable || !inputRef.current) return
 
-    let mounted = true
-    type AutocompleteEl = HTMLElement & {
-      value: string
-      addEventListener: (type: string, listener: EventListenerOrEventListenerObject) => void
-      removeEventListener: (type: string, listener: EventListenerOrEventListenerObject) => void
+    try {
+      const autocomplete = new google.maps.places.Autocomplete(inputRef.current, {
+        types: ['geocode'],
+        fields: ['formatted_address', 'geometry'],
+      })
+
+      autocomplete.addListener('place_changed', () => {
+        const place = autocomplete.getPlace()
+        if (!place) return
+        const formatted = place.formatted_address || value
+        const location = place.geometry?.location
+        const lat = location ? location.lat() : null
+        const lng = location ? location.lng() : null
+        onChange(formatted)
+        onResolve({ address: formatted, lat, lng })
+      })
+    } catch {
+      // Falls Google Places nicht korrekt initialisiert werden kann, fällt die Komponente auf reinen Textinput zurück
+      setPlacesAvailable(false)
     }
-    let autocompleteEl: AutocompleteEl | null = null
-
-    async function init() {
-      try {
-        const { PlaceAutocompleteElement } = (await window.google!.maps!.importLibrary('places')) as {
-          PlaceAutocompleteElement: new (opts?: {
-            placeholder?: string
-            requestedLanguage?: string
-            includedRegionCodes?: string[]
-          }) => AutocompleteEl
-        }
-        if (!mounted || !containerRef.current) return
-
-        autocompleteEl = new PlaceAutocompleteElement({
-          placeholder: placeholder ?? 'Heimatadresse eingeben',
-          requestedLanguage: 'de',
-          includedRegionCodes: ['de', 'at', 'ch'],
-        }) as AutocompleteEl
-
-        autocompleteEl.className = 'home-address-autocomplete-input'
-        Object.assign(autocompleteEl.style, {
-          width: '100%',
-          height: '40px',
-          border: '1px solid hsl(var(--border))',
-          borderRadius: '6px',
-          paddingLeft: '12px',
-          paddingRight: '12px',
-          fontSize: '14px',
-          boxSizing: 'border-box',
-        })
-
-        const onSelect = async (ev: { placePrediction: { toPlace: () => Promise<PlaceLike> } }) => {
-          try {
-            const place = await ev.placePrediction.toPlace()
-            await place.fetchFields({ fields: ['formattedAddress', 'location'] })
-            const address = place.formattedAddress ?? value
-            const loc = place.location
-            const lat = loc ? loc.lat() : null
-            const lng = loc ? loc.lng() : null
-            onChange(address)
-            onResolve({ address, lat, lng })
-          } catch {
-            setPlacesAvailable(false)
-          }
-        }
-
-        const selectHandler = onSelect as unknown as EventListener
-        autocompleteEl.addEventListener('gmp-select', selectHandler)
-        ;(autocompleteEl as unknown as { _gmpSelectHandler: EventListener })._gmpSelectHandler = selectHandler
-
-        // Wert vom Parent in das Element übernehmen
-        if (value) (autocompleteEl as { value: string }).value = value
-
-        // Input-Ereignisse (Tippen) an Parent melden
-        const inputPart = autocompleteEl.shadowRoot?.querySelector?.('input') ?? (autocompleteEl as HTMLInputElement)
-        const onInput = () => {
-          const v = (autocompleteEl as { value: string }).value ?? ''
-          onChange(v)
-          onResolve({ address: v, lat: null, lng: null })
-        }
-        if (inputPart && inputPart.addEventListener) {
-          inputPart.addEventListener('input', onInput)
-          const elWithCleanup = autocompleteEl as AutocompleteEl & {
-            _inputListener?: () => void
-            _inputPart?: HTMLInputElement
-          }
-          elWithCleanup._inputListener = onInput
-          elWithCleanup._inputPart = inputPart
-        }
-
-        containerRef.current.innerHTML = ''
-        containerRef.current.appendChild(autocompleteEl)
-        elementRef.current = autocompleteEl
-        setPlacesAvailable(true)
-      } catch {
-        if (mounted) setPlacesAvailable(false)
-      }
-    }
-
-    init()
-    return () => {
-      mounted = false
-      if (autocompleteEl) {
-        const el = autocompleteEl as unknown as {
-          _inputPart?: HTMLInputElement
-          _inputListener?: () => void
-          _gmpSelectHandler?: EventListener
-        }
-        if (el._inputPart && el._inputListener) el._inputPart.removeEventListener('input', el._inputListener)
-        if (el._gmpSelectHandler) autocompleteEl.removeEventListener('gmp-select', el._gmpSelectHandler)
-        if (autocompleteEl.parentNode) autocompleteEl.parentNode.removeChild(autocompleteEl)
-      }
-      elementRef.current = null
-    }
-    // value absichtlich nicht in deps: wird im nächsten useEffect synchron gehalten, um Re-Mount des Widgets zu vermeiden
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scriptLoaded, placeholder, onChange, onResolve])
-
-  // Wert-Prop in das Google-Element übernehmen
-  useEffect(() => {
-    const el = elementRef.current as (HTMLElement & { value: string }) | null
-    if (el && value !== undefined && el.value !== value) el.value = value
-  }, [value])
-
-  const showFallback = !placesAvailable
+  }, [scriptLoaded, placesAvailable, onChange, onResolve, value])
 
   return (
-    <div className="relative w-full" style={{ minHeight: 40 }}>
-      {/* Container immer im DOM und sichtbar (nur per z-index überlagert), damit das Google-Widget nicht in display:none hängt */}
-      <div
-        ref={containerRef}
-        className="block w-full"
-        style={{ minHeight: 40, position: 'relative', zIndex: showFallback ? 0 : 1 }}
-      />
-      {showFallback && (
-        <div className="absolute inset-0 z-10">
-          <Input
-            ref={inputRef}
-            value={value}
-            onChange={(e) => {
-              const v = e.target.value
-              onChange(v)
-              onResolve({ address: v, lat: null, lng: null })
-            }}
-            placeholder={placeholder ?? 'Heimatadresse eingeben'}
-            autoComplete="off"
-          />
-        </div>
-      )}
-    </div>
+    <Input
+      ref={inputRef}
+      value={value}
+      onChange={(e) => {
+        const v = e.target.value
+        onChange(v)
+        if (!placesAvailable) {
+          onResolve({ address: v, lat: null, lng: null })
+        }
+      }}
+      placeholder={placeholder ?? 'Heimatadresse eingeben'}
+      autoComplete="off"
+    />
   )
 }
