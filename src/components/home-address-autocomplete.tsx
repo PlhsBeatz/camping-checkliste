@@ -37,6 +37,7 @@ export function HomeAddressAutocomplete(props: HomeAddressAutocompleteProps) {
   const [placesAvailable, setPlacesAvailable] = useState(false)
 
   // Bootstrap Loader (neue Maps JS API) mit key + v=weekly laden
+  // Hinweis: NEXT_PUBLIC_GOOGLE_MAPS_API_KEY muss für den Client verfügbar sein (z. B. .env.local mit NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=...)
   useEffect(() => {
     if (typeof window === 'undefined') return
 
@@ -58,12 +59,21 @@ export function HomeAddressAutocomplete(props: HomeAddressAutocompleteProps) {
       return
     }
 
+    const scriptContent = `${BOOTSTRAP_LOADER}({key:"${apiKey.replace(/"/g, '\\"')}",v:"weekly",language:"de"});`
     const script = document.createElement('script')
     script.id = scriptId
-    script.textContent = `${BOOTSTRAP_LOADER}({key:"${apiKey.replace(/"/g, '\\"')}",v:"weekly",language:"de"});`
+    script.async = true
+    const blob = new Blob([scriptContent], { type: 'application/javascript' })
+    script.src = URL.createObjectURL(blob)
+    script.onload = () => {
+      URL.revokeObjectURL(script.src)
+      setScriptLoaded(true)
+    }
+    script.onerror = () => {
+      URL.revokeObjectURL(script.src)
+      setScriptLoaded(true)
+    }
     document.head.appendChild(script)
-    // Bei Inline-Skripten feuert "load" nicht – der Code läuft sofort beim Append, danach ist importLibrary verfügbar
-    setScriptLoaded(true)
   }, [])
 
   // Places-Bibliothek laden und PlaceAutocompleteElement nutzen (neue API)
