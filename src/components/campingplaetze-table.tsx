@@ -102,14 +102,22 @@ export function CampingplaetzeTable({
       map[key].items.push(item)
     }
     const entries = Object.entries(map).map(([key, value]) => {
-      const [land] = key.split('|||')
+      const [landRaw] = key.split('|||')
+      const land = landRaw || ''
+      const bundesland = value.bundesland || ''
       return {
         land,
-        bundesland: value.bundesland,
-        items: value.items.sort((a, b) => a.ort.localeCompare(b.ort) || a.name.localeCompare(b.name)),
+        bundesland,
+        items: value.items.sort(
+          (a, b) => a.ort.localeCompare(b.ort) || a.name.localeCompare(b.name)
+        ),
       }
     })
-    entries.sort((a, b) => a.land.localeCompare(b.land) || a.bundesland.localeCompare(b.bundesland))
+    entries.sort(
+      (a, b) =>
+        a.land.localeCompare(b.land) ||
+        a.bundesland.localeCompare(b.bundesland)
+    )
     return entries
   }, [filtered])
 
