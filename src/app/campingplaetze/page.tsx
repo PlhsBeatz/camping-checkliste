@@ -4,7 +4,7 @@ import { useAuth } from '@/components/auth-provider'
 import { Button } from '@/components/ui/button'
 import { NavigationSidebar } from '@/components/navigation-sidebar'
 import { Plus, Menu } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { ApiResponse } from '@/lib/api-types'
 import { Campingplatz } from '@/lib/db'
 import { cn } from '@/lib/utils'
@@ -13,6 +13,7 @@ import { ResponsiveModal } from '@/components/ui/responsive-modal'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { CampingplatzAddressAutocomplete } from '@/components/campingplatz-address-autocomplete'
 import {
   Select,
   SelectContent,
@@ -32,6 +33,8 @@ interface CampingplatzFormState {
   video_link: string
   platz_typ: 'Durchreise' | 'Urlaubsplatz' | 'Stellplatz'
   adresse: string
+  lat: number | null
+  lng: number | null
   pros: string[]
   cons: string[]
 }
@@ -46,6 +49,8 @@ function createEmptyForm(): CampingplatzFormState {
     video_link: '',
     platz_typ: 'Urlaubsplatz',
     adresse: '',
+    lat: null,
+    lng: null,
     pros: [''],
     cons: [''],
   }
@@ -62,6 +67,7 @@ export default function CampingplaetzePage() {
   const [editId, setEditId] = useState<string | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Campingplatz | null>(null)
   const [archivePrompt, setArchivePrompt] = useState<Campingplatz | null>(null)
+  const adresseInputRef = useRef<HTMLInputElement | null>(null)
 
   useEffect(() => {
     if (showNavSidebar) {
@@ -106,6 +112,8 @@ export default function CampingplaetzePage() {
       video_link: item.video_link ?? '',
       platz_typ: item.platz_typ,
       adresse: item.adresse ?? '',
+      lat: item.lat ?? null,
+      lng: item.lng ?? null,
       pros: item.pros.length ? item.pros : [''],
       cons: item.cons.length ? item.cons : [''],
     })
@@ -143,7 +151,9 @@ export default function CampingplaetzePage() {
 
   const handleSave = async () => {
     if (!form.name || !form.land || !form.ort || !form.platz_typ) {
-      alert('Bitte füllen Sie alle Pflichtfelder aus.')
+      alert(
+        'Bitte füllen Sie alle Pflichtfelder aus. Tipp: Wählen Sie die Adresse aus der Vorschlagsliste, damit Ort/Land automatisch gesetzt werden.'
+      )
       return
     }
     setIsSaving(true)
@@ -159,6 +169,8 @@ export default function CampingplaetzePage() {
         video_link: form.video_link.trim() || null,
         platz_typ: form.platz_typ,
         adresse: form.adresse.trim() || null,
+        lat: form.lat,
+        lng: form.lng,
         pros: form.pros.map((p) => p.trim()).filter((p) => p.length > 0),
         cons: form.cons.map((p) => p.trim()).filter((p) => p.length > 0),
       }
@@ -351,6 +363,15 @@ export default function CampingplaetzePage() {
               id="cp-name"
               value={form.name}
               onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
+              onBlur={() => {
+                setForm((prev) => {
+                  if (prev.adresse.trim()) return prev
+                  const seeded = prev.name.trim()
+                  if (!seeded) return prev
+                  return { ...prev, adresse: seeded }
+                })
+                requestAnimationFrame(() => adresseInputRef.current?.focus())
+              }}
               placeholder="z.B. Campingplatz am See"
             />
           </div>
@@ -377,23 +398,50 @@ export default function CampingplaetzePage() {
             </div>
           </div>
           <div>
-            <Label htmlFor="cp-ort">Ort *</Label>
-            <Input
-              id="cp-ort"
-              value={form.ort}
-              onChange={(e) => setForm((prev) => ({ ...prev, ort: e.target.value }))}
-              placeholder="z.B. Titisee-Neustadt"
-            />
+            <Label htmlFor="cp-adresse">Adresse</Label>
+            <div id="cp-adresse">
+              <CampingplatzAddressAutocomplete
+                ref={adresseInputRef}
+                value={form.adresse}
+                onChange={(v) => setForm((prev) => ({ ...prev, adresse: v }))}
+                onResolve={(r) => {
+                  setForm((prev) => ({
+                    ...prev,
+                    adresse: r.address,
+                    lat: r.lat,
+                    lng: r.lng,
+                    // Ort bleibt für Sortierung/Anzeige in der App relevant, wird aber aus der Adresse abgeleitet
+                    ort: r.ort ?? prev.ort,
+                    bundesland: r.bundesland ?? prev.bundesland,
+                    land: r.land ?? prev.land,
+                  }))
+                }}
+                placeholder="Straße, Hausnummer, PLZ, Ort"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <Label>Ort (aus Adresse)</Label>
+              <Input value={form.ort} disabled placeholder="Wird automatisch gesetzt" />
+            </div>
+            <div>
+              <Label>Koordinaten</Label>
+              <Input
+                value={
+                  form.lat != null && form.lng != null
+                    ? `${form.lat.toFixed(5)}, ${form.lng.toFixed(5)}`
+                    : ''
+                }
+                disabled
+                placeholder="Wird automatisch gesetzt"
+              />
+            </div>
           </div>
           <div>
-            <Label htmlFor="cp-adresse">Adresse</Label>
-            <Textarea
-              id="cp-adresse"
-              value={form.adresse}
-              onChange={(e) => setForm((prev) => ({ ...prev, adresse: e.target.value }))}
-              placeholder="Straße, Hausnummer, PLZ, Ort"
-              rows={2}
-            />
+            <Label className="text-muted-foreground text-sm">
+              Tipp: Bitte die Adresse aus der Vorschlagsliste auswählen – dann werden Ort/Land/Bundesland und Koordinaten automatisch gefüllt.
+            </Label>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
