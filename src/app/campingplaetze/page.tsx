@@ -4,7 +4,7 @@ import { useAuth } from '@/components/auth-provider'
 import { Button } from '@/components/ui/button'
 import { NavigationSidebar } from '@/components/navigation-sidebar'
 import { Plus, Menu } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { ApiResponse } from '@/lib/api-types'
 import { Campingplatz } from '@/lib/db'
 import { cn } from '@/lib/utils'
@@ -66,7 +66,6 @@ export default function CampingplaetzePage() {
   const [editId, setEditId] = useState<string | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Campingplatz | null>(null)
   const [archivePrompt, setArchivePrompt] = useState<Campingplatz | null>(null)
-  const adresseInputRef = useRef<HTMLInputElement | null>(null)
 
   useEffect(() => {
     if (showNavSidebar) {
@@ -362,15 +361,6 @@ export default function CampingplaetzePage() {
               id="cp-name"
               value={form.name}
               onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
-              onBlur={() => {
-                setForm((prev) => {
-                  if (prev.adresse.trim()) return prev
-                  const seeded = prev.name.trim()
-                  if (!seeded) return prev
-                  return { ...prev, adresse: seeded }
-                })
-                requestAnimationFrame(() => adresseInputRef.current?.focus())
-              }}
               placeholder="z.B. Campingplatz am See"
             />
           </div>
@@ -400,7 +390,6 @@ export default function CampingplaetzePage() {
             <Label htmlFor="cp-adresse">Adresse</Label>
             <div id="cp-adresse">
               <CampingplatzAddressAutocomplete
-                ref={adresseInputRef}
                 value={form.adresse}
                 onChange={(v) => setForm((prev) => ({ ...prev, adresse: v }))}
                 onResolve={(r) => {

@@ -89,11 +89,26 @@ export function HomeAddressAutocomplete(props: HomeAddressAutocompleteProps) {
       ;(el as any).value = value
     }
 
+    type PlaceLocation = {
+      lat?: number | (() => number)
+      lng?: number | (() => number)
+    }
+
+    type NewPlace = {
+      formattedAddress?: string
+      location?: PlaceLocation
+      fetchFields?: (opts: { fields: string[] }) => Promise<void>
+    }
+
+    type GmpSelectEvent = {
+      placePrediction?: {
+        toPlace: () => Promise<NewPlace>
+      }
+    }
+
     const onSelect = async (event: Event) => {
       try {
-        const anyEvent = event as unknown as {
-          placePrediction?: { toPlace: () => Promise<any> }
-        }
+        const anyEvent = event as unknown as GmpSelectEvent
         if (!anyEvent.placePrediction) return
         const place = await anyEvent.placePrediction.toPlace()
         await place.fetchFields?.({

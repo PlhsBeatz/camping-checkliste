@@ -3,6 +3,32 @@
 import { useEffect, useRef, useState } from 'react'
 import { Input } from '@/components/ui/input'
 
+type PlaceLocation = {
+  lat?: number | (() => number)
+  lng?: number | (() => number)
+}
+
+type PlaceAddressComponent = {
+  longText?: string
+  shortText?: string
+  long_name?: string
+  short_name?: string
+  types?: string[]
+}
+
+type NewPlace = {
+  formattedAddress?: string
+  location?: PlaceLocation
+  addressComponents?: PlaceAddressComponent[]
+  fetchFields?: (opts: { fields: string[] }) => Promise<void>
+}
+
+type GmpSelectEvent = {
+  placePrediction?: {
+    toPlace: () => Promise<NewPlace>
+  }
+}
+
 export type CampingplatzAddressResolve = {
   address: string
   lat: number | null
@@ -21,7 +47,7 @@ interface CampingplatzAddressAutocompleteProps {
 
 // Hilfsfunktionen für neue Place-Klasse
 function pickComponent(
-  comps: any[] | undefined,
+  comps: PlaceAddressComponent[] | undefined,
   type: string,
   key: 'longText' | 'shortText' | 'long_name' | 'short_name' = 'longText'
 ): string | null {
@@ -35,7 +61,7 @@ function pickComponent(
   return null
 }
 
-function deriveOrt(comps: any[] | undefined): string | null {
+function deriveOrt(comps: PlaceAddressComponent[] | undefined): string | null {
   return (
     pickComponent(comps, 'locality') ??
     pickComponent(comps, 'postal_town') ??
@@ -128,9 +154,7 @@ export function CampingplatzAddressAutocomplete(props: CampingplatzAddressAutoco
 
     const onSelect = async (event: Event) => {
       try {
-        const anyEvent = event as unknown as {
-          placePrediction?: { toPlace: () => Promise<any> }
-        }
+        const anyEvent = event as unknown as GmpSelectEvent
         if (!anyEvent.placePrediction) return
         const place = await anyEvent.placePrediction.toPlace()
         await place.fetchFields?.({
@@ -143,7 +167,7 @@ export function CampingplatzAddressAutocomplete(props: CampingplatzAddressAutoco
           typeof loc?.lat === 'function' ? loc.lat() : typeof loc?.lat === 'number' ? loc.lat : null
         const lng =
           typeof loc?.lng === 'function' ? loc.lng() : typeof loc?.lng === 'number' ? loc.lng : null
-        const comps: any[] | undefined = place.addressComponents
+        const comps = place.addressComponents
         const land = pickComponent(comps, 'country')
         const bundesland = pickComponent(comps, 'administrative_area_level_1')
         const ort = deriveOrt(comps)
