@@ -3,7 +3,7 @@ import { useAuth } from '@/components/auth-provider'
 import { Button } from '@/components/ui/button'
 import { NavigationSidebar } from '@/components/navigation-sidebar'
 import { EquipmentTable } from '@/components/equipment-table'
-import { Plus, Menu } from 'lucide-react'
+import { Plus, Menu, Star } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { EquipmentItem, Category, MainCategory, TransportVehicle, Tag, Mitreisender } from '@/lib/db'
 import type { ApiResponse } from '@/lib/api-types'
@@ -641,7 +641,7 @@ export default function AusruestungPage() {
                                 setFormData({ ...formData, standard_mitreisende: formData.standard_mitreisende.filter(id => id !== m.id) })
                               }
                             }}
-                            className="h-3 w-3"
+                            className="h-3 w-3 rounded border-gray-300 text-[rgb(45,79,30)] focus:ring-[rgb(45,79,30)]"
                           />
                           {m.name}
                         </label>
@@ -666,7 +666,7 @@ export default function AusruestungPage() {
                             tags: checked ? [...prev.tags, tag.id] : prev.tags.filter(id => id !== tag.id)
                           }))
                         }}
-                        className="h-3 w-3"
+                        className="h-3 w-3 rounded border-gray-300 text-[rgb(45,79,30)] focus:ring-[rgb(45,79,30)]"
                       />
                       {tag.titel}
                     </label>
@@ -692,20 +692,24 @@ export default function AusruestungPage() {
                 id="is_standard"
                 checked={formData.is_standard}
                 onChange={(e) => setFormData({ ...formData, is_standard: e.target.checked })}
-                className="h-4 w-4"
+                className="h-4 w-4 rounded border-gray-300 text-[rgb(45,79,30)] focus:ring-[rgb(45,79,30)]"
               />
-              <Label htmlFor="is_standard" className="cursor-pointer">
-                Als Standard markieren (⭐)
+              <Label htmlFor="is_standard" className="cursor-pointer flex items-center gap-2">
+                <Star
+                  className="h-4 w-4"
+                  style={{ color: 'rgb(230,126,34)', fill: 'rgb(230,126,34)' }}
+                />
+                <span>Als Standard markieren</span>
               </Label>
             </div>
-
+            
             <div className="flex items-center gap-2">
               <input
                 type="checkbox"
                 id="erst_abreisetag_gepackt"
                 checked={formData.erst_abreisetag_gepackt}
                 onChange={(e) => setFormData({ ...formData, erst_abreisetag_gepackt: e.target.checked })}
-                className="h-4 w-4"
+                className="h-4 w-4 rounded border-gray-300 text-[rgb(45,79,30)] focus:ring-[rgb(45,79,30)]"
               />
               <Label htmlFor="erst_abreisetag_gepackt" className="cursor-pointer">
                 Erst am Abreisetag packen
@@ -901,7 +905,7 @@ export default function AusruestungPage() {
                                 setFormData({ ...formData, standard_mitreisende: formData.standard_mitreisende.filter(id => id !== m.id) })
                               }
                             }}
-                            className="h-3 w-3"
+                            className="h-3 w-3 rounded border-gray-300 text-[rgb(45,79,30)] focus:ring-[rgb(45,79,30)]"
                           />
                           {m.name}
                         </label>
@@ -926,7 +930,7 @@ export default function AusruestungPage() {
                             tags: checked ? [...prev.tags, tag.id] : prev.tags.filter(id => id !== tag.id)
                           }))
                         }}
-                        className="h-3 w-3"
+                        className="h-3 w-3 rounded border-gray-300 text-[rgb(45,79,30)] focus:ring-[rgb(45,79,30)]"
                       />
                       {tag.titel}
                     </label>
@@ -952,20 +956,24 @@ export default function AusruestungPage() {
                 id="edit_is_standard"
                 checked={formData.is_standard}
                 onChange={(e) => setFormData({ ...formData, is_standard: e.target.checked })}
-                className="h-4 w-4"
+                className="h-4 w-4 rounded border-gray-300 text-[rgb(45,79,30)] focus:ring-[rgb(45,79,30)]"
               />
-              <Label htmlFor="edit_is_standard" className="cursor-pointer">
-                Als Standard markieren (⭐)
+              <Label htmlFor="edit_is_standard" className="cursor-pointer flex items-center gap-2">
+                <Star
+                  className="h-4 w-4"
+                  style={{ color: 'rgb(230,126,34)', fill: 'rgb(230,126,34)' }}
+                />
+                <span>Als Standard markieren</span>
               </Label>
             </div>
-
+            
             <div className="flex items-center gap-2">
               <input
                 type="checkbox"
                 id="edit_erst_abreisetag_gepackt"
                 checked={formData.erst_abreisetag_gepackt}
                 onChange={(e) => setFormData({ ...formData, erst_abreisetag_gepackt: e.target.checked })}
-                className="h-4 w-4"
+                className="h-4 w-4 rounded border-gray-300 text-[rgb(45,79,30)] focus:ring-[rgb(45,79,30)]"
               />
               <Label htmlFor="edit_erst_abreisetag_gepackt" className="cursor-pointer">
                 Erst am Abreisetag packen

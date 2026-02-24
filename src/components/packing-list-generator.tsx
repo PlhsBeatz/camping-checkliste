@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Sparkles, Tag as TagIcon } from 'lucide-react'
+import { Sparkles, Star, Tag as TagIcon } from 'lucide-react'
 import { Tag, EquipmentItem } from '@/lib/db'
 import type { ApiResponse } from '@/lib/api-types'
 import { DEFAULT_USER_COLOR_BG } from '@/lib/user-colors'
@@ -148,8 +148,12 @@ export function PackingListGenerator({
                   checked={includeStandard}
                   onCheckedChange={(checked) => setIncludeStandard(checked as boolean)}
                 />
-                <Label htmlFor="include-standard" className="cursor-pointer">
-                  ⭐ Standard-Gegenstände immer einschließen
+                <Label htmlFor="include-standard" className="cursor-pointer flex items-center gap-2">
+                  <Star
+                    className="h-4 w-4"
+                    style={{ color: 'rgb(230,126,34)', fill: 'rgb(230,126,34)' }}
+                  />
+                  <span>Standard-Gegenstände immer einschließen</span>
                 </Label>
               </div>
               <p className="text-xs text-muted-foreground mt-2">

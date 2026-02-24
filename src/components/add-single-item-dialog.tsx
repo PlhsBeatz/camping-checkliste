@@ -382,7 +382,7 @@ export function AddSingleItemDialog({
                             }))
                           }
                         }}
-                        className="h-3 w-3"
+                        className="h-3 w-3 rounded border-gray-300 text-[rgb(45,79,30)] focus:ring-[rgb(45,79,30)]"
                       />
                       {m.name}
                     </label>
@@ -408,7 +408,7 @@ export function AddSingleItemDialog({
                           tags: e.target.checked ? [...p.tags, tag.id] : p.tags.filter((id) => id !== tag.id),
                         }))
                       }}
-                      className="h-3 w-3"
+                      className="h-3 w-3 rounded border-gray-300 text-[rgb(45,79,30)] focus:ring-[rgb(45,79,30)]"
                     />
                     {tag.titel}
                   </label>

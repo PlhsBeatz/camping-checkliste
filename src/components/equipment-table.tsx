@@ -426,7 +426,7 @@ export const EquipmentTable = React.memo(({
                           setFilterStatus(filterStatus.filter(s => s !== status))
                         }
                       }}
-                      className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                      className="h-4 w-4 rounded border-gray-300 text-[rgb(45,79,30)] focus:ring-[rgb(45,79,30)]"
                     />
                     {status}
                   </label>
