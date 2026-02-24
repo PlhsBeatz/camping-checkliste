@@ -9,6 +9,7 @@ import {
   archiveCampingplatz,
   getCampingplatzById,
   deleteRoutesForCampingplatz,
+  CampingplatzTyp,
 } from '@/lib/db'
 import { requireAuth, requireAdmin } from '@/lib/api-auth'
 
@@ -68,7 +69,7 @@ export async function POST(request: NextRequest) {
       ort: body.ort,
       webseite: body.webseite ?? null,
       video_link: body.video_link ?? null,
-      platz_typ: body.platz_typ as any,
+      platz_typ: body.platz_typ as CampingplatzTyp,
       pros: body.pros ?? [],
       cons: body.cons ?? [],
       adresse: body.adresse ?? null,
@@ -129,7 +130,7 @@ export async function PUT(request: NextRequest) {
       ort: body.ort,
       webseite: body.webseite ?? null,
       video_link: body.video_link ?? null,
-      platz_typ: body.platz_typ as any,
+      platz_typ: body.platz_typ as CampingplatzTyp,
       pros: body.pros,
       cons: body.cons,
       adresse: body.adresse ?? null,

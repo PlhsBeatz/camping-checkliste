@@ -56,7 +56,15 @@ export async function callGoogleDistanceMatrix(
   if (!res.ok) {
     return null
   }
-  const json = (await res.json()) as any
+  type DistanceMatrixElement = {
+    status: string
+    distance?: { value: number }
+    duration?: { value: number }
+  }
+  type DistanceMatrixResponse = {
+    rows?: Array<{ elements?: DistanceMatrixElement[] }>
+  }
+  const json = (await res.json()) as DistanceMatrixResponse
   if (
     !json.rows ||
     !Array.isArray(json.rows) ||

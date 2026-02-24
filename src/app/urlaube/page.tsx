@@ -942,7 +942,7 @@ export default function UrlaubePage() {
                         <span className="text-sm font-medium">Campingplätze</span>
                         <Button
                           variant="outline"
-                          size="xs"
+                          size="sm"
                           onClick={(e) => {
                             e.stopPropagation()
                             openCampingDialogForVacation(vacation)
@@ -982,7 +982,7 @@ export default function UrlaubePage() {
                                   <Button
                                     type="button"
                                     variant="outline"
-                                    size="xs"
+                                    size="sm"
                                     onClick={(e) => {
                                       e.stopPropagation()
                                       void calculateRoute(cp.id)
@@ -994,7 +994,7 @@ export default function UrlaubePage() {
                                   <Button
                                     type="button"
                                     variant="outline"
-                                    size="xs"
+                                    size="sm"
                                     onClick={(e) => {
                                       e.stopPropagation()
                                       openInAdacMaps(cp)

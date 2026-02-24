@@ -3,7 +3,34 @@
 import { useEffect, useRef, useState } from 'react'
 import { Input } from '@/components/ui/input'
 
-declare const google: any
+type GooglePlaceLocation = {
+  lat: () => number
+  lng: () => number
+}
+
+type GooglePlaceGeometry = {
+  location?: GooglePlaceLocation
+}
+
+type GooglePlaceResult = {
+  formatted_address?: string
+  geometry?: GooglePlaceGeometry
+}
+
+type GoogleAutocomplete = {
+  addListener: (event: string, handler: () => void) => void
+  getPlace: () => GooglePlaceResult
+}
+
+type GoogleMapsPlaces = {
+  Autocomplete: new (input: HTMLInputElement, opts: unknown) => GoogleAutocomplete
+}
+
+declare const google: {
+  maps: {
+    places: GoogleMapsPlaces
+  }
+}
 
 interface HomeAddressAutocompleteProps {
   value: string
@@ -21,7 +48,10 @@ export function HomeAddressAutocomplete(props: HomeAddressAutocompleteProps) {
   useEffect(() => {
     if (typeof window === 'undefined') return
 
-    const existing = (window as any).google?.maps?.places
+    const anyWindow = window as typeof window & {
+      google?: { maps?: { places?: unknown } }
+    }
+    const existing = anyWindow.google?.maps?.places
     if (existing) {
       setScriptLoaded(true)
       setPlacesAvailable(true)
@@ -47,7 +77,10 @@ export function HomeAddressAutocomplete(props: HomeAddressAutocompleteProps) {
     script.async = true
     script.onload = () => {
       setScriptLoaded(true)
-      setPlacesAvailable(!!(window as any).google?.maps?.places)
+      const w = window as typeof window & {
+        google?: { maps?: { places?: unknown } }
+      }
+      setPlacesAvailable(!!w.google?.maps?.places)
     }
     script.onerror = () => {
       setScriptLoaded(true)
