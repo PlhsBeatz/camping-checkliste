@@ -546,7 +546,10 @@ export const EquipmentTable = React.memo(({
                   >
                     <div className={`px-4 py-2 text-sm flex items-center gap-2 ${colAlign.was}`}>
                       {item.is_standard ? (
-                        <Star className="h-4 w-4 text-yellow-500 fill-yellow-500 flex-shrink-0" />
+                        <Star
+                          className="h-4 w-4 flex-shrink-0"
+                          style={{ color: 'rgb(230,126,34)', fill: 'rgb(230,126,34)' }}
+                        />
                       ) : (
                         <span className="w-4" />
                       )}

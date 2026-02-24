@@ -226,7 +226,7 @@ export function PackingListGenerator({
                             <span className="text-muted-foreground">•</span>
                             <span>{item.was}</span>
                             {item.is_standard && (
-                              <span className="text-xs text-yellow-600">⭐</span>
+                              <span className="text-xs" style={{ color: 'rgb(230,126,34)' }}>⭐</span>
                             )}
                             {item.tags && item.tags.length > 0 && (
                               <div className="flex gap-1">
