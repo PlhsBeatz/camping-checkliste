@@ -3,35 +3,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Input } from '@/components/ui/input'
 
-type GooglePlaceLocation = {
-  lat: () => number
-  lng: () => number
-}
-
-type GooglePlaceGeometry = {
-  location?: GooglePlaceLocation
-}
-
-type GooglePlaceResult = {
-  formatted_address?: string
-  geometry?: GooglePlaceGeometry
-}
-
-type GoogleAutocomplete = {
-  addListener: (event: string, handler: () => void) => void
-  getPlace: () => GooglePlaceResult
-}
-
-type GoogleMapsPlaces = {
-  Autocomplete: new (input: HTMLInputElement, opts: unknown) => GoogleAutocomplete
-}
-
-declare const google: {
-  maps: {
-    places: GoogleMapsPlaces
-  }
-}
-
 interface HomeAddressAutocompleteProps {
   value: string
   onChange: (value: string) => void
@@ -41,18 +12,19 @@ interface HomeAddressAutocompleteProps {
 
 export function HomeAddressAutocomplete(props: HomeAddressAutocompleteProps) {
   const { value, onChange, onResolve, placeholder } = props
-  const inputRef = useRef<HTMLInputElement | null>(null)
+  const containerRef = useRef<HTMLDivElement | null>(null)
+  const elementRef = useRef<HTMLElement | null>(null)
   const [scriptLoaded, setScriptLoaded] = useState(false)
   const [placesAvailable, setPlacesAvailable] = useState(false)
 
+  // Gemeinsames Laden des JS-SDK
   useEffect(() => {
     if (typeof window === 'undefined') return
 
     const anyWindow = window as typeof window & {
       google?: { maps?: { places?: unknown } }
     }
-    const existing = anyWindow.google?.maps?.places
-    if (existing) {
+    if (anyWindow.google?.maps?.places) {
       setScriptLoaded(true)
       setPlacesAvailable(true)
       return
@@ -73,14 +45,14 @@ export function HomeAddressAutocomplete(props: HomeAddressAutocompleteProps) {
 
     const script = document.createElement('script')
     script.id = scriptId
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&language=de`
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&language=de&v=weekly`
     script.async = true
     script.onload = () => {
       setScriptLoaded(true)
       const w = window as typeof window & {
-        google?: { maps?: { places?: unknown } }
+        google?: { maps?: { places?: { PlaceAutocompleteElement?: unknown } } }
       }
-      setPlacesAvailable(!!w.google?.maps?.places)
+      setPlacesAvailable(!!w.google?.maps?.places?.PlaceAutocompleteElement)
     }
     script.onerror = () => {
       setScriptLoaded(true)
@@ -89,44 +61,88 @@ export function HomeAddressAutocomplete(props: HomeAddressAutocompleteProps) {
     document.head.appendChild(script)
   }, [])
 
+  // PlaceAutocompleteElement nutzen
   useEffect(() => {
-    if (!scriptLoaded || !placesAvailable || !inputRef.current) return
+    if (!scriptLoaded || !placesAvailable || !containerRef.current) return
+    if (elementRef.current) return
 
-    try {
-      const autocomplete = new google.maps.places.Autocomplete(inputRef.current, {
-        types: ['geocode'],
-        fields: ['formatted_address', 'geometry'],
-      })
-
-      autocomplete.addListener('place_changed', () => {
-        const place = autocomplete.getPlace()
-        if (!place) return
-        const formatted = place.formatted_address || value
-        const location = place.geometry?.location
-        const lat = location ? location.lat() : null
-        const lng = location ? location.lng() : null
-        onChange(formatted)
-        onResolve({ address: formatted, lat, lng })
-      })
-    } catch {
-      // Falls Google Places nicht korrekt initialisiert werden kann, fällt die Komponente auf reinen Textinput zurück
-      setPlacesAvailable(false)
+    const w = window as typeof window & {
+      google?: { maps?: { places?: { PlaceAutocompleteElement?: new (opts?: unknown) => HTMLElement } } }
     }
-  }, [scriptLoaded, placesAvailable, onChange, onResolve, value])
+    const ctor = w.google?.maps?.places?.PlaceAutocompleteElement
+    if (!ctor) return
 
-  return (
-    <Input
-      ref={inputRef}
-      value={value}
-      onChange={(e) => {
-        const v = e.target.value
-        onChange(v)
-        if (!placesAvailable) {
-          onResolve({ address: v, lat: null, lng: null })
+    const el = new ctor({
+      requestedLanguage: 'de',
+      placeholder: placeholder ?? 'Heimatadresse eingeben',
+    } as unknown)
+
+    el.className = 'w-full'
+    Object.assign(el.style, {
+      width: '100%',
+      height: '40px',
+      borderRadius: '6px',
+      boxSizing: 'border-box',
+    })
+
+    if (value) {
+      ;(el as any).value = value
+    }
+
+    const onSelect = async (event: Event) => {
+      try {
+        const anyEvent = event as unknown as {
+          placePrediction?: { toPlace: () => Promise<any> }
         }
-      }}
-      placeholder={placeholder ?? 'Heimatadresse eingeben'}
-      autoComplete="off"
-    />
-  )
+        if (!anyEvent.placePrediction) return
+        const place = await anyEvent.placePrediction.toPlace()
+        await place.fetchFields?.({
+          fields: ['formattedAddress', 'location'],
+        })
+
+        const addr = (place.formattedAddress ?? value) as string
+        const loc = place.location
+        const lat =
+          typeof loc?.lat === 'function' ? loc.lat() : typeof loc?.lat === 'number' ? loc.lat : null
+        const lng =
+          typeof loc?.lng === 'function' ? loc.lng() : typeof loc?.lng === 'number' ? loc.lng : null
+
+        onChange(addr)
+        onResolve({ address: addr, lat, lng })
+      } catch {
+        setPlacesAvailable(false)
+      }
+    }
+
+    el.addEventListener('gmp-select', onSelect as EventListener)
+
+    containerRef.current.innerHTML = ''
+    containerRef.current.appendChild(el)
+    elementRef.current = el
+
+    return () => {
+      el.removeEventListener('gmp-select', onSelect as EventListener)
+      if (el.parentNode) el.parentNode.removeChild(el)
+      elementRef.current = null
+    }
+  }, [scriptLoaded, placesAvailable, onChange, onResolve, value, placeholder])
+
+  // Fallback: normales Input, wenn Places nicht verfügbar ist
+  if (!placesAvailable) {
+    return (
+      <Input
+        value={value}
+        onChange={(e) => {
+          const v = e.target.value
+          onChange(v)
+          onResolve({ address: v, lat: null, lng: null })
+        }}
+        placeholder={placeholder ?? 'Heimatadresse eingeben'}
+        autoComplete="off"
+      />
+    )
+  }
+
+  return <div ref={containerRef} className="w-full" />
 }
+
