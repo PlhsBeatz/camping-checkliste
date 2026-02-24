@@ -7,21 +7,7 @@ declare global {
   interface Window {
     google?: {
       maps?: {
-        importLibrary: (name: string) => Promise<{
-          PlaceAutocompleteElement: new (opts?: {
-            placeholder?: string
-            requestedLanguage?: string
-            includedRegionCodes?: string[]
-          }) => HTMLElement & {
-            value: string
-            placeholder: string
-            addEventListener(
-              type: 'gmp-select',
-              listener: (ev: { placePrediction: { toPlace: () => Promise<PlaceLike> } }) => void
-            ): void
-            removeEventListener(type: string, listener: unknown): void
-          }
-        }
+        importLibrary: (name: string) => Promise<unknown>
       }
     }
   }
