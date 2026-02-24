@@ -43,6 +43,7 @@ interface CampingplatzAddressAutocompleteProps {
   onChange: (value: string) => void
   onResolve: (result: CampingplatzAddressResolve) => void
   placeholder?: string
+  onElementReady?: (el: HTMLElement | null) => void
 }
 
 // Hilfsfunktionen für neue Place-Klasse
@@ -73,7 +74,7 @@ function deriveOrt(comps: PlaceAddressComponent[] | undefined): string | null {
 }
 
 export function CampingplatzAddressAutocomplete(props: CampingplatzAddressAutocompleteProps) {
-  const { value, onChange, onResolve, placeholder } = props
+  const { value, onChange, onResolve, placeholder, onElementReady } = props
   const containerRef = useRef<HTMLDivElement | null>(null)
   const elementRef = useRef<HTMLElement | null>(null)
   const [scriptLoaded, setScriptLoaded] = useState(false)
@@ -184,13 +185,22 @@ export function CampingplatzAddressAutocomplete(props: CampingplatzAddressAutoco
     containerRef.current.innerHTML = ''
     containerRef.current.appendChild(el)
     elementRef.current = el
+    onElementReady?.(el)
 
     return () => {
       el.removeEventListener('gmp-select', onSelect as EventListener)
       if (el.parentNode) el.parentNode.removeChild(el)
       elementRef.current = null
+      onElementReady?.(null)
     }
   }, [scriptLoaded, placesAvailable, onChange, onResolve, value, placeholder])
+
+  // Falls der Wert von außen geändert wird (z.B. durch Vorbefüllen mit dem Namen),
+  // spiegeln wir ihn in das PlaceAutocompleteElement zurück.
+  useEffect(() => {
+    if (!elementRef.current) return
+    ;(elementRef.current as unknown as { value?: string }).value = value
+  }, [value])
 
   // Fallback: normales Input, wenn Places nicht verfügbar ist
   if (!placesAvailable) {

@@ -4,7 +4,7 @@ import { useAuth } from '@/components/auth-provider'
 import { Button } from '@/components/ui/button'
 import { NavigationSidebar } from '@/components/navigation-sidebar'
 import { Plus, Menu } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { ApiResponse } from '@/lib/api-types'
 import { Campingplatz } from '@/lib/db'
 import { cn } from '@/lib/utils'
@@ -66,6 +66,7 @@ export default function CampingplaetzePage() {
   const [editId, setEditId] = useState<string | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Campingplatz | null>(null)
   const [archivePrompt, setArchivePrompt] = useState<Campingplatz | null>(null)
+  const adresseElementRef = useRef<HTMLElement | null>(null)
 
   useEffect(() => {
     if (showNavSidebar) {
@@ -361,30 +362,19 @@ export default function CampingplaetzePage() {
               id="cp-name"
               value={form.name}
               onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
+              onBlur={() => {
+                setForm((prev) => {
+                  if (prev.adresse.trim()) return prev
+                  const seeded = prev.name.trim()
+                  if (!seeded) return prev
+                  return { ...prev, adresse: seeded }
+                })
+                requestAnimationFrame(() => {
+                  adresseElementRef.current?.focus()
+                })
+              }}
               placeholder="z.B. Campingplatz am See"
             />
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="cp-land">Land *</Label>
-              <Input
-                id="cp-land"
-                value={form.land}
-                onChange={(e) => setForm((prev) => ({ ...prev, land: e.target.value }))}
-                placeholder="z.B. Deutschland"
-              />
-            </div>
-            <div>
-              <Label htmlFor="cp-bundesland">Bundesland</Label>
-              <Input
-                id="cp-bundesland"
-                value={form.bundesland}
-                onChange={(e) =>
-                  setForm((prev) => ({ ...prev, bundesland: e.target.value }))
-                }
-                placeholder="z.B. Baden-Württemberg"
-              />
-            </div>
           </div>
           <div>
             <Label htmlFor="cp-adresse">Adresse</Label>
@@ -403,6 +393,9 @@ export default function CampingplaetzePage() {
                     bundesland: r.bundesland ?? prev.bundesland,
                     land: r.land ?? prev.land,
                   }))
+                }}
+                onElementReady={(el) => {
+                  adresseElementRef.current = el
                 }}
                 placeholder="Straße, Hausnummer, PLZ, Ort"
               />
@@ -430,6 +423,28 @@ export default function CampingplaetzePage() {
             <Label className="text-muted-foreground text-sm">
               Tipp: Bitte die Adresse aus der Vorschlagsliste auswählen – dann werden Ort/Land/Bundesland und Koordinaten automatisch gefüllt.
             </Label>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <Label htmlFor="cp-land">Land *</Label>
+              <Input
+                id="cp-land"
+                value={form.land}
+                onChange={(e) => setForm((prev) => ({ ...prev, land: e.target.value }))}
+                placeholder="z.B. Deutschland"
+              />
+            </div>
+            <div>
+              <Label htmlFor="cp-bundesland">Bundesland</Label>
+              <Input
+                id="cp-bundesland"
+                value={form.bundesland}
+                onChange={(e) =>
+                  setForm((prev) => ({ ...prev, bundesland: e.target.value }))
+                }
+                placeholder="z.B. Baden-Württemberg"
+              />
+            </div>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
