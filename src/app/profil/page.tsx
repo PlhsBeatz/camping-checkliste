@@ -9,15 +9,81 @@ import { NavigationSidebar } from '@/components/navigation-sidebar'
 import { Menu, KeyRound } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { cn } from '@/lib/utils'
+import type { ApiResponse } from '@/lib/api-types'
+import { HomeAddressAutocomplete } from '@/components/home-address-autocomplete'
 
 export default function ProfilPage() {
   const { user, loading } = useAuth()
   const router = useRouter()
   const [showNavSidebar, setShowNavSidebar] = useState(false)
+  const [homeAddress, setHomeAddress] = useState('')
+  const [homeLat, setHomeLat] = useState<number | null>(null)
+  const [homeLng, setHomeLng] = useState<number | null>(null)
+  const [homeLoading, setHomeLoading] = useState(false)
+  const [homeSaving, setHomeSaving] = useState(false)
+  const [homeError, setHomeError] = useState<string | null>(null)
+  const [homeSuccess, setHomeSuccess] = useState(false)
 
   useEffect(() => {
     if (!loading && !user) router.replace('/login')
   }, [loading, user, router])
+
+  useEffect(() => {
+    const loadHomeLocation = async () => {
+      if (!user) return
+      setHomeLoading(true)
+      setHomeError(null)
+      try {
+        const res = await fetch('/api/profile/home-location')
+        const data = (await res.json()) as ApiResponse<{
+          heimat_adresse: string | null
+          heimat_lat: number | null
+          heimat_lng: number | null
+        }>
+        if (data.success && data.data) {
+          setHomeAddress(data.data.heimat_adresse ?? '')
+          setHomeLat(data.data.heimat_lat)
+          setHomeLng(data.data.heimat_lng)
+        }
+      } catch (error) {
+        console.error('Failed to load home location:', error)
+        setHomeError('Heimatadresse konnte nicht geladen werden.')
+      } finally {
+        setHomeLoading(false)
+      }
+    }
+    if (!loading) {
+      void loadHomeLocation()
+    }
+  }, [loading, user])
+
+  const handleSaveHomeLocation = async () => {
+    setHomeSaving(true)
+    setHomeError(null)
+    setHomeSuccess(false)
+    try {
+      const res = await fetch('/api/profile/home-location', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          heimatAdresse: homeAddress,
+          lat: homeLat,
+          lng: homeLng,
+        }),
+      })
+      const data = (await res.json()) as { success?: boolean; error?: string }
+      if (!res.ok || !data.success) {
+        setHomeError(data.error ?? 'Heimatadresse konnte nicht gespeichert werden.')
+        return
+      }
+      setHomeSuccess(true)
+    } catch (error) {
+      console.error('Failed to save home location:', error)
+      setHomeError('Heimatadresse konnte nicht gespeichert werden.')
+    } finally {
+      setHomeSaving(false)
+    }
+  }
 
   useEffect(() => {
     if (showNavSidebar) {
@@ -82,6 +148,57 @@ export default function ProfilPage() {
                   <KeyRound className="h-4 w-4" />
                   Passwort ändern
                 </Link>
+              </Button>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Heimatadresse</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-sm text-gray-600">
+                Die Heimatadresse wird zur Berechnung von Entfernungen und Fahrzeiten zu Campingplätzen verwendet.
+              </p>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700" htmlFor="heimat_adresse">
+                  Adresse
+                </label>
+                <HomeAddressAutocomplete
+                  value={homeAddress}
+                  onChange={(v) => {
+                    setHomeAddress(v)
+                    setHomeSuccess(false)
+                  }}
+                  onResolve={(r) => {
+                    setHomeAddress(r.address)
+                    setHomeLat(r.lat)
+                    setHomeLng(r.lng)
+                    setHomeSuccess(false)
+                  }}
+                  placeholder="z.B. Musterstraße 1, 12345 Musterstadt"
+                />
+                <p className="text-xs text-gray-500">
+                  Wenn Google Places verfügbar ist, werden Koordinaten automatisch ermittelt. Andernfalls wird nur die Adresse gespeichert.
+                </p>
+              </div>
+              {homeError && (
+                <p className="text-sm text-red-600">
+                  {homeError}
+                </p>
+              )}
+              {homeSuccess && !homeError && (
+                <p className="text-sm text-emerald-700">
+                  Heimatadresse gespeichert. Routen-Caches werden beim nächsten Aufruf neu berechnet.
+                </p>
+              )}
+              <Button
+                type="button"
+                onClick={handleSaveHomeLocation}
+                disabled={homeSaving || homeLoading}
+                className="w-full sm:w-auto"
+              >
+                {homeSaving ? 'Speichert…' : 'Heimatadresse speichern'}
               </Button>
             </CardContent>
           </Card>
