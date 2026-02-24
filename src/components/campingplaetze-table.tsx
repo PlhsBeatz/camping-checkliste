@@ -41,6 +41,9 @@ export function CampingplaetzeTable({
   const [filterArchiv, setFilterArchiv] = useState<string>(showArchived ? 'all' : 'active')
   const [showFilters, setShowFilters] = useState(false)
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
+  const [distances, setDistances] = useState<
+    Record<string, { distanceKm: number; durationMinutes: number }>
+  >({})
 
   const lands = useMemo(
     () =>
@@ -83,47 +86,84 @@ export function CampingplaetzeTable({
     })
   }, [items, filterArchiv, filterLand, filterBundesland, filterTyp, search])
 
-  const grouped = useMemo(() => {
-    const map: Record<
-      string,
-      {
-        bundesland: string
-        items: Campingplatz[]
-      }
-    > = {}
-    for (const item of filtered) {
-      const key = `${item.land}|||${item.bundesland ?? ''}`
-      if (!map[key]) {
-        map[key] = {
-          bundesland: item.bundesland ?? '',
-          items: [],
+  // Distanz zur Heimatadresse über bestehende Route-API laden (pro Campingplatz, mit Caching).
+  React.useEffect(() => {
+    let aborted = false
+    const controller = new AbortController()
+
+    const loadDistances = async () => {
+      for (const item of filtered) {
+        if (aborted) break
+        if (item.lat == null || item.lng == null) continue
+        if (distances[item.id]) continue
+        try {
+          const res = await fetch('/api/routes/campingplatz', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ campingplatzId: item.id }),
+            signal: controller.signal,
+          })
+          if (!res.ok) continue
+          const data = (await res.json()) as {
+            success?: boolean
+            data?: { distanceKm: number; durationMinutes: number }
+          }
+          if (data.success && data.data && !aborted) {
+            setDistances((prev) => ({
+              ...prev,
+              [item.id]: {
+                distanceKm: data.data!.distanceKm,
+                durationMinutes: data.data!.durationMinutes,
+              },
+            }))
+          }
+        } catch {
+          if (aborted) return
         }
       }
-      map[key].items.push(item)
     }
-    const entries = Object.entries(map).map(([key, value]) => {
-      const [landRaw] = key.split('|||')
-      const land = landRaw || ''
-      const bundesland = value.bundesland || ''
-      return {
-        land,
-        bundesland,
-        items: value.items.sort(
-          (a, b) => a.ort.localeCompare(b.ort) || a.name.localeCompare(b.name)
-        ),
-      }
-    })
-    entries.sort(
-      (a, b) =>
-        a.land.localeCompare(b.land) ||
-        a.bundesland.localeCompare(b.bundesland)
-    )
-    return entries
-  }, [filtered])
+
+    void loadDistances()
+    return () => {
+      aborted = true
+      controller.abort()
+    }
+  }, [filtered, distances])
 
   return (
     <div className="space-y-4">
       <div className="space-y-4 bg-white border rounded-lg p-4 bg-muted/30">
+        {lands.length > 0 && (
+          <div className="flex gap-2 overflow-x-auto pb-1 mb-1">
+            <button
+              type="button"
+              onClick={() => setFilterLand('all')}
+              className={cn(
+                'px-3 py-1 rounded-full border text-xs whitespace-nowrap',
+                filterLand === 'all'
+                  ? 'bg-[rgb(45,79,30)] text-white border-[rgb(45,79,30)]'
+                  : 'bg-white text-gray-700 hover:bg-muted'
+              )}
+            >
+              Alle Länder
+            </button>
+            {lands.map((land) => (
+              <button
+                key={land}
+                type="button"
+                onClick={() => setFilterLand(land)}
+                className={cn(
+                  'px-3 py-1 rounded-full border text-xs whitespace-nowrap',
+                  filterLand === land
+                    ? 'bg-[rgb(45,79,30)] text-white border-[rgb(45,79,30)]'
+                    : 'bg-white text-gray-700 hover:bg-muted'
+                )}
+              >
+                {land}
+              </button>
+            ))}
+          </div>
+        )}
         <div className="flex gap-2">
           <div className="flex-1 relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -144,23 +184,7 @@ export function CampingplaetzeTable({
         </div>
 
         {showFilters && (
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div>
-              <Label>Land</Label>
-              <Select value={filterLand} onValueChange={setFilterLand}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Alle" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Alle</SelectItem>
-                  {lands.map((l) => (
-                    <SelectItem key={l} value={l}>
-                      {l}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <Label>Bundesland</Label>
               <Select value={filterBundesland} onValueChange={setFilterBundesland}>
@@ -235,69 +259,79 @@ export function CampingplaetzeTable({
       </div>
 
       <div className="border rounded-lg bg-white overflow-hidden">
-        {grouped.length === 0 ? (
+        {filtered.length === 0 ? (
           <div className="py-12 text-center text-muted-foreground">
             Keine Campingplätze gefunden.
           </div>
         ) : (
-          <div className="divide-y">
-            {grouped.map((group) => (
-              <div key={`${group.land}-${group.bundesland}`} className="bg-muted/40">
-                <div className="px-4 py-2 text-xs font-semibold text-gray-700 uppercase tracking-wide border-b">
-                  {group.land}
-                  {group.bundesland && ` – ${group.bundesland}`}
-                </div>
-                <div className="divide-y">
-                  {group.items.map((item) => (
-                    <div
-                      key={item.id}
-                      className={cn(
-                        'px-4 py-3 flex items-start justify-between gap-3',
-                        item.is_archived && 'opacity-60 bg-muted/60'
+          <div className="p-4 space-y-3">
+            {filtered
+              .slice()
+              .sort(
+                (a, b) =>
+                  a.land.localeCompare(b.land) ||
+                  (a.bundesland ?? '').localeCompare(b.bundesland ?? '') ||
+                  a.ort.localeCompare(b.ort) ||
+                  a.name.localeCompare(b.name)
+              )
+              .map((item) => {
+                const route = distances[item.id]
+                return (
+                  <div
+                    key={item.id}
+                    className={cn(
+                      'bg-white rounded-xl border border-gray-200 shadow-sm px-4 py-3 flex items-start justify-between gap-3',
+                      item.is_archived && 'opacity-60 bg-muted/60'
+                    )}
+                  >
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-sm">{item.name}</span>
+                      </div>
+                      <div className="text-xs text-gray-600">
+                        {item.ort}, {item.land}
+                        {item.bundesland && ` (${item.bundesland})`}
+                      </div>
+                      {route && (
+                        <div className="text-xs text-gray-600">
+                          Entfernung zur Heimat:{' '}
+                          {Math.round(route.distanceKm)} km
+                          {route.durationMinutes != null &&
+                            ` (~${Math.round(route.durationMinutes)} min)`}
+                        </div>
                       )}
-                    >
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2">
-                          <span className="font-semibold text-sm">{item.name}</span>
-                          <span className="inline-flex items-center rounded-full bg-emerald-100 text-emerald-800 px-2 py-0.5 text-xs">
-                            {item.platz_typ}
-                          </span>
-                          {item.is_archived && (
-                            <span className="inline-flex items-center rounded-full bg-gray-200 text-gray-700 px-2 py-0.5 text-xs">
-                              Archiviert
-                            </span>
+                      {(item.webseite || item.video_link) && (
+                        <div className="flex flex-wrap gap-2 text-xs mt-1">
+                          {item.webseite && (
+                            <button
+                              type="button"
+                              className="underline text-blue-600 hover:text-blue-800"
+                              onClick={() => window.open(item.webseite!, '_blank')}
+                            >
+                              Webseite
+                            </button>
+                          )}
+                          {item.video_link && (
+                            <button
+                              type="button"
+                              className="underline text-blue-600 hover:text-blue-800"
+                              onClick={() => window.open(item.video_link!, '_blank')}
+                            >
+                              Video
+                            </button>
                           )}
                         </div>
-                        <div className="text-xs text-gray-600">
-                          {item.ort}, {item.land}
-                          {item.bundesland && ` (${item.bundesland})`}
-                        </div>
-                        {item.adresse && (
-                          <div className="text-xs text-gray-500">{item.adresse}</div>
-                        )}
-                        {(item.webseite || item.video_link) && (
-                          <div className="flex flex-wrap gap-2 text-xs mt-1">
-                            {item.webseite && (
-                              <button
-                                type="button"
-                                className="underline text-blue-600 hover:text-blue-800"
-                                onClick={() => window.open(item.webseite!, '_blank')}
-                              >
-                                Webseite
-                              </button>
-                            )}
-                            {item.video_link && (
-                              <button
-                                type="button"
-                                className="underline text-blue-600 hover:text-blue-800"
-                                onClick={() => window.open(item.video_link!, '_blank')}
-                              >
-                                Video
-                              </button>
-                            )}
-                          </div>
-                        )}
-                      </div>
+                      )}
+                    </div>
+                    <div className="flex flex-col items-end gap-2">
+                      <span className="inline-flex items-center rounded-full bg-emerald-100 text-emerald-800 px-2 py-0.5 text-xs">
+                        {item.platz_typ}
+                      </span>
+                      {item.is_archived && (
+                        <span className="inline-flex items-center rounded-full bg-gray-200 text-gray-700 px-2 py-0.5 text-xs">
+                          Archiviert
+                        </span>
+                      )}
                       <DropdownMenu
                         open={openMenuId === item.id}
                         onOpenChange={(o) => setOpenMenuId(o ? item.id : null)}
@@ -334,10 +368,9 @@ export function CampingplaetzeTable({
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </div>
-                  ))}
-                </div>
-              </div>
-            ))}
+                  </div>
+                )
+              })}
           </div>
         )}
       </div>
