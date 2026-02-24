@@ -61,9 +61,9 @@ export function HomeAddressAutocomplete(props: HomeAddressAutocompleteProps) {
     const script = document.createElement('script')
     script.id = scriptId
     script.textContent = `${BOOTSTRAP_LOADER}({key:"${apiKey.replace(/"/g, '\\"')}",v:"weekly",language:"de"});`
-    script.onload = () => setScriptLoaded(true)
-    script.onerror = () => setScriptLoaded(true)
     document.head.appendChild(script)
+    // Bei Inline-Skripten feuert "load" nicht – der Code läuft sofort beim Append, danach ist importLibrary verfügbar
+    setScriptLoaded(true)
   }, [])
 
   // Places-Bibliothek laden und PlaceAutocompleteElement nutzen (neue API)
