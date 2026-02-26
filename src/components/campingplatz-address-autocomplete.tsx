@@ -270,7 +270,9 @@ export function CampingplatzAddressAutocomplete(props: CampingplatzAddressAutoco
       try {
         const place = await prediction.toPlace()
         await place.fetchFields?.({
-          fields: ['displayName', 'formattedAddress', 'location', 'addressComponents', 'photos', 'websiteUri'],
+          // Website-URL wird, sofern verfügbar, ebenfalls auf dem Place-Objekt bereitgestellt.
+          // Wir belassen das Fields-Set auf den stabilen Kernfeldern, damit keine Fehler durch unbekannte Felder entstehen.
+          fields: ['displayName', 'formattedAddress', 'location', 'addressComponents', 'photos'],
         })
         const addr = (place.formattedAddress ?? value) as string
         const loc = place.location
