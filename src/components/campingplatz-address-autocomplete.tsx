@@ -78,16 +78,29 @@ function deriveOrt(comps: PlaceAddressComponent[] | undefined): string | null {
   )
 }
 
+type PlacePrediction = {
+  text?: { text?: string }
+  mainText?: { text?: string }
+  secondaryText?: { text?: string }
+  toPlace: () => Promise<NewPlace>
+}
+
+type AutocompleteSuggestionsResult = {
+  suggestions: Array<{ placePrediction?: PlacePrediction }>
+}
+
+type AutocompleteRequest = {
+  input: string
+  sessionToken?: unknown
+  includedPrimaryTypes?: string[]
+  language?: string
+  locationBias?: unknown
+  locationRestriction?: unknown
+}
+
 type PlacesLib = {
   AutocompleteSuggestion: {
-    fetchAutocompleteSuggestions: (req: {
-      input: string
-      sessionToken?: unknown
-      includedPrimaryTypes?: string[]
-      language?: string
-      locationBias?: unknown
-      locationRestriction?: unknown
-    }) => Promise<{ suggestions: Array<{ placePrediction?: { text?: { text?: string }; mainText?: { text?: string }; secondaryText?: { text?: string }; toPlace: () => Promise<NewPlace> } }> }
+    fetchAutocompleteSuggestions: (req: AutocompleteRequest) => Promise<AutocompleteSuggestionsResult>
   }
   AutocompleteSessionToken: new () => unknown
 }
@@ -109,7 +122,7 @@ export function CampingplatzAddressAutocomplete(props: CampingplatzAddressAutoco
   const inputRef = useRef<HTMLInputElement>(null)
   const [scriptLoaded, setScriptLoaded] = useState(false)
   const [placesAvailable, setPlacesAvailable] = useState(false)
-  const [suggestions, setSuggestions] = useState<Array<{ placePrediction?: { text?: { text?: string }; mainText?: { text?: string }; secondaryText?: { text?: string }; toPlace: () => Promise<NewPlace> } }>>([])
+  const [suggestions, setSuggestions] = useState<Array<{ placePrediction?: PlacePrediction }>>([])
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [dropdownOpen, setDropdownOpen] = useState(false)
@@ -174,7 +187,7 @@ export function CampingplatzAddressAutocomplete(props: CampingplatzAddressAutoco
       setError(null)
       try {
         if (!sessionTokenRef.current) resetSessionToken()
-        const request: Parameters<PlacesLib['AutocompleteSuggestion']['fetchAutocompleteSuggestions']>[0] = {
+        const request: AutocompleteRequest = {
           input: input.trim(),
           sessionToken: sessionTokenRef.current ?? undefined,
           language: 'de',
@@ -227,7 +240,7 @@ export function CampingplatzAddressAutocomplete(props: CampingplatzAddressAutoco
       setIsLoading(true)
       setError(null)
       const requestId = ++lastRequestIdRef.current
-      const request: Parameters<PlacesLib['AutocompleteSuggestion']['fetchAutocompleteSuggestions']>[0] = {
+      const request: AutocompleteRequest = {
         input: value.trim(),
         sessionToken: sessionTokenRef.current ?? undefined,
         language: 'de',
