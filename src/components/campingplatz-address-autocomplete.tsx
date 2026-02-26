@@ -288,7 +288,16 @@ export function CampingplatzAddressAutocomplete(props: CampingplatzAddressAutoco
         const placeName = place.displayName?.text ?? (mainText || undefined)
         // Im Feld immer den Namen anzeigen (nicht die Adresse): zuerst displayName, dann Text aus der Vorschlagsliste, sonst Adresse
         const displayValue = placeName ?? addr
-        const website = place.websiteUri ?? null
+
+        // Website-URL optional nachladen; falls das Feld in der aktuellen SDK-Version nicht unterstützt wird,
+        // wird der Fehler hier bewusst geschluckt.
+        let website: string | null = null
+        try {
+          await place.fetchFields?.({ fields: ['websiteUri'] })
+          website = (place as NewPlace).websiteUri ?? null
+        } catch {
+          website = null
+        }
         onChange(displayValue)
         onResolve({
           address: addr,
