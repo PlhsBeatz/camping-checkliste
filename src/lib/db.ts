@@ -3093,7 +3093,7 @@ export async function getCampingplaetzeForVacation(
          FROM urlaub_campingplaetze uc
          JOIN campingplaetze c ON uc.campingplatz_id = c.id
          WHERE uc.urlaub_id = ?
-         ORDER BY c.land, c.bundesland, c.ort, c.name`
+         ORDER BY COALESCE(uc.sort_index, 999999), c.land, c.bundesland, c.ort, c.name`
       )
       .bind(vacationId)
       .all<Record<string, unknown>>()
@@ -3133,12 +3133,13 @@ export async function setCampingplaetzeForVacation(
       .prepare('DELETE FROM urlaub_campingplaetze WHERE urlaub_id = ?')
       .bind(vacationId)
       .run()
-    for (const cid of campingplatzIds) {
+    for (let index = 0; index < campingplatzIds.length; index++) {
+      const cid = campingplatzIds[index]
       await db
         .prepare(
-          'INSERT INTO urlaub_campingplaetze (urlaub_id, campingplatz_id) VALUES (?, ?)'
+          'INSERT INTO urlaub_campingplaetze (urlaub_id, campingplatz_id, sort_index) VALUES (?, ?, ?)'
         )
-        .bind(vacationId, cid)
+        .bind(vacationId, cid, index)
         .run()
     }
     return true

@@ -77,9 +77,11 @@ export function HomeAddressAutocomplete(props: HomeAddressAutocompleteProps) {
       placeholder: placeholder ?? 'Heimatadresse eingeben',
     } as unknown)
 
-    el.className = 'w-full'
+    el.className = 'w-full max-w-full'
     Object.assign(el.style, {
       width: '100%',
+      maxWidth: '100%',
+      minWidth: '0',
       height: '40px',
       borderRadius: '6px',
       boxSizing: 'border-box',
@@ -158,6 +160,6 @@ export function HomeAddressAutocomplete(props: HomeAddressAutocompleteProps) {
     )
   }
 
-  return <div ref={containerRef} className="w-full" />
+  return <div ref={containerRef} className="w-full max-w-full overflow-hidden" />
 }
 

@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { NavigationSidebar } from '@/components/navigation-sidebar'
 import { MitreisendeManager } from '@/components/mitreisende-manager'
-import { Plus, Menu, MoreVertical, Pencil, Trash2 } from 'lucide-react'
+import { Plus, Menu, MoreVertical, Pencil, Trash2, GripVertical } from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -41,6 +41,22 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import {
+  DndContext,
+  PointerSensor,
+  TouchSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core'
+import {
+  SortableContext,
+  arrayMove,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 
 /** Caption mit eigener Navigation pro Monat (für Mobile, wenn zwei Monate untereinander stehen) */
 function RangeCalendarCaption(props: CaptionProps) {
@@ -91,6 +107,44 @@ function useIsSmallViewport() {
   return isSmall
 }
 
+function SortableSelectedCampingRow({ campingplatz }: { campingplatz: Campingplatz }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: campingplatz.id,
+  })
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.6 : 1,
+  }
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className="flex items-center gap-2 py-1.5 px-2 rounded-md bg-muted/60 border border-muted-foreground/10"
+    >
+      <button
+        type="button"
+        {...attributes}
+        {...listeners}
+        className="flex items-center justify-center h-8 w-6 text-muted-foreground cursor-grab active:cursor-grabbing shrink-0"
+        style={{ touchAction: 'none' }}
+        aria-label="Campingplatz-Reihenfolge ändern"
+      >
+        <GripVertical className="h-4 w-4" />
+      </button>
+      <div className="flex-1 min-w-0">
+        <div className="text-sm font-medium truncate">{campingplatz.name}</div>
+        <div className="text-xs text-muted-foreground truncate">
+          {campingplatz.ort}, {campingplatz.land}
+          {campingplatz.bundesland && ` (${campingplatz.bundesland})`}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function UrlaubePage() {
   const router = useRouter()
   const isSmallViewport = useIsSmallViewport()
@@ -102,10 +156,9 @@ export default function UrlaubePage() {
   const [vacationMitreisende, setVacationMitreisende] = useState<Mitreisender[]>([])
   const [deleteVacationId, setDeleteVacationId] = useState<string | null>(null)
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
-  const [vacationCampingplaetze, setVacationCampingplaetze] = useState<
-    Record<string, Campingplatz[]>
-  >({})
-  const [selectedVacationForCamping, setSelectedVacationForCamping] = useState<Vacation | null>(null)
+  const [vacationCampingplaetze, setVacationCampingplaetze] = useState<Record<string, Campingplatz[]>>(
+    {}
+  )
   const [allCampingplaetze, setAllCampingplaetze] = useState<Campingplatz[]>([])
   const [campingSelectionIds, setCampingSelectionIds] = useState<string[]>([])
   const [routeLoadingId, setRouteLoadingId] = useState<string | null>(null)
@@ -125,6 +178,10 @@ export default function UrlaubePage() {
   const [abfahrtPopoverOpen, setAbfahrtPopoverOpen] = useState(false)
   const [rangePopoverOpen, setRangePopoverOpen] = useState(false)
   const [draftRange, setDraftRange] = useState<DateRange | undefined>(undefined)
+  const sensors = useSensors(
+    useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 8 } }),
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
+  )
 
   // Sidebar offen: Body-Scroll sperren
   useEffect(() => {
@@ -218,7 +275,7 @@ export default function UrlaubePage() {
   })()
 
   const handleCreateVacation = async () => {
-    if (!newVacationForm.titel || !newVacationForm.startdatum || !newVacationForm.enddatum || !newVacationForm.reiseziel_name) {
+    if (!newVacationForm.titel || !newVacationForm.startdatum || !newVacationForm.enddatum) {
       alert('Bitte füllen Sie alle erforderlichen Felder aus')
       return
     }
@@ -226,36 +283,70 @@ export default function UrlaubePage() {
     setIsLoading(true)
     try {
       const method = editingVacationId ? 'PUT' : 'POST'
-      const body = editingVacationId
-        ? { ...newVacationForm, id: editingVacationId }
-        : newVacationForm
+      const body = editingVacationId ? { ...newVacationForm, id: editingVacationId } : newVacationForm
 
       const res = await fetch('/api/vacations', {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
+        body: JSON.stringify(body),
       })
       const data = (await res.json()) as ApiResponse<Vacation>
       if (data.success && data.data) {
+        const savedVacation = data.data
+        const vacationIdForCamping = savedVacation.id
+
+        if (campingSelectionIds.length >= 0) {
+          try {
+            const campingRes = await fetch('/api/vacations/campingplaetze', {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                urlaubId: vacationIdForCamping,
+                campingplatzIds: campingSelectionIds,
+              }),
+            })
+            const campingData = (await campingRes.json()) as {
+              success?: boolean
+              error?: string
+            }
+            if (!campingData.success) {
+              alert(
+                'Fehler beim Speichern der Campingplätze: ' +
+                  (campingData.error ?? 'Unbekannt')
+              )
+            } else {
+              const selected = allCampingplaetze.filter((c) =>
+                campingSelectionIds.includes(c.id)
+              )
+              setVacationCampingplaetze((prev) => ({
+                ...prev,
+                [vacationIdForCamping]: selected,
+              }))
+            }
+          } catch (error) {
+            console.error('Failed to save vacation campingplaetze:', error)
+            alert('Fehler beim Speichern der Campingplätze.')
+          }
+        }
+
         if (editingVacationId) {
-          setVacations(vacations.map(v => v.id === editingVacationId ? data.data! : v))
+          setVacations(vacations.map((v) => (v.id === editingVacationId ? savedVacation : v)))
         } else {
-          const newVacationId = data.data.id
-          
+          const newVacationId = savedVacation.id
+
           if (vacationMitreisende.length > 0) {
-            // Assign selected travelers to the new vacation
-            const selectedIds = vacationMitreisende.map(m => m.id)
+            const selectedIds = vacationMitreisende.map((m) => m.id)
             await fetch('/api/mitreisende', {
               method: 'PUT',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 vacationId: newVacationId,
-                mitreisendeIds: selectedIds
-              })
+                mitreisendeIds: selectedIds,
+              }),
             })
           }
-          
-          setVacations([...vacations, data.data!])
+
+          setVacations([...vacations, savedVacation])
         }
         setShowNewVacationDialog(false)
         setEditingVacationId(null)
@@ -266,9 +357,10 @@ export default function UrlaubePage() {
           enddatum: '',
           reiseziel_name: '',
           reiseziel_adresse: '',
-          land_region: ''
+          land_region: '',
         })
         setVacationMitreisende([])
+        setCampingSelectionIds([])
       } else {
         alert('Fehler beim Speichern des Urlaubs: ' + (data.error ?? 'Unbekannt'))
       }
@@ -291,6 +383,8 @@ export default function UrlaubePage() {
       reiseziel_adresse: vacation.reiseziel_adresse || '',
       land_region: vacation.land_region || ''
     })
+    const existingCamping = vacationCampingplaetze[vacation.id] ?? []
+    setCampingSelectionIds(existingCamping.map((c) => c.id))
     if (fromDropdown) {
       requestAnimationFrame(() => {
         requestAnimationFrame(() => setShowNewVacationDialog(true))
@@ -314,6 +408,7 @@ export default function UrlaubePage() {
       land_region: ''
     })
     setVacationMitreisende([])
+    setCampingSelectionIds([])
   }
 
   const handleDeleteVacation = (vacationId: string) => {
@@ -348,49 +443,10 @@ export default function UrlaubePage() {
     router.push(`/?vacation=${vacationId}`)
   }
 
-  const openCampingDialogForVacation = (vacation: Vacation) => {
-    setSelectedVacationForCamping(vacation)
-    const existing = vacationCampingplaetze[vacation.id] ?? []
-    setCampingSelectionIds(existing.map((c) => c.id))
-  }
-
   const toggleCampingSelection = (id: string) => {
     setCampingSelectionIds((prev) =>
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
     )
-  }
-
-  const saveCampingSelection = async () => {
-    if (!selectedVacationForCamping) return
-    setIsLoading(true)
-    try {
-      const res = await fetch('/api/vacations/campingplaetze', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          urlaubId: selectedVacationForCamping.id,
-          campingplatzIds: campingSelectionIds,
-        }),
-      })
-      const data = (await res.json()) as { success?: boolean; error?: string }
-      if (!data.success) {
-        alert('Fehler beim Speichern der Campingplätze: ' + (data.error ?? 'Unbekannt'))
-      } else {
-        const selected = allCampingplaetze.filter((c) =>
-          campingSelectionIds.includes(c.id)
-        )
-        setVacationCampingplaetze((prev) => ({
-          ...prev,
-          [selectedVacationForCamping.id]: selected,
-        }))
-        setSelectedVacationForCamping(null)
-      }
-    } catch (error) {
-      console.error('Failed to save vacation campingplaetze:', error)
-      alert('Fehler beim Speichern der Campingplätze.')
-    } finally {
-      setIsLoading(false)
-    }
   }
 
   const calculateRoute = async (campingplatzId: string) => {
@@ -492,34 +548,9 @@ export default function UrlaubePage() {
                       id="titel"
                       placeholder="z.B. Sommerurlaub 2024"
                       value={newVacationForm.titel}
-                      onChange={(e) => setNewVacationForm({ ...newVacationForm, titel: e.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="reiseziel">Reiseziel *</Label>
-                    <Input
-                      id="reiseziel"
-                      placeholder="z.B. Schwarzwald"
-                      value={newVacationForm.reiseziel_name}
-                      onChange={(e) => setNewVacationForm({ ...newVacationForm, reiseziel_name: e.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="reiseziel_adresse">Adresse</Label>
-                    <Input
-                      id="reiseziel_adresse"
-                      placeholder="z.B. Campingplatz am See, 79822 Titisee"
-                      value={newVacationForm.reiseziel_adresse}
-                      onChange={(e) => setNewVacationForm({ ...newVacationForm, reiseziel_adresse: e.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="land_region">Land / Region</Label>
-                    <Input
-                      id="land_region"
-                      placeholder="z.B. Deutschland, Baden-Württemberg"
-                      value={newVacationForm.land_region}
-                      onChange={(e) => setNewVacationForm({ ...newVacationForm, land_region: e.target.value })}
+                      onChange={(e) =>
+                        setNewVacationForm({ ...newVacationForm, titel: e.target.value })
+                      }
                     />
                   </div>
                   <div className="space-y-4">
@@ -835,6 +866,92 @@ export default function UrlaubePage() {
                       )}
                     </div>
                   </div>
+
+                  <div className="space-y-2">
+                    <Label>Campingplätze für diesen Urlaub</Label>
+                    <p className="text-xs text-muted-foreground">
+                      Wählen Sie einen oder mehrere Campingplätze aus. Die Reihenfolge in der
+                      folgenden Liste bestimmt die Reihenfolge im Urlaub.
+                    </p>
+                    <div className="space-y-2">
+                      <div className="space-y-2 max-h-[40vh] overflow-y-auto border rounded-md p-2 bg-muted/30">
+                        {allCampingplaetze.length === 0 ? (
+                          <p className="text-sm text-muted-foreground">
+                            Noch keine Campingplätze angelegt.
+                          </p>
+                        ) : (
+                          allCampingplaetze
+                            .filter((c) => !c.is_archived)
+                            .sort((a, b) => a.name.localeCompare(b.name))
+                            .map((c) => (
+                              <label
+                                key={c.id}
+                                className="flex items-start gap-2 text-sm cursor-pointer rounded-md px-2 py-1 hover:bg-muted/60"
+                              >
+                                <input
+                                  type="checkbox"
+                                  className="mt-0.5 h-3 w-3"
+                                  checked={campingSelectionIds.includes(c.id)}
+                                  onChange={() => toggleCampingSelection(c.id)}
+                                />
+                                <div>
+                                  <div className="font-medium text-xs">
+                                    {c.name} ({c.platz_typ})
+                                  </div>
+                                  <div className="text-[11px] text-muted-foreground">
+                                    {c.ort}, {c.land}
+                                    {c.bundesland && ` (${c.bundesland})`}
+                                  </div>
+                                </div>
+                              </label>
+                            ))
+                        )}
+                      </div>
+                      <div className="space-y-1">
+                        <div className="text-xs font-medium text-muted-foreground">
+                          Ausgewählte Campingplätze (Reihenfolge per Drag &amp; Drop ändern)
+                        </div>
+                        <DndContext
+                          sensors={sensors}
+                          collisionDetection={closestCenter}
+                          onDragEnd={(event: DragEndEvent) => {
+                            const { active, over } = event
+                            if (!over || active.id === over.id) return
+                            setCampingSelectionIds((prev) => {
+                              const oldIndex = prev.indexOf(String(active.id))
+                              const newIndex = prev.indexOf(String(over.id))
+                              if (oldIndex === -1 || newIndex === -1) return prev
+                              return arrayMove(prev, oldIndex, newIndex)
+                            })
+                          }}
+                        >
+                          <SortableContext
+                            items={campingSelectionIds}
+                            strategy={verticalListSortingStrategy}
+                          >
+                            <div className="space-y-1">
+                              {campingSelectionIds.length === 0 ? (
+                                <p className="text-xs text-muted-foreground">
+                                  Noch keine Campingplätze ausgewählt.
+                                </p>
+                              ) : (
+                                campingSelectionIds.map((id) => {
+                                  const c = allCampingplaetze.find((cp) => cp.id === id)
+                                  if (!c) return null
+                                  return (
+                                    <SortableSelectedCampingRow
+                                      key={id}
+                                      campingplatz={c}
+                                    />
+                                  )
+                                })
+                              )}
+                            </div>
+                          </SortableContext>
+                        </DndContext>
+                      </div>
+                    </div>
+                  </div>
                   
                   {/* Mitreisenden-Verwaltung */}
                   <MitreisendeManager 
@@ -881,11 +998,18 @@ export default function UrlaubePage() {
                         <CardTitle>{vacation.titel}</CardTitle>
                         <CardDescription>
                           <div className="space-y-1 mt-2">
-                            {vacation.reiseziel_name && <p>📍 {vacation.reiseziel_name}</p>}
-                            {vacation.reiseziel_adresse && <p className="text-xs">   {vacation.reiseziel_adresse}</p>}
-                            {vacation.land_region && <p>🌍 {vacation.land_region}</p>}
                             {vacation.abfahrtdatum && <p>🚗 Reisebeginn: {vacation.abfahrtdatum}</p>}
                             <p>📅 {vacation.startdatum} bis {vacation.enddatum}</p>
+                            <p className="text-sm">
+                              ⛺{' '}
+                              {(vacationCampingplaetze[vacation.id] ?? []).length > 0
+                                ? `${(vacationCampingplaetze[vacation.id] ?? []).length} Campingplatz${
+                                    (vacationCampingplaetze[vacation.id] ?? []).length > 1
+                                      ? 'e'
+                                      : ''
+                                  }`
+                                : 'Noch keine Campingplätze zugeordnet'}
+                            </p>
                           </div>
                         </CardDescription>
                       </div>
@@ -940,16 +1064,6 @@ export default function UrlaubePage() {
                     <div className="mt-3 space-y-2">
                       <div className="flex items-center justify-between">
                         <span className="text-sm font-medium">Campingplätze</span>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            openCampingDialogForVacation(vacation)
-                          }}
-                        >
-                          Verwalten
-                        </Button>
                       </div>
                       <div className="space-y-1">
                         {(vacationCampingplaetze[vacation.id] ?? []).length === 0 ? (
@@ -1032,6 +1146,7 @@ export default function UrlaubePage() {
                 land_region: ''
               })
               setVacationMitreisende([])
+              setCampingSelectionIds([])
               setShowNewVacationDialog(true)
             }}
             className="h-14 w-14 rounded-full shadow-lg hover:shadow-xl transition-shadow bg-[rgb(45,79,30)] hover:bg-[rgb(45,79,30)]/90 text-white aspect-square p-0"
@@ -1041,67 +1156,6 @@ export default function UrlaubePage() {
         </div>
       </div>
 
-      <ResponsiveModal
-        open={!!selectedVacationForCamping}
-        onOpenChange={(open) => {
-          if (!open) {
-            setSelectedVacationForCamping(null)
-            setCampingSelectionIds([])
-          }
-        }}
-        title="Campingplätze zuordnen"
-        description="Wählen Sie die Campingplätze aus, die diesem Urlaub zugeordnet werden sollen."
-        contentClassName="max-w-xl max-h-[90vh] overflow-y-auto"
-      >
-        {selectedVacationForCamping && (
-          <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              Urlaub: <span className="font-medium">{selectedVacationForCamping.titel}</span>
-            </p>
-            <div className="space-y-2 max-h-[50vh] overflow-y-auto border rounded-md p-2">
-              {allCampingplaetze.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  Noch keine Campingplätze angelegt.
-                </p>
-              ) : (
-                allCampingplaetze
-                  .filter((c) => !c.is_archived)
-                  .sort((a, b) => a.name.localeCompare(b.name))
-                  .map((c) => (
-                    <label
-                      key={c.id}
-                      className="flex items-start gap-2 text-sm cursor-pointer rounded-md px-2 py-1 hover:bg-muted/60"
-                    >
-                      <input
-                        type="checkbox"
-                        className="mt-0.5 h-3 w-3"
-                        checked={campingSelectionIds.includes(c.id)}
-                        onChange={() => toggleCampingSelection(c.id)}
-                      />
-                      <div>
-                        <div className="font-medium text-xs">
-                          {c.name} ({c.platz_typ})
-                        </div>
-                        <div className="text-[11px] text-muted-foreground">
-                          {c.ort}, {c.land}
-                          {c.bundesland && ` (${c.bundesland})`}
-                        </div>
-                      </div>
-                    </label>
-                  ))
-              )}
-            </div>
-            <Button
-              type="button"
-              onClick={saveCampingSelection}
-              disabled={isLoading}
-              className="w-full"
-            >
-              {isLoading ? 'Speichert…' : 'Zuordnung speichern'}
-            </Button>
-          </div>
-        )}
-      </ResponsiveModal>
     </div>
   )
 }
