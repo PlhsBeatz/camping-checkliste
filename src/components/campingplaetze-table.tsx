@@ -18,7 +18,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Search, Filter, MoreVertical, Pencil, Trash2, Route } from 'lucide-react'
+import { Search, Filter, MoreVertical, Pencil, Trash2, Route, Globe2, PlayCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface CampingplaetzeTableProps {
@@ -315,7 +315,19 @@ export function CampingplaetzeTable({
                             item.is_archived && 'opacity-60 bg-muted/60'
                           )}
                         >
-                          <div className="space-y-1">
+                          <div className="flex gap-3 flex-1 min-w-0">
+                            {item.photo_name && (() => {
+                              const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
+                              const photoUrl = apiKey
+                                ? `https://places.googleapis.com/v1/${item.photo_name}/media?maxWidthPx=96&key=${apiKey}`
+                                : null
+                              return photoUrl ? (
+                                <div className="flex-shrink-0 w-12 h-12 rounded-lg overflow-hidden bg-muted">
+                                  <img src={photoUrl} alt="" className="w-full h-full object-cover" />
+                                </div>
+                              ) : null
+                            })()}
+                            <div className="space-y-1 min-w-0 flex-1">
                             <div className="flex items-center gap-2">
                               <span className="font-semibold text-sm">{item.name}</span>
                             </div>
@@ -340,32 +352,34 @@ export function CampingplaetzeTable({
                               </div>
                             )}
                             {(item.webseite || item.video_link) && (
-                              <div className="flex flex-wrap gap-2 text-xs mt-1">
+                              <div className="flex items-center gap-1 text-muted-foreground mt-0.5">
                                 {item.webseite && (
                                   <button
                                     type="button"
-                                    className="underline text-blue-600 hover:text-blue-800"
+                                    className="p-1 rounded hover:bg-muted hover:text-blue-600 transition-colors"
                                     onClick={() => window.open(item.webseite!, '_blank')}
+                                    aria-label="Webseite öffnen"
+                                    title="Webseite öffnen"
                                   >
-                                    Webseite
+                                    <Globe2 className="h-3.5 w-3.5" />
                                   </button>
                                 )}
                                 {item.video_link && (
                                   <button
                                     type="button"
-                                    className="underline text-blue-600 hover:text-blue-800"
+                                    className="p-1 rounded hover:bg-muted hover:text-blue-600 transition-colors"
                                     onClick={() => window.open(item.video_link!, '_blank')}
+                                    aria-label="Video öffnen"
+                                    title="Video öffnen"
                                   >
-                                    Video
+                                    <PlayCircle className="h-3.5 w-3.5" />
                                   </button>
                                 )}
                               </div>
                             )}
+                            </div>
                           </div>
                           <div className="flex flex-col items-end gap-2">
-                            <span className="inline-flex items-center rounded-full bg-emerald-100 text-emerald-800 px-2 py-0.5 text-xs">
-                              {item.platz_typ}
-                            </span>
                             {item.is_archived && (
                               <span className="inline-flex items-center rounded-full bg-gray-200 text-gray-700 px-2 py-0.5 text-xs">
                                 Archiviert

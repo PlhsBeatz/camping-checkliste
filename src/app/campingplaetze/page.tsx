@@ -13,7 +13,7 @@ import { ResponsiveModal } from '@/components/ui/responsive-modal'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { CampingplatzAddressAutocomplete } from '@/components/campingplatz-address-autocomplete'
+import { CampingplatzAddressAutocomplete, type PlacePhotoForPicker } from '@/components/campingplatz-address-autocomplete'
 import {
   Select,
   SelectContent,
@@ -34,6 +34,7 @@ interface CampingplatzFormState {
   adresse: string
   lat: number | null
   lng: number | null
+  photo_name: string | null
   pros: string[]
   cons: string[]
 }
@@ -50,6 +51,7 @@ function createEmptyForm(): CampingplatzFormState {
     adresse: '',
     lat: null,
     lng: null,
+    photo_name: null,
     pros: [''],
     cons: [''],
   }
@@ -66,6 +68,7 @@ export default function CampingplaetzePage() {
   const [editId, setEditId] = useState<string | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Campingplatz | null>(null)
   const [archivePrompt, setArchivePrompt] = useState<Campingplatz | null>(null)
+  const [placePhotos, setPlacePhotos] = useState<PlacePhotoForPicker[]>([])
   const adresseElementRef = useRef<HTMLElement | null>(null)
 
   useEffect(() => {
@@ -113,15 +116,18 @@ export default function CampingplaetzePage() {
       adresse: item.adresse ?? '',
       lat: item.lat ?? null,
       lng: item.lng ?? null,
+      photo_name: item.photo_name ?? null,
       pros: item.pros.length ? item.pros : [''],
       cons: item.cons.length ? item.cons : [''],
     })
+    setPlacePhotos(item.photo_name ? [{ name: item.photo_name }] : [])
     setShowDialog(true)
   }
 
   const handleAdd = () => {
     setEditId(null)
     setForm(createEmptyForm())
+    setPlacePhotos([])
     setShowDialog(true)
   }
 
@@ -170,6 +176,7 @@ export default function CampingplaetzePage() {
         adresse: form.adresse.trim() || null,
         lat: form.lat,
         lng: form.lng,
+        photo_name: form.photo_name ?? null,
         pros: form.pros.map((p) => p.trim()).filter((p) => p.length > 0),
         cons: form.cons.map((p) => p.trim()).filter((p) => p.length > 0),
       }
@@ -191,6 +198,7 @@ export default function CampingplaetzePage() {
       setShowDialog(false)
       setEditId(null)
       setForm(createEmptyForm())
+      setPlacePhotos([])
     } catch (error) {
       console.error('Failed to save campingplatz:', error)
       alert('Fehler beim Speichern des Campingplatzes.')
@@ -304,7 +312,7 @@ export default function CampingplaetzePage() {
             </div>
           </div>
 
-          <div className="flex-1 min-h-0 min-w-0 mt-4 md:mt-6 overflow-hidden">
+          <div className="flex-1 min-h-0 min-w-0 mt-4 md:mt-6 overflow-y-auto max-md:overflow-y-auto">
             {isLoading ? (
               <div className="flex flex-col items-center justify-center py-20 gap-4">
                 <div className="animate-spin rounded-full h-12 w-12 border-4 border-[rgb(45,79,30)] border-t-transparent" />
@@ -342,6 +350,7 @@ export default function CampingplaetzePage() {
             setShowDialog(false)
             setEditId(null)
             setForm(createEmptyForm())
+            setPlacePhotos([])
           } else {
             setShowDialog(true)
           }
@@ -358,70 +367,40 @@ export default function CampingplaetzePage() {
         <div className="space-y-4 px-6 pt-4 pb-6">
           <div>
             <Label htmlFor="cp-name">Name *</Label>
-            <Input
-              id="cp-name"
+            <CampingplatzAddressAutocomplete
               value={form.name}
-              onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
-              onBlur={() => {
-                setForm((prev) => {
-                  if (prev.adresse.trim()) return prev
-                  const seeded = prev.name.trim()
-                  if (!seeded) return prev
-                  return { ...prev, adresse: seeded }
-                })
-                requestAnimationFrame(() => {
-                  adresseElementRef.current?.focus()
-                })
+              onChange={(v) => setForm((prev) => ({ ...prev, name: v }))}
+              onResolve={(r) => {
+                setForm((prev) => ({
+                  ...prev,
+                  name: r.placeName ?? prev.name,
+                  adresse: r.address,
+                  lat: r.lat,
+                  lng: r.lng,
+                  ort: r.ort ?? prev.ort,
+                  bundesland: r.bundesland ?? prev.bundesland,
+                  land: r.land ?? prev.land,
+                }))
               }}
-              placeholder="z.B. Campingplatz am See"
+              onPlacePhotos={(photos) => setPlacePhotos(photos)}
+              onElementReady={(el) => {
+                adresseElementRef.current = el
+              }}
+              placeholder="z.B. Campingplatz am See oder Name eingeben"
             />
           </div>
           <div>
             <Label htmlFor="cp-adresse">Adresse</Label>
-            <div id="cp-adresse">
-              <CampingplatzAddressAutocomplete
-                value={form.adresse}
-                onChange={(v) => setForm((prev) => ({ ...prev, adresse: v }))}
-                onResolve={(r) => {
-                  setForm((prev) => ({
-                    ...prev,
-                    adresse: r.address,
-                    lat: r.lat,
-                    lng: r.lng,
-                    // Ort bleibt für Sortierung/Anzeige in der App relevant, wird aber aus der Adresse abgeleitet
-                    ort: r.ort ?? prev.ort,
-                    bundesland: r.bundesland ?? prev.bundesland,
-                    land: r.land ?? prev.land,
-                  }))
-                }}
-                onElementReady={(el) => {
-                  adresseElementRef.current = el
-                }}
-                placeholder="Straße, Hausnummer, PLZ, Ort"
-              />
-            </div>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <Label>Ort (aus Adresse)</Label>
-              <Input value={form.ort} disabled placeholder="Wird automatisch gesetzt" />
-            </div>
-            <div>
-              <Label>Koordinaten</Label>
-              <Input
-                value={
-                  form.lat != null && form.lng != null
-                    ? `${form.lat.toFixed(5)}, ${form.lng.toFixed(5)}`
-                    : ''
-                }
-                disabled
-                placeholder="Wird automatisch gesetzt"
-              />
-            </div>
+            <Input
+              id="cp-adresse"
+              value={form.adresse}
+              onChange={(e) => setForm((prev) => ({ ...prev, adresse: e.target.value }))}
+              placeholder="Straße, Hausnummer, PLZ, Ort (wird bei Namenssuche automatisch gefüllt)"
+            />
           </div>
           <div>
             <Label className="text-muted-foreground text-sm">
-              Tipp: Bitte die Adresse aus der Vorschlagsliste auswählen – dann werden Ort/Land/Bundesland und Koordinaten automatisch gefüllt.
+              Tipp: Im Namensfeld tippen und einen Vorschlag wählen – dann werden Adresse, Ort, Land und Koordinaten automatisch gesetzt.
             </Label>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -487,6 +466,42 @@ export default function CampingplaetzePage() {
                 <SelectItem value="Stellplatz">Stellplatz</SelectItem>
               </SelectContent>
             </Select>
+          </div>
+
+          <div>
+            <Label className="block mb-2">Bild aus Google Maps</Label>
+            {placePhotos.length > 0 ? (
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+                {placePhotos.slice(0, 10).map((photo, idx) => {
+                  const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
+                  const photoUrl = apiKey && photo.name
+                    ? `https://places.googleapis.com/v1/${photo.name}/media?maxWidthPx=400&key=${apiKey}`
+                    : null
+                  const isSelected = form.photo_name === photo.name
+                  return (
+                    <button
+                      key={photo.name || idx}
+                      type="button"
+                      onClick={() => setForm((prev) => ({ ...prev, photo_name: photo.name }))}
+                      className={cn(
+                        'aspect-square rounded-lg border-2 overflow-hidden bg-muted hover:opacity-90 transition-opacity',
+                        isSelected ? 'border-[rgb(45,79,30)] ring-2 ring-[rgb(45,79,30)]' : 'border-transparent'
+                      )}
+                    >
+                      {photoUrl ? (
+                        <img src={photoUrl} alt="" className="w-full h-full object-cover" />
+                      ) : (
+                        <span className="text-xs text-muted-foreground flex items-center justify-center h-full">Foto</span>
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                Für diesen Ort sind keine Bilder von Google Maps verfügbar. Wählen Sie einen Platz aus der Namenssuche, um bis zu 10 Bilder zur Auswahl zu sehen.
+              </p>
+            )}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -573,6 +588,7 @@ export default function CampingplaetzePage() {
                 setShowDialog(false)
                 setEditId(null)
                 setForm(createEmptyForm())
+                setPlacePhotos([])
               }}
             >
               Abbrechen

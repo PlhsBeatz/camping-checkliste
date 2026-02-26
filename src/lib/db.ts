@@ -166,6 +166,8 @@ export interface Campingplatz {
   adresse?: string | null
   lat?: number | null
   lng?: number | null
+  /** Google Places Photo Resource-Name (z. B. places/ChIJ.../photos/...) */
+  photo_name?: string | null
   is_archived: boolean
   created_at: string
   updated_at?: string
@@ -2859,6 +2861,7 @@ export async function getCampingplaetze(
       adresse: row.adresse != null ? String(row.adresse) : null,
       lat: row.lat != null ? Number(row.lat) : null,
       lng: row.lng != null ? Number(row.lng) : null,
+      photo_name: row.photo_name != null ? String(row.photo_name) : null,
       is_archived: !!(row.is_archived ?? 0),
       created_at: String(row.created_at || ''),
       updated_at: row.updated_at != null ? String(row.updated_at) : undefined,
@@ -2892,6 +2895,7 @@ export async function getCampingplatzById(
       adresse: row.adresse != null ? String(row.adresse) : null,
       lat: row.lat != null ? Number(row.lat) : null,
       lng: row.lng != null ? Number(row.lng) : null,
+      photo_name: row.photo_name != null ? String(row.photo_name) : null,
       is_archived: !!(row.is_archived ?? 0),
       created_at: String(row.created_at || ''),
       updated_at: row.updated_at != null ? String(row.updated_at) : undefined,
@@ -2917,6 +2921,7 @@ export async function createCampingplatz(
     adresse?: string | null
     lat?: number | null
     lng?: number | null
+    photo_name?: string | null
   }
 ): Promise<Campingplatz | null> {
   try {
@@ -2924,8 +2929,8 @@ export async function createCampingplatz(
     await db
       .prepare(
         `INSERT INTO campingplaetze 
-         (id, name, land, bundesland, ort, webseite, video_link, platz_typ, pros, cons, adresse, lat, lng) 
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+         (id, name, land, bundesland, ort, webseite, video_link, platz_typ, pros, cons, adresse, lat, lng, photo_name) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .bind(
         id,
@@ -2940,7 +2945,8 @@ export async function createCampingplatz(
         JSON.stringify(data.cons ?? []),
         data.adresse ?? null,
         data.lat ?? null,
-        data.lng ?? null
+        data.lng ?? null,
+        data.photo_name ?? null
       )
       .run()
     return getCampingplatzById(db, id)
@@ -2966,6 +2972,7 @@ export async function updateCampingplatz(
     adresse: string | null
     lat: number | null
     lng: number | null
+    photo_name: string | null
     is_archived: boolean
   }>
 ): Promise<Campingplatz | null> {
@@ -3020,6 +3027,10 @@ export async function updateCampingplatz(
     if (updates.lng !== undefined) {
       fields.push('lng = ?')
       values.push(updates.lng)
+    }
+    if (updates.photo_name !== undefined) {
+      fields.push('photo_name = ?')
+      values.push(updates.photo_name)
     }
     if (updates.is_archived !== undefined) {
       fields.push('is_archived = ?')
@@ -3101,6 +3112,7 @@ export async function getCampingplaetzeForVacation(
       adresse: row.adresse != null ? String(row.adresse) : null,
       lat: row.lat != null ? Number(row.lat) : null,
       lng: row.lng != null ? Number(row.lng) : null,
+      photo_name: row.photo_name != null ? String(row.photo_name) : null,
       is_archived: !!(row.is_archived ?? 0),
       created_at: String(row.created_at || ''),
       updated_at: row.updated_at != null ? String(row.updated_at) : undefined,

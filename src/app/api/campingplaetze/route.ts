@@ -53,6 +53,7 @@ export async function POST(request: NextRequest) {
       adresse?: string | null
       lat?: number | null
       lng?: number | null
+      photo_name?: string | null
     }
 
     if (!body.name || !body.land || !body.ort || !body.platz_typ) {
@@ -75,6 +76,7 @@ export async function POST(request: NextRequest) {
       adresse: body.adresse ?? null,
       lat: body.lat ?? null,
       lng: body.lng ?? null,
+      photo_name: body.photo_name ?? null,
     })
 
     if (!campingplatz) {
@@ -115,6 +117,7 @@ export async function PUT(request: NextRequest) {
       adresse?: string | null
       lat?: number | null
       lng?: number | null
+      photo_name?: string | null
       is_archived?: boolean
     }
 
@@ -136,6 +139,7 @@ export async function PUT(request: NextRequest) {
       adresse: body.adresse ?? null,
       lat: body.lat ?? null,
       lng: body.lng ?? null,
+      photo_name: body.photo_name ?? null,
       is_archived: body.is_archived,
     })
 
