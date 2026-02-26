@@ -315,7 +315,10 @@ export function CampingplatzAddressAutocomplete(props: CampingplatzAddressAutoco
 
   const showDropdown =
     dropdownOpen &&
-    (suggestions.length > 0 || isLoading || error || (value.trim() && !isLoading && suggestions.length === 0 && !isExpandedSearch))
+    (suggestions.length > 0 ||
+      isLoading ||
+      !!error ||
+      (!!value.trim() && !isLoading && suggestions.length === 0 && !isExpandedSearch))
 
   const showFallbackButton =
     !isLoading &&
