@@ -23,7 +23,9 @@ type NewPlace = {
   location?: PlaceLocation
   addressComponents?: PlaceAddressComponent[]
   photos?: Array<{ name?: string }>
-  /** Bei Places API (New): hinterlegte Website-URL */
+  /** Klassisches Website-Feld der JS Places API */
+  website?: string
+  /** Bei neueren Versionen ggf. zusätzlich verfügbar */
   websiteUri?: string
   fetchFields?: (opts: { fields: string[] }) => Promise<void>
 }
@@ -289,12 +291,15 @@ export function CampingplatzAddressAutocomplete(props: CampingplatzAddressAutoco
         // Im Feld immer den Namen anzeigen (nicht die Adresse): zuerst displayName, dann Text aus der Vorschlagsliste, sonst Adresse
         const displayValue = placeName ?? addr
 
-        // Website-URL optional nachladen; falls das Feld in der aktuellen SDK-Version nicht unterstützt wird,
-        // wird der Fehler hier bewusst geschluckt.
+        // Website-URL optional nachladen; zuerst klassisches `website`, ggf. zusätzlich `websiteUri`.
         let website: string | null = null
         try {
-          await place.fetchFields?.({ fields: ['websiteUri'] })
-          website = (place as NewPlace).websiteUri ?? null
+          await place.fetchFields?.({ fields: ['website'] })
+          website = (place as NewPlace).website ?? null
+          if (!website) {
+            await place.fetchFields?.({ fields: ['websiteUri'] })
+            website = (place as NewPlace).websiteUri ?? null
+          }
         } catch {
           website = null
         }
