@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { NavigationSidebar } from '@/components/navigation-sidebar'
 import { MitreisendeManager } from '@/components/mitreisende-manager'
-import { Plus, Menu, MoreVertical, Pencil, Trash2, GripVertical } from 'lucide-react'
+import { Plus, Menu, MoreVertical, Pencil, Trash2, GripVertical, Route } from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -41,6 +41,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import Image from 'next/image'
 import {
   DndContext,
   PointerSensor,
@@ -161,7 +162,6 @@ export default function UrlaubePage() {
   )
   const [allCampingplaetze, setAllCampingplaetze] = useState<Campingplatz[]>([])
   const [campingSelectionIds, setCampingSelectionIds] = useState<string[]>([])
-  const [routeLoadingId, setRouteLoadingId] = useState<string | null>(null)
   const [routeInfo, setRouteInfo] = useState<
     Record<string, { distanceKm: number; durationMinutes: number; provider: string }>
   >({})
@@ -257,6 +257,51 @@ export default function UrlaubePage() {
       void loadPerVacation()
     }
   }, [vacations])
+
+  // Routeninfo (Entfernung / Fahrzeit) für alle in Urlaube eingebundenen Campingplätze lazy laden
+  useEffect(() => {
+    let aborted = false
+    const controller = new AbortController()
+
+    const loadRoutes = async () => {
+      const seen = new Set<string>()
+      const allCampingForVacations = Object.values(vacationCampingplaetze).flat()
+      for (const cp of allCampingForVacations) {
+        if (aborted) break
+        if (!cp.lat || !cp.lng) continue
+        if (seen.has(cp.id)) continue
+        seen.add(cp.id)
+        if (routeInfo[cp.id]) continue
+        try {
+          const res = await fetch('/api/routes/campingplatz', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ campingplatzId: cp.id }),
+            signal: controller.signal,
+          })
+          if (!res.ok) continue
+          const data = (await res.json()) as {
+            success?: boolean
+            data?: { distanceKm: number; durationMinutes: number; provider: string }
+          }
+          if (data.success && data.data && !aborted) {
+            setRouteInfo((prev) => ({
+              ...prev,
+              [cp.id]: data.data!,
+            }))
+          }
+        } catch {
+          if (aborted) return
+        }
+      }
+    }
+
+    void loadRoutes()
+    return () => {
+      aborted = true
+      controller.abort()
+    }
+  }, [vacationCampingplaetze, routeInfo])
 
   // Sortieren nach Startdatum (chronologisch), vergangene ausblenden (Enddatum > 7 Tage zurück)
   const displayedVacations = (() => {
@@ -449,38 +494,9 @@ export default function UrlaubePage() {
     )
   }
 
-  const calculateRoute = async (campingplatzId: string) => {
-    setRouteLoadingId(campingplatzId)
-    try {
-      const res = await fetch('/api/routes/campingplatz', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ campingplatzId }),
-      })
-      const data = (await res.json()) as {
-        success?: boolean
-        error?: string
-        data?: { distanceKm: number; durationMinutes: number; provider: string }
-      }
-      if (!data.success || !data.data) {
-        alert('Fehler bei der Routenberechnung: ' + (data.error ?? 'Unbekannt'))
-        return
-      }
-      setRouteInfo((prev) => ({
-        ...prev,
-        [campingplatzId]: data.data!,
-      }))
-    } catch (error) {
-      console.error('Failed to calculate route:', error)
-      alert('Fehler bei der Routenberechnung.')
-    } finally {
-      setRouteLoadingId(null)
-    }
-  }
-
   const openInAdacMaps = (campingplatz: Campingplatz) => {
-    const label = `${campingplatz.name}, ${campingplatz.ort}`
-    const url = `https://maps.adac.de/?poi=${encodeURIComponent(label)}`
+    const label = `${campingplatz.name}, ${campingplatz.ort}, ${campingplatz.land}`
+    const url = `https://maps.adac.de/routenplaner?poi=${encodeURIComponent(label)}`
     window.open(url, '_blank')
   }
 
@@ -1076,46 +1092,87 @@ export default function UrlaubePage() {
                             return (
                               <div
                                 key={cp.id}
-                                className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-dashed px-2 py-1.5 text-xs"
+                                className={cn(
+                                  'bg-white rounded-xl border border-gray-200 shadow-sm px-3 py-2 flex items-start justify-between gap-3',
+                                  cp.is_archived && 'opacity-60 bg-muted/60'
+                                )}
                               >
-                                <div>
-                                  <div className="font-medium">
-                                    {cp.name} ({cp.platz_typ})
-                                  </div>
-                                  <div className="text-[11px] text-muted-foreground">
-                                    {cp.ort}, {cp.land}
-                                  </div>
-                                  {r && (
-                                    <div className="text-[11px] text-muted-foreground mt-0.5">
-                                      Entfernung ca. {r.distanceKm.toFixed(1).replace('.', ',')} km,{' '}
-                                      {Math.round(r.durationMinutes)} Min. ({r.provider})
+                                <div className="flex gap-3 flex-1 min-w-0">
+                                  {cp.photo_name &&
+                                    (() => {
+                                      const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
+                                      const photoUrl =
+                                        apiKey && cp.photo_name
+                                          ? `https://places.googleapis.com/v1/${cp.photo_name}/media?maxWidthPx=96&key=${apiKey}`
+                                          : null
+                                      return photoUrl ? (
+                                        <div className="flex-shrink-0 w-12 h-12 rounded-lg overflow-hidden bg-muted">
+                                          <Image
+                                            src={photoUrl}
+                                            alt=""
+                                            width={48}
+                                            height={48}
+                                            unoptimized
+                                            className="w-full h-full object-cover"
+                                          />
+                                        </div>
+                                      ) : null
+                                    })()}
+                                  <div className="space-y-1 min-w-0 flex-1">
+                                    <div className="flex items-center gap-2">
+                                      <span className="font-semibold text-sm truncate">
+                                        {cp.name}
+                                      </span>
                                     </div>
-                                  )}
+                                    <div className="text-xs text-gray-600">
+                                      {cp.ort}, {cp.land}
+                                      {cp.bundesland && ` (${cp.bundesland})`}
+                                    </div>
+                                    {r && (
+                                      <div className="flex items-center gap-1 text-xs text-gray-600 mt-0.5">
+                                        <Route className="h-3.5 w-3.5 text-[rgb(45,79,30)]" />
+                                        <span>
+                                          {Math.round(r.distanceKm)} km
+                                          {r.durationMinutes != null && (() => {
+                                            const hours = Math.floor(r.durationMinutes / 60)
+                                            const minutes = Math.round(r.durationMinutes % 60)
+                                            const parts: string[] = []
+                                            if (hours > 0) parts.push(`${hours} h`)
+                                            if (minutes > 0 || hours === 0)
+                                              parts.push(`${minutes} min`)
+                                            return ` · ${parts.join(' ')}`
+                                          })()}
+                                        </span>
+                                      </div>
+                                    )}
+                                  </div>
                                 </div>
-                                <div className="flex flex-col gap-1">
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      void calculateRoute(cp.id)
-                                    }}
-                                    disabled={routeLoadingId === cp.id}
-                                  >
-                                    {routeLoadingId === cp.id ? 'Berechne…' : 'Route berechnen'}
-                                  </Button>
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      openInAdacMaps(cp)
-                                    }}
-                                  >
-                                    In ADAC Maps öffnen
-                                  </Button>
+                                <div className="flex flex-col items-end gap-2">
+                                  <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-8 w-8 p-0"
+                                        onClick={(e) => e.stopPropagation()}
+                                      >
+                                        <MoreVertical className="h-4 w-4" />
+                                      </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent
+                                      align="end"
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      <DropdownMenuItem
+                                        onSelect={() => {
+                                          openInAdacMaps(cp)
+                                        }}
+                                      >
+                                        <Route className="h-4 w-4 mr-2" />
+                                        ADAC Routenplanung öffnen
+                                      </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                  </DropdownMenu>
                                 </div>
                               </div>
                             )
