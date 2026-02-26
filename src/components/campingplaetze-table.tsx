@@ -331,6 +331,32 @@ export function CampingplaetzeTable({
                             <div className="space-y-1 min-w-0 flex-1">
                             <div className="flex items-center gap-2">
                               <span className="font-semibold text-sm">{item.name}</span>
+                              {(item.webseite || item.video_link) && (
+                                <div className="flex items-center gap-1 text-muted-foreground">
+                                  {item.webseite && (
+                                    <button
+                                      type="button"
+                                      className="p-1 rounded hover:bg-muted hover:text-blue-600 transition-colors"
+                                      onClick={() => window.open(item.webseite!, '_blank')}
+                                      aria-label="Webseite öffnen"
+                                      title="Webseite öffnen"
+                                    >
+                                      <Globe2 className="h-3.5 w-3.5" />
+                                    </button>
+                                  )}
+                                  {item.video_link && (
+                                    <button
+                                      type="button"
+                                      className="p-1 rounded hover:bg-muted hover:text-blue-600 transition-colors"
+                                      onClick={() => window.open(item.video_link!, '_blank')}
+                                      aria-label="Video öffnen"
+                                      title="Video öffnen"
+                                    >
+                                      <PlayCircle className="h-3.5 w-3.5" />
+                                    </button>
+                                  )}
+                                </div>
+                              )}
                             </div>
                             <div className="text-xs text-gray-600">
                               {item.ort}, {item.land}
@@ -350,32 +376,6 @@ export function CampingplaetzeTable({
                                     return ` · ${parts.join(' ')}`
                                   })()}
                                 </span>
-                              </div>
-                            )}
-                            {(item.webseite || item.video_link) && (
-                              <div className="flex items-center gap-1 text-muted-foreground mt-0.5">
-                                {item.webseite && (
-                                  <button
-                                    type="button"
-                                    className="p-1 rounded hover:bg-muted hover:text-blue-600 transition-colors"
-                                    onClick={() => window.open(item.webseite!, '_blank')}
-                                    aria-label="Webseite öffnen"
-                                    title="Webseite öffnen"
-                                  >
-                                    <Globe2 className="h-3.5 w-3.5" />
-                                  </button>
-                                )}
-                                {item.video_link && (
-                                  <button
-                                    type="button"
-                                    className="p-1 rounded hover:bg-muted hover:text-blue-600 transition-colors"
-                                    onClick={() => window.open(item.video_link!, '_blank')}
-                                    aria-label="Video öffnen"
-                                    title="Video öffnen"
-                                  >
-                                    <PlayCircle className="h-3.5 w-3.5" />
-                                  </button>
-                                )}
                               </div>
                             )}
                             </div>
@@ -400,6 +400,28 @@ export function CampingplaetzeTable({
                                 </Button>
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end">
+                                {item.webseite && (
+                                  <DropdownMenuItem
+                                    onSelect={() => {
+                                      setOpenMenuId(null)
+                                      window.open(item.webseite!, '_blank')
+                                    }}
+                                  >
+                                    <Globe2 className="h-4 w-4 mr-2" />
+                                    Webseite öffnen
+                                  </DropdownMenuItem>
+                                )}
+                                {item.video_link && (
+                                  <DropdownMenuItem
+                                    onSelect={() => {
+                                      setOpenMenuId(null)
+                                      window.open(item.video_link!, '_blank')
+                                    }}
+                                  >
+                                    <PlayCircle className="h-4 w-4 mr-2" />
+                                    Video öffnen
+                                  </DropdownMenuItem>
+                                )}
                                 <DropdownMenuItem
                                   onSelect={() => {
                                     setOpenMenuId(null)

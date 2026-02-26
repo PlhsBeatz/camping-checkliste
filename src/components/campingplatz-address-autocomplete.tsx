@@ -23,6 +23,8 @@ type NewPlace = {
   location?: PlaceLocation
   addressComponents?: PlaceAddressComponent[]
   photos?: Array<{ name?: string }>
+  /** Bei Places API (New): hinterlegte Website-URL */
+  websiteUri?: string
   fetchFields?: (opts: { fields: string[] }) => Promise<void>
 }
 
@@ -35,6 +37,8 @@ export type CampingplatzAddressResolve = {
   land: string | null
   /** Anzeigename des Ortes (z. B. für Name-Feld) */
   placeName?: string
+  /** Von Google hinterlegte Website-URL (falls vorhanden) */
+  website?: string | null
 }
 
 export type PlacePhotoForPicker = { name: string }
@@ -262,11 +266,11 @@ export function CampingplatzAddressAutocomplete(props: CampingplatzAddressAutoco
   }, [value])
 
   const handleSelectSuggestion = useCallback(
-    async (prediction: { toPlace: () => Promise<NewPlace> }) => {
+    async (prediction: PlacePrediction) => {
       try {
         const place = await prediction.toPlace()
         await place.fetchFields?.({
-          fields: ['displayName', 'formattedAddress', 'location', 'addressComponents', 'photos'],
+          fields: ['displayName', 'formattedAddress', 'location', 'addressComponents', 'photos', 'websiteUri'],
         })
         const addr = (place.formattedAddress ?? value) as string
         const loc = place.location
@@ -278,8 +282,11 @@ export function CampingplatzAddressAutocomplete(props: CampingplatzAddressAutoco
         const land = pickComponent(comps, 'country')
         const bundesland = pickComponent(comps, 'administrative_area_level_1')
         const ort = deriveOrt(comps)
-        const placeName = place.displayName?.text ?? undefined
+        const mainText = prediction.mainText?.text ?? prediction.text?.text ?? ''
+        const placeName = place.displayName?.text ?? (mainText || undefined)
+        // Im Feld immer den Namen anzeigen (nicht die Adresse): zuerst displayName, dann Text aus der Vorschlagsliste, sonst Adresse
         const displayValue = placeName ?? addr
+        const website = place.websiteUri ?? null
         onChange(displayValue)
         onResolve({
           address: addr,
@@ -289,6 +296,7 @@ export function CampingplatzAddressAutocomplete(props: CampingplatzAddressAutoco
           bundesland,
           land,
           placeName,
+          website,
         })
         const photos = place.photos ?? []
         const forPicker: PlacePhotoForPicker[] = photos

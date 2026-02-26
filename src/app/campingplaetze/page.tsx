@@ -381,6 +381,7 @@ export default function CampingplaetzePage() {
                   ort: r.ort ?? prev.ort,
                   bundesland: r.bundesland ?? prev.bundesland,
                   land: r.land ?? prev.land,
+                  webseite: r.website ?? prev.webseite,
                 }))
               }}
               onPlacePhotos={(photos) => setPlacePhotos(photos)}
