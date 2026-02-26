@@ -86,7 +86,7 @@ export function HomeAddressAutocomplete(props: HomeAddressAutocompleteProps) {
     })
 
     if (value) {
-      ;(el as any).value = value
+      ;(el as unknown as { value?: string }).value = value
     }
 
     type PlaceLocation = {

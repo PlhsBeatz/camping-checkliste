@@ -19,6 +19,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Search, Filter, MoreVertical, Pencil, Trash2, Route, Globe2, PlayCircle } from 'lucide-react'
+import Image from 'next/image'
 import { cn } from '@/lib/utils'
 
 interface CampingplaetzeTableProps {
@@ -323,7 +324,7 @@ export function CampingplaetzeTable({
                                 : null
                               return photoUrl ? (
                                 <div className="flex-shrink-0 w-12 h-12 rounded-lg overflow-hidden bg-muted">
-                                  <img src={photoUrl} alt="" className="w-full h-full object-cover" />
+                                  <Image src={photoUrl} alt="" width={48} height={48} unoptimized className="w-full h-full object-cover" />
                                 </div>
                               ) : null
                             })()}

@@ -14,6 +14,7 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { CampingplatzAddressAutocomplete, type PlacePhotoForPicker } from '@/components/campingplatz-address-autocomplete'
+import Image from 'next/image'
 import {
   Select,
   SelectContent,
@@ -489,7 +490,7 @@ export default function CampingplaetzePage() {
                       )}
                     >
                       {photoUrl ? (
-                        <img src={photoUrl} alt="" className="w-full h-full object-cover" />
+                        <Image src={photoUrl} alt="" width={400} height={400} unoptimized className="w-full h-full object-cover" />
                       ) : (
                         <span className="text-xs text-muted-foreground flex items-center justify-center h-full">Foto</span>
                       )}

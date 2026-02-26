@@ -199,7 +199,7 @@ export function CampingplatzAddressAutocomplete(props: CampingplatzAddressAutoco
         if (requestId !== lastRequestIdRef.current) return
         setSuggestions(result.suggestions ?? [])
         setError(null)
-      } catch (e) {
+      } catch {
         if (requestId !== lastRequestIdRef.current) return
         setSuggestions([])
         setError('Suche derzeit nicht verfügbar. Bitte später erneut versuchen.')
@@ -395,6 +395,7 @@ export function CampingplatzAddressAutocomplete(props: CampingplatzAddressAutoco
                     key={idx}
                     type="button"
                     role="option"
+                    aria-selected={false}
                     className="w-full text-left px-3 py-2 text-sm hover:bg-muted focus:bg-muted focus:outline-none"
                     onMouseDown={(e) => {
                       e.preventDefault()
