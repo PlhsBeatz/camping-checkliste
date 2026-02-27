@@ -1,19 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth, requireAdmin } from '@/lib/api-auth'
 
+type PlaceAddressComponentServer = {
+  longText?: string
+  shortText?: string
+  types?: string[]
+}
+
+type PlaceServer = {
+  displayName?: { text?: string }
+  formattedAddress?: string
+  location?: { latitude?: number; longitude?: number }
+  addressComponents?: PlaceAddressComponentServer[]
+  photos?: Array<{ name?: string }>
+  websiteUri?: string
+}
+
 type PlacesSearchTextResponse = {
-  places?: Array<{
-    displayName?: { text?: string }
-    formattedAddress?: string
-    location?: { latitude?: number; longitude?: number }
-    addressComponents?: Array<{
-      longText?: string
-      shortText?: string
-      types?: string[]
-    }>
-    photos?: Array<{ name?: string }>
-    websiteUri?: string
-  }>
+  places?: PlaceServer[]
 }
 
 type CampingplatzAddressResolve = {
@@ -29,10 +33,7 @@ type CampingplatzAddressResolve = {
 
 type PlacePhotoForPicker = { name: string }
 
-function pickComponent(
-  comps: PlacesSearchTextResponse['places'][number]['addressComponents'] | undefined,
-  type: string
-): string | null {
+function pickComponent(comps: PlaceAddressComponentServer[] | undefined, type: string): string | null {
   if (!comps?.length) return null
   for (const c of comps) {
     if (Array.isArray(c.types) && c.types.includes(type)) {
@@ -43,9 +44,7 @@ function pickComponent(
   return null
 }
 
-function deriveOrt(
-  comps: PlacesSearchTextResponse['places'][number]['addressComponents'] | undefined
-): string | null {
+function deriveOrt(comps: PlaceAddressComponentServer[] | undefined): string | null {
   return (
     pickComponent(comps, 'locality') ??
     pickComponent(comps, 'postal_town') ??
