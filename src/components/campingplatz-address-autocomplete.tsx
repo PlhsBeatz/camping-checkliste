@@ -304,7 +304,7 @@ export function CampingplatzAddressAutocomplete(props: CampingplatzAddressAutoco
       name = null
     }
 
-    const displayName = name ?? value.trim() || url
+    const displayName = (name ?? value.trim()) || url
     const address = displayName
 
     onChange(displayName)
