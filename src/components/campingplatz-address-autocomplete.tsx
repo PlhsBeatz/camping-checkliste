@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type FocusEvent } from 'react'
 import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
 type PlaceLocation = {
@@ -530,23 +531,33 @@ export function CampingplatzAddressAutocomplete(props: CampingplatzAddressAutoco
               </button>
               {showLinkImport && (
                 <div className="px-3 pb-2 pt-1 space-y-1">
-                  <Input
-                    value={googleMapsLink}
-                    onChange={(e) => setGoogleMapsLink(e.target.value)}
-                    placeholder="https://maps.app.goo.gl/..."
-                    className="h-8 text-sm"
-                    autoFocus
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault()
-                        handleImportFromGoogleMapsLink()
-                      } else if (e.key === 'Escape') {
-                        e.preventDefault()
-                        setShowLinkImport(false)
-                        setGoogleMapsLink('')
-                      }
-                    }}
-                  />
+                  <div className="flex items-center gap-2">
+                    <Input
+                      value={googleMapsLink}
+                      onChange={(e) => setGoogleMapsLink(e.target.value)}
+                      placeholder="https://maps.app.goo.gl/..."
+                      className="h-8 text-sm"
+                      autoFocus
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault()
+                          handleImportFromGoogleMapsLink()
+                        } else if (e.key === 'Escape') {
+                          e.preventDefault()
+                          setShowLinkImport(false)
+                          setGoogleMapsLink('')
+                        }
+                      }}
+                    />
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="h-8 px-3 text-xs bg-[rgb(45,79,30)] hover:bg-[rgb(45,79,30)]/90 text-white"
+                      onClick={() => handleImportFromGoogleMapsLink()}
+                    >
+                      OK
+                    </Button>
+                  </div>
                   <p className="text-[11px] leading-snug text-muted-foreground">
                     Tipp: In Google Maps den Platz öffnen, auf „Teilen“ klicken und den Link hier einfügen.
                   </p>
