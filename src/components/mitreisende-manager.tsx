@@ -5,11 +5,17 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Plus, Users } from 'lucide-react'
+import { Users, ChevronDown } from 'lucide-react'
 import { Mitreisender } from '@/lib/db'
 import type { ApiResponse } from '@/lib/api-types'
 import { getCachedMitreisende } from '@/lib/offline-sync'
 import { cacheMitreisende } from '@/lib/offline-db'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 
 interface MitreisendeManagerProps {
   vacationId: string | null
@@ -19,8 +25,7 @@ interface MitreisendeManagerProps {
 export function MitreisendeManager({ vacationId, onMitreisendeChange }: MitreisendeManagerProps) {
   const [allMitreisende, setAllMitreisende] = useState<Mitreisender[]>([])
   const [vacationMitreisende, setVacationMitreisende] = useState<string[]>([])
-  const [showAddDialog, setShowAddDialog] = useState(false)
-  const [newMitreisenderName, setNewMitreisenderName] = useState('')
+  const [showAdditionalPicker, setShowAdditionalPicker] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [initialLoadDone, setInitialLoadDone] = useState(false)
 
@@ -125,49 +130,6 @@ export function MitreisendeManager({ vacationId, onMitreisendeChange }: Mitreise
     }
   }
 
-  const handleCreateMitreisender = async () => {
-    if (!newMitreisenderName.trim()) {
-      alert('Bitte geben Sie einen Namen ein')
-      return
-    }
-
-    setIsLoading(true)
-    try {
-      const res = await fetch('/api/mitreisende', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: newMitreisenderName,
-          is_default_member: false
-        })
-      })
-      const data = (await res.json()) as ApiResponse<{ id: string }>
-      if (data.success && data.data) {
-        const newMitreisender: Mitreisender = {
-          id: data.data.id,
-          name: newMitreisenderName,
-          is_default_member: false,
-          created_at: new Date().toISOString()
-        }
-        setAllMitreisende([...allMitreisende, newMitreisender])
-        setNewMitreisenderName('')
-        setShowAddDialog(false)
-        
-        // Automatisch zur Auswahl hinzufügen
-        await handleToggleMitreisender(data.data!.id)
-      } else {
-        alert('Fehler beim Erstellen des Mitreisenden: ' + (data.error ?? 'Unbekannt'))
-      }
-    } catch (error) {
-      console.error('Failed to create mitreisender:', error)
-      alert('Fehler beim Erstellen des Mitreisenden')
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-
-
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -175,43 +137,52 @@ export function MitreisendeManager({ vacationId, onMitreisendeChange }: Mitreise
           <Users className="h-4 w-4" />
           Mitreisende
         </Label>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => setShowAddDialog(!showAddDialog)}
-        >
-          <Plus className="h-4 w-4 mr-1" />
-          Neu
-        </Button>
-      </div>
-
-      {showAddDialog && (
-        <div className="border rounded-lg p-4 space-y-3 bg-muted/50">
-          <Label htmlFor="new-mitreisender">Neuer Mitreisender</Label>
-          <div className="flex gap-2">
-            <Input
-              id="new-mitreisender"
-              value={newMitreisenderName}
-              onChange={(e) => setNewMitreisenderName(e.target.value)}
-              placeholder="Name eingeben..."
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault()
-                  handleCreateMitreisender()
-                }
-              }}
-            />
+        <DropdownMenu open={showAdditionalPicker} onOpenChange={setShowAdditionalPicker}>
+          <DropdownMenuTrigger asChild>
             <Button
               type="button"
-              onClick={handleCreateMitreisender}
-              disabled={isLoading || !newMitreisenderName.trim()}
+              variant="outline"
+              size="sm"
+              disabled={
+                allMitreisende.filter((m) => !m.is_default_member).length === 0
+              }
             >
-              Hinzufügen
+              Weitere auswählen
+              <ChevronDown className="h-3 w-3 ml-1" />
             </Button>
-          </div>
-        </div>
-      )}
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-56">
+            {allMitreisende.filter((m) => !m.is_default_member).length === 0 ? (
+              <div className="px-2 py-1 text-xs text-muted-foreground">
+                Keine weiteren Mitreisenden vorhanden.
+              </div>
+            ) : (
+              allMitreisende
+                .filter((m) => !m.is_default_member)
+                .map((m) => {
+                  const checked = vacationMitreisende.includes(m.id)
+                  return (
+                    <DropdownMenuItem
+                      key={m.id}
+                      onSelect={(e) => {
+                        e.preventDefault()
+                        void handleToggleMitreisender(m.id)
+                      }}
+                      className="flex items-center gap-2"
+                    >
+                      <Checkbox
+                        checked={checked}
+                        onCheckedChange={() => void handleToggleMitreisender(m.id)}
+                        className="h-3 w-3"
+                      />
+                      <span className="text-sm">{m.name}</span>
+                    </DropdownMenuItem>
+                  )
+                })
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
 
       <div className="space-y-2 max-h-60 overflow-y-auto border rounded-lg p-3">
         {allMitreisende.length === 0 ? (
@@ -220,27 +191,27 @@ export function MitreisendeManager({ vacationId, onMitreisendeChange }: Mitreise
           </p>
         ) : (
           [...allMitreisende]
-            .sort((a, b) => (b.is_default_member ? 1 : 0) - (a.is_default_member ? 1 : 0))
+            .filter((m) => m.is_default_member)
             .map((mitreisender) => (
-            <div
-              key={mitreisender.id}
-              className="flex items-center justify-between py-2 px-3 hover:bg-muted/50 rounded-md"
-            >
-              <div className="flex items-center gap-3">
-                <Checkbox
-                  id={`mitreisender-${mitreisender.id}`}
-                  checked={vacationMitreisende.includes(mitreisender.id)}
-                  onCheckedChange={() => handleToggleMitreisender(mitreisender.id)}
-                />
-                <label
-                  htmlFor={`mitreisender-${mitreisender.id}`}
-                  className="text-sm font-medium cursor-pointer"
-                >
-                  {mitreisender.name}
-                </label>
+              <div
+                key={mitreisender.id}
+                className="flex items-center justify-between py-2 px-3 hover:bg-muted/50 rounded-md"
+              >
+                <div className="flex items-center gap-3">
+                  <Checkbox
+                    id={`mitreisender-${mitreisender.id}`}
+                    checked={vacationMitreisende.includes(mitreisender.id)}
+                    onCheckedChange={() => handleToggleMitreisender(mitreisender.id)}
+                  />
+                  <label
+                    htmlFor={`mitreisender-${mitreisender.id}`}
+                    className="text-sm font-medium cursor-pointer"
+                  >
+                    {mitreisender.name}
+                  </label>
+                </div>
               </div>
-            </div>
-          ))
+            ))
         )}
       </div>
 

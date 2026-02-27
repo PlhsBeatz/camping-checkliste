@@ -22,7 +22,7 @@ import { cn } from '@/lib/utils'
 import { useRouter } from 'next/navigation'
 import { getCachedVacations } from '@/lib/offline-sync'
 import { cacheVacations } from '@/lib/offline-db'
-import { format } from 'date-fns'
+import { format, isSameMonth, isSameYear } from 'date-fns'
 import { de } from 'date-fns/locale'
 import { Calendar as CalendarIcon } from 'lucide-react'
 import type { DateRange } from 'react-day-picker'
@@ -42,6 +42,14 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import Image from 'next/image'
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command'
 import {
   DndContext,
   PointerSensor,
@@ -162,6 +170,7 @@ export default function UrlaubePage() {
   )
   const [allCampingplaetze, setAllCampingplaetze] = useState<Campingplatz[]>([])
   const [campingSelectionIds, setCampingSelectionIds] = useState<string[]>([])
+  const [campingSearchOpen, setCampingSearchOpen] = useState(false)
   const [routeInfo, setRouteInfo] = useState<
     Record<string, { distanceKm: number; durationMinutes: number; provider: string }>
   >({})
@@ -495,8 +504,21 @@ export default function UrlaubePage() {
   }
 
   const openInAdacMaps = (campingplatz: Campingplatz) => {
-    const label = `${campingplatz.name}, ${campingplatz.ort}, ${campingplatz.land}`
-    const url = `https://maps.adac.de/routenplaner?poi=${encodeURIComponent(label)}`
+    if (routeInfo[campingplatz.id]?.distanceKm != null) {
+      // Wir nutzen hier die bekannten Koordinaten von Heimatadresse (aus Routen-API) und Campingplatz.
+      // Die Routen-API arbeitet bereits mit user.heimat_lat/lng und campingplatz.lat/lng.
+      // Für den ADAC-Link verwenden wir direkt die Koordinaten des Users und des Campingplatzes.
+    }
+    if (campingplatz.lat == null || campingplatz.lng == null) {
+      const labelFallback = `${campingplatz.name}, ${campingplatz.ort}, ${campingplatz.land}`
+      const urlFallback = `https://maps.adac.de/routenplaner?poi=${encodeURIComponent(labelFallback)}`
+      window.open(urlFallback, '_blank')
+      return
+    }
+    // Startkoordinaten aus der Heimatadresse können clientseitig nicht sicher ermittelt werden,
+    // daher nutzen wir den ADAC-Parameter nur mit Zielkoordinaten. Das Fahrzeug wird auf Gespann gesetzt.
+    const target = `${campingplatz.lat.toFixed(5)}_${campingplatz.lng.toFixed(5)}_6_0`
+    const url = `https://maps.adac.de/route?vehicle-type=trailer&places=${target}`
     window.open(url, '_blank')
   }
 
@@ -509,6 +531,31 @@ export default function UrlaubePage() {
       return
     }
     handleSelectVacation(vacationId)
+  }
+
+  const formatVacationDateRange = (start: string, end: string) => {
+    const startDate = new Date(start)
+    const endDate = new Date(end)
+    const sameYear = isSameYear(startDate, endDate)
+    const sameMonth = isSameMonth(startDate, endDate)
+
+    const dayStart = format(startDate, 'd.', { locale: de })
+    const dayEnd = format(endDate, 'd.', { locale: de })
+
+    if (sameYear && sameMonth) {
+      const monthYear = format(endDate, 'LLLL yyyy', { locale: de })
+      return `${dayStart} bis ${dayEnd} ${monthYear}`
+    }
+
+    if (sameYear && !sameMonth) {
+      const partStart = format(startDate, 'd. LLLL', { locale: de })
+      const partEnd = format(endDate, 'd. LLLL yyyy', { locale: de })
+      return `${partStart} bis ${partEnd}`
+    }
+
+    const fullStart = format(startDate, 'd. LLLL yyyy', { locale: de })
+    const fullEnd = format(endDate, 'd. LLLL yyyy', { locale: de })
+    return `${fullStart} bis ${fullEnd}`
   }
 
   return (
@@ -885,43 +932,58 @@ export default function UrlaubePage() {
 
                   <div className="space-y-2">
                     <Label>Campingplätze für diesen Urlaub</Label>
-                    <p className="text-xs text-muted-foreground">
-                      Wählen Sie einen oder mehrere Campingplätze aus. Die Reihenfolge in der
-                      folgenden Liste bestimmt die Reihenfolge im Urlaub.
-                    </p>
                     <div className="space-y-2">
-                      <div className="space-y-2 max-h-[40vh] overflow-y-auto border rounded-md p-2 bg-muted/30">
-                        {allCampingplaetze.length === 0 ? (
-                          <p className="text-sm text-muted-foreground">
-                            Noch keine Campingplätze angelegt.
-                          </p>
-                        ) : (
-                          allCampingplaetze
-                            .filter((c) => !c.is_archived)
-                            .sort((a, b) => a.name.localeCompare(b.name))
-                            .map((c) => (
-                              <label
-                                key={c.id}
-                                className="flex items-start gap-2 text-sm cursor-pointer rounded-md px-2 py-1 hover:bg-muted/60"
-                              >
-                                <input
-                                  type="checkbox"
-                                  className="mt-0.5 h-3 w-3"
-                                  checked={campingSelectionIds.includes(c.id)}
-                                  onChange={() => toggleCampingSelection(c.id)}
-                                />
-                                <div>
-                                  <div className="font-medium text-xs">
-                                    {c.name} ({c.platz_typ})
-                                  </div>
-                                  <div className="text-[11px] text-muted-foreground">
-                                    {c.ort}, {c.land}
-                                    {c.bundesland && ` (${c.bundesland})`}
-                                  </div>
-                                </div>
-                              </label>
-                            ))
-                        )}
+                      <div>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="w-full justify-between"
+                          onClick={() => setCampingSearchOpen(true)}
+                        >
+                          <span>Campingplatz hinzufügen…</span>
+                        </Button>
+                        <Dialog open={campingSearchOpen} onOpenChange={setCampingSearchOpen}>
+                          <DialogContent className="p-0 max-w-lg">
+                            <DialogHeader className="px-4 pt-4 pb-2">
+                              <DialogTitle>Campingplatz auswählen</DialogTitle>
+                            </DialogHeader>
+                            <Command>
+                              <CommandInput placeholder="Name, Ort, Bundesland oder Land eingeben…" />
+                              <CommandList>
+                                <CommandEmpty>Keine Campingplätze gefunden.</CommandEmpty>
+                                <CommandGroup heading="Campingplätze">
+                                  {allCampingplaetze
+                                    .filter((c) => !c.is_archived)
+                                    .sort((a, b) => a.name.localeCompare(b.name))
+                                    .map((c) => (
+                                      <CommandItem
+                                        key={c.id}
+                                        value={`${c.name} ${c.ort} ${c.bundesland ?? ''} ${c.land}`}
+                                        onSelect={() => {
+                                          setCampingSelectionIds((prev) =>
+                                            prev.includes(c.id) ? prev : [...prev, c.id]
+                                          )
+                                          setCampingSearchOpen(false)
+                                        }}
+                                      >
+                                        <div className="flex flex-col">
+                                          <span className="font-medium text-sm">{c.name}</span>
+                                          <span className="text-xs text-muted-foreground">
+                                            {c.ort}, {c.land}
+                                            {c.bundesland && ` (${c.bundesland})`}
+                                          </span>
+                                        </div>
+                                      </CommandItem>
+                                    ))}
+                                </CommandGroup>
+                              </CommandList>
+                            </Command>
+                          </DialogContent>
+                        </Dialog>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Öffnen Sie die Suche, um einen Campingplatz zu finden und zur Liste
+                          hinzuzufügen.
+                        </p>
                       </div>
                       <div className="space-y-1">
                         <div className="text-xs font-medium text-muted-foreground">
@@ -955,10 +1017,24 @@ export default function UrlaubePage() {
                                   const c = allCampingplaetze.find((cp) => cp.id === id)
                                   if (!c) return null
                                   return (
-                                    <SortableSelectedCampingRow
-                                      key={id}
-                                      campingplatz={c}
-                                    />
+                                    <div key={id} className="flex items-center gap-2">
+                                      <div className="flex-1">
+                                        <SortableSelectedCampingRow campingplatz={c} />
+                                      </div>
+                                      <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-7 w-7 text-xs"
+                                        onClick={() =>
+                                          setCampingSelectionIds((prev) =>
+                                            prev.filter((x) => x !== id)
+                                          )
+                                        }
+                                      >
+                                        ×
+                                      </Button>
+                                    </div>
                                   )
                                 })
                               )}
@@ -1014,18 +1090,22 @@ export default function UrlaubePage() {
                         <CardTitle>{vacation.titel}</CardTitle>
                         <CardDescription>
                           <div className="space-y-1 mt-2">
-                            {vacation.abfahrtdatum && <p>🚗 Reisebeginn: {vacation.abfahrtdatum}</p>}
-                            <p>📅 {vacation.startdatum} bis {vacation.enddatum}</p>
-                            <p className="text-sm">
-                              ⛺{' '}
-                              {(vacationCampingplaetze[vacation.id] ?? []).length > 0
-                                ? `${(vacationCampingplaetze[vacation.id] ?? []).length} Campingplatz${
-                                    (vacationCampingplaetze[vacation.id] ?? []).length > 1
-                                      ? 'e'
-                                      : ''
-                                  }`
-                                : 'Noch keine Campingplätze zugeordnet'}
+                            {vacation.abfahrtdatum && (
+                              <p>
+                                🚗 Reisebeginn:{' '}
+                                {format(new Date(vacation.abfahrtdatum), 'd. LLLL yyyy', {
+                                  locale: de,
+                                })}
+                              </p>
+                            )}
+                            <p>
+                              📅 {formatVacationDateRange(vacation.startdatum, vacation.enddatum)}
                             </p>
+                            {(vacationCampingplaetze[vacation.id] ?? []).length === 0 && (
+                              <p className="text-sm">
+                                ⛺ Noch keine Campingplätze zugeordnet
+                              </p>
+                            )}
                           </div>
                         </CardDescription>
                       </div>
