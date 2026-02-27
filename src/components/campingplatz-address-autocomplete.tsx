@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type FocusEvent } from 'react'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 
@@ -413,9 +413,16 @@ export function CampingplatzAddressAutocomplete(props: CampingplatzAddressAutoco
     suggestions.length === 0 &&
     !isExpandedSearch
 
-  const handleBlur = useCallback(() => {
-    setTimeout(() => setDropdownOpen(false), 150)
-  }, [])
+  const handleBlur = useCallback(
+    (e: FocusEvent<HTMLInputElement>) => {
+      const next = e.relatedTarget as HTMLElement | null
+      if (next && wrapperRef.current && wrapperRef.current.contains(next)) {
+        return
+      }
+      setTimeout(() => setDropdownOpen(false), 150)
+    },
+    []
+  )
 
   if (!placesAvailable) {
     return (
@@ -503,8 +510,7 @@ export function CampingplatzAddressAutocomplete(props: CampingplatzAddressAutoco
               <button
                 type="button"
                 className="w-full text-left px-3 py-2 text-sm text-[rgb(45,79,30)] hover:bg-muted focus:bg-muted focus:outline-none font-medium"
-                onMouseDown={(e) => {
-                  e.preventDefault()
+                onClick={() => {
                   handleExpandSearch()
                 }}
               >
@@ -513,8 +519,7 @@ export function CampingplatzAddressAutocomplete(props: CampingplatzAddressAutoco
               <button
                 type="button"
                 className="w-full text-left px-3 py-1.5 text-sm text-[rgb(45,79,30)] hover:bg-muted focus:bg-muted focus:outline-none"
-                onMouseDown={(e) => {
-                  e.preventDefault()
+                onClick={() => {
                   setShowLinkImport((prev) => !prev)
                   if (!showLinkImport) {
                     setGoogleMapsLink('')
