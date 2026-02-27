@@ -291,7 +291,7 @@ export function CampingplatzAddressAutocomplete(props: CampingplatzAddressAutoco
 
     // Versuche, einen Namen aus der URL (Place-URL) zu extrahieren
     try {
-      const withoutQuery = url.split('?')[0]
+      const withoutQuery = url.split('?')[0] ?? ''
       const parts = withoutQuery.split('/')
       const placeIndex = parts.findIndex((p) => p === 'place')
       if (placeIndex >= 0 && parts[placeIndex + 1]) {
