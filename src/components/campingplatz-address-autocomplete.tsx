@@ -295,7 +295,7 @@ export function CampingplatzAddressAutocomplete(props: CampingplatzAddressAutoco
       }
 
       const { resolve, photos } = json.data
-      const displayName = resolve.placeName ?? resolve.address ?? value.trim() || url
+      const displayName = (resolve.placeName ?? resolve.address ?? value.trim()) || url
 
       onChange(displayName)
       onResolve({
