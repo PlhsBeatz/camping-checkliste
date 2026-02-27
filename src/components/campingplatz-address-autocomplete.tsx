@@ -281,8 +281,8 @@ export function CampingplatzAddressAutocomplete(props: CampingplatzAddressAutoco
     try {
       const atMatch = url.match(/@(-?\d+\.?\d*),(-?\d+\.?\d*)/)
       if (atMatch) {
-        lat = parseFloat(atMatch[1])
-        lng = parseFloat(atMatch[2])
+        lat = parseFloat(atMatch[1] ?? '0')
+        lng = parseFloat(atMatch[2] ?? '0')
       }
     } catch {
       lat = null
