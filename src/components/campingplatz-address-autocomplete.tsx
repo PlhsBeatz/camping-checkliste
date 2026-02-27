@@ -133,6 +133,8 @@ export function CampingplatzAddressAutocomplete(props: CampingplatzAddressAutoco
   const [error, setError] = useState<string | null>(null)
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const [isExpandedSearch, setIsExpandedSearch] = useState(false)
+  const [showLinkImport, setShowLinkImport] = useState(false)
+  const [googleMapsLink, setGoogleMapsLink] = useState('')
   const sessionTokenRef = useRef<unknown>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const lastRequestIdRef = useRef(0)
@@ -266,6 +268,65 @@ export function CampingplatzAddressAutocomplete(props: CampingplatzAddressAutoco
       })
     }
   }, [value])
+
+  const handleImportFromGoogleMapsLink = useCallback(() => {
+    const url = googleMapsLink.trim()
+    if (!url) return
+
+    let lat: number | null = null
+    let lng: number | null = null
+    let name: string | null = null
+
+    // Versuche, ein @lat,lng-Muster aus der URL zu lesen
+    try {
+      const atMatch = url.match(/@(-?\d+\.?\d*),(-?\d+\.?\d*)/)
+      if (atMatch) {
+        lat = parseFloat(atMatch[1])
+        lng = parseFloat(atMatch[2])
+      }
+    } catch {
+      lat = null
+      lng = null
+    }
+
+    // Versuche, einen Namen aus der URL (Place-URL) zu extrahieren
+    try {
+      const withoutQuery = url.split('?')[0]
+      const parts = withoutQuery.split('/')
+      const placeIndex = parts.findIndex((p) => p === 'place')
+      if (placeIndex >= 0 && parts[placeIndex + 1]) {
+        const decoded = decodeURIComponent(parts[placeIndex + 1].replace(/\+/g, ' '))
+        if (decoded && decoded !== '@') {
+          name = decoded
+        }
+      }
+    } catch {
+      name = null
+    }
+
+    const displayName = name ?? value.trim() || url
+    const address = displayName
+
+    onChange(displayName)
+    onResolve({
+      address,
+      lat,
+      lng,
+      ort: null,
+      bundesland: null,
+      land: null,
+      placeName: displayName,
+      website: url,
+    })
+    onPlacePhotos?.([])
+    sessionTokenRef.current = null
+    setDropdownOpen(false)
+    setSuggestions([])
+    setIsExpandedSearch(false)
+    setShowLinkImport(false)
+    setGoogleMapsLink('')
+    onElementReady?.(inputRef.current ?? null)
+  }, [googleMapsLink, onChange, onResolve, onPlacePhotos, onElementReady, value])
 
   const handleSelectSuggestion = useCallback(
     async (prediction: PlacePrediction) => {
@@ -437,16 +498,55 @@ export function CampingplatzAddressAutocomplete(props: CampingplatzAddressAutoco
             </>
           )}
           {showFallbackButton && (
-            <button
-              type="button"
-              className="w-full text-left px-3 py-2 text-sm text-blue-600 hover:bg-muted focus:bg-muted focus:outline-none font-medium"
-              onMouseDown={(e) => {
-                e.preventDefault()
-                handleExpandSearch()
-              }}
-            >
-              Kein Campingplatz gefunden. Suche auf alle Orte ausweiten?
-            </button>
+            <div className="border-t border-muted">
+              <button
+                type="button"
+                className="w-full text-left px-3 py-2 text-sm text-[rgb(45,79,30)] hover:bg-muted focus:bg-muted focus:outline-none font-medium"
+                onMouseDown={(e) => {
+                  e.preventDefault()
+                  handleExpandSearch()
+                }}
+              >
+                Kein Campingplatz gefunden. Suche auf alle Orte ausweiten?
+              </button>
+              <button
+                type="button"
+                className="w-full text-left px-3 py-1.5 text-sm text-[rgb(45,79,30)] hover:bg-muted focus:bg-muted focus:outline-none"
+                onMouseDown={(e) => {
+                  e.preventDefault()
+                  setShowLinkImport((prev) => !prev)
+                  if (!showLinkImport) {
+                    setGoogleMapsLink('')
+                  }
+                }}
+              >
+                Campingplatz per Google-Maps-Link hinzufügen
+              </button>
+              {showLinkImport && (
+                <div className="px-3 pb-2 pt-1 space-y-1">
+                  <Input
+                    value={googleMapsLink}
+                    onChange={(e) => setGoogleMapsLink(e.target.value)}
+                    placeholder="https://maps.app.goo.gl/..."
+                    className="h-8 text-sm"
+                    autoFocus
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        handleImportFromGoogleMapsLink()
+                      } else if (e.key === 'Escape') {
+                        e.preventDefault()
+                        setShowLinkImport(false)
+                        setGoogleMapsLink('')
+                      }
+                    }}
+                  />
+                  <p className="text-[11px] leading-snug text-muted-foreground">
+                    Tipp: In Google Maps den Platz öffnen, auf „Teilen“ klicken und den Link hier einfügen.
+                  </p>
+                </div>
+              )}
+            </div>
           )}
         </div>
       )}
