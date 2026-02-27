@@ -294,8 +294,9 @@ export function CampingplatzAddressAutocomplete(props: CampingplatzAddressAutoco
       const withoutQuery = url.split('?')[0] ?? ''
       const parts = withoutQuery.split('/')
       const placeIndex = parts.findIndex((p) => p === 'place')
-      if (placeIndex >= 0 && parts[placeIndex + 1]) {
-        const decoded = decodeURIComponent(parts[placeIndex + 1].replace(/\+/g, ' '))
+      const rawPart = placeIndex >= 0 ? parts[placeIndex + 1] ?? '' : ''
+      if (rawPart) {
+        const decoded = decodeURIComponent(rawPart.replace(/\+/g, ' '))
         if (decoded && decoded !== '@') {
           name = decoded
         }
