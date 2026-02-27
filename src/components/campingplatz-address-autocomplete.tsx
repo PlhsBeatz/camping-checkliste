@@ -270,80 +270,82 @@ export function CampingplatzAddressAutocomplete(props: CampingplatzAddressAutoco
     }
   }, [value])
 
-  const handleImportFromGoogleMapsLink = useCallback(async () => {
-    const url = googleMapsLink.trim()
-    if (!url) return
+  const handleImportFromGoogleMapsLink = useCallback(
+    async (selectSuggestion: (prediction: PlacePrediction) => Promise<void>) => {
+      const url = googleMapsLink.trim()
+      if (!url) return
 
-    // 1) Versuche, aus dem Link einen brauchbaren Suchbegriff zu extrahieren
-    let extractedName: string | null = null
-    try {
-      const withoutQuery = url.split('?')[0] ?? ''
-      const parts = withoutQuery.split('/')
-      const placeIndex = parts.findIndex((p) => p === 'place')
-      const rawPart = placeIndex >= 0 ? parts[placeIndex + 1] ?? '' : ''
-      if (rawPart) {
-        const decoded = decodeURIComponent(rawPart.replace(/\+/g, ' '))
-        if (decoded && decoded !== '@') {
-          extractedName = decoded
-        }
-      }
-    } catch {
-      extractedName = null
-    }
-
-    // 2) Wenn wir einen Namen haben und die Places-Lib verfügbar ist:
-    //    nutze denselben Weg wie Autocomplete → Vorschläge holen, ersten Treffer auswählen.
-    const lib = placesLibRef.current
-    const searchText = extractedName ?? value.trim()
-    if (lib?.AutocompleteSuggestion && searchText) {
+      // 1) Versuche, aus dem Link einen brauchbaren Suchbegriff zu extrahieren
+      let extractedName: string | null = null
       try {
-        setIsLoading(true)
-        setError(null)
-        const requestId = ++lastRequestIdRef.current
-        const request: AutocompleteRequest = {
-          input: searchText,
-          sessionToken: sessionTokenRef.current ?? undefined,
-          language: 'de',
-        }
-        const result = await lib.AutocompleteSuggestion.fetchAutocompleteSuggestions(request)
-        if (requestId !== lastRequestIdRef.current) return
-        const firstPrediction = (result.suggestions ?? []).find((s) => s.placePrediction)?.placePrediction
-        if (firstPrediction) {
-          await handleSelectSuggestion(firstPrediction)
-          // handleSelectSuggestion kümmert sich bereits um onChange, onResolve, Fotos usw.
-          setShowLinkImport(false)
-          setGoogleMapsLink('')
-          return
+        const withoutQuery = url.split('?')[0] ?? ''
+        const parts = withoutQuery.split('/')
+        const placeIndex = parts.findIndex((p) => p === 'place')
+        const rawPart = placeIndex >= 0 ? parts[placeIndex + 1] ?? '' : ''
+        if (rawPart) {
+          const decoded = decodeURIComponent(rawPart.replace(/\+/g, ' '))
+          if (decoded && decoded !== '@') {
+            extractedName = decoded
+          }
         }
       } catch {
-        // Fallback unten nutzen
-      } finally {
-        setIsLoading(false)
+        extractedName = null
       }
-    }
 
-    // 3) Fallback: Wenn wir nichts Sinnvolles finden, trage wenigstens den Link als Website ein.
-    const displayName = searchText || url
-    onChange(displayName)
-    onResolve({
-      address: displayName,
-      lat: null,
-      lng: null,
-      ort: null,
-      bundesland: null,
-      land: null,
-      placeName: displayName,
-      website: url,
-    })
-    onPlacePhotos?.([])
-    sessionTokenRef.current = null
-    setDropdownOpen(false)
-    setSuggestions([])
-    setIsExpandedSearch(false)
-    setShowLinkImport(false)
-    setGoogleMapsLink('')
-    onElementReady?.(inputRef.current ?? null)
-  }, [googleMapsLink, value, handleSelectSuggestion, onChange, onResolve, onPlacePhotos, onElementReady])
+      // 2) Wenn wir einen Namen haben und die Places-Lib verfügbar ist:
+      //    nutze denselben Weg wie Autocomplete → Vorschläge holen, ersten Treffer auswählen.
+      const lib = placesLibRef.current
+      const searchText = extractedName ?? value.trim()
+      if (lib?.AutocompleteSuggestion && searchText) {
+        try {
+          setIsLoading(true)
+          setError(null)
+          const requestId = ++lastRequestIdRef.current
+          const request: AutocompleteRequest = {
+            input: searchText,
+            sessionToken: sessionTokenRef.current ?? undefined,
+            language: 'de',
+          }
+          const result = await lib.AutocompleteSuggestion.fetchAutocompleteSuggestions(request)
+          if (requestId !== lastRequestIdRef.current) return
+          const firstPrediction = (result.suggestions ?? []).find((s) => s.placePrediction)?.placePrediction
+          if (firstPrediction) {
+            await selectSuggestion(firstPrediction)
+            setShowLinkImport(false)
+            setGoogleMapsLink('')
+            return
+          }
+        } catch {
+          // Fallback unten nutzen
+        } finally {
+          setIsLoading(false)
+        }
+      }
+
+      // 3) Fallback: Wenn wir nichts Sinnvolles finden, trage wenigstens den Link als Website ein.
+      const displayName = searchText || url
+      onChange(displayName)
+      onResolve({
+        address: displayName,
+        lat: null,
+        lng: null,
+        ort: null,
+        bundesland: null,
+        land: null,
+        placeName: displayName,
+        website: url,
+      })
+      onPlacePhotos?.([])
+      sessionTokenRef.current = null
+      setDropdownOpen(false)
+      setSuggestions([])
+      setIsExpandedSearch(false)
+      setShowLinkImport(false)
+      setGoogleMapsLink('')
+      onElementReady?.(inputRef.current ?? null)
+    },
+    [googleMapsLink, value, onChange, onResolve, onPlacePhotos, onElementReady]
+  )
 
   const handleSelectSuggestion = useCallback(
     async (prediction: PlacePrediction) => {
@@ -556,7 +558,7 @@ export function CampingplatzAddressAutocomplete(props: CampingplatzAddressAutoco
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') {
                           e.preventDefault()
-                          handleImportFromGoogleMapsLink()
+                          void handleImportFromGoogleMapsLink(handleSelectSuggestion)
                         } else if (e.key === 'Escape') {
                           e.preventDefault()
                           setShowLinkImport(false)
@@ -568,7 +570,9 @@ export function CampingplatzAddressAutocomplete(props: CampingplatzAddressAutoco
                       type="button"
                       size="sm"
                       className="h-8 px-3 text-xs bg-[rgb(45,79,30)] hover:bg-[rgb(45,79,30)]/90 text-white"
-                      onClick={() => handleImportFromGoogleMapsLink()}
+                      onClick={() => {
+                        void handleImportFromGoogleMapsLink(handleSelectSuggestion)
+                      }}
                     >
                       OK
                     </Button>
