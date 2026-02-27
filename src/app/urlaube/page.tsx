@@ -174,6 +174,8 @@ export default function UrlaubePage() {
   const [routeInfo, setRouteInfo] = useState<
     Record<string, { distanceKm: number; durationMinutes: number; provider: string }>
   >({})
+  const [homeCoords, setHomeCoords] = useState<{ lat: number; lng: number } | null>(null)
+  const [homeCoordsLoaded, setHomeCoordsLoaded] = useState(false)
   
   const [newVacationForm, setNewVacationForm] = useState({
     titel: '',
@@ -497,22 +499,49 @@ export default function UrlaubePage() {
     router.push(`/?vacation=${vacationId}`)
   }
 
-  const openInAdacMaps = (campingplatz: Campingplatz) => {
-    if (routeInfo[campingplatz.id]?.distanceKm != null) {
-      // Wir nutzen hier die bekannten Koordinaten von Heimatadresse (aus Routen-API) und Campingplatz.
-      // Die Routen-API arbeitet bereits mit user.heimat_lat/lng und campingplatz.lat/lng.
-      // Für den ADAC-Link verwenden wir direkt die Koordinaten des Users und des Campingplatzes.
-    }
+  const openInAdacMaps = async (campingplatz: Campingplatz) => {
+    // Wenn Koordinaten des Campingplatzes fehlen, auf generische Routenplaner-Ansicht mit POI-Name zurückfallen
     if (campingplatz.lat == null || campingplatz.lng == null) {
       const labelFallback = `${campingplatz.name}, ${campingplatz.ort}, ${campingplatz.land}`
       const urlFallback = `https://maps.adac.de/routenplaner?poi=${encodeURIComponent(labelFallback)}`
       window.open(urlFallback, '_blank')
       return
     }
-    // Startkoordinaten aus der Heimatadresse können clientseitig nicht sicher ermittelt werden,
-    // daher nutzen wir den ADAC-Parameter nur mit Zielkoordinaten. Das Fahrzeug wird auf Gespann gesetzt.
+
+    // Heimatkoordinaten (Start) einmalig laden und im State cachen
+    let coords = homeCoords
+    if (!homeCoordsLoaded) {
+      try {
+        const res = await fetch('/api/profile/home-location')
+        const data = (await res.json()) as ApiResponse<{
+          heimat_adresse: string | null
+          heimat_lat: number | null
+          heimat_lng: number | null
+        }>
+        if (data.success && data.data && data.data.heimat_lat != null && data.data.heimat_lng != null) {
+          coords = { lat: data.data.heimat_lat, lng: data.data.heimat_lng }
+          setHomeCoords(coords)
+        } else {
+          coords = null
+        }
+      } catch {
+        coords = null
+      } finally {
+        setHomeCoordsLoaded(true)
+      }
+    }
+
+    // Wenn keine Heimatkoordinaten vorhanden sind, notfalls nur das Ziel vorbelegen
+    if (!coords) {
+      const targetOnly = `${campingplatz.lat.toFixed(5)}_${campingplatz.lng.toFixed(5)}_6_0`
+      const urlOnly = `https://maps.adac.de/route?vehicle-type=trailer&places=${targetOnly}`
+      window.open(urlOnly, '_blank')
+      return
+    }
+
+    const start = `${coords.lat.toFixed(5)}_${coords.lng.toFixed(5)}_1_0`
     const target = `${campingplatz.lat.toFixed(5)}_${campingplatz.lng.toFixed(5)}_6_0`
-    const url = `https://maps.adac.de/route?vehicle-type=trailer&places=${target}`
+    const url = `https://maps.adac.de/route?vehicle-type=trailer&places=${start},${target}`
     window.open(url, '_blank')
   }
 
@@ -1239,7 +1268,7 @@ export default function UrlaubePage() {
                                     >
                                       <DropdownMenuItem
                                         onSelect={() => {
-                                          openInAdacMaps(cp)
+                                          void openInAdacMaps(cp)
                                         }}
                                       >
                                         <Route className="h-4 w-4 mr-2" />
