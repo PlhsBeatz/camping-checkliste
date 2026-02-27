@@ -270,27 +270,12 @@ export function CampingplatzAddressAutocomplete(props: CampingplatzAddressAutoco
     }
   }, [value])
 
-  const handleImportFromGoogleMapsLink = useCallback(() => {
+  const handleImportFromGoogleMapsLink = useCallback(async () => {
     const url = googleMapsLink.trim()
     if (!url) return
 
-    let lat: number | null = null
-    let lng: number | null = null
-    let name: string | null = null
-
-    // Versuche, ein @lat,lng-Muster aus der URL zu lesen
-    try {
-      const atMatch = url.match(/@(-?\d+\.?\d*),(-?\d+\.?\d*)/)
-      if (atMatch) {
-        lat = parseFloat(atMatch[1] ?? '0')
-        lng = parseFloat(atMatch[2] ?? '0')
-      }
-    } catch {
-      lat = null
-      lng = null
-    }
-
-    // Versuche, einen Namen aus der URL (Place-URL) zu extrahieren
+    // 1) Versuche, aus dem Link einen brauchbaren Suchbegriff zu extrahieren
+    let extractedName: string | null = null
     try {
       const withoutQuery = url.split('?')[0] ?? ''
       const parts = withoutQuery.split('/')
@@ -299,21 +284,51 @@ export function CampingplatzAddressAutocomplete(props: CampingplatzAddressAutoco
       if (rawPart) {
         const decoded = decodeURIComponent(rawPart.replace(/\+/g, ' '))
         if (decoded && decoded !== '@') {
-          name = decoded
+          extractedName = decoded
         }
       }
     } catch {
-      name = null
+      extractedName = null
     }
 
-    const displayName = (name ?? value.trim()) || url
-    const address = displayName
+    // 2) Wenn wir einen Namen haben und die Places-Lib verfügbar ist:
+    //    nutze denselben Weg wie Autocomplete → Vorschläge holen, ersten Treffer auswählen.
+    const lib = placesLibRef.current
+    const searchText = extractedName ?? value.trim()
+    if (lib?.AutocompleteSuggestion && searchText) {
+      try {
+        setIsLoading(true)
+        setError(null)
+        const requestId = ++lastRequestIdRef.current
+        const request: AutocompleteRequest = {
+          input: searchText,
+          sessionToken: sessionTokenRef.current ?? undefined,
+          language: 'de',
+        }
+        const result = await lib.AutocompleteSuggestion.fetchAutocompleteSuggestions(request)
+        if (requestId !== lastRequestIdRef.current) return
+        const firstPrediction = (result.suggestions ?? []).find((s) => s.placePrediction)?.placePrediction
+        if (firstPrediction) {
+          await handleSelectSuggestion(firstPrediction)
+          // handleSelectSuggestion kümmert sich bereits um onChange, onResolve, Fotos usw.
+          setShowLinkImport(false)
+          setGoogleMapsLink('')
+          return
+        }
+      } catch {
+        // Fallback unten nutzen
+      } finally {
+        setIsLoading(false)
+      }
+    }
 
+    // 3) Fallback: Wenn wir nichts Sinnvolles finden, trage wenigstens den Link als Website ein.
+    const displayName = searchText || url
     onChange(displayName)
     onResolve({
-      address,
-      lat,
-      lng,
+      address: displayName,
+      lat: null,
+      lng: null,
       ort: null,
       bundesland: null,
       land: null,
@@ -328,7 +343,7 @@ export function CampingplatzAddressAutocomplete(props: CampingplatzAddressAutoco
     setShowLinkImport(false)
     setGoogleMapsLink('')
     onElementReady?.(inputRef.current ?? null)
-  }, [googleMapsLink, onChange, onResolve, onPlacePhotos, onElementReady, value])
+  }, [googleMapsLink, value, handleSelectSuggestion, onChange, onResolve, onPlacePhotos, onElementReady])
 
   const handleSelectSuggestion = useCallback(
     async (prediction: PlacePrediction) => {
