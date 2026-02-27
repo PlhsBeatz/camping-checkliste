@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Users, ChevronDown } from 'lucide-react'
@@ -26,7 +25,6 @@ export function MitreisendeManager({ vacationId, onMitreisendeChange }: Mitreise
   const [allMitreisende, setAllMitreisende] = useState<Mitreisender[]>([])
   const [vacationMitreisende, setVacationMitreisende] = useState<string[]>([])
   const [showAdditionalPicker, setShowAdditionalPicker] = useState(false)
-  const [isLoading, setIsLoading] = useState(false)
   const [initialLoadDone, setInitialLoadDone] = useState(false)
 
   // Lade alle Mitreisenden

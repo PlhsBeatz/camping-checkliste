@@ -497,12 +497,6 @@ export default function UrlaubePage() {
     router.push(`/?vacation=${vacationId}`)
   }
 
-  const toggleCampingSelection = (id: string) => {
-    setCampingSelectionIds((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
-    )
-  }
-
   const openInAdacMaps = (campingplatz: Campingplatz) => {
     if (routeInfo[campingplatz.id]?.distanceKm != null) {
       // Wir nutzen hier die bekannten Koordinaten von Heimatadresse (aus Routen-API) und Campingplatz.
