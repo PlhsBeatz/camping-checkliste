@@ -86,7 +86,7 @@ export async function POST(request: NextRequest) {
     }
     let resolvedUrl = rawUrl
     try {
-      let res = await fetch(rawUrl, {
+      const res = await fetch(rawUrl, {
         redirect: 'follow',
         headers: browserHeaders,
       })
