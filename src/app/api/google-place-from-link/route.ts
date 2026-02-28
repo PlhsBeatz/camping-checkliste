@@ -88,6 +88,40 @@ export async function POST(request: NextRequest) {
       resolvedUrl = rawUrl
     }
 
+    // Versuche aus der finalen URL einen sinnvollen Suchbegriff zu extrahieren
+    let textQuery = resolvedUrl
+    try {
+      const u = new URL(resolvedUrl)
+      const pathnameParts = u.pathname.split('/').filter(Boolean)
+      const placeIndex = pathnameParts.indexOf('place')
+      let nameFromPath: string | null = null
+      if (placeIndex >= 0 && pathnameParts[placeIndex + 1]) {
+        const rawPart = pathnameParts[placeIndex + 1]
+        const decoded = decodeURIComponent(rawPart.replace(/\+/g, ' '))
+        if (decoded && decoded !== '@') {
+          nameFromPath = decoded
+        }
+      }
+      const qParam =
+        u.searchParams.get('q') ||
+        u.searchParams.get('query') ||
+        u.searchParams.get('destination') ||
+        null
+      let nameFromQuery: string | null = null
+      if (qParam) {
+        const decoded = decodeURIComponent(qParam.replace(/\+/g, ' '))
+        if (decoded && decoded !== '@') {
+          nameFromQuery = decoded
+        }
+      }
+      const extracted = nameFromPath ?? nameFromQuery
+      if (extracted) {
+        textQuery = extracted
+      }
+    } catch {
+      textQuery = resolvedUrl
+    }
+
     // Nutze die Places API (searchText), um den dahinterliegenden Place zu finden.
     const searchEndpoint = 'https://places.googleapis.com/v1/places:searchText'
     const fieldMask = [
@@ -107,7 +141,7 @@ export async function POST(request: NextRequest) {
         'X-Goog-FieldMask': fieldMask,
       },
       body: JSON.stringify({
-        textQuery: resolvedUrl,
+        textQuery,
         languageCode: 'de',
         pageSize: 1,
       }),
