@@ -77,7 +77,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Versuche, den Shortlink aufzulösen (Redirects folgen oder aus HTML auslesen).
-    const browserHeaders = {
+    const browserHeaders: Record<string, string> = {
       'User-Agent':
         'Mozilla/5.0 (Windows NT 10.0; rv:109.0) Gecko/20100101 Firefox/115.0',
       Accept:
@@ -116,7 +116,7 @@ export async function POST(request: NextRequest) {
           }
         }
       }
-      // Fallback: Aus HTML nach finaler URL suchen (meta refresh, canonical, og:url)
+      // Fallback: Aus HTML nach finaler URL suchen (meta refresh, canonical, og:url, beliebige google.com/maps-URL)
       if (
         resolvedUrl.startsWith('https://maps.app.goo.gl/') ||
         resolvedUrl.startsWith('https://goo.gl/')
@@ -126,25 +126,69 @@ export async function POST(request: NextRequest) {
           headers: browserHeaders,
         })
         const html = await htmlRes.text()
-        const metaRefresh = html.match(/content="\d+;?\s*url=([^"]+)"/i)
-        if (metaRefresh?.[1]) {
-          resolvedUrl = metaRefresh[1].replace(/&amp;/g, '&').trim()
-        }
-        if (resolvedUrl === rawUrl || resolvedUrl.includes('goo.gl')) {
-          const canonical =
-            html.match(/<link[^>]+rel="canonical"[^>]+href="([^"]+)"/i) ??
-            html.match(/<link[^>]+href="([^"]+)"[^>]+rel="canonical"/i)
-          if (canonical?.[1]) {
-            resolvedUrl = canonical[1].replace(/&amp;/g, '&').trim()
+        // Nach dem Abruf: Wenn der Server trotzdem weitergeleitet hat, diese URL nutzen
+        if (htmlRes.url && !htmlRes.url.includes('goo.gl')) {
+          resolvedUrl = htmlRes.url
+        } else {
+          const metaRefresh = html.match(/content="\d+;?\s*url=([^"]+)"/i)
+            ?? html.match(/content='\d+;?\s*url=([^']+)'/i)
+            ?? html.match(/content="\d+;?\s*URL=([^"]+)"/i)
+            ?? html.match(/content=\s*["']?\d+[^"']*url\s*=\s*([^\s"'>]+)/i)
+          if (metaRefresh?.[1]) {
+            resolvedUrl = metaRefresh[1].replace(/&amp;/g, '&').trim()
+          }
+          if (resolvedUrl.includes('goo.gl')) {
+            const jsRedirect =
+              html.match(/window\.location\.replace\s*\(\s*["']([^"']+)["']\s*\)/i)
+              ?? html.match(/location\.href\s*=\s*["']([^"']+)["']/i)
+              ?? html.match(/window\.location\s*=\s*["']([^"']+)["']/i)
+              ?? html.match(/redirect\s*=\s*["']([^"']+)["']/i)
+            if (jsRedirect?.[1]) {
+              resolvedUrl = jsRedirect[1].replace(/&amp;/g, '&').trim()
+            }
+          }
+          if (resolvedUrl.includes('goo.gl')) {
+            const canonical =
+              html.match(/<link[^>]+rel="canonical"[^>]+href="([^"]+)"/i) ??
+              html.match(/<link[^>]+href="([^"]+)"[^>]+rel="canonical"/i)
+            if (canonical?.[1]) {
+              resolvedUrl = canonical[1].replace(/&amp;/g, '&').trim()
+            }
+          }
+          if (resolvedUrl.includes('goo.gl')) {
+            const ogUrl =
+              html.match(/<meta[^>]+property="og:url"[^>]+content="([^"]+)"/i) ??
+              html.match(/<meta[^>]+content="([^"]+)"[^>]+property="og:url"/i)
+            if (ogUrl?.[1]) {
+              resolvedUrl = ogUrl[1].replace(/&amp;/g, '&').trim()
+            }
+          }
+          // Letzter Fallback: erste google.com/maps- oder google.de/maps-URL im HTML
+          if (resolvedUrl.includes('goo.gl')) {
+            const anyMapsUrl = html.match(
+              /https:\/\/(?:www\.)?google\.(?:de|com)\/maps\/[^\s"'<>]+/
+            )
+            if (anyMapsUrl?.[0]) {
+              resolvedUrl = anyMapsUrl[0].replace(/&amp;/g, '&').replace(/["']+$/, '').trim()
+            }
           }
         }
-        if (resolvedUrl === rawUrl || resolvedUrl.includes('goo.gl')) {
-          const ogUrl =
-            html.match(/<meta[^>]+property="og:url"[^>]+content="([^"]+)"/i) ??
-            html.match(/<meta[^>]+content="([^"]+)"[^>]+property="og:url"/i)
-          if (ogUrl?.[1]) {
-            resolvedUrl = ogUrl[1].replace(/&amp;/g, '&').trim()
-          }
+      }
+      // Ein zweiter Versuch mit anderem User-Agent, wenn wir immer noch den Kurzlink haben
+      if (
+        (resolvedUrl.startsWith('https://maps.app.goo.gl/') ||
+          resolvedUrl.startsWith('https://goo.gl/')) &&
+        resolvedUrl === rawUrl
+      ) {
+        const altHeaders = {
+          ...browserHeaders,
+          'User-Agent':
+            'Mozilla/5.0 (Linux; Android 10; Pixel 4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+          'Accept-Language': 'en-US,en;q=0.9',
+        }
+        const res2 = await fetch(rawUrl, { redirect: 'follow', headers: altHeaders })
+        if (res2.url && !res2.url.includes('goo.gl')) {
+          resolvedUrl = res2.url
         }
       }
     } catch {
@@ -189,64 +233,75 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 2) Fallback: Suchbegriff aus URL extrahieren und searchText aufrufen
+    // 2) Fallback nur, wenn wir eine aufgelöste Long-URL haben: Suchbegriff aus URL extrahieren, searchText
+    // Bei Kurzlink ohne Auflösung kein searchText (kein „erster Treffer“) – URL-Eingabe ist reiner Fallback.
     if (!place) {
-      let textQuery = resolvedUrl
-      try {
-        const u = new URL(resolvedUrl)
-        const pathnameParts = u.pathname.split('/').filter(Boolean)
-        const placeIndex = pathnameParts.indexOf('place')
-        let nameFromPath: string | null = null
-        if (placeIndex >= 0 && pathnameParts[placeIndex + 1]) {
-          const rawPart = pathnameParts[placeIndex + 1] ?? ''
-          const decoded = decodeURIComponent(rawPart.replace(/\+/g, ' '))
-          if (decoded && decoded !== '@' && !decoded.startsWith('@')) {
-            nameFromPath = decoded
+      const isStillShortLink =
+        resolvedUrl.startsWith('https://maps.app.goo.gl/') ||
+        resolvedUrl.startsWith('https://goo.gl/')
+      if (!isStillShortLink) {
+        let textQuery = resolvedUrl
+        try {
+          const u = new URL(resolvedUrl)
+          const pathnameParts = u.pathname.split('/').filter(Boolean)
+          const placeIndex = pathnameParts.indexOf('place')
+          let nameFromPath: string | null = null
+          if (placeIndex >= 0 && pathnameParts[placeIndex + 1]) {
+            const rawPart = pathnameParts[placeIndex + 1] ?? ''
+            const decoded = decodeURIComponent(rawPart.replace(/\+/g, ' '))
+            if (decoded && decoded !== '@' && !decoded.startsWith('@')) {
+              nameFromPath = decoded
+            }
           }
-        }
-        const qParam =
-          u.searchParams.get('q') ??
-          u.searchParams.get('query') ??
-          u.searchParams.get('destination') ??
-          null
-        let nameFromQuery: string | null = null
-        if (qParam) {
-          const decoded = decodeURIComponent(qParam.replace(/\+/g, ' '))
-          if (decoded && decoded !== '@') {
-            nameFromQuery = decoded
+          const qParam =
+            u.searchParams.get('q') ??
+            u.searchParams.get('query') ??
+            u.searchParams.get('destination') ??
+            null
+          let nameFromQuery: string | null = null
+          if (qParam) {
+            const decoded = decodeURIComponent(qParam.replace(/\+/g, ' '))
+            if (decoded && decoded !== '@') {
+              nameFromQuery = decoded
+            }
           }
+          const extracted = nameFromPath ?? nameFromQuery
+          if (extracted) {
+            textQuery = extracted
+          }
+        } catch {
+          textQuery = resolvedUrl
         }
-        const extracted = nameFromPath ?? nameFromQuery
-        if (extracted) {
-          textQuery = extracted
+
+        const searchRes = await fetch('https://places.googleapis.com/v1/places:searchText', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Goog-Api-Key': apiKey,
+            'X-Goog-FieldMask': searchTextFieldMask,
+          },
+          body: JSON.stringify({
+            textQuery,
+            languageCode: 'de',
+            pageSize: 1,
+          }),
+        })
+
+        if (searchRes.ok) {
+          const searchJson = (await searchRes.json()) as PlacesSearchTextResponse
+          place = searchJson.places?.[0] ?? null
         }
-      } catch {
-        textQuery = resolvedUrl
-      }
-
-      const searchRes = await fetch('https://places.googleapis.com/v1/places:searchText', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Goog-Api-Key': apiKey,
-          'X-Goog-FieldMask': searchTextFieldMask,
-        },
-        body: JSON.stringify({
-          textQuery,
-          languageCode: 'de',
-          pageSize: 1,
-        }),
-      })
-
-      if (searchRes.ok) {
-        const searchJson = (await searchRes.json()) as PlacesSearchTextResponse
-        place = searchJson.places?.[0] ?? null
       }
     }
 
     if (!place) {
       return NextResponse.json(
-        { success: false, error: 'Kein passender Ort für diesen Link gefunden.' },
+        {
+          success: false,
+          error:
+            'Kein passender Ort für diesen Link gefunden. Tipp: Link im Browser öffnen und die vollständige URL aus der Adresszeile hier einfügen.',
+          debug: { resolvedUrl, extractedPlaceId: placeId ?? undefined },
+        },
         { status: 404 }
       )
     }
