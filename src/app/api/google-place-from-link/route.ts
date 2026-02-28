@@ -217,7 +217,7 @@ export async function POST(request: NextRequest) {
     let place: PlaceServer | null = null
     const placeId = extractPlaceIdFromMapsUrl(resolvedUrl)
 
-    // 1) Wenn wir eine Place-ID haben: Place Details API (exakt derselbe Eintrag wie hinter dem Link)
+    // 1) Wenn wir eine Place-ID haben: zuerst Place Details API (New), bei Fehler Legacy API (unterstützt 0x-Place-IDs)
     if (placeId) {
       const detailsUrl = `https://places.googleapis.com/v1/places/${encodeURIComponent(placeId)}`
       const detailsRes = await fetch(detailsUrl, {
@@ -230,6 +230,52 @@ export async function POST(request: NextRequest) {
       if (detailsRes.ok) {
         const detailsJson = (await detailsRes.json()) as PlaceServer
         place = detailsJson
+      } else {
+        // Fallback: Legacy Place Details (akzeptiert 0x...:0x... Place-IDs)
+        const legacyUrl = new URL('https://maps.googleapis.com/maps/api/place/details/json')
+        legacyUrl.searchParams.set('place_id', placeId)
+        legacyUrl.searchParams.set('key', apiKey)
+        legacyUrl.searchParams.set('fields', 'name,formatted_address,geometry,address_components,website')
+        legacyUrl.searchParams.set('language', 'de')
+        const legacyRes = await fetch(legacyUrl.toString())
+        if (legacyRes.ok) {
+          const legacyJson = (await legacyRes.json()) as {
+            status: string
+            result?: {
+              name?: string
+              formatted_address?: string
+              geometry?: { location?: { lat?: number; lng?: number } }
+              address_components?: Array<{
+                long_name?: string
+                short_name?: string
+                types?: string[]
+              }>
+              website?: string
+            }
+          }
+          if (legacyJson.status === 'OK' && legacyJson.result) {
+            const r = legacyJson.result
+            const comps = (r.address_components ?? []).map((c) => ({
+              longText: c.long_name,
+              shortText: c.short_name,
+              types: c.types ?? [],
+            }))
+            place = {
+              displayName: r.name ? { text: r.name } : undefined,
+              formattedAddress: r.formatted_address,
+              location:
+                r.geometry?.location != null
+                  ? {
+                      latitude: r.geometry.location.lat,
+                      longitude: r.geometry.location.lng,
+                    }
+                  : undefined,
+              addressComponents: comps.length ? comps : undefined,
+              photos: [],
+              websiteUri: r.website,
+            }
+          }
+        }
       }
     }
 
