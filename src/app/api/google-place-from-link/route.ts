@@ -97,7 +97,8 @@ export async function POST(request: NextRequest) {
     function extractPlaceIdFromMapsUrl(url: string): string | null {
       // Gesamte URL inkl. Hash durchsuchen (Place-ID steht oft im Fragment)
       const match = url.match(/!1s([^!]+)/)
-      return match ? decodeURIComponent(match[1]) : null
+      const id = match?.[1]
+      return id ? decodeURIComponent(id) : null
     }
 
     const fieldMaskList = [
