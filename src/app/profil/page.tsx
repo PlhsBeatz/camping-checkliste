@@ -110,8 +110,8 @@ export default function ProfilPage() {
   return (
     <div className="min-h-screen flex">
       <NavigationSidebar isOpen={showNavSidebar} onClose={() => setShowNavSidebar(false)} />
-      <div className={cn('flex-1 transition-all duration-300', 'lg:ml-[280px]')}>
-        <div className="container mx-auto p-4 md:p-6 space-y-6">
+      <div className={cn('flex-1 transition-all duration-300 min-w-0 overflow-x-hidden', 'lg:ml-[280px]')}>
+        <div className="container mx-auto p-4 md:p-6 space-y-6 max-w-full">
           <div className="sticky top-0 z-10 flex items-center justify-between bg-white shadow pb-4 -mx-4 px-4 -mt-4 pt-4 md:-mx-6 md:px-6 md:-mt-6 md:pt-6">
             <div className="flex items-center gap-4">
               <Button
@@ -130,7 +130,7 @@ export default function ProfilPage() {
             </div>
           </div>
 
-          <Card>
+          <Card className="min-w-0 overflow-hidden">
             <CardHeader>
               <CardTitle>Kontodaten</CardTitle>
             </CardHeader>
@@ -152,19 +152,20 @@ export default function ProfilPage() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="min-w-0 overflow-hidden">
             <CardHeader>
               <CardTitle>Heimatadresse</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-4 min-w-0">
               <p className="text-sm text-gray-600">
                 Die Heimatadresse wird zur Berechnung von Entfernungen und Fahrzeiten zu Campingplätzen verwendet.
               </p>
-              <div className="space-y-2">
+              <div className="space-y-2 min-w-0">
                 <label className="text-sm font-medium text-gray-700" htmlFor="heimat_adresse">
                   Adresse
                 </label>
-                <HomeAddressAutocomplete
+                <div className="min-w-0 w-full">
+                  <HomeAddressAutocomplete
                   value={homeAddress}
                   onChange={(v) => {
                     setHomeAddress(v)
@@ -178,6 +179,7 @@ export default function ProfilPage() {
                   }}
                   placeholder="z.B. Musterstraße 1, 12345 Musterstadt"
                 />
+                </div>
                 <p className="text-xs text-gray-500">
                   Wenn Google Places verfügbar ist, werden Koordinaten automatisch ermittelt. Andernfalls wird nur die Adresse gespeichert.
                 </p>

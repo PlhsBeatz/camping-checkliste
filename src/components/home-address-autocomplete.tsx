@@ -147,19 +147,22 @@ export function HomeAddressAutocomplete(props: HomeAddressAutocompleteProps) {
   // Fallback: normales Input, wenn Places nicht verfügbar ist
   if (!placesAvailable) {
     return (
-      <Input
-        value={value}
-        onChange={(e) => {
-          const v = e.target.value
-          onChange(v)
-          onResolve({ address: v, lat: null, lng: null })
-        }}
-        placeholder={placeholder ?? 'Heimatadresse eingeben'}
-        autoComplete="off"
-      />
+      <div className="min-w-0 w-full">
+        <Input
+          value={value}
+          onChange={(e) => {
+            const v = e.target.value
+            onChange(v)
+            onResolve({ address: v, lat: null, lng: null })
+          }}
+          placeholder={placeholder ?? 'Heimatadresse eingeben'}
+          autoComplete="off"
+          className="min-w-0 w-full max-w-full box-border"
+        />
+      </div>
     )
   }
 
-  return <div ref={containerRef} className="w-full max-w-full overflow-hidden" />
+  return <div ref={containerRef} className="w-full min-w-0 max-w-full overflow-hidden box-border" />
 }
 
