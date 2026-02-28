@@ -197,10 +197,18 @@ export async function POST(request: NextRequest) {
 
     // Place-ID aus der URL extrahieren (z.B. aus data=!3m1!4b1!4m5!3m4!1sChIJ... oder !1s0x... im Pfad oder Fragment)
     function extractPlaceIdFromMapsUrl(url: string): string | null {
-      // Gesamte URL inkl. Hash durchsuchen (Place-ID steht oft im Fragment)
       const match = url.match(/!1s([^!]+)/)
       const id = match?.[1]
       return id ? decodeURIComponent(id) : null
+    }
+    // Koordinaten aus der URL extrahieren (@lat,lng)
+    function extractCoordsFromMapsUrl(url: string): { lat: number; lng: number } | null {
+      const match = url.match(/@(-?\d+\.?\d*),(-?\d+\.?\d*)/)
+      if (!match?.[1] || !match?.[2]) return null
+      const lat = parseFloat(match[1])
+      const lng = parseFloat(match[2])
+      if (Number.isFinite(lat) && Number.isFinite(lng)) return { lat, lng }
+      return null
     }
 
     const fieldMaskList = [
@@ -311,12 +319,32 @@ export async function POST(request: NextRequest) {
               nameFromQuery = decoded
             }
           }
-          const extracted = nameFromPath ?? nameFromQuery
-          if (extracted) {
-            textQuery = extracted
-          }
+        const extracted = nameFromPath ?? nameFromQuery
+        if (extracted) {
+          textQuery = extracted
+        }
         } catch {
           textQuery = resolvedUrl
+        }
+
+        const searchBody: {
+          textQuery: string
+          languageCode: string
+          pageSize: number
+          locationBias?: { circle: { center: { latitude: number; longitude: number }; radius: number } }
+        } = {
+          textQuery,
+          languageCode: 'de',
+          pageSize: 1,
+        }
+        const coords = extractCoordsFromMapsUrl(resolvedUrl)
+        if (coords) {
+          searchBody.locationBias = {
+            circle: {
+              center: { latitude: coords.lat, longitude: coords.lng },
+              radius: 500,
+            },
+          }
         }
 
         const searchRes = await fetch('https://places.googleapis.com/v1/places:searchText', {
@@ -326,11 +354,7 @@ export async function POST(request: NextRequest) {
             'X-Goog-Api-Key': apiKey,
             'X-Goog-FieldMask': searchTextFieldMask,
           },
-          body: JSON.stringify({
-            textQuery,
-            languageCode: 'de',
-            pageSize: 1,
-          }),
+          body: JSON.stringify(searchBody),
         })
 
         if (searchRes.ok) {
