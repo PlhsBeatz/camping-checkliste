@@ -142,7 +142,14 @@ export function HomeAddressAutocomplete(props: HomeAddressAutocompleteProps) {
       if (el.parentNode) el.parentNode.removeChild(el)
       elementRef.current = null
     }
-  }, [scriptLoaded, placesAvailable, onChange, onResolve, value, placeholder])
+  }, [scriptLoaded, placesAvailable, onChange, onResolve])
+
+  // Wert vom Prop ins Google-Element übernehmen (ohne Effect neu zu starten)
+  useEffect(() => {
+    if (!placesAvailable || !elementRef.current) return
+    const el = elementRef.current as unknown as { value?: string }
+    if (el.value !== value) el.value = value
+  }, [value, placesAvailable])
 
   // Fallback: normales Input, wenn Places nicht verfügbar ist
   if (!placesAvailable) {
@@ -163,6 +170,6 @@ export function HomeAddressAutocomplete(props: HomeAddressAutocompleteProps) {
     )
   }
 
-  return <div ref={containerRef} className="w-full min-w-0 max-w-full overflow-hidden box-border" />
+  return <div ref={containerRef} className="w-full min-w-0 max-w-full box-border" />
 }
 
