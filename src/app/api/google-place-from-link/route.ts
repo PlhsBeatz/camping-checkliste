@@ -79,83 +79,112 @@ export async function POST(request: NextRequest) {
     // Versuche, den Shortlink aufzulösen, um die finale Google-Maps-URL zu erhalten.
     let resolvedUrl = rawUrl
     try {
-      const res = await fetch(rawUrl, { redirect: 'follow' })
+      const res = await fetch(rawUrl, {
+        redirect: 'follow',
+        headers: {
+          'User-Agent':
+            'Mozilla/5.0 (Windows NT 10.0; rv:109.0) Gecko/20100101 Firefox/115.0',
+        },
+      })
       if (res.url) {
         resolvedUrl = res.url
       }
     } catch {
-      // Im Fehlerfall einfach mit dem ursprünglichen Link weitermachen.
       resolvedUrl = rawUrl
     }
 
-    // Versuche aus der finalen URL einen sinnvollen Suchbegriff zu extrahieren
-    let textQuery = resolvedUrl
-    try {
-      const u = new URL(resolvedUrl)
-      const pathnameParts = u.pathname.split('/').filter(Boolean)
-      const placeIndex = pathnameParts.indexOf('place')
-      let nameFromPath: string | null = null
-      if (placeIndex >= 0 && pathnameParts[placeIndex + 1]) {
-        const rawPart = pathnameParts[placeIndex + 1] ?? ''
-        const decoded = decodeURIComponent(rawPart.replace(/\+/g, ' '))
-        if (decoded && decoded !== '@') {
-          nameFromPath = decoded
-        }
-      }
-      const qParam =
-        u.searchParams.get('q') ||
-        u.searchParams.get('query') ||
-        u.searchParams.get('destination') ||
-        null
-      let nameFromQuery: string | null = null
-      if (qParam) {
-        const decoded = decodeURIComponent(qParam.replace(/\+/g, ' '))
-        if (decoded && decoded !== '@') {
-          nameFromQuery = decoded
-        }
-      }
-      const extracted = nameFromPath ?? nameFromQuery
-      if (extracted) {
-        textQuery = extracted
-      }
-    } catch {
-      textQuery = resolvedUrl
+    // Place-ID aus der URL extrahieren (z.B. aus data=!3m1!4b1!4m5!3m4!1sChIJ... oder !1s0x... im Pfad oder Fragment)
+    function extractPlaceIdFromMapsUrl(url: string): string | null {
+      // Gesamte URL inkl. Hash durchsuchen (Place-ID steht oft im Fragment)
+      const match = url.match(/!1s([^!]+)/)
+      return match ? decodeURIComponent(match[1]) : null
     }
 
-    // Nutze die Places API (searchText), um den dahinterliegenden Place zu finden.
-    const searchEndpoint = 'https://places.googleapis.com/v1/places:searchText'
-    const fieldMask = [
-      'places.displayName',
-      'places.formattedAddress',
-      'places.location',
-      'places.addressComponents',
-      'places.photos',
-      'places.websiteUri',
-    ].join(',')
+    const fieldMaskList = [
+      'displayName',
+      'formattedAddress',
+      'location',
+      'addressComponents',
+      'photos',
+      'websiteUri',
+    ]
+    const placeDetailsFieldMask = fieldMaskList.join(',')
+    const searchTextFieldMask = fieldMaskList.map((f) => `places.${f}`).join(',')
 
-    const searchRes = await fetch(searchEndpoint, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Goog-Api-Key': apiKey,
-        'X-Goog-FieldMask': fieldMask,
-      },
-      body: JSON.stringify({
-        textQuery,
-        languageCode: 'de',
-        pageSize: 1,
-      }),
-    })
+    let place: PlaceServer | null = null
+    const placeId = extractPlaceIdFromMapsUrl(resolvedUrl)
 
-    if (!searchRes.ok) {
-      return NextResponse.json(
-        { success: false, error: 'Google Places searchText call failed' },
-        { status: 502 }
-      )
+    // 1) Wenn wir eine Place-ID haben: Place Details API (exakt derselbe Eintrag wie hinter dem Link)
+    if (placeId) {
+      const detailsUrl = `https://places.googleapis.com/v1/places/${encodeURIComponent(placeId)}`
+      const detailsRes = await fetch(detailsUrl, {
+        method: 'GET',
+        headers: {
+          'X-Goog-Api-Key': apiKey,
+          'X-Goog-FieldMask': placeDetailsFieldMask,
+        },
+      })
+      if (detailsRes.ok) {
+        const detailsJson = (await detailsRes.json()) as PlaceServer
+        place = detailsJson
+      }
     }
 
-    const searchJson = (await searchRes.json()) as PlacesSearchTextResponse
-    const place = searchJson.places?.[0]
+    // 2) Fallback: Suchbegriff aus URL extrahieren und searchText aufrufen
+    if (!place) {
+      let textQuery = resolvedUrl
+      try {
+        const u = new URL(resolvedUrl)
+        const pathnameParts = u.pathname.split('/').filter(Boolean)
+        const placeIndex = pathnameParts.indexOf('place')
+        let nameFromPath: string | null = null
+        if (placeIndex >= 0 && pathnameParts[placeIndex + 1]) {
+          const rawPart = pathnameParts[placeIndex + 1] ?? ''
+          const decoded = decodeURIComponent(rawPart.replace(/\+/g, ' '))
+          if (decoded && decoded !== '@' && !decoded.startsWith('@')) {
+            nameFromPath = decoded
+          }
+        }
+        const qParam =
+          u.searchParams.get('q') ??
+          u.searchParams.get('query') ??
+          u.searchParams.get('destination') ??
+          null
+        let nameFromQuery: string | null = null
+        if (qParam) {
+          const decoded = decodeURIComponent(qParam.replace(/\+/g, ' '))
+          if (decoded && decoded !== '@') {
+            nameFromQuery = decoded
+          }
+        }
+        const extracted = nameFromPath ?? nameFromQuery
+        if (extracted) {
+          textQuery = extracted
+        }
+      } catch {
+        textQuery = resolvedUrl
+      }
+
+      const searchRes = await fetch('https://places.googleapis.com/v1/places:searchText', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Goog-Api-Key': apiKey,
+          'X-Goog-FieldMask': searchTextFieldMask,
+        },
+        body: JSON.stringify({
+          textQuery,
+          languageCode: 'de',
+          pageSize: 1,
+        }),
+      })
+
+      if (searchRes.ok) {
+        const searchJson = (await searchRes.json()) as PlacesSearchTextResponse
+        place = searchJson.places?.[0] ?? null
+      }
+    }
+
     if (!place) {
       return NextResponse.json(
         { success: false, error: 'Kein passender Ort für diesen Link gefunden.' },
