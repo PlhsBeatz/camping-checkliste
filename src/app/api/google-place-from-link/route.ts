@@ -76,18 +76,76 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Versuche, den Shortlink aufzulösen, um die finale Google-Maps-URL zu erhalten.
+    // Versuche, den Shortlink aufzulösen (Redirects folgen oder aus HTML auslesen).
+    const browserHeaders = {
+      'User-Agent':
+        'Mozilla/5.0 (Windows NT 10.0; rv:109.0) Gecko/20100101 Firefox/115.0',
+      Accept:
+        'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      'Accept-Language': 'de-DE,de;q=0.9,en;q=0.8',
+    }
     let resolvedUrl = rawUrl
     try {
-      const res = await fetch(rawUrl, {
+      let res = await fetch(rawUrl, {
         redirect: 'follow',
-        headers: {
-          'User-Agent':
-            'Mozilla/5.0 (Windows NT 10.0; rv:109.0) Gecko/20100101 Firefox/115.0',
-        },
+        headers: browserHeaders,
       })
-      if (res.url) {
+      if (res.url && res.url !== rawUrl) {
         resolvedUrl = res.url
+      }
+      // Wenn wir noch auf dem Shortlink sind: Redirect manuell aus Location-Header-Kette holen
+      if (
+        resolvedUrl.startsWith('https://maps.app.goo.gl/') ||
+        resolvedUrl.startsWith('https://goo.gl/maps/')
+      ) {
+        let current = rawUrl
+        for (let i = 0; i < 5; i++) {
+          const r = await fetch(current, {
+            redirect: 'manual',
+            headers: browserHeaders,
+          })
+          const loc = r.headers.get('location')
+          if (loc) {
+            current = loc.startsWith('http') ? loc : new URL(loc, current).toString()
+            resolvedUrl = current
+            if (!current.includes('goo.gl') && !current.includes('maps.app.goo.gl')) {
+              break
+            }
+          } else {
+            break
+          }
+        }
+      }
+      // Fallback: Aus HTML nach finaler URL suchen (meta refresh, canonical, og:url)
+      if (
+        resolvedUrl.startsWith('https://maps.app.goo.gl/') ||
+        resolvedUrl.startsWith('https://goo.gl/')
+      ) {
+        const htmlRes = await fetch(resolvedUrl, {
+          redirect: 'follow',
+          headers: browserHeaders,
+        })
+        const html = await htmlRes.text()
+        const metaRefresh = html.match(/content="\d+;?\s*url=([^"]+)"/i)
+        if (metaRefresh?.[1]) {
+          resolvedUrl = metaRefresh[1].replace(/&amp;/g, '&').trim()
+        }
+        if (resolvedUrl === rawUrl || resolvedUrl.includes('goo.gl')) {
+          const canonical =
+            html.match(/<link[^>]+rel="canonical"[^>]+href="([^"]+)"/i) ??
+            html.match(/<link[^>]+href="([^"]+)"[^>]+rel="canonical"/i)
+          if (canonical?.[1]) {
+            resolvedUrl = canonical[1].replace(/&amp;/g, '&').trim()
+          }
+        }
+        if (resolvedUrl === rawUrl || resolvedUrl.includes('goo.gl')) {
+          const ogUrl =
+            html.match(/<meta[^>]+property="og:url"[^>]+content="([^"]+)"/i) ??
+            html.match(/<meta[^>]+content="([^"]+)"[^>]+property="og:url"/i)
+          if (ogUrl?.[1]) {
+            resolvedUrl = ogUrl[1].replace(/&amp;/g, '&').trim()
+          }
+        }
       }
     } catch {
       resolvedUrl = rawUrl
