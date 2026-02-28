@@ -610,7 +610,7 @@ export const EquipmentTable = React.memo(({
                         <DropdownMenu open={openLinksMenuId === item.id} onOpenChange={(o) => setOpenLinksMenuId(o ? item.id : null)}>
                           <DropdownMenuTrigger asChild>
                             <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                              <ExternalLink className="h-4 w-4 text-blue-600" />
+                              <ExternalLink className="h-4 w-4" style={{ color: 'rgb(230,126,34)', fill: 'rgb(230,126,34)' }} />
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
@@ -623,7 +623,7 @@ export const EquipmentTable = React.memo(({
                                 }}
                                 className="cursor-pointer"
                               >
-                                <ExternalLink className="h-3 w-3 mr-2" />
+                                <ExternalLink className="h-3 w-3 mr-2" style={{ color: 'rgb(230,126,34)', fill: 'rgb(230,126,34)' }} />
                                 {link.url.length > 40 ? link.url.substring(0, 40) + '...' : link.url}
                               </DropdownMenuItem>
                             ))}

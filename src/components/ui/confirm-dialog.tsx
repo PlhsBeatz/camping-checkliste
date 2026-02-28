@@ -11,6 +11,8 @@ export interface ConfirmDialogProps {
   description: string
   confirmLabel?: string
   cancelLabel?: string
+  /** Text des Bestätigen-Buttons während des Ladevorgangs (Standard: „Wird gelöscht…“) */
+  loadingLabel?: string
   variant?: 'destructive' | 'default'
   onConfirm: () => void | Promise<void>
   isLoading?: boolean
@@ -27,6 +29,7 @@ export function ConfirmDialog({
   description,
   confirmLabel = 'Löschen',
   cancelLabel = 'Abbrechen',
+  loadingLabel = 'Wird gelöscht...',
   variant = 'destructive',
   onConfirm,
   isLoading = false,
@@ -66,7 +69,7 @@ export function ConfirmDialog({
           disabled={busy}
           className="w-full sm:w-auto"
         >
-          {busy ? 'Wird gelöscht...' : confirmLabel}
+          {busy ? loadingLabel : confirmLabel}
         </Button>
       </div>
     </ResponsiveModal>

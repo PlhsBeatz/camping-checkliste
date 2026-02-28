@@ -155,6 +155,7 @@ export function TravelersManager({ travelers, onRefresh }: TravelersManagerProps
   const [resetResult, setResetResult] = useState<{ email: string; temporaryPassword: string } | null>(null)
   const [copyFeedback, setCopyFeedback] = useState(false)
   const [resettingUserId, setResettingUserId] = useState<string | null>(null)
+  const [resetPasswordConfirmTraveler, setResetPasswordConfirmTraveler] = useState<Mitreisender | null>(null)
 
   const [form, setForm] = useState({
     name: '',
@@ -492,7 +493,7 @@ export function TravelersManager({ travelers, onRefresh }: TravelersManagerProps
                 onEdit={openEdit}
                 onDelete={handleDelete}
                 onInvite={openInvite}
-                onResetPassword={canAccessConfig ? handleResetPassword : undefined}
+                onResetPassword={canAccessConfig ? (t) => setResetPasswordConfirmTraveler(t) : undefined}
                 resettingUserId={resettingUserId}
               />
             ))}
@@ -521,7 +522,7 @@ export function TravelersManager({ travelers, onRefresh }: TravelersManagerProps
                 onEdit={openEdit}
                 onDelete={handleDelete}
                 onInvite={openInvite}
-                onResetPassword={canAccessConfig ? handleResetPassword : undefined}
+                onResetPassword={canAccessConfig ? (t) => setResetPasswordConfirmTraveler(t) : undefined}
                 resettingUserId={resettingUserId}
               />
             ))}
@@ -772,6 +773,29 @@ export function TravelersManager({ travelers, onRefresh }: TravelersManagerProps
         description="Möchten Sie diesen Mitreisenden wirklich löschen? Dies entfernt ihn auch von allen Urlauben und Ausrüstungsgegenständen."
         onConfirm={executeDeleteTraveler}
         isLoading={isLoading}
+      />
+
+      {/* Passwort zurücksetzen – Sicherheitsabfrage */}
+      <ConfirmDialog
+        open={!!resetPasswordConfirmTraveler}
+        onOpenChange={(open) => !open && setResetPasswordConfirmTraveler(null)}
+        title="Passwort zurücksetzen?"
+        description={
+          resetPasswordConfirmTraveler
+            ? `Es wird ein neues temporäres Passwort für ${resetPasswordConfirmTraveler.name} (${resetPasswordConfirmTraveler.user_email ?? '–'}) erzeugt. Der Benutzer erhält es von Ihnen und muss sich damit anmelden sowie unter „Mein Profil“ → „Passwort ändern“ ein eigenes Passwort setzen. Möchten Sie das Passwort wirklich zurücksetzen?`
+            : ''
+        }
+        confirmLabel="Passwort zurücksetzen"
+        cancelLabel="Abbrechen"
+        loadingLabel="Wird zurückgesetzt…"
+        variant="default"
+        onConfirm={async () => {
+          if (resetPasswordConfirmTraveler) {
+            await handleResetPassword(resetPasswordConfirmTraveler)
+            setResetPasswordConfirmTraveler(null)
+          }
+        }}
+        isLoading={resettingUserId != null}
       />
 
       {/* Passwort zurückgesetzt – temporäres Passwort anzeigen */}
