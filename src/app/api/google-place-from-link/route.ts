@@ -96,7 +96,7 @@ export async function POST(request: NextRequest) {
       const placeIndex = pathnameParts.indexOf('place')
       let nameFromPath: string | null = null
       if (placeIndex >= 0 && pathnameParts[placeIndex + 1]) {
-        const rawPart = pathnameParts[placeIndex + 1]
+        const rawPart = pathnameParts[placeIndex + 1] ?? ''
         const decoded = decodeURIComponent(rawPart.replace(/\+/g, ' '))
         if (decoded && decoded !== '@') {
           nameFromPath = decoded
