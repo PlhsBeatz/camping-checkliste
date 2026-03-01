@@ -1089,6 +1089,7 @@ function HomeContent() {
                   selectedProfile={selectedPackProfile}
                   hidePackedItems={hidePackedItems}
                   canEditPauschalEntries={canEditPauschalEntries}
+                  selectedProfileColor={vacationMitreisende.find(m => m.id === selectedPackProfile)?.farbe ?? undefined}
                   isChildView={!canSelectOtherProfiles}
                   listDisplayMode={listDisplayMode}
                   onOpenSettings={() => setShowPackSettings(true)}

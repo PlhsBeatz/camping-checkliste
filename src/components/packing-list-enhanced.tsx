@@ -21,6 +21,7 @@ import { PackingItem as DBPackingItem } from "@/lib/db";
 import { MarkAllConfirmationDialog, type TravelerForMarkAll } from "./mark-all-confirmation-dialog";
 import { UndoToast } from "./undo-toast";
 import { cn } from "@/lib/utils";
+import { DEFAULT_USER_COLOR_BG } from "@/lib/user-colors";
 
 interface PackingItemProps {
   id: string;
@@ -542,6 +543,8 @@ interface PackingListProps {
   listDisplayMode: 'alles' | 'packliste';
   onOpenSettings: () => void;
   vacationMitreisende?: Array<{ id: string; name: string }>;
+  /** Farbe des gewählten Packprofils (Mitreisender) für Fortschrittsbalken „nur eigene“ */
+  selectedProfileColor?: string | null;
   /** Urlaubs-Abreisedatum (abfahrtdatum ?? startdatum) – für erst_abreisetag_gepackt im Packliste-Modus */
   abreiseDatum?: string | null;
   /** Callback wenn sich die sichtbare Kategorie ändert (für Add-Dialog-Scroll) */
@@ -566,6 +569,7 @@ export function PackingList({
   listDisplayMode,
   onOpenSettings: _onOpenSettings,
   vacationMitreisende = [],
+  selectedProfileColor = null,
   abreiseDatum,
   onScrollContextChange
 }: PackingListProps) {
@@ -574,6 +578,8 @@ export function PackingList({
   const [firstVisibleCategory, setFirstVisibleCategory] = useState<string>('');
   const [tabsScrollbarVisible, setTabsScrollbarVisible] = useState(false);
   const [tabSwipeDirection, setTabSwipeDirection] = useState<'left' | 'right' | null>(null);
+  /** Im Packprofil einer Person mit Berechtigung Pauschal: Umschaltung Fortschritt „alle berechtigten“ vs. „nur eigene“. Kein Button – Klick auf Balken. */
+  const [progressBarMode, setProgressBarMode] = useState<'all' | 'own'>('all');
   const tabsScrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const tabsScrollContainerRef = useRef<HTMLDivElement | null>(null);
   const categoryRefsMap = useRef<Map<string, HTMLDivElement | null>>(new Map());
@@ -584,6 +590,11 @@ export function PackingList({
       if (tabsScrollTimeoutRef.current) clearTimeout(tabsScrollTimeoutRef.current);
     };
   }, []);
+
+  // Beim Wechsel des Packprofils Fortschritts-Modus auf „alle berechtigten“ zurücksetzen
+  useEffect(() => {
+    setProgressBarMode('all');
+  }, [selectedProfile]);
 
   // Datum zu YYYY-MM-DD normalisieren (ISO, DE DD.MM.YYYY, etc.)
   const toYYYYMMDD = useMemo(() => {
@@ -679,7 +690,17 @@ export function PackingList({
     }, { packedCount: 0, totalCount: 0 });
   }, [visibleItems, selectedProfile]);
 
-  const progressPercentage = totalCount > 0 ? Math.round((packedCount / totalCount) * 100) : 0;
+  // Anzeige Fortschrittsbalken: Packprofil „Alle“ = alle sichtbaren; Packprofil Person mit Pauschal-Berechtigung = umschaltbar (alle / nur eigene); sonst nur eigene.
+  const displayProgress = !selectedProfile
+    ? { packed: packedCount, total: totalCount }
+    : canEditPauschalEntries
+      ? (progressBarMode === 'all' ? progressForAllVisible : progressForOwnOnly)
+      : progressForOwnOnly;
+  const displayProgressPercentage = displayProgress.total > 0 ? Math.round((displayProgress.packed / displayProgress.total) * 100) : 0;
+  const progressBarColor = !selectedProfile || (canEditPauschalEntries && progressBarMode === 'all')
+    ? 'rgb(45,79,30)'
+    : (selectedProfileColor || DEFAULT_USER_COLOR_BG);
+  const isProgressBarClickable = !!(selectedProfile && canEditPauschalEntries);
 
   // IntersectionObserver: erste sichtbare Kategorie im aktiven Tab ermitteln
   useEffect(() => {
@@ -783,7 +804,26 @@ export function PackingList({
     );
   }, [selectedProfile, canConfirmVorgemerkt]);
 
-  // Hauptkategorien ausblenden, die vollständig abgehakt sind (bei Gepacktes ausblenden)
+  // Fortschritt „alle sichtbaren Einträge“ (jeder sichtbare Eintrag zählt 1) – für Packprofil einer Person inkl. Pauschal
+  const progressForAllVisible = useMemo(() => ({
+    total: visibleItems.length,
+    packed: visibleItems.filter(item => isItemFullyPackedForView(item)).length
+  }), [visibleItems, isItemFullyPackedForView]);
+
+  // Fortschritt „nur eigene Einträge“ (nur der Person zugeordnet, ohne Pauschal) – für Packprofil einer Person
+  const progressForOwnOnly = useMemo(() => {
+    const ownItems = visibleItems.filter(item =>
+      item.mitreisenden_typ !== 'pauschal' && item.mitreisende?.some(m => m.mitreisender_id === selectedProfile)
+    );
+    const packed = ownItems.filter(item => {
+      const m = item.mitreisende?.find(t => t.mitreisender_id === selectedProfile);
+      return m ? (m.gepackt || !!m.gepackt_vorgemerkt) : false;
+    }).length;
+    return { total: ownItems.length, packed };
+  }, [visibleItems, selectedProfile]);
+
+  // "Alles gepackt!": Nur anzeigen, wenn alle Einträge abgehakt sind, die der User in diesem Profil sehen kann (Rolle + Packprofil inkl. pauschal falls berechtigt).
+  const allPackedFromCurrentView = hasItems && visibleItems.every(item => isItemFullyPackedForView(item));
   const visibleMainCategories = useMemo(() => {
     if (!hidePackedItems) return mainCategories;
     return mainCategories.filter(mainCat => {
@@ -808,7 +848,6 @@ export function PackingList({
   };
 
   const hasItems = visibleItems.length > 0;
-  const allPackedFromCurrentView = hasItems && totalCount > 0 && packedCount === totalCount;
 
   const tabsForSwipe = allPackedFromCurrentView && hidePackedItems
     ? []
@@ -865,17 +904,28 @@ export function PackingList({
       <div className="flex-shrink-0 bg-white shadow">
         <div className="px-4 bg-white">
           {/* Progress Bar */}
-          {totalCount > 0 && (
+          {displayProgress.total > 0 && (
             <div className="space-y-2 bg-white px-1">
               <div className="flex items-center gap-2">
-                <div className="flex-1 min-w-0 h-2.5 bg-gray-200 rounded-full overflow-hidden">
+                <div
+                  role={isProgressBarClickable ? 'button' : undefined}
+                  tabIndex={isProgressBarClickable ? 0 : undefined}
+                  onClick={isProgressBarClickable ? () => setProgressBarMode(m => m === 'all' ? 'own' : 'all') : undefined}
+                  onKeyDown={isProgressBarClickable ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setProgressBarMode(m => m === 'all' ? 'own' : 'all'); } } : undefined}
+                  className={cn(
+                    "flex-1 min-w-0 h-2.5 bg-gray-200 rounded-full overflow-hidden",
+                    isProgressBarClickable && "cursor-pointer focus:outline-none focus:ring-2 focus:ring-[rgb(45,79,30)] focus:ring-offset-1 rounded-full"
+                  )}
+                  title={isProgressBarClickable ? (progressBarMode === 'all' ? 'Klicken: Fortschritt nur eigene Einträge' : 'Klicken: Fortschritt alle berechtigten Einträge') : undefined}
+                  aria-label={isProgressBarClickable ? (progressBarMode === 'all' ? 'Fortschritt umschalten auf nur eigene Einträge' : 'Fortschritt umschalten auf alle berechtigten Einträge') : undefined}
+                >
                   <div
-                    className="h-full bg-[rgb(45,79,30)] transition-all duration-500 ease-out"
-                    style={{ width: `${progressPercentage}%` }}
+                    className="h-full transition-all duration-500 ease-out"
+                    style={{ width: `${displayProgressPercentage}%`, backgroundColor: progressBarColor }}
                   />
                 </div>
                 <span className="text-xs font-medium text-accent flex-shrink-0">
-                  {progressPercentage}%
+                  {displayProgressPercentage}%
                 </span>
               </div>
             </div>
