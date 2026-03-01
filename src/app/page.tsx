@@ -1252,6 +1252,7 @@ function HomeContent() {
         }}
         title=""
         customContent
+        hideCloseButton
         contentClassName="max-w-4xl max-h-[90vh] sm:max-h-[90vh] h-[85vh] sm:h-auto flex flex-col"
       >
         <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
@@ -1261,7 +1262,7 @@ function HomeContent() {
               variant="outline"
               size="sm"
               onClick={() => {
-                setAddSingleItemInitialName('')
+                setAddSingleItemInitialName(searchTerm)
                 setShowAddSingleItemDialog(true)
               }}
             >

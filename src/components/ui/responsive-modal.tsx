@@ -49,6 +49,8 @@ export interface ResponsiveModalProps {
   noPadding?: boolean
   /** Komplett eigenes Layout – Kinder werden direkt gerendert, kein Header/Scroll-Wrapper */
   customContent?: boolean
+  /** Schließen-Button (X) oben rechts ausblenden – z. B. wenn unten ein Abbrechen-Button existiert */
+  hideCloseButton?: boolean
 }
 
 /**
@@ -66,6 +68,7 @@ export function ResponsiveModal({
   contentClassName,
   noPadding,
   customContent = false,
+  hideCloseButton = false,
 }: ResponsiveModalProps) {
   const isMobile = useIsMobile()
   const openedAtRef = React.useRef<number>(0)
@@ -116,7 +119,7 @@ export function ResponsiveModal({
     }
     return (
       <Dialog open={open} onOpenChange={handleOpenChange}>
-        <DialogContent className={cn('p-0', contentClassName)}>
+        <DialogContent className={cn('p-0', contentClassName)} hideCloseButton={hideCloseButton}>
           {children}
         </DialogContent>
       </Dialog>
