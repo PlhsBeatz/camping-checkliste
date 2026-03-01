@@ -22,6 +22,21 @@ const useIsMobile = () => {
 
 const DRAWER_STATE_KEY = 'responsive_modal_drawer'
 
+/** Stack der geöffneten Drawer (zuletzt geöffneter = oben). Nur der oberste reagiert auf Zurück. */
+const drawerCloseStack: Array<() => void> = []
+
+function handleDrawerPopState() {
+  const closeTop = drawerCloseStack.pop()
+  if (closeTop) closeTop()
+}
+
+let globalPopstateListenerAdded = false
+function ensureGlobalPopstateListener() {
+  if (typeof window === 'undefined' || globalPopstateListenerAdded) return
+  globalPopstateListenerAdded = true
+  window.addEventListener('popstate', handleDrawerPopState)
+}
+
 export interface ResponsiveModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -72,22 +87,20 @@ export function ResponsiveModal({
     [onOpenChange, isMobile, open]
   )
 
-  // Smartphone Zurück-Button: Drawer schließen statt Navigation (Ref für stabile Deps)
+  // Smartphone Zurück-Button: nur der zuletzt geöffnete Drawer schließt (Stack für verschachtelte Drawer)
   React.useEffect(() => {
     if (!open || !isMobile || typeof window === 'undefined') return
 
-    // Eigenen History-State beim Öffnen pushen – Zurück führt zu popstate
+    const close = () => onOpenChangeRef.current(false)
+    drawerCloseStack.push(close)
+    ensureGlobalPopstateListener()
+
     const state = { ...(window.history.state || {}), [DRAWER_STATE_KEY]: true }
     window.history.pushState(state, '')
 
-    const onPopState = () => {
-      // Listener ist nur aktiv wenn Drawer offen; popstate = Nutzer hat Zurück gedrückt → Drawer schließen
-      onOpenChangeRef.current(false)
-    }
-
-    window.addEventListener('popstate', onPopState)
     return () => {
-      window.removeEventListener('popstate', onPopState)
+      const idx = drawerCloseStack.indexOf(close)
+      if (idx !== -1) drawerCloseStack.splice(idx, 1)
     }
   }, [open, isMobile])
 
