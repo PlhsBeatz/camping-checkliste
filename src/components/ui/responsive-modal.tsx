@@ -76,21 +76,17 @@ export function ResponsiveModal({
   React.useEffect(() => {
     if (!open || !isMobile || typeof window === 'undefined') return
 
-    // eigenen History-State für diesen Drawer markieren
+    // Eigenen History-State beim Öffnen pushen – Zurück führt zu popstate
     const state = { ...(window.history.state || {}), [DRAWER_STATE_KEY]: true }
     window.history.pushState(state, '')
 
-    const onPopState = (event: PopStateEvent) => {
-      // Nur diesen Drawer schließen, Navigation nicht weiter kaskadieren
-      if (event.state && event.state[DRAWER_STATE_KEY]) {
-        onOpenChangeRef.current(false)
-      }
+    const onPopState = () => {
+      // Listener ist nur aktiv wenn Drawer offen; popstate = Nutzer hat Zurück gedrückt → Drawer schließen
+      onOpenChangeRef.current(false)
     }
 
     window.addEventListener('popstate', onPopState)
     return () => {
-      // Listener wieder entfernen – die History-Einträge bleiben bestehen,
-      // beeinflussen aber das Verhalten nicht mehr, sobald der Drawer zu ist.
       window.removeEventListener('popstate', onPopState)
     }
   }, [open, isMobile])
