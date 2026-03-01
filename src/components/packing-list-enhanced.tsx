@@ -665,6 +665,9 @@ export function PackingList({
   }, [mainCategories, activeMainCategory]);
 
   const effectivePacked = (g: boolean, v?: boolean) => g || !!v;
+  // Für Admin (canConfirmVorgemerkt): Nur verifiziert (gepackt) zählt im Fortschritt; Kind/Gast: vorgemerkt zählt mit.
+  const countedAsPacked = (gepackt: boolean, vorgemerkt?: boolean) =>
+    canConfirmVorgemerkt ? gepackt : effectivePacked(gepackt, vorgemerkt);
   // Fortschritt: Im Packprofil einer Person nur Einträge, die der Person zugeordnet sind; im Alle-Profil alle sichtbaren.
   const { packedCount, totalCount } = useMemo(() => {
     return visibleItems.reduce((acc, item) => {
@@ -672,23 +675,23 @@ export function PackingList({
         // Pauschal nur im Alle-Profil in den Fortschritt einrechnen (nicht personenzugeordnet)
         if (!selectedProfile) {
           acc.totalCount += 1;
-          if (effectivePacked(item.gepackt, item.gepackt_vorgemerkt)) acc.packedCount += 1;
+          if (countedAsPacked(item.gepackt, item.gepackt_vorgemerkt)) acc.packedCount += 1;
         }
       } else if (item.mitreisende) {
         if (selectedProfile) {
           const mine = item.mitreisende.find(m => m.mitreisender_id === selectedProfile);
           if (mine) {
             acc.totalCount += 1;
-            if (effectivePacked(mine.gepackt, mine.gepackt_vorgemerkt)) acc.packedCount += 1;
+            if (countedAsPacked(mine.gepackt, mine.gepackt_vorgemerkt)) acc.packedCount += 1;
           }
         } else {
           acc.totalCount += item.mitreisende.length;
-          acc.packedCount += item.mitreisende.filter(m => effectivePacked(m.gepackt, m.gepackt_vorgemerkt)).length;
+          acc.packedCount += item.mitreisende.filter(m => countedAsPacked(m.gepackt, m.gepackt_vorgemerkt)).length;
         }
       }
       return acc;
     }, { packedCount: 0, totalCount: 0 });
-  }, [visibleItems, selectedProfile]);
+  }, [visibleItems, selectedProfile, canConfirmVorgemerkt]);
 
   // IntersectionObserver: erste sichtbare Kategorie im aktiven Tab ermitteln
   useEffect(() => {
@@ -798,17 +801,17 @@ export function PackingList({
     packed: visibleItems.filter(item => isItemFullyPackedForView(item)).length
   }), [visibleItems, isItemFullyPackedForView]);
 
-  // Fortschritt „nur eigene Einträge“ (nur der Person zugeordnet, ohne Pauschal) – für Packprofil einer Person
+  // Fortschritt „nur eigene Einträge“ (nur der Person zugeordnet, ohne Pauschal) – für Packprofil einer Person. Kind: vorgemerkt zählt; Admin: nur verifiziert.
   const progressForOwnOnly = useMemo(() => {
     const ownItems = visibleItems.filter(item =>
       item.mitreisenden_typ !== 'pauschal' && item.mitreisende?.some(m => m.mitreisender_id === selectedProfile)
     );
     const packed = ownItems.filter(item => {
       const m = item.mitreisende?.find(t => t.mitreisender_id === selectedProfile);
-      return m ? (m.gepackt || !!m.gepackt_vorgemerkt) : false;
+      return m ? countedAsPacked(m.gepackt, m.gepackt_vorgemerkt) : false;
     }).length;
     return { total: ownItems.length, packed };
-  }, [visibleItems, selectedProfile]);
+  }, [visibleItems, selectedProfile, canConfirmVorgemerkt]);
 
   // Anzeige Fortschrittsbalken: Packprofil „Alle“ = alle sichtbaren; Packprofil Person mit Pauschal-Berechtigung = umschaltbar (alle / nur eigene); sonst nur eigene.
   const displayProgress = !selectedProfile
@@ -913,7 +916,7 @@ export function PackingList({
                   onKeyDown={isProgressBarClickable ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setProgressBarMode(m => m === 'all' ? 'own' : 'all'); } } : undefined}
                   className={cn(
                     "flex-1 min-w-0 h-2.5 bg-gray-200 rounded-full overflow-hidden",
-                    isProgressBarClickable && "cursor-pointer focus:outline-none focus:ring-2 focus:ring-[rgb(45,79,30)] focus:ring-offset-1 rounded-full"
+                    isProgressBarClickable && "cursor-pointer focus:outline-none focus:ring-0 focus:ring-offset-0 rounded-full"
                   )}
                   title={isProgressBarClickable ? (progressBarMode === 'all' ? 'Klicken: Fortschritt nur eigene Einträge' : 'Klicken: Fortschritt alle berechtigten Einträge') : undefined}
                   aria-label={isProgressBarClickable ? (progressBarMode === 'all' ? 'Fortschritt umschalten auf nur eigene Einträge' : 'Fortschritt umschalten auf alle berechtigten Einträge') : undefined}

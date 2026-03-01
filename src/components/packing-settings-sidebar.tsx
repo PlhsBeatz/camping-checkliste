@@ -147,7 +147,7 @@ export function PackingSettingsSidebar({
               </div>
               <div className="text-left">
                 <div className="font-semibold text-gray-900">Zentral / Alle</div>
-                <div className="text-xs text-gray-500 uppercase tracking-wide">GEMEINSAMES GUT</div>
+                <div className="text-xs text-gray-500 tracking-wide">Übersicht</div>
               </div>
             </div>
           </button>
