@@ -142,7 +142,9 @@ export function HomeAddressAutocomplete(props: HomeAddressAutocompleteProps) {
       if (el.parentNode) el.parentNode.removeChild(el)
       elementRef.current = null
     }
-  }, [scriptLoaded, placesAvailable, onChange, onResolve])
+  // value bewusst nicht in deps: wird im separaten Effect synchron gehalten; sonst würde das Element bei jeder Änderung neu erstellt
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scriptLoaded, placesAvailable, onChange, onResolve, placeholder])
 
   // Wert vom Prop ins Google-Element übernehmen (ohne Effect neu zu starten)
   useEffect(() => {

@@ -690,18 +690,6 @@ export function PackingList({
     }, { packedCount: 0, totalCount: 0 });
   }, [visibleItems, selectedProfile]);
 
-  // Anzeige Fortschrittsbalken: Packprofil „Alle“ = alle sichtbaren; Packprofil Person mit Pauschal-Berechtigung = umschaltbar (alle / nur eigene); sonst nur eigene.
-  const displayProgress = !selectedProfile
-    ? { packed: packedCount, total: totalCount }
-    : canEditPauschalEntries
-      ? (progressBarMode === 'all' ? progressForAllVisible : progressForOwnOnly)
-      : progressForOwnOnly;
-  const displayProgressPercentage = displayProgress.total > 0 ? Math.round((displayProgress.packed / displayProgress.total) * 100) : 0;
-  const progressBarColor = !selectedProfile || (canEditPauschalEntries && progressBarMode === 'all')
-    ? 'rgb(45,79,30)'
-    : (selectedProfileColor || DEFAULT_USER_COLOR_BG);
-  const isProgressBarClickable = !!(selectedProfile && canEditPauschalEntries);
-
   // IntersectionObserver: erste sichtbare Kategorie im aktiven Tab ermitteln
   useEffect(() => {
     if (!onScrollContextChange || !activeMainCategory) return;
@@ -822,6 +810,19 @@ export function PackingList({
     return { total: ownItems.length, packed };
   }, [visibleItems, selectedProfile]);
 
+  // Anzeige Fortschrittsbalken: Packprofil „Alle“ = alle sichtbaren; Packprofil Person mit Pauschal-Berechtigung = umschaltbar (alle / nur eigene); sonst nur eigene.
+  const displayProgress = !selectedProfile
+    ? { packed: packedCount, total: totalCount }
+    : canEditPauschalEntries
+      ? (progressBarMode === 'all' ? progressForAllVisible : progressForOwnOnly)
+      : progressForOwnOnly;
+  const displayProgressPercentage = displayProgress.total > 0 ? Math.round((displayProgress.packed / displayProgress.total) * 100) : 0;
+  const progressBarColor = !selectedProfile || (canEditPauschalEntries && progressBarMode === 'all')
+    ? 'rgb(45,79,30)'
+    : (selectedProfileColor || DEFAULT_USER_COLOR_BG);
+  const isProgressBarClickable = !!(selectedProfile && canEditPauschalEntries);
+
+  const hasItems = visibleItems.length > 0;
   // "Alles gepackt!": Nur anzeigen, wenn alle Einträge abgehakt sind, die der User in diesem Profil sehen kann (Rolle + Packprofil inkl. pauschal falls berechtigt).
   const allPackedFromCurrentView = hasItems && visibleItems.every(item => isItemFullyPackedForView(item));
   const visibleMainCategories = useMemo(() => {
@@ -846,8 +847,6 @@ export function PackingList({
     if (!hidePackedItems) return true;
     return categoryItems.some(item => !isItemFullyPackedForView(item));
   };
-
-  const hasItems = visibleItems.length > 0;
 
   const tabsForSwipe = allPackedFromCurrentView && hidePackedItems
     ? []
