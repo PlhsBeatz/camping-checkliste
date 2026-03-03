@@ -1,6 +1,7 @@
 'use client'
 
 import { Tent } from 'lucide-react'
+import { CampingAppIcon } from './camping-app-icon'
 
 interface AppLogoProps {
   /** Wenn true, wird die Version "v 0.3 PRO" angezeigt (z.B. in der Sidebar) */
@@ -34,7 +35,7 @@ export function AppLogo({
     <div
       className={`${boxSize} ${borderRadius} bg-[rgb(45,79,30)] flex items-center justify-center flex-shrink-0`}
     >
-      <Tent className={`${iconSize} text-white`} />
+      <CampingAppIcon className={iconSize} />
     </div>
   )
 

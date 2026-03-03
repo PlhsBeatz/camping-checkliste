@@ -1,21 +1,5 @@
 import { ImageResponse } from 'next/og'
-
-/** Zelt-Icon wie im CAMPPACK-Logo – mit 20% Safe-Zone für Maskable-Icons (Android) */
-const tentSvg = (
-  <svg
-    width="100%"
-    height="100%"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="white"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <path d="M3.5 21 12 3l8.5 18H3.5Z" />
-    <path d="M12 3v18" />
-  </svg>
-)
+import { CampingAppIcon } from '@/components/camping-app-icon'
 
 export function generateImageMetadata() {
   return [
@@ -53,7 +37,7 @@ export default async function Icon({
           padding: '10%',
         }}
       >
-        {tentSvg}
+        <CampingAppIcon />
       </div>
     ),
     size
