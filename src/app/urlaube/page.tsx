@@ -1201,15 +1201,16 @@ export default function UrlaubePage() {
                                 )}
                               >
                                 <div className="flex gap-3 flex-1 min-w-0">
-                                  {cp.photo_name &&
-                                    (() => {
-                                      const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
-                                      const photoUrl =
-                                        apiKey && cp.photo_name
-                                          ? `https://places.googleapis.com/v1/${cp.photo_name}/media?maxWidthPx=96&key=${apiKey}`
-                                          : null
-                                      return photoUrl ? (
-                                        <div className="flex-shrink-0 w-12 h-12 rounded-lg overflow-hidden bg-muted">
+                                  {(() => {
+                                    const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
+                                    const hasPhoto = !!cp.photo_name && !!apiKey
+                                    const photoUrl =
+                                      hasPhoto && cp.photo_name
+                                        ? `https://places.googleapis.com/v1/${cp.photo_name}/media?maxWidthPx=96&key=${apiKey}`
+                                        : null
+                                    return (
+                                      <div className="flex-shrink-0 w-12 h-12 rounded-lg overflow-hidden bg-muted flex items-center justify-center">
+                                        {photoUrl ? (
                                           <Image
                                             src={photoUrl}
                                             alt=""
@@ -1218,9 +1219,14 @@ export default function UrlaubePage() {
                                             unoptimized
                                             className="w-full h-full object-cover"
                                           />
-                                        </div>
-                                      ) : null
-                                    })()}
+                                        ) : (
+                                          <span className="text-[10px] leading-tight text-muted-foreground px-1 text-center">
+                                            Kein Bild
+                                          </span>
+                                        )}
+                                      </div>
+                                    )
+                                  })()}
                                   <div className="space-y-1 min-w-0 flex-1">
                                     <div className="flex items-center gap-2">
                                       <span className="font-semibold text-sm truncate">

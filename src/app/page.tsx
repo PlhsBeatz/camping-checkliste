@@ -277,14 +277,23 @@ function HomeContent() {
     fetchVacationMitreisende()
   }, [selectedVacationId])
 
-  // Kind/Gast: Eigenes Profil automatisch auswählen
+  // Standard-Packprofil je nach Rolle setzen:
+  // - Kind/Gast: immer eigenes Profil
+  // - Admin: standardmäßig eigenes Profil, kann aber auf „Alle“ oder andere Personen umschalten
   useEffect(() => {
-    if (!canSelectOtherProfiles && user?.mitreisender_id && vacationMitreisende.length > 0) {
-      if (vacationMitreisende.some((m) => m.id === user.mitreisender_id)) {
-        setSelectedPackProfile(user.mitreisender_id)
-      }
+    if (!user?.mitreisender_id || vacationMitreisende.length === 0) return
+    const ownId = user.mitreisender_id
+    const isOnVacation = vacationMitreisende.some((m) => m.id === ownId)
+    if (!isOnVacation) return
+
+    if (!canSelectOtherProfiles) {
+      // Kind/Gast: immer eigenes Profil, kein „Alle“-Profil
+      setSelectedPackProfile(ownId)
+    } else if (selectedPackProfile === null) {
+      // Admin: nur initial (wenn noch kein Profil gewählt wurde) eigenes Profil setzen
+      setSelectedPackProfile(ownId)
     }
-  }, [canSelectOtherProfiles, user?.mitreisender_id, vacationMitreisende])
+  }, [canSelectOtherProfiles, user?.mitreisender_id, vacationMitreisende, selectedPackProfile, user])
 
   // Fetch Equipment Items for FAB modal
   useEffect(() => {
