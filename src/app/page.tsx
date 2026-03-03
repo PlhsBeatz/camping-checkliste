@@ -104,6 +104,8 @@ function HomeContent() {
   const [editingForMitreisenderId, setEditingForMitreisenderId] = useState<string | null>(null)
   const [_equipmentSearchTerm, _setEquipmentSearchTerm] = useState('')
   const [selectedPackProfile, setSelectedPackProfile] = useState<string | null>(null)
+  // Für Admins: merken, für welchen Urlaub das Standard-Packprofil bereits automatisch gesetzt wurde
+  const [autoProfileInitializedVacationId, setAutoProfileInitializedVacationId] = useState<string | null>(null)
   const [hidePackedItems, setHidePackedItems] = useState(true)
   const [deletePackingItemConfirm, setDeletePackingItemConfirm] = useState<{
     id: string
@@ -279,7 +281,7 @@ function HomeContent() {
 
   // Standard-Packprofil je nach Rolle setzen:
   // - Kind/Gast: immer eigenes Profil
-  // - Admin: standardmäßig eigenes Profil, kann aber auf „Alle“ oder andere Personen umschalten
+  // - Admin: pro Urlaub genau einmal automatisch eigenes Profil wählen; danach manuelle Auswahl respektieren
   useEffect(() => {
     if (!user?.mitreisender_id || vacationMitreisende.length === 0) return
     const ownId = user.mitreisender_id
@@ -289,11 +291,30 @@ function HomeContent() {
     if (!canSelectOtherProfiles) {
       // Kind/Gast: immer eigenes Profil, kein „Alle“-Profil
       setSelectedPackProfile(ownId)
-    } else if (selectedPackProfile === null) {
-      // Admin: nur initial (wenn noch kein Profil gewählt wurde) eigenes Profil setzen
+      return
+    }
+
+    // Ab hier: Admin-Logik
+    if (!selectedVacationId) return
+
+    // Wenn für diesen Urlaub bereits automatisch ein Profil gesetzt wurde, nichts mehr überschreiben
+    if (autoProfileInitializedVacationId === selectedVacationId) return
+
+    // Admin: nur beim ersten Laden dieses Urlaubs automatisch eigenes Profil setzen,
+    // und nur, wenn aktuell noch kein Profil gewählt wurde (z.B. durch Session/URL)
+    if (selectedPackProfile === null) {
       setSelectedPackProfile(ownId)
     }
-  }, [canSelectOtherProfiles, user?.mitreisender_id, vacationMitreisende, selectedPackProfile, user])
+    setAutoProfileInitializedVacationId(selectedVacationId)
+  }, [
+    canSelectOtherProfiles,
+    user?.mitreisender_id,
+    vacationMitreisende,
+    selectedPackProfile,
+    user,
+    selectedVacationId,
+    autoProfileInitializedVacationId,
+  ])
 
   // Fetch Equipment Items for FAB modal
   useEffect(() => {
