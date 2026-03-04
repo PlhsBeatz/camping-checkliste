@@ -16,10 +16,11 @@ export default function AppleIcon() {
           justifyContent: 'center',
           background: 'rgb(45, 79, 30)',
           borderRadius: 24,
-          padding: '12.5%',
         }}
       >
-        <CampingAppIcon width={112} height={112} />
+        <div style={{ width: '62%', height: '62%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <CampingAppIcon style={{ width: '100%', height: '100%' }} />
+        </div>
       </div>
     ),
     { ...size }
