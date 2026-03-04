@@ -18,7 +18,7 @@ export default function AppleIcon() {
           borderRadius: 24,
         }}
       >
-        <div style={{ width: '62%', height: '62%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ width: '75%', height: '75%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <CampingAppIcon style={{ width: '100%', height: '100%' }} />
         </div>
       </div>

@@ -26,7 +26,7 @@ export async function GET(
           borderRadius: Math.round(sizeNum * 0.1875),
         }}
       >
-        <div style={{ width: '62%', height: '62%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ width: '75%', height: '75%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <CampingAppIcon style={{ width: '100%', height: '100%' }} />
         </div>
       </div>
