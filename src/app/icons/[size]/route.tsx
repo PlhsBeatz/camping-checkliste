@@ -1,4 +1,5 @@
 import { ImageResponse } from 'next/og'
+import { CampingAppIcon } from '@/components/camping-app-icon'
 
 const SIZES = ['48', '72', '96', '128', '192', '384', '512'] as const
 
@@ -26,19 +27,7 @@ export async function GET(
           padding: '10%',
         }}
       >
-        <svg
-          width="100%"
-          height="100%"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="white"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <path d="M3.5 21 12 3l8.5 18H3.5Z" />
-          <path d="M12 3v18" />
-        </svg>
+        <CampingAppIcon />
       </div>
     ),
     {
