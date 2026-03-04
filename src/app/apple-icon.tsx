@@ -16,6 +16,7 @@ export default function AppleIcon() {
           justifyContent: 'center',
           background: 'rgb(45, 79, 30)',
           borderRadius: 24,
+          padding: '12.5%',
         }}
       >
         <CampingAppIcon width={112} height={112} />

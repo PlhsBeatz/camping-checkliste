@@ -26,7 +26,7 @@ export function AppLogo({
   className = '',
 }: AppLogoProps) {
   const isCompact = size === 'compact'
-  const iconSize = isCompact ? 'w-6 h-6' : 'w-8 h-8'
+  const iconSize = isCompact ? 'w-8 h-8' : 'w-11 h-11'
   const boxSize = isCompact ? 'w-10 h-10' : 'w-14 h-14'
   const borderRadius = isCompact ? 'rounded-lg' : 'rounded-xl'
 

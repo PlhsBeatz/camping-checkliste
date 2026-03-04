@@ -24,7 +24,7 @@ export async function GET(
           justifyContent: 'center',
           background: 'rgb(45, 79, 30)',
           borderRadius: Math.round(sizeNum * 0.1875),
-          padding: '10%',
+          padding: '12.5%',
         }}
       >
         <CampingAppIcon />

@@ -34,7 +34,7 @@ export default async function Icon({
           justifyContent: 'center',
           background: 'rgb(45, 79, 30)',
           borderRadius: radius,
-          padding: '10%',
+          padding: '12.5%',
         }}
       >
         <CampingAppIcon />
