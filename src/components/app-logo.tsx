@@ -1,6 +1,5 @@
 'use client'
 
-import { Tent } from 'lucide-react'
 import { CampingAppIcon } from './camping-app-icon'
 
 interface AppLogoProps {
@@ -69,3 +68,4 @@ export function AppLogo({
     </div>
   )
 }
+

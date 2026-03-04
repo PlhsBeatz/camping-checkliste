@@ -691,7 +691,7 @@ export function PackingList({
       }
       return acc;
     }, { packedCount: 0, totalCount: 0 });
-  }, [visibleItems, selectedProfile, canConfirmVorgemerkt]);
+  }, [visibleItems, selectedProfile, canConfirmVorgemerkt, countedAsPacked]);
 
   // IntersectionObserver: erste sichtbare Kategorie im aktiven Tab ermitteln
   useEffect(() => {
@@ -811,7 +811,7 @@ export function PackingList({
       return m ? countedAsPacked(m.gepackt, m.gepackt_vorgemerkt) : false;
     }).length;
     return { total: ownItems.length, packed };
-  }, [visibleItems, selectedProfile, canConfirmVorgemerkt]);
+  }, [visibleItems, selectedProfile, canConfirmVorgemerkt, countedAsPacked]);
 
   // Anzeige Fortschrittsbalken: Packprofil „Alle“ = alle sichtbaren; Packprofil Person mit Pauschal-Berechtigung = umschaltbar (alle / nur eigene); sonst nur eigene.
   const displayProgress = !selectedProfile
