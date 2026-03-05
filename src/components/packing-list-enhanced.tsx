@@ -45,6 +45,7 @@ interface PackingItemProps {
   /** Admin: Vormerkung entfernen (Drei-Punkte-Menü) */
   onRemoveVorgemerkt?: (packingItemId: string, mitreisenderId?: string) => void;
   canConfirmVorgemerkt?: boolean;
+  canEditPauschalEntries?: boolean;
   details?: string;
   fullItem: DBPackingItem;
   selectedProfile: string | null;
@@ -73,6 +74,7 @@ const PackingItem: React.FC<PackingItemProps> = ({
   onConfirmVorgemerkt,
   onRemoveVorgemerkt,
   canConfirmVorgemerkt,
+  canEditPauschalEntries = true,
   details,
   fullItem,
   selectedProfile,
@@ -491,7 +493,7 @@ const PackingItem: React.FC<PackingItemProps> = ({
                 <Edit2 className="h-4 w-4 mr-2" />
                 Bearbeiten
               </DropdownMenuItem>
-              {!(selectedProfile && mitreisenden_typ === 'pauschal' && !isTemporaer) && (
+              {!(selectedProfile && mitreisenden_typ === 'pauschal' && !isTemporaer && !canEditPauschalEntries) && (
                 <DropdownMenuItem 
                   onSelect={() => {
                     setMenuOpen(false)

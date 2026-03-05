@@ -841,17 +841,25 @@ function HomeContent() {
     // Temporär-ähnlich: echte temporäre Einträge oder solche ohne Equipment-Referenz
     const isTempLike = !!item.is_temporaer || !item.gegenstand_id
 
-    // Pauschale Einträge dürfen im Personenprofil grundsätzlich nur im Profil "Alle" entfernt werden –
+    const isPauschal = item.mitreisenden_typ === 'pauschal'
+
+    // Pauschale Einträge dürfen im Personenprofil nur dann nicht entfernt werden,
+    // wenn der Benutzer keine Berechtigung für pauschale Einträge hat.
     // Ausnahme: temporäre/„temp-like“ Einträge, die aus jedem Profil löschbar sein sollen.
-    if (forMitreisenderId && item.mitreisenden_typ === 'pauschal' && !isTempLike) {
+    if (forMitreisenderId && isPauschal && !isTempLike && !canEditPauschalEntries) {
       alert('Pauschale Einträge können nur im Packprofil „Alle" entfernt werden.')
       return
     }
 
-    const isTemporaerPauschal = isTempLike && item.mitreisenden_typ === 'pauschal'
+    const isTemporaerPauschal = isTempLike && isPauschal
     // Temporär + pauschal: immer Gesamteintrag löschen (nicht nur ein Mitreisender),
     // daher hier kein Profil-Deletepfad.
-    const isProfileDelete = !!forMitreisenderId && !isTemporaerPauschal
+    // Nicht-temporäre pauschale Einträge: bei Berechtigung auch aus dem Personenprofil heraus
+    // immer als Gesamteintrag löschen (kein Profil-Deletepfad).
+    const isProfileDelete =
+      !!forMitreisenderId &&
+      !isTemporaerPauschal &&
+      !(isPauschal && !isTempLike)
     setDeletePackingItemConfirm({
       id,
       forMitreisenderId: isProfileDelete ? forMitreisenderId : null,
