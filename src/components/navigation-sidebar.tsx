@@ -77,7 +77,7 @@ export function NavigationSidebar({ isOpen, onClose }: NavigationSidebarProps) {
         )}
       >
         {/* Logo & Version */}
-        <div className="p-6 bg-[rgb(250,250,249)]">
+        <div className="p-6 bg-[rgb(45,79,30)]">
           <AppLogo showVersion size="compact" />
         </div>
 

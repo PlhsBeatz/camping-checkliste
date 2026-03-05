@@ -40,11 +40,11 @@ export function AppLogo({
 
   const textBlock = (
     <div className={variant === 'centered' ? 'text-center' : ''}>
-      <h1 className={`${isCompact ? 'text-xl' : 'text-2xl'} font-bold text-[rgb(45,79,30)] leading-tight`}>
+      <h1 className={`${isCompact ? 'text-xl' : 'text-2xl'} font-bold text-white leading-tight`}>
         CAMPPACK
       </h1>
       {showVersion && (
-        <p className="text-xs text-[rgb(45,79,30)]/60">v 0.3 PRO</p>
+        <p className="text-xs text-white/60">v 0.3 PRO</p>
       )}
       {subtitle && (
         <p className="text-sm text-gray-600 mt-1">{subtitle}</p>
