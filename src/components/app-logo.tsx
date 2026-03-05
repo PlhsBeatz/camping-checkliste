@@ -44,7 +44,7 @@ export function AppLogo({
         CAMPPACK
       </h1>
       {showVersion && (
-        <p className="text-xs text-white/60">v 0.3 PRO</p>
+        <p className="text-xs text-white/70">v 0.3 PRO</p>
       )}
       {subtitle && (
         <p className="text-sm text-gray-600 mt-1">{subtitle}</p>
