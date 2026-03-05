@@ -13,6 +13,7 @@ import { Vacation, PackingItem, TransportVehicle, Mitreisender, EquipmentItem, C
 import type { ApiResponse } from '@/lib/api-types'
 import { ResponsiveModal } from '@/components/ui/responsive-modal'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import { MarkAllConfirmationDialog } from '@/components/mark-all-confirmation-dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -111,6 +112,11 @@ function HomeContent() {
     id: string
     forMitreisenderId?: string | null
     isProfileDelete: boolean
+  } | null>(null)
+  /** Im Packprofil „Alle“: personenbezogener Eintrag – Auswahl „für wen löschen?“ (wie beim Abhaken) */
+  const [deletePersonsConfirm, setDeletePersonsConfirm] = useState<{
+    packingItemId: string
+    travelers: Array<{ id: string; name: string }>
   } | null>(null)
   const [listDisplayMode, setListDisplayMode] = useState<'alles' | 'packliste'>('packliste')
   const addDialogScrollContextRef = useRef<{ mainCategory: string; category: string } | null>(null)
@@ -869,6 +875,19 @@ function HomeContent() {
       return
     }
 
+    // Packprofil „Alle“: personenbezogener Eintrag (alle/ausgewaehlte) → Dialog „Für wen löschen?“
+    const personenbezogen = !forMitreisenderId && !isPauschal && (item.mitreisende?.length ?? 0) > 0
+    if (personenbezogen) {
+      setDeletePersonsConfirm({
+        packingItemId: id,
+        travelers: (item.mitreisende ?? []).map((m) => ({
+          id: m.mitreisender_id,
+          name: m.mitreisender_name,
+        })),
+      })
+      return
+    }
+
     const isTemporaerPauschal = isTempLike && isPauschal
     // Temporär + pauschal: immer Gesamteintrag löschen (nicht nur ein Mitreisender),
     // daher hier kein Profil-Deletepfad.
@@ -883,6 +902,39 @@ function HomeContent() {
       forMitreisenderId: isProfileDelete ? forMitreisenderId : null,
       isProfileDelete,
     })
+  }
+
+  const executeDeleteForPersons = async (selectedTravelerIds: string[]) => {
+    if (!deletePersonsConfirm || selectedTravelerIds.length === 0) return
+    const { packingItemId } = deletePersonsConfirm
+    setDeletePersonsConfirm(null)
+    pendingMutationsRef.current += 1
+    setIsLoading(true)
+    try {
+      for (const mitreisenderId of selectedTravelerIds) {
+        const res = await fetch(
+          `/api/packing-items/remove-mitreisender?packingItemId=${packingItemId}&mitreisenderId=${mitreisenderId}`,
+          { method: 'DELETE' }
+        )
+        const data = (await res.json()) as ApiResponse<boolean>
+        if (!data.success) {
+          alert('Fehler beim Entfernen: ' + (data.error ?? 'Unbekannt'))
+        }
+      }
+      if (selectedVacationId) {
+        const itemsRes = await fetch(`/api/packing-items?vacationId=${selectedVacationId}`)
+        const itemsData = (await itemsRes.json()) as ApiResponse<PackingItem[]>
+        if (itemsData.success && itemsData.data) {
+          setPackingItems(itemsData.data)
+        }
+      }
+    } catch (error) {
+      console.error('Failed to remove from packing item:', error)
+      alert('Fehler beim Entfernen')
+    } finally {
+      pendingMutationsRef.current -= 1
+      setIsLoading(false)
+    }
   }
 
   const executeDeletePackingItem = async () => {
@@ -1294,6 +1346,16 @@ function HomeContent() {
             confirmLabel={deletePackingItemConfirm?.isProfileDelete ? 'Entfernen' : 'Löschen'}
             onConfirm={executeDeletePackingItem}
             isLoading={isLoading}
+          />
+
+          {/* Packprofil „Alle“: personenbezogener Eintrag – Für wen von der Packliste entfernen? */}
+          <MarkAllConfirmationDialog
+            isOpen={!!deletePersonsConfirm}
+            onClose={() => setDeletePersonsConfirm(null)}
+            onConfirm={executeDeleteForPersons}
+            _itemName=""
+            travelers={deletePersonsConfirm?.travelers ?? []}
+            deleteMode
           />
         </div>
       </div>
