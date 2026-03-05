@@ -404,13 +404,17 @@ function HomeContent() {
   const availableEquipment = useMemo(() => {
     return equipmentItems.filter((eq) => {
       if (!PACKABLE_STATUSES.includes(eq.status)) return false
+      // Ohne Berechtigung für pauschale Einträge: diese nicht zur Auswahl anbieten
+      if (!canEditPauschalEntries && (eq.mitreisenden_typ ?? 'pauschal') === 'pauschal') return false
       const existingItem = packingItems.find((p) => p.gegenstand_id === eq.id)
       if (!existingItem) return true // Nicht auf der Liste → verfügbar
       if (!selectedPackProfile) return false // Alle-Modus: bereits auf Liste → nicht verfügbar
+      // Pauschal-Einträge sind keiner Person zugeordnet und stehen bereits auf der Packliste → nicht zur Auswahl
+      if (existingItem.mitreisenden_typ === 'pauschal') return false
       // Mitreisender-Modus: verfügbar wenn diese Person noch nicht zugeordnet ist
       return !existingItem.mitreisende?.some((m) => m.mitreisender_id === selectedPackProfile)
     })
-  }, [equipmentItems, packingItems, selectedPackProfile])
+  }, [equipmentItems, packingItems, selectedPackProfile, canEditPauschalEntries])
 
   // Filter and group available equipment (nur Kategorien mit verfügbaren Gegenständen)
   const groupedAvailableEquipment = useMemo(() => {
