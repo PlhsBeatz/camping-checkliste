@@ -402,19 +402,37 @@ function HomeContent() {
 
   // Get available equipment (not on packing list, or on list but without selected person)
   const availableEquipment = useMemo(() => {
+    const vacationMitreisendeIds = vacationMitreisende.map((m) => m.id)
+    const vacationMitreisendeSet = new Set(vacationMitreisendeIds)
+
     return equipmentItems.filter((eq) => {
       if (!PACKABLE_STATUSES.includes(eq.status)) return false
       // Ohne Berechtigung für pauschale Einträge: diese nicht zur Auswahl anbieten
       if (!canEditPauschalEntries && (eq.mitreisenden_typ ?? 'pauschal') === 'pauschal') return false
       const existingItem = packingItems.find((p) => p.gegenstand_id === eq.id)
       if (!existingItem) return true // Nicht auf der Liste → verfügbar
-      if (!selectedPackProfile) return false // Alle-Modus: bereits auf Liste → nicht verfügbar
-      // Pauschal-Einträge sind keiner Person zugeordnet und stehen bereits auf der Packliste → nicht zur Auswahl
+
+      if (selectedPackProfile) {
+        // Packprofil einer Person: Pauschal bereits auf Liste → nicht verfügbar; alle/ausgewaehlte wenn Person fehlt
+        if (existingItem.mitreisenden_typ === 'pauschal') return false
+        return !existingItem.mitreisende?.some((m) => m.mitreisender_id === selectedPackProfile)
+      }
+
+      // Packprofil „Alle“: Pauschal bereits auf Liste → nicht verfügbar
       if (existingItem.mitreisenden_typ === 'pauschal') return false
-      // Mitreisender-Modus: verfügbar wenn diese Person noch nicht zugeordnet ist
-      return !existingItem.mitreisende?.some((m) => m.mitreisender_id === selectedPackProfile)
+      // Typ „alle“: verfügbar, wenn nicht alle Urlaubs-Mitreisenden dem Eintrag zugeordnet sind
+      const existingIds = new Set((existingItem.mitreisende ?? []).map((m) => m.mitreisender_id))
+      if ((eq.mitreisenden_typ ?? 'pauschal') === 'alle') {
+        const allAssigned = vacationMitreisendeIds.every((id) => existingIds.has(id))
+        return !allAssigned
+      }
+      // Typ „ausgewaehlte“: verfügbar, wenn nicht alle standardmäßig zugeordneten (die im Urlaub sind) zugeordnet sind
+      const expectedIds = (eq.standard_mitreisende ?? []).filter((id) => vacationMitreisendeSet.has(id))
+      if (expectedIds.length === 0) return false // Keine erwarteten Personen im Urlaub → nicht anbieten
+      const allAssigned = expectedIds.every((id) => existingIds.has(id))
+      return !allAssigned
     })
-  }, [equipmentItems, packingItems, selectedPackProfile, canEditPauschalEntries])
+  }, [equipmentItems, packingItems, selectedPackProfile, canEditPauschalEntries, vacationMitreisende])
 
   // Filter and group available equipment (nur Kategorien mit verfügbaren Gegenständen)
   const groupedAvailableEquipment = useMemo(() => {
@@ -962,28 +980,57 @@ function HomeContent() {
           }
         }
       } else {
-        // Packprofil Alle: Zuordnung gemäß Ausrüstungstabelle (alle/ausgewaehlte)
-        const promises = Array.from(selectedEquipmentIds).map((equipmentId) => {
+        // Packprofil Alle: Neuen Eintrag anlegen oder nur fehlende Zuordnungen zum bestehenden Eintrag ergänzen
+        const vacationMitreisendeSet = new Set(vacationMitreisendeIds)
+        const promises: Promise<Response>[] = []
+        for (const equipmentId of selectedEquipmentIds) {
           const eq = equipmentItems.find((e) => e.id === equipmentId)
-          let mitreisendeIds: string[] | undefined
+          const existingItem = packingItems.find((p) => p.gegenstand_id === equipmentId)
+          const existingIds = new Set((existingItem?.mitreisende ?? []).map((m) => m.mitreisender_id))
+
+          let expectedIds: string[]
           if (eq?.mitreisenden_typ === 'alle') {
-            mitreisendeIds = vacationMitreisendeIds
+            expectedIds = vacationMitreisendeIds
           } else if (eq?.mitreisenden_typ === 'ausgewaehlte' && eq.standard_mitreisende?.length) {
-            mitreisendeIds = eq.standard_mitreisende
+            expectedIds = eq.standard_mitreisende.filter((id) => vacationMitreisendeSet.has(id))
+          } else {
+            expectedIds = []
           }
-          return fetch('/api/packing-items', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              vacationId: selectedVacationId,
-              gegenstandId: equipmentId,
-              anzahl: eq?.standard_anzahl ?? 1,
-              bemerkung: null,
-              transportId: eq?.transport_id ?? null,
-              mitreisende: mitreisendeIds ?? []
-            })
-          })
-        })
+
+          if (!existingItem) {
+            // Neuer Eintrag: vollständige Zuordnung anlegen
+            promises.push(
+              fetch('/api/packing-items', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  vacationId: selectedVacationId,
+                  gegenstandId: equipmentId,
+                  anzahl: eq?.standard_anzahl ?? 1,
+                  bemerkung: null,
+                  transportId: eq?.transport_id ?? null,
+                  mitreisende: expectedIds
+                })
+              })
+            )
+          } else {
+            // Bestehender Eintrag: nur fehlende Mitreisende hinzufügen (keine Doppel)
+            const missingIds = expectedIds.filter((id) => !existingIds.has(id))
+            for (const mitreisenderId of missingIds) {
+              promises.push(
+                fetch('/api/packing-items/toggle-mitreisender', {
+                  method: 'PUT',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    packingItemId: existingItem.id,
+                    mitreisenderId,
+                    gepackt: false
+                  })
+                })
+              )
+            }
+          }
+        }
         await Promise.all(promises)
       }
 
