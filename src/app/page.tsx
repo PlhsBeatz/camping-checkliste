@@ -116,7 +116,7 @@ function HomeContent() {
   /** Im Packprofil „Alle“: personenbezogener Eintrag – Auswahl „für wen löschen?“ (wie beim Abhaken) */
   const [deletePersonsConfirm, setDeletePersonsConfirm] = useState<{
     packingItemId: string
-    travelers: Array<{ id: string; name: string }>
+    travelers: Array<{ id: string; name: string; gepackt?: boolean; gepackt_vorgemerkt?: boolean }>
   } | null>(null)
   const [listDisplayMode, setListDisplayMode] = useState<'alles' | 'packliste'>('packliste')
   const addDialogScrollContextRef = useRef<{ mainCategory: string; category: string } | null>(null)
@@ -883,6 +883,8 @@ function HomeContent() {
         travelers: (item.mitreisende ?? []).map((m) => ({
           id: m.mitreisender_id,
           name: m.mitreisender_name,
+          gepackt: !!m.gepackt,
+          gepackt_vorgemerkt: !!m.gepackt_vorgemerkt,
         })),
       })
       return

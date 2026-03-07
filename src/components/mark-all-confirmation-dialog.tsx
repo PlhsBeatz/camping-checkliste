@@ -11,6 +11,10 @@ export interface TravelerForMarkAll {
   id: string
   name: string
   isCurrentlyPacked?: boolean
+  /** Nur im Löschen-Dialog: Eintrag für diese Person bereits als gepackt markiert */
+  gepackt?: boolean
+  /** Nur im Löschen-Dialog: Eintrag für diese Person als vorgemerkt markiert */
+  gepackt_vorgemerkt?: boolean
 }
 
 interface MarkAllConfirmationDialogProps {
@@ -45,9 +49,17 @@ export function MarkAllConfirmationDialog({
 
   useEffect(() => {
     if (isOpen && travelers.length > 0) {
-      setSelectedIds(new Set(travelers.map(t => t.id)))
+      if (deleteMode) {
+        // Im Löschen-Modus: nur Personen anhaken, bei denen der Eintrag weder gepackt noch vorgemerkt ist
+        const idsToSelect = travelers
+          .filter(t => !t.gepackt && !t.gepackt_vorgemerkt)
+          .map(t => t.id)
+        setSelectedIds(new Set(idsToSelect))
+      } else {
+        setSelectedIds(new Set(travelers.map(t => t.id)))
+      }
     }
-  }, [isOpen, travelers])
+  }, [isOpen, travelers, deleteMode])
 
   const toggleTraveler = (id: string) => {
     setSelectedIds(prev => {
@@ -85,6 +97,8 @@ export function MarkAllConfirmationDialog({
         ? `Zurücksetzen (${selectedIds.size})`
         : `Abhaken (${selectedIds.size})`)
 
+  const hasPackedOrVorgemerkt = deleteMode && travelers.some(t => t.gepackt || t.gepackt_vorgemerkt)
+
   return (
     <ResponsiveModal
       open={isOpen}
@@ -104,6 +118,11 @@ export function MarkAllConfirmationDialog({
             <CheckCheck className="h-6 w-6 text-primary" />
           )}
         </div>
+        {hasPackedOrVorgemerkt && (
+          <p className="text-sm text-muted-foreground bg-muted/50 rounded-lg px-3 py-2">
+            Bei einigen Personen ist der Eintrag bereits als gepackt oder vorgemerkt markiert. Diese sind standardmäßig nicht ausgewählt.
+          </p>
+        )}
         <div className="space-y-2">
           {travelers.map(t => (
             <label
@@ -114,7 +133,12 @@ export function MarkAllConfirmationDialog({
                 checked={selectedIds.has(t.id)}
                 onCheckedChange={() => toggleTraveler(t.id)}
               />
-              <span className="text-sm font-medium">{t.name}</span>
+              <span className="text-sm font-medium flex-1">{t.name}</span>
+              {deleteMode && (t.gepackt || t.gepackt_vorgemerkt) && (
+                <span className="text-xs text-muted-foreground shrink-0">
+                  {t.gepackt ? 'Gepackt' : 'Vorgemerkt'}
+                </span>
+              )}
             </label>
           ))}
         </div>
