@@ -446,7 +446,7 @@ export async function getPackingItems(db: D1Database, vacationId: string): Promi
     const query = `
       SELECT 
         pe.id, pe.packliste_id, pe.gegenstand_id, pe.anzahl, pe.gepackt, pe.gepackt_vorgemerkt, pe.gepackt_vorgemerkt_durch, pe.bemerkung, pe.transport_id,
-        ag.was, ag.einzelgewicht, ag.details, ag.mitreisenden_typ, ag.status, ag.erst_abreisetag_gepackt as erst_abreisetag_gepackt,
+        ag.was, ag.einzelgewicht, ag.details, ag.mitreisenden_typ, ag.status AS status, ag.erst_abreisetag_gepackt as erst_abreisetag_gepackt,
         k.titel as kategorie,
         hk.titel as hauptkategorie,
         hk.reihenfolge as hk_reihenfolge,
@@ -529,7 +529,11 @@ export async function getPackingItems(db: D1Database, vacationId: string): Promi
         hauptkategorie: String(item.hauptkategorie),
         details: item.details ? String(item.details) : undefined,
         einzelgewicht: item.einzelgewicht ? Number(item.einzelgewicht) : undefined,
-        status: item.status ? String(item.status) : undefined,
+        status: (() => {
+          const raw = (item as Record<string, unknown>).status ?? (item as Record<string, unknown>)['ag.status']
+          const s = raw != null ? String(raw).trim() : ''
+          return s === 'Immer gepackt' ? 'Immer gepackt' : (s || 'Normal')
+        })(),
         erst_abreisetag_gepackt: !!((item as Record<string, unknown>).erst_abreisetag_gepackt ?? (item as Record<string, unknown>)['ag.erst_abreisetag_gepackt']),
         created_at: String(item.created_at || ''),
         orderHk: item.hk_reihenfolge != null ? Number(item.hk_reihenfolge) : undefined,

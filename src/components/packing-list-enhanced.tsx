@@ -622,7 +622,8 @@ export function PackingList({
     const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
     return items.filter(item => {
-      if (listDisplayMode === 'packliste' && item.status === 'Immer gepackt') return false;
+      // Nur im Packliste-Modus: „Immer gepackt“ ausblenden (robust gegen undefined/Leerstring)
+      if (listDisplayMode === 'packliste' && String(item.status || '').trim() === 'Immer gepackt') return false;
       // Nur im Packliste-Modus: erst_abreisetag_gepackt nur am Abreisetag anzeigen
       const isErstAbreisetag = !!item.erst_abreisetag_gepackt;
       if (listDisplayMode === 'packliste' && isErstAbreisetag && abreiseDatum) {
@@ -633,9 +634,16 @@ export function PackingList({
       if (item.mitreisenden_typ === 'pauschal') {
         return canEditPauschalEntries;
       }
-      return item.mitreisende?.some(m => m.mitreisender_id === selectedProfile) ?? false;
+      // Typ „alle“ oder „ausgewaehlte“: anzeigen, wenn der gewählte Mitreisende zugeordnet ist
+      const personAssigned = item.mitreisende?.some(m => m.mitreisender_id === selectedProfile);
+      if (personAssigned) return true;
+      // Typ „alle“ ohne Zuordnungen: trotzdem anzeigen, wenn das Profil im Urlaub ist (Datenkonsistenz)
+      if (item.mitreisenden_typ === 'alle' && (!item.mitreisende || item.mitreisende.length === 0) && vacationMitreisende.some(m => m.id === selectedProfile)) {
+        return true;
+      }
+      return false;
     });
-  }, [items, listDisplayMode, selectedProfile, abreiseDatum, toYYYYMMDD, canEditPauschalEntries]);
+  }, [items, listDisplayMode, selectedProfile, abreiseDatum, toYYYYMMDD, canEditPauschalEntries, vacationMitreisende]);
 
   // Group items by main category and category (nur sichtbare)
   const itemsByMainCategory = useMemo(() => {
