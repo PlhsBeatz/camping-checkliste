@@ -598,7 +598,7 @@ export const EquipmentTable = React.memo(({
                       {item.details || '-'}
                     </div>
                     <div className={`px-4 py-2 flex items-center ${colAlign.tags}`}>
-                      <div className="flex flex-wrap gap-1 pb-1">
+                      <div className="flex flex-wrap gap-1.5 pb-2">
                         {getTagNames(item).map((tagName, idx) => (
                           <span key={idx} className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-blue-100 text-blue-800">
                             {tagName}
