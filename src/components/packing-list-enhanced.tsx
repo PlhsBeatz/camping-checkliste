@@ -912,8 +912,8 @@ export function PackingList({
 
   return (
     <Tabs value={activeMainCategory} onValueChange={setActiveMainCategory} className="flex flex-col flex-1 min-h-0 min-w-0 w-full max-w-full">
-      {/* Sticky-Bereich: Progress + Tabs – scrollt nie. Shadow unter den Tabs. */}
-      <div className="flex-shrink-0 bg-white shadow">
+      {/* Sticky-Bereich: Progress + Tabs – scrollt nie. Deutlicher, aber dezenter Schatten unterhalb der Tabs. */}
+      <div className="flex-shrink-0 bg-white shadow-md">
         <div className="px-4 bg-white">
           {/* Progress Bar */}
           {displayProgress.total > 0 && (

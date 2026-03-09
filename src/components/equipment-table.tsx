@@ -266,7 +266,8 @@ export const EquipmentTable = React.memo(({
   }, [filterKey, virtualizer])
 
   // Feste Spaltenbreiten: was, transport, gewicht, anzahl, status, abreise, gepacktFuer, details, tags, links, actions
-  const gridCols = '220px 120px 90px 48px 135px 48px 130px 220px 150px 48px 44px'
+  // Details leicht verbreitert, Tags etwas breiter (220px)
+  const gridCols = '220px 120px 90px 48px 135px 48px 130px 260px 220px 48px 44px'
 
   // Spalten-Ausrichtung für saubere vertikale Linien (Header und Body identisch)
   const colAlign = {
@@ -300,7 +301,7 @@ export const EquipmentTable = React.memo(({
     )}>
       {/* Search and Filters - overflow-x-auto auf Mobile falls Filter zu breit */}
       <div className={cn(
-        "space-y-4 bg-white border rounded-lg p-4 bg-muted/30 min-w-0 overflow-x-auto",
+        "space-y-4 bg-white border rounded-lg p-4 min-w-0 overflow-x-auto shadow-sm",
         dynamicHeight && "flex-shrink-0"
       )}>
         {/* Search Bar */}
@@ -561,7 +562,7 @@ export const EquipmentTable = React.memo(({
                       )}
                       <span>{item.was}</span>
                     </div>
-                    <div className={`px-4 py-2 text-sm ${colAlign.transport}`}>{getTransportName(item.transport_id)}</div>
+                    <div className={`px-4 py-2 text-sm flex items-center ${colAlign.transport}`}>{getTransportName(item.transport_id)}</div>
                     <div className={`px-4 py-2 text-sm flex items-center gap-1.5 ${colAlign.gewicht}`}>
                       {item.in_pauschale_inbegriffen && (item.einzelgewicht == null || item.einzelgewicht === 0) ? (
                         <span className="inline-flex items-center rounded bg-emerald-100 text-emerald-800 px-1.5 py-0.5 text-xs" title="In Pauschale inbegriffen">
@@ -571,20 +572,20 @@ export const EquipmentTable = React.memo(({
                         formatWeight(item.einzelgewicht)
                       )}
                     </div>
-                    <div className={`px-4 py-2 text-sm ${colAlign.anzahl}`}>{item.standard_anzahl}</div>
-                    <div className={`px-4 py-2 ${colAlign.status}`}>
+                    <div className={`px-4 py-2 text-sm flex items-center justify-center ${colAlign.anzahl}`}>{item.standard_anzahl}</div>
+                    <div className={`px-4 py-2 flex items-center ${colAlign.status}`}>
                       <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(item.status)}`}>
                         {item.status}
                       </span>
                     </div>
-                    <div className={`px-2 py-2 text-center ${colAlign.abreise}`} title={item.erst_abreisetag_gepackt ? 'Erst am Abreisetag packen' : ''}>
+                    <div className={`px-2 py-2 flex items-center justify-center text-center ${colAlign.abreise}`} title={item.erst_abreisetag_gepackt ? 'Erst am Abreisetag packen' : ''}>
                       {item.erst_abreisetag_gepackt ? (
                         <span className="inline-flex items-center rounded bg-amber-100 text-amber-800 px-1.5 py-0.5 text-xs">Abr.</span>
                       ) : (
                         <span className="w-6 block" />
                       )}
                     </div>
-                    <div className={`px-4 py-2 text-sm ${colAlign.gepacktFuer}`}>
+                    <div className={`px-4 py-2 text-sm flex items-center ${colAlign.gepacktFuer}`}>
                       {item.mitreisenden_typ === 'pauschal' ? (
                         <span title="Pauschal">📦 Pauschal</span>
                       ) : item.mitreisenden_typ === 'alle' ? (
@@ -593,11 +594,11 @@ export const EquipmentTable = React.memo(({
                         <span title="Individuell">👤 Individuell</span>
                       )}
                     </div>
-                    <div className={`px-4 py-2 text-sm text-muted-foreground max-w-[300px] truncate ${colAlign.details}`} title={item.details || ''}>
+                    <div className={`px-4 py-2 text-sm text-muted-foreground max-w-[320px] truncate flex items-center ${colAlign.details}`} title={item.details || ''}>
                       {item.details || '-'}
                     </div>
-                    <div className={`px-4 py-2 ${colAlign.tags}`}>
-                      <div className="flex flex-wrap gap-1">
+                    <div className={`px-4 py-2 flex items-center ${colAlign.tags}`}>
+                      <div className="flex flex-wrap gap-1 pb-1">
                         {getTagNames(item).map((tagName, idx) => (
                           <span key={idx} className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-blue-100 text-blue-800">
                             {tagName}
