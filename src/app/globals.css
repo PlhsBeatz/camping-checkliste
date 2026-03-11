@@ -125,6 +125,12 @@
   }
 }
 
+/* Scroll-Lock von Radix/RemoveScroll: unerwünschten rechten Rand auf dem Body entfernen */
+body.react-remove-scroll-bar {
+  margin-right: 0 !important;
+  padding-right: 0 !important;
+}
+
 /* Google PlaceAutocompleteElement Styling (neue API) */
 gmp-place-autocomplete {
   display: block;

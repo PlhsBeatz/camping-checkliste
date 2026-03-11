@@ -21,6 +21,7 @@ import {
 import { Search, Filter, Star, MoreVertical, Pencil, Trash2, ExternalLink } from 'lucide-react'
 import { EquipmentItem, Category, MainCategory, TransportVehicle, Tag } from '@/lib/db'
 import { cn } from '@/lib/utils'
+import { useIsMobile } from '@/hooks/use-mobile'
 
 interface EquipmentTableProps {
   equipmentItems: EquipmentItem[]
@@ -47,6 +48,7 @@ export const EquipmentTable = React.memo(({
   readOnly = false,
   dynamicHeight = false,
 }: EquipmentTableProps) => {
+  const isMobile = useIsMobile()
   const [searchTerm, setSearchTerm] = useState('')
   const [filterMainCategory, setFilterMainCategory] = useState<string>('all')
   const [filterCategory, setFilterCategory] = useState<string>('all')
@@ -241,7 +243,6 @@ export const EquipmentTable = React.memo(({
   }, [groupedItems])
 
   const parentRef = useRef<HTMLDivElement>(null)
-  const headerHeight = 49
   const virtualizer = useVirtualizer({
     count: flatRows.length,
     getScrollElement: () => parentRef.current,
@@ -254,7 +255,6 @@ export const EquipmentTable = React.memo(({
       return 52
     },
     overscan: 5,
-    paddingStart: headerHeight,
   })
 
   // Bei Filteränderung: Nach oben scrollen (verhindert leere/verschobene Zeilen)
@@ -266,8 +266,10 @@ export const EquipmentTable = React.memo(({
   }, [filterKey, virtualizer])
 
   // Feste Spaltenbreiten: was, transport, gewicht, anzahl, status, abreise, gepacktFuer, details, tags, links, actions
-  // Details leicht verbreitert, Tags etwas breiter (220px)
-  const gridCols = '220px 120px 90px 48px 135px 48px 130px 260px 220px 48px 44px'
+  // Auf dem Smartphone etwas breitere Tags-Spalte und genügend Platz für Links
+  const gridCols = isMobile
+    ? '220px 110px 80px 44px 130px 44px 130px 240px 260px 56px 48px'
+    : '220px 120px 90px 48px 135px 48px 130px 260px 220px 48px 44px'
 
   // Spalten-Ausrichtung für saubere vertikale Linien (Header und Body identisch)
   const colAlign = {
@@ -476,7 +478,24 @@ export const EquipmentTable = React.memo(({
       )}>
         <div className="flex-1 min-h-0 min-w-0 flex flex-col min-w-[1253px]">
           <div className="min-w-[1253px] flex flex-col flex-1 min-h-0">
-            {/* Ein gemeinsamer vertikaler Scroll: Header + Body scrollen zusammen (paddingStart für Header) */}
+            {/* Tabellenkopf – bleibt beim vertikalen Scrollen sichtbar */}
+            <div
+              className="grid gap-px bg-border border-b bg-gray-50 sticky top-0 z-10"
+              style={{ gridTemplateColumns: gridCols }}
+            >
+              <div className={`px-4 py-3 font-medium text-sm ${colAlign.was}`}>Was</div>
+              <div className={`px-4 py-3 font-medium text-sm ${colAlign.transport}`}>Transport</div>
+              <div className={`px-4 py-3 font-medium text-sm ${colAlign.gewicht}`}>Gewicht</div>
+              <div className={`px-4 py-3 font-medium text-sm ${colAlign.anzahl}`}>#</div>
+              <div className={`px-4 py-3 font-medium text-sm ${colAlign.status}`}>Status</div>
+              <div className={`px-2 py-3 font-medium text-sm ${colAlign.abreise}`} title="Erst am Abreisetag">Abr.</div>
+              <div className={`px-4 py-3 font-medium text-sm ${colAlign.gepacktFuer}`}>Gepackt für</div>
+              <div className={`px-4 py-3 font-medium text-sm ${colAlign.details}`}>Details</div>
+              <div className={`px-4 py-3 font-medium text-sm ${colAlign.tags}`}>Tags</div>
+              <div className={`px-4 py-3 font-medium text-sm ${colAlign.links}`}>Links</div>
+              <div className={`px-1 py-3 font-medium text-sm ${colAlign.actions}`}></div>
+            </div>
+            {/* Scrollbarer Bereich für Datenzeilen */}
             <div
               ref={parentRef}
               className={cn(
@@ -485,190 +504,173 @@ export const EquipmentTable = React.memo(({
                 !dynamicHeight && 'min-h-[200px]'
               )}
             >
-          {flatRows.length === 0 ? (
-            <div className="py-16 text-center text-muted-foreground">
-              Keine Ausrüstungsgegenstände gefunden
-            </div>
-          ) : (
-            <div
-              className="relative w-full"
-              style={{ height: `${virtualizer.getTotalSize()}px` }}
-            >
-              {/* Header im Padding-Bereich - scrollt mit */}
-              <div
-                className="absolute top-0 left-0 right-0 grid gap-px bg-border border-b bg-gray-50"
-                style={{ gridTemplateColumns: gridCols, height: `${headerHeight}px` }}
-              >
-                <div className={`px-4 py-3 font-medium text-sm ${colAlign.was}`}>Was</div>
-                <div className={`px-4 py-3 font-medium text-sm ${colAlign.transport}`}>Transport</div>
-                <div className={`px-4 py-3 font-medium text-sm ${colAlign.gewicht}`}>Gewicht</div>
-                <div className={`px-4 py-3 font-medium text-sm ${colAlign.anzahl}`}>#</div>
-                <div className={`px-4 py-3 font-medium text-sm ${colAlign.status}`}>Status</div>
-                <div className={`px-2 py-3 font-medium text-sm ${colAlign.abreise}`} title="Erst am Abreisetag">Abr.</div>
-                <div className={`px-4 py-3 font-medium text-sm ${colAlign.gepacktFuer}`}>Gepackt für</div>
-                <div className={`px-4 py-3 font-medium text-sm ${colAlign.details}`}>Details</div>
-                <div className={`px-4 py-3 font-medium text-sm ${colAlign.tags}`}>Tags</div>
-                <div className={`px-4 py-3 font-medium text-sm ${colAlign.links}`}>Links</div>
-                <div className={`px-1 py-3 font-medium text-sm ${colAlign.actions}`}></div>
-              </div>
-              {virtualizer.getVirtualItems().map((virtualRow) => {
-                const row = flatRows[virtualRow.index]
-                if (!row) return null
-                const size = virtualRow.size
-                const translateY = virtualRow.start
+              {flatRows.length === 0 ? (
+                <div className="py-16 text-center text-muted-foreground">
+                  Keine Ausrüstungsgegenstände gefunden
+                </div>
+              ) : (
+                <div
+                  className="relative w-full"
+                  style={{ height: `${virtualizer.getTotalSize()}px` }}
+                >
+                  {virtualizer.getVirtualItems().map((virtualRow) => {
+                    const row = flatRows[virtualRow.index]
+                    if (!row) return null
+                    const size = virtualRow.size
+                    const translateY = virtualRow.start
 
-                if (row.type === 'main-category') {
-                  return (
-                    <div
-                      key={row.id}
-                      className="absolute left-0 right-0 flex items-center bg-[rgb(45,79,30)] text-white font-bold text-base px-4 isolate"
-                      style={{ height: size, top: 0, transform: `translate3d(0,${translateY}px,0)` }}
-                    >
-                      {row.name}
-                    </div>
-                  )
-                }
-                if (row.type === 'category') {
-                  return (
-                    <div
-                      key={row.id}
-                      className="absolute left-0 right-0 flex items-center bg-muted/70 font-semibold px-4 isolate"
-                      style={{ height: size, top: 0, transform: `translate3d(0,${translateY}px,0)` }}
-                    >
-                      {row.name} ({row.count})
-                    </div>
-                  )
-                }
-                const item = row.item
-                return (
-                  <div
-                    key={row.id}
-                    className="absolute left-0 right-0 grid gap-px bg-white hover:bg-muted/30 border-b border-border/50 isolate"
-                    style={{
-                      height: size,
-                      top: 0,
-                      transform: `translate3d(0,${translateY}px,0)`,
-                      gridTemplateColumns: gridCols
-                    }}
-                  >
-                    <div className={`px-4 py-2 text-sm flex items-center gap-2 ${colAlign.was}`}>
-                      {item.is_standard ? (
-                        <Star
-                          className="h-4 w-4 flex-shrink-0"
-                          style={{ color: 'rgb(230,126,34)', fill: 'rgb(230,126,34)' }}
-                        />
-                      ) : (
-                        <span className="w-4" />
-                      )}
-                      <span>{item.was}</span>
-                    </div>
-                    <div className={`px-4 py-2 text-sm flex items-center ${colAlign.transport}`}>{getTransportName(item.transport_id)}</div>
-                    <div className={`px-4 py-2 text-sm flex items-center gap-1.5 ${colAlign.gewicht}`}>
-                      {item.in_pauschale_inbegriffen && (item.einzelgewicht == null || item.einzelgewicht === 0) ? (
-                        <span className="inline-flex items-center rounded bg-emerald-100 text-emerald-800 px-1.5 py-0.5 text-xs" title="In Pauschale inbegriffen">
-                          Pausch.
-                        </span>
-                      ) : (
-                        formatWeight(item.einzelgewicht)
-                      )}
-                    </div>
-                    <div className={`px-4 py-2 text-sm flex items-center justify-center ${colAlign.anzahl}`}>{item.standard_anzahl}</div>
-                    <div className={`px-4 py-2 flex items-center ${colAlign.status}`}>
-                      <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(item.status)}`}>
-                        {item.status}
-                      </span>
-                    </div>
-                    <div className={`px-2 py-2 flex items-center justify-center text-center ${colAlign.abreise}`} title={item.erst_abreisetag_gepackt ? 'Erst am Abreisetag packen' : ''}>
-                      {item.erst_abreisetag_gepackt ? (
-                        <span className="inline-flex items-center rounded bg-amber-100 text-amber-800 px-1.5 py-0.5 text-xs">Abr.</span>
-                      ) : (
-                        <span className="w-6 block" />
-                      )}
-                    </div>
-                    <div className={`px-4 py-2 text-sm flex items-center ${colAlign.gepacktFuer}`}>
-                      {item.mitreisenden_typ === 'pauschal' ? (
-                        <span title="Pauschal">📦 Pauschal</span>
-                      ) : item.mitreisenden_typ === 'alle' ? (
-                        <span title="Für alle">👥 Alle</span>
-                      ) : (
-                        <span title="Individuell">👤 Individuell</span>
-                      )}
-                    </div>
-                    <div className={`px-4 py-2 text-sm text-muted-foreground max-w-[320px] truncate flex items-center ${colAlign.details}`} title={item.details || ''}>
-                      {item.details || '-'}
-                    </div>
-                    <div className={`px-4 py-2 flex items-center ${colAlign.tags}`}>
-                      <div className="flex flex-wrap gap-1.5 pb-2">
-                        {getTagNames(item).map((tagName, idx) => (
-                          <span key={idx} className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-blue-100 text-blue-800">
-                            {tagName}
+                    if (row.type === 'main-category') {
+                      return (
+                        <div
+                          key={row.id}
+                          className="absolute left-0 right-0 flex items-center bg-[rgb(45,79,30)] text-white font-bold text-base px-4 isolate"
+                          style={{ height: size, top: 0, transform: `translate3d(0,${translateY}px,0)` }}
+                        >
+                          {row.name}
+                        </div>
+                      )
+                    }
+                    if (row.type === 'category') {
+                      return (
+                        <div
+                          key={row.id}
+                          className="absolute left-0 right-0 flex items-center bg-muted/70 font-semibold px-4 isolate"
+                          style={{ height: size, top: 0, transform: `translate3d(0,${translateY}px,0)` }}
+                        >
+                          {row.name} ({row.count})
+                        </div>
+                      )
+                    }
+                    const item = row.item
+                    return (
+                      <div
+                        key={row.id}
+                        className="absolute left-0 right-0 grid gap-px bg-white hover:bg-muted/30 border-b border-border/50 isolate"
+                        style={{
+                          height: size,
+                          top: 0,
+                          transform: `translate3d(0,${translateY}px,0)`,
+                          gridTemplateColumns: gridCols
+                        }}
+                      >
+                        <div className={`px-4 py-2 text-sm flex items-center gap-2 ${colAlign.was}`}>
+                          {item.is_standard ? (
+                            <Star
+                              className="h-4 w-4 flex-shrink-0"
+                              style={{ color: 'rgb(230,126,34)', fill: 'rgb(230,126,34)' }}
+                            />
+                          ) : (
+                            <span className="w-4" />
+                          )}
+                          <span>{item.was}</span>
+                        </div>
+                        <div className={`px-4 py-2 text-sm flex items-center ${colAlign.transport}`}>{getTransportName(item.transport_id)}</div>
+                        <div className={`px-4 py-2 text-sm flex items-center gap-1.5 ${colAlign.gewicht}`}>
+                          {item.in_pauschale_inbegriffen && (item.einzelgewicht == null || item.einzelgewicht === 0) ? (
+                            <span className="inline-flex items-center rounded bg-emerald-100 text-emerald-800 px-1.5 py-0.5 text-xs" title="In Pauschale inbegriffen">
+                              Pausch.
+                            </span>
+                          ) : (
+                            formatWeight(item.einzelgewicht)
+                          )}
+                        </div>
+                        <div className={`px-4 py-2 text-sm flex items-center justify-center ${colAlign.anzahl}`}>{item.standard_anzahl}</div>
+                        <div className={`px-4 py-2 flex items-center ${colAlign.status}`}>
+                          <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(item.status)}`}>
+                            {item.status}
                           </span>
-                        ))}
-                      </div>
-                    </div>
-                    <div className={`px-4 py-2 flex items-center ${colAlign.links}`}>
-                      {item.links && item.links.length > 0 ? (
-                        <DropdownMenu open={openLinksMenuId === item.id} onOpenChange={(o) => setOpenLinksMenuId(o ? item.id : null)}>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                              <ExternalLink className="h-4 w-4" style={{ color: 'rgb(230,126,34)', fill: 'rgb(230,126,34)' }} />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            {item.links.map((link, idx) => (
-                              <DropdownMenuItem
-                                key={idx}
-                                onSelect={() => {
-                                  setOpenLinksMenuId(null)
-                                  window.open(link.url, '_blank')
-                                }}
-                                className="cursor-pointer"
-                              >
-                                <ExternalLink className="h-3 w-3 mr-2" style={{ color: 'rgb(230,126,34)', fill: 'rgb(230,126,34)' }} />
-                                {link.url.length > 40 ? link.url.substring(0, 40) + '...' : link.url}
-                              </DropdownMenuItem>
+                        </div>
+                        <div className={`px-2 py-2 flex items-center justify-center text-center ${colAlign.abreise}`} title={item.erst_abreisetag_gepackt ? 'Erst am Abreisetag packen' : ''}>
+                          {item.erst_abreisetag_gepackt ? (
+                            <span className="inline-flex items-center rounded bg-amber-100 text-amber-800 px-1.5 py-0.5 text-xs">Abr.</span>
+                          ) : (
+                            <span className="w-6 block" />
+                          )}
+                        </div>
+                        <div className={`px-4 py-2 text-sm flex items-center ${colAlign.gepacktFuer}`}>
+                          {item.mitreisenden_typ === 'pauschal' ? (
+                            <span title="Pauschal">📦 Pauschal</span>
+                          ) : item.mitreisenden_typ === 'alle' ? (
+                            <span title="Für alle">👥 Alle</span>
+                          ) : (
+                            <span title="Individuell">👤 Individuell</span>
+                          )}
+                        </div>
+                        <div className={`px-4 py-2 text-sm text-muted-foreground max-w-[320px] truncate flex items-center ${colAlign.details}`} title={item.details || ''}>
+                          {item.details || '-'}
+                        </div>
+                        <div className={`px-4 py-2 flex items-center ${colAlign.tags}`}>
+                          <div className="flex flex-wrap gap-1.5 pb-2">
+                            {getTagNames(item).map((tagName, idx) => (
+                              <span key={idx} className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-blue-100 text-blue-800">
+                                {tagName}
+                              </span>
                             ))}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      ) : null}
-                    </div>
-                    <div className={`px-1 py-2 sticky right-0 bg-white flex items-center justify-center ${colAlign.actions}`}>
-                      {!readOnly && (
-                      <DropdownMenu open={openMenuId === item.id} onOpenChange={(o) => setOpenMenuId(o ? item.id : null)}>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="sm" className="h-7 w-7 min-w-7 p-0">
-                            <MoreVertical className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem
-                            onSelect={() => {
-                              setOpenMenuId(null)
-                              onEdit(item)
-                            }}
-                          >
-                            <Pencil className="h-4 w-4 mr-2" />
-                            Bearbeiten
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onSelect={() => {
-                              setOpenMenuId(null)
-                              onDelete(item.id)
-                            }}
-                            className="text-destructive"
-                          >
-                            <Trash2 className="h-4 w-4 mr-2" />
-                            Löschen
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                      )}
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          )}
+                          </div>
+                        </div>
+                        <div className={`px-4 py-2 flex items-center ${colAlign.links}`}>
+                          {item.links && item.links.length > 0 ? (
+                            <DropdownMenu open={openLinksMenuId === item.id} onOpenChange={(o) => setOpenLinksMenuId(o ? item.id : null)}>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                                  <ExternalLink className="h-4 w-4" style={{ color: 'rgb(230,126,34)', fill: 'rgb(230,126,34)' }} />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                {item.links.map((link, idx) => (
+                                  <DropdownMenuItem
+                                    key={idx}
+                                    onSelect={() => {
+                                      setOpenLinksMenuId(null)
+                                      window.open(link.url, '_blank')
+                                    }}
+                                    className="cursor-pointer"
+                                  >
+                                    <ExternalLink className="h-3 w-3 mr-2" style={{ color: 'rgb(230,126,34)', fill: 'rgb(230,126,34)' }} />
+                                    {link.url.length > 40 ? link.url.substring(0, 40) + '...' : link.url}
+                                  </DropdownMenuItem>
+                                ))}
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          ) : null}
+                        </div>
+                        <div className={`px-1 py-2 sticky right-0 bg-white flex items-center justify-center ${colAlign.actions}`}>
+                          {!readOnly && (
+                          <DropdownMenu open={openMenuId === item.id} onOpenChange={(o) => setOpenMenuId(o ? item.id : null)}>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="sm" className="h-7 w-7 min-w-7 p-0">
+                                <MoreVertical className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem
+                                onSelect={() => {
+                                  setOpenMenuId(null)
+                                  onEdit(item)
+                                }}
+                              >
+                                <Pencil className="h-4 w-4 mr-2" />
+                                Bearbeiten
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onSelect={() => {
+                                  setOpenMenuId(null)
+                                  onDelete(item.id)
+                                }}
+                                className="text-destructive"
+                              >
+                                <Trash2 className="h-4 w-4 mr-2" />
+                                Löschen
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
             </div>
           </div>
         </div>
