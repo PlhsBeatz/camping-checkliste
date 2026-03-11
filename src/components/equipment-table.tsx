@@ -476,8 +476,8 @@ export const EquipmentTable = React.memo(({
         "border rounded-lg min-w-0 bg-white overflow-x-auto overflow-y-hidden",
         dynamicHeight && "flex-1 min-h-0 flex flex-col"
       )}>
-        <div className="flex-1 min-h-0 min-w-0 flex flex-col min-w-[1253px]">
-          <div className="min-w-[1253px] flex flex-col flex-1 min-h-0">
+        <div className="flex-1 min-h-0 min-w-0 flex flex-col min-w-[1400px]">
+          <div className="min-w-[1400px] flex flex-col flex-1 min-h-0">
             {/* Scrollbarer Bereich für Datenzeilen */}
             <div
               ref={parentRef}
