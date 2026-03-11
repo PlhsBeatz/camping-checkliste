@@ -482,7 +482,7 @@ export const EquipmentTable = React.memo(({
             <div
               ref={parentRef}
               className={cn(
-                'overflow-y-auto',
+                'overflow-y-auto overflow-x-hidden',
                 dynamicHeight ? 'flex-1 min-h-0' : 'h-[600px]',
                 !dynamicHeight && 'min-h-[200px]'
               )}

@@ -138,6 +138,11 @@ body[data-scroll-locked][style*="margin-right"] {
   padding-right: 0 !important;
 }
 
+/* Visuellen Versatz durch Body-Margin kompensieren, falls externe Styles gewinnen */
+body[data-scroll-locked] #__next {
+  margin-right: -15px !important;
+}
+
 /* Google PlaceAutocompleteElement Styling (neue API) */
 gmp-place-autocomplete {
   display: block;
