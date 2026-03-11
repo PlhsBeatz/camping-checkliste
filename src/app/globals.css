@@ -125,8 +125,11 @@
   }
 }
 
-/* Scroll-Lock von Radix/RemoveScroll: unerwünschten rechten Rand auf dem Body entfernen */
-body.react-remove-scroll-bar {
+/* Scroll-Lock von Radix/RemoveScroll: unerwünschten rechten Rand entfernen (Dropdowns/Overlays) */
+html.react-remove-scroll-bar,
+body.react-remove-scroll-bar,
+html[data-scroll-locked],
+body[data-scroll-locked] {
   margin-right: 0 !important;
   padding-right: 0 !important;
 }

@@ -268,7 +268,7 @@ export const EquipmentTable = React.memo(({
   // Feste Spaltenbreiten: was, transport, gewicht, anzahl, status, abreise, gepacktFuer, details, tags, links, actions
   // Auf dem Smartphone etwas breitere Tags-Spalte und genügend Platz für Links
   const gridCols = isMobile
-    ? '220px 110px 80px 44px 130px 44px 130px 240px 260px 56px 48px'
+    ? '220px 110px 80px 44px 135px 44px 130px 240px 260px 56px 48px'
     : '220px 120px 90px 48px 135px 48px 130px 260px 220px 48px 44px'
 
   // Spalten-Ausrichtung für saubere vertikale Linien (Header und Body identisch)
@@ -478,23 +478,6 @@ export const EquipmentTable = React.memo(({
       )}>
         <div className="flex-1 min-h-0 min-w-0 flex flex-col min-w-[1253px]">
           <div className="min-w-[1253px] flex flex-col flex-1 min-h-0">
-            {/* Tabellenkopf – bleibt beim vertikalen Scrollen sichtbar */}
-            <div
-              className="grid gap-px bg-border border-b bg-gray-50 sticky top-0 z-10"
-              style={{ gridTemplateColumns: gridCols }}
-            >
-              <div className={`px-4 py-3 font-medium text-sm ${colAlign.was}`}>Was</div>
-              <div className={`px-4 py-3 font-medium text-sm ${colAlign.transport}`}>Transport</div>
-              <div className={`px-4 py-3 font-medium text-sm ${colAlign.gewicht}`}>Gewicht</div>
-              <div className={`px-4 py-3 font-medium text-sm ${colAlign.anzahl}`}>#</div>
-              <div className={`px-4 py-3 font-medium text-sm ${colAlign.status}`}>Status</div>
-              <div className={`px-2 py-3 font-medium text-sm ${colAlign.abreise}`} title="Erst am Abreisetag">Abr.</div>
-              <div className={`px-4 py-3 font-medium text-sm ${colAlign.gepacktFuer}`}>Gepackt für</div>
-              <div className={`px-4 py-3 font-medium text-sm ${colAlign.details}`}>Details</div>
-              <div className={`px-4 py-3 font-medium text-sm ${colAlign.tags}`}>Tags</div>
-              <div className={`px-4 py-3 font-medium text-sm ${colAlign.links}`}>Links</div>
-              <div className={`px-1 py-3 font-medium text-sm ${colAlign.actions}`}></div>
-            </div>
             {/* Scrollbarer Bereich für Datenzeilen */}
             <div
               ref={parentRef}
@@ -504,6 +487,23 @@ export const EquipmentTable = React.memo(({
                 !dynamicHeight && 'min-h-[200px]'
               )}
             >
+              {/* Tabellenkopf – bleibt beim vertikalen Scrollen sichtbar (im selben Scroll-Container) */}
+              <div
+                className="grid gap-px bg-border border-b bg-gray-50 sticky top-0 z-40"
+                style={{ gridTemplateColumns: gridCols }}
+              >
+                <div className={`px-4 py-3 font-medium text-sm ${colAlign.was}`}>Was</div>
+                <div className={`px-4 py-3 font-medium text-sm ${colAlign.transport}`}>Transport</div>
+                <div className={`px-4 py-3 font-medium text-sm ${colAlign.gewicht}`}>Gewicht</div>
+                <div className={`px-4 py-3 font-medium text-sm ${colAlign.anzahl}`}>#</div>
+                <div className={`px-4 py-3 font-medium text-sm ${colAlign.status}`}>Status</div>
+                <div className={`px-2 py-3 font-medium text-sm ${colAlign.abreise}`} title="Erst am Abreisetag">Abr.</div>
+                <div className={`px-4 py-3 font-medium text-sm ${colAlign.gepacktFuer}`}>Gepackt für</div>
+                <div className={`px-4 py-3 font-medium text-sm ${colAlign.details}`}>Details</div>
+                <div className={`px-4 py-3 font-medium text-sm ${colAlign.tags}`}>Tags</div>
+                <div className={`px-4 py-3 font-medium text-sm ${colAlign.links}`}>Links</div>
+                <div className={`px-1 py-3 font-medium text-sm sticky right-0 z-50 bg-gray-50 ${colAlign.actions}`}></div>
+              </div>
               {flatRows.length === 0 ? (
                 <div className="py-16 text-center text-muted-foreground">
                   Keine Ausrüstungsgegenstände gefunden
@@ -634,7 +634,7 @@ export const EquipmentTable = React.memo(({
                             </DropdownMenu>
                           ) : null}
                         </div>
-                        <div className={`px-1 py-2 sticky right-0 bg-white flex items-center justify-center ${colAlign.actions}`}>
+                        <div className={`px-1 py-2 sticky right-0 z-30 bg-white flex items-center justify-center ${colAlign.actions}`}>
                           {!readOnly && (
                           <DropdownMenu open={openMenuId === item.id} onOpenChange={(o) => setOpenMenuId(o ? item.id : null)}>
                             <DropdownMenuTrigger asChild>
