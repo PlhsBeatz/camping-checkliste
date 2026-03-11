@@ -131,7 +131,9 @@ body.react-remove-scroll-bar,
 html[data-scroll-locked],
 body[data-scroll-locked],
 html[style*="margin-right"],
-body[style*="margin-right"] {
+body[style*="margin-right"],
+html[data-scroll-locked][style*="margin-right"],
+body[data-scroll-locked][style*="margin-right"] {
   margin-right: 0 !important;
   padding-right: 0 !important;
 }

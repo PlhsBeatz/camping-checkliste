@@ -22,6 +22,7 @@ import { Search, Filter, Star, MoreVertical, Pencil, Trash2, ExternalLink } from
 import { EquipmentItem, Category, MainCategory, TransportVehicle, Tag } from '@/lib/db'
 import { cn } from '@/lib/utils'
 import { useIsMobile } from '@/hooks/use-mobile'
+import { Checkbox } from '@/components/ui/checkbox'
 
 interface EquipmentTableProps {
   equipmentItems: EquipmentItem[]
@@ -268,14 +269,14 @@ export const EquipmentTable = React.memo(({
   // Feste Spaltenbreiten: was, transport, gewicht, anzahl, status, abreise, gepacktFuer, details, tags, links, actions
   // Auf dem Smartphone etwas breitere Tags-Spalte und genügend Platz für Links
   const gridCols = isMobile
-    ? '220px 110px 90px 44px 135px 44px 130px 240px 260px 56px 48px'
+    ? '220px 110px 90px 48px 135px 48px 130px 260px 220px 56px 48px'
     : '220px 120px 90px 48px 135px 48px 130px 260px 220px 48px 44px'
 
   // Spalten-Ausrichtung für saubere vertikale Linien (Header und Body identisch)
   const colAlign = {
     was: 'text-left',
     transport: 'text-left',
-    gewicht: 'text-right', // Zahlen rechts
+    gewicht: 'text-right justify-end', // Zahlen rechts
     anzahl: 'text-center',
     status: 'text-left',
     abreise: 'text-center',
@@ -425,17 +426,16 @@ export const EquipmentTable = React.memo(({
               <div className="flex flex-wrap gap-3 mt-2">
                 {['Normal', 'Immer gepackt', 'Fest Installiert', 'Ausgemustert'].map(status => (
                   <label key={status} className="flex items-center gap-2 cursor-pointer text-sm bg-background border rounded-md px-3 py-1.5 hover:bg-muted/50">
-                    <input
-                      type="checkbox"
+                    <Checkbox
                       checked={filterStatus.includes(status)}
-                      onChange={(e) => {
-                        if (e.target.checked) {
+                      onCheckedChange={(checked) => {
+                        if (checked) {
                           setFilterStatus([...filterStatus, status])
                         } else {
                           setFilterStatus(filterStatus.filter(s => s !== status))
                         }
                       }}
-                      className="h-4 w-4 rounded border-gray-300 text-[rgb(45,79,30)] focus:ring-[rgb(45,79,30)]"
+                      className="h-4 w-4"
                     />
                     {status}
                   </label>
@@ -482,7 +482,7 @@ export const EquipmentTable = React.memo(({
             <div
               ref={parentRef}
               className={cn(
-                'overflow-y-auto overflow-x-hidden',
+                'overflow-y-auto',
                 dynamicHeight ? 'flex-1 min-h-0' : 'h-[600px]',
                 !dynamicHeight && 'min-h-[200px]'
               )}
