@@ -268,7 +268,7 @@ export const EquipmentTable = React.memo(({
   // Feste Spaltenbreiten: was, transport, gewicht, anzahl, status, abreise, gepacktFuer, details, tags, links, actions
   // Auf dem Smartphone etwas breitere Tags-Spalte und genügend Platz für Links
   const gridCols = isMobile
-    ? '220px 110px 80px 44px 135px 44px 130px 240px 260px 56px 48px'
+    ? '220px 110px 90px 44px 135px 44px 130px 240px 260px 56px 48px'
     : '220px 120px 90px 48px 135px 48px 130px 260px 220px 48px 44px'
 
   // Spalten-Ausrichtung für saubere vertikale Linien (Header und Body identisch)
@@ -489,7 +489,7 @@ export const EquipmentTable = React.memo(({
             >
               {/* Tabellenkopf – bleibt beim vertikalen Scrollen sichtbar (im selben Scroll-Container) */}
               <div
-                className="grid gap-px bg-border border-b bg-gray-50 sticky top-0 z-40"
+                className="grid gap-px bg-border border-b bg-gray-50 sticky top-0 z-20"
                 style={{ gridTemplateColumns: gridCols }}
               >
                 <div className={`px-4 py-3 font-medium text-sm ${colAlign.was}`}>Was</div>
@@ -502,7 +502,7 @@ export const EquipmentTable = React.memo(({
                 <div className={`px-4 py-3 font-medium text-sm ${colAlign.details}`}>Details</div>
                 <div className={`px-4 py-3 font-medium text-sm ${colAlign.tags}`}>Tags</div>
                 <div className={`px-4 py-3 font-medium text-sm ${colAlign.links}`}>Links</div>
-                <div className={`px-1 py-3 font-medium text-sm sticky right-0 z-50 bg-gray-50 ${colAlign.actions}`}></div>
+                <div className={`px-1 py-3 font-medium text-sm sticky right-0 z-25 bg-gray-50 ${colAlign.actions}`}></div>
               </div>
               {flatRows.length === 0 ? (
                 <div className="py-16 text-center text-muted-foreground">
@@ -634,7 +634,7 @@ export const EquipmentTable = React.memo(({
                             </DropdownMenu>
                           ) : null}
                         </div>
-                        <div className={`px-1 py-2 sticky right-0 z-30 bg-white flex items-center justify-center ${colAlign.actions}`}>
+                        <div className={`px-1 py-2 sticky right-0 z-25 bg-white flex items-center justify-center ${colAlign.actions}`}>
                           {!readOnly && (
                           <DropdownMenu open={openMenuId === item.id} onOpenChange={(o) => setOpenMenuId(o ? item.id : null)}>
                             <DropdownMenuTrigger asChild>
