@@ -634,7 +634,7 @@ export const EquipmentTable = React.memo(({
                             </DropdownMenu>
                           ) : null}
                         </div>
-                        <div className={`px-1 py-2 sticky right-0 z-25 bg-white flex items-center justify-center ${colAlign.actions}`}>
+                        <div className={`px-1 py-2 sticky right-0 z-25 flex items-center justify-center ${colAlign.actions}`}>
                           {!readOnly && (
                           <DropdownMenu open={openMenuId === item.id} onOpenChange={(o) => setOpenMenuId(o ? item.id : null)}>
                             <DropdownMenuTrigger asChild>

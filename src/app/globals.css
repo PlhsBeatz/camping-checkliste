@@ -144,6 +144,11 @@ html body[data-scroll-locked] {
   padding-right: 0 !important;
 }
 
+/* Radix Focus-Guards: sicher hinter Seiten-Header legen */
+body > span[data-radix-focus-guard] {
+  z-index: 0 !important;
+}
+
 /* Google PlaceAutocompleteElement Styling (neue API) */
 gmp-place-autocomplete {
   display: block;
