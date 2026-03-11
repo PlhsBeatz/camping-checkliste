@@ -297,6 +297,12 @@ export const EquipmentTable = React.memo(({
       default: return 'bg-gray-100 text-gray-800'
     }
   }
+
+  // Standard-Statusfilter: Normal & Immer gepackt aktiv
+  const defaultStatusFilter = ['Normal', 'Immer gepackt']
+  const isDefaultStatusFilter =
+    filterStatus.length === defaultStatusFilter.length &&
+    defaultStatusFilter.every((s) => filterStatus.includes(s))
   return (
     <div className={cn(
       "space-y-4",
@@ -449,7 +455,13 @@ export const EquipmentTable = React.memo(({
         <div className="text-sm text-muted-foreground flex items-center justify-between">
           <div>
             {filteredItems.length} von {equipmentItems.length} Einträgen
-            {(searchTerm || filterMainCategory !== 'all' || filterCategory !== 'all' || filterTransport !== 'all' || filterStatus.length !== 3 || filterTag !== 'all' || filterStandard !== 'all') && (
+            {(searchTerm ||
+              filterMainCategory !== 'all' ||
+              filterCategory !== 'all' ||
+              filterTransport !== 'all' ||
+              !isDefaultStatusFilter ||
+              filterTag !== 'all' ||
+              filterStandard !== 'all') && (
               <Button
                 variant="link"
                 size="sm"
