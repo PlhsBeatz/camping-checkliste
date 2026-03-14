@@ -1256,7 +1256,7 @@ function HomeContent() {
 
               {/* Auto-generate button - Only when list is empty */}
               {packingItems.length === 0 && (
-                <div className="p-6 text-center">
+                <div className="p-6 text-center bg-white">
                   <p className="text-muted-foreground mb-4">
                     Ihre Packliste ist leer. Generieren Sie automatisch Vorschläge oder fügen Sie manuell Gegenstände hinzu.
                   </p>

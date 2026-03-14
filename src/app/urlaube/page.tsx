@@ -1030,9 +1030,6 @@ export default function UrlaubePage() {
                         </p>
                       </div>
                       <div className="space-y-1">
-                        <div className="text-xs font-medium text-muted-foreground">
-                          Ausgewählte Campingplätze (Reihenfolge per Drag &amp; Drop ändern)
-                        </div>
                         <DndContext
                           sensors={sensors}
                           collisionDetection={closestCenter}
