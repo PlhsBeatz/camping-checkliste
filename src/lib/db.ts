@@ -16,6 +16,8 @@ export interface Vacation {
   reiseziel_name: string
   reiseziel_adresse?: string | null
   land_region?: string | null
+  /** Standardansicht der Packliste: 'packliste' oder 'alles'. Default: 'packliste' */
+  packliste_default_ansicht?: 'packliste' | 'alles' | null
   created_at: string
 }
 
@@ -320,13 +322,15 @@ export async function createVacation(
     reiseziel_name: string
     reiseziel_adresse?: string | null
     land_region?: string | null
+    packliste_default_ansicht?: 'packliste' | 'alles' | null
   }
 ): Promise<Vacation | null> {
   try {
     const id = crypto.randomUUID()
+    const defaultAnsicht = vacation.packliste_default_ansicht === 'alles' ? 'alles' : 'packliste'
     await db
       .prepare(
-        'INSERT INTO urlaube (id, titel, startdatum, abfahrtdatum, enddatum, reiseziel_name, reiseziel_adresse, land_region) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+        'INSERT INTO urlaube (id, titel, startdatum, abfahrtdatum, enddatum, reiseziel_name, reiseziel_adresse, land_region, packliste_default_ansicht) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
       )
       .bind(
         id, 
@@ -336,7 +340,8 @@ export async function createVacation(
         vacation.enddatum, 
         vacation.reiseziel_name,
         vacation.reiseziel_adresse || null,
-        vacation.land_region || null
+        vacation.land_region || null,
+        defaultAnsicht
       )
       .run()
 
@@ -365,6 +370,7 @@ export async function updateVacation(
     reiseziel_name?: string
     reiseziel_adresse?: string | null
     land_region?: string | null
+    packliste_default_ansicht?: 'packliste' | 'alles' | null
   }
 ): Promise<Vacation | null> {
   try {
@@ -398,6 +404,10 @@ export async function updateVacation(
     if (updates.land_region !== undefined) {
       fields.push('land_region = ?')
       values.push(updates.land_region)
+    }
+    if (updates.packliste_default_ansicht !== undefined) {
+      fields.push('packliste_default_ansicht = ?')
+      values.push(updates.packliste_default_ansicht === 'alles' ? 'alles' : 'packliste')
     }
 
     if (fields.length === 0) return getVacation(db, id)

@@ -119,6 +119,8 @@ function HomeContent() {
     travelers: Array<{ id: string; name: string; gepackt?: boolean; gepackt_vorgemerkt?: boolean }>
   } | null>(null)
   const [listDisplayMode, setListDisplayMode] = useState<'alles' | 'packliste'>('packliste')
+  /** Beim Wechsel des Urlaubs: Standardansicht aus Urlaub übernehmen (wird in useEffect gesetzt) */
+  const lastAppliedDefaultVacationIdRef = useRef<string | null>(null)
   const addDialogScrollContextRef = useRef<{ mainCategory: string; category: string } | null>(null)
   const addDialogScrollRef = useRef<HTMLDivElement>(null)
   const [showAddSingleItemDialog, setShowAddSingleItemDialog] = useState(false)
@@ -482,6 +484,17 @@ function HomeContent() {
   }, [availableEquipment, searchTerm, categories, mainCategories])
 
   const currentVacation = vacations.find(v => v.id === selectedVacationId)
+
+  // Beim Wechsel des Urlaubs: Standardansicht aus Urlaub übernehmen
+  useEffect(() => {
+    if (!selectedVacationId || vacations.length === 0) return
+    const vacation = vacations.find((v) => v.id === selectedVacationId)
+    if (!vacation) return
+    if (lastAppliedDefaultVacationIdRef.current === selectedVacationId) return
+    lastAppliedDefaultVacationIdRef.current = selectedVacationId
+    const defaultMode = vacation.packliste_default_ansicht === 'alles' ? 'alles' : 'packliste'
+    setListDisplayMode(defaultMode)
+  }, [selectedVacationId, vacations])
 
   const handleGeneratePackingList = async (equipmentItems: EquipmentItem[]) => {
     if (!selectedVacationId || equipmentItems.length === 0) return

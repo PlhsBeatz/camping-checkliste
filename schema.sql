@@ -50,6 +50,7 @@ CREATE TABLE IF NOT EXISTS urlaube (
     reiseziel_name TEXT,
     reiseziel_adresse TEXT,
     land_region TEXT,
+    packliste_default_ansicht TEXT DEFAULT 'packliste',
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );

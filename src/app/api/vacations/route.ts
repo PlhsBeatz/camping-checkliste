@@ -38,6 +38,7 @@ export async function POST(request: NextRequest) {
       destination?: string
       reiseziel_adresse?: string | null
       land_region?: string | null
+      packliste_default_ansicht?: 'packliste' | 'alles' | null
     }
 
     const titel = body.titel ?? body.title ?? ''
@@ -56,7 +57,8 @@ export async function POST(request: NextRequest) {
       enddatum,
       reiseziel_name,
       reiseziel_adresse: body.reiseziel_adresse ?? null,
-      land_region: body.land_region ?? null
+      land_region: body.land_region ?? null,
+      packliste_default_ansicht: body.packliste_default_ansicht ?? 'packliste'
     })
 
     if (!vacation) {
@@ -87,6 +89,7 @@ export async function PUT(request: NextRequest) {
       reiseziel_name?: string
       reiseziel_adresse?: string | null
       land_region?: string | null
+      packliste_default_ansicht?: 'packliste' | 'alles' | null
     }
     const { id, ...updates } = body
 

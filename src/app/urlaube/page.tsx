@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { NavigationSidebar } from '@/components/navigation-sidebar'
 import { MitreisendeManager } from '@/components/mitreisende-manager'
-import { Plus, Menu, MoreVertical, Pencil, Trash2, GripVertical, Route } from 'lucide-react'
+import { Plus, Menu, MoreVertical, Pencil, Trash2, GripVertical, Route, Settings } from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -184,8 +184,10 @@ export default function UrlaubePage() {
     enddatum: '',
     reiseziel_name: '',
     reiseziel_adresse: '',
-    land_region: ''
+    land_region: '',
+    packliste_default_ansicht: 'packliste' as 'packliste' | 'alles'
   })
+  const [showVacationSettingsModal, setShowVacationSettingsModal] = useState(false)
   const [abfahrtPopoverOpen, setAbfahrtPopoverOpen] = useState(false)
   const [rangePopoverOpen, setRangePopoverOpen] = useState(false)
   const [draftRange, setDraftRange] = useState<DateRange | undefined>(undefined)
@@ -339,7 +341,10 @@ export default function UrlaubePage() {
     setIsLoading(true)
     try {
       const method = editingVacationId ? 'PUT' : 'POST'
-      const body = editingVacationId ? { ...newVacationForm, id: editingVacationId } : newVacationForm
+      const { packliste_default_ansicht, ...restForm } = newVacationForm
+      const body = editingVacationId
+        ? { ...restForm, id: editingVacationId, packliste_default_ansicht }
+        : { ...restForm, packliste_default_ansicht }
 
       const res = await fetch('/api/vacations', {
         method,
@@ -414,6 +419,7 @@ export default function UrlaubePage() {
           reiseziel_name: '',
           reiseziel_adresse: '',
           land_region: '',
+          packliste_default_ansicht: 'packliste',
         })
         setVacationMitreisende([])
         setCampingSelectionIds([])
@@ -437,7 +443,8 @@ export default function UrlaubePage() {
       enddatum: vacation.enddatum,
       reiseziel_name: vacation.reiseziel_name,
       reiseziel_adresse: vacation.reiseziel_adresse || '',
-      land_region: vacation.land_region || ''
+      land_region: vacation.land_region || '',
+      packliste_default_ansicht: (vacation.packliste_default_ansicht === 'alles' ? 'alles' : 'packliste') as 'packliste' | 'alles'
     })
     const existingCamping = vacationCampingplaetze[vacation.id] ?? []
     setCampingSelectionIds(existingCamping.map((c) => c.id))
@@ -454,6 +461,7 @@ export default function UrlaubePage() {
     setShowNewVacationDialog(false)
     setEditingVacationId(null)
     setAbfahrtPopoverOpen(false)
+    setShowVacationSettingsModal(false)
     setNewVacationForm({
       titel: '',
       startdatum: '',
@@ -461,7 +469,8 @@ export default function UrlaubePage() {
       enddatum: '',
       reiseziel_name: '',
       reiseziel_adresse: '',
-      land_region: ''
+      land_region: '',
+      packliste_default_ansicht: 'packliste'
     })
     setVacationMitreisende([])
     setCampingSelectionIds([])
@@ -628,6 +637,18 @@ export default function UrlaubePage() {
             contentClassName="max-w-2xl max-h-[90vh] overflow-y-auto"
           >
             <div className="space-y-4">
+                  <div className="flex justify-end -mt-1">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                      onClick={() => setShowVacationSettingsModal(true)}
+                      aria-label="Urlaub-Einstellungen"
+                    >
+                      <Settings className="h-4 w-4" />
+                    </Button>
+                  </div>
                   <div>
                     <Label htmlFor="titel">Titel *</Label>
                     <Input
@@ -1080,6 +1101,53 @@ export default function UrlaubePage() {
                 </div>
           </ResponsiveModal>
 
+          {/* Urlaub-Einstellungen: Standardansicht (dezentes Modal) */}
+          <ResponsiveModal
+            open={showVacationSettingsModal}
+            onOpenChange={setShowVacationSettingsModal}
+            title="Urlaub-Einstellungen"
+            description="Optionale Einstellungen für diesen Urlaub"
+            contentClassName="max-w-sm"
+          >
+            <div className="space-y-4">
+              <div>
+                <Label className="text-sm text-muted-foreground">Standardansicht der Packliste</Label>
+                <p className="text-xs text-muted-foreground mt-0.5 mb-2">
+                  Welche Ansicht beim Öffnen der Packliste standardmäßig angezeigt wird.
+                </p>
+                <div className="flex rounded-lg border border-gray-200 p-0.5 bg-gray-50 overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => setNewVacationForm((prev) => ({ ...prev, packliste_default_ansicht: 'packliste' }))}
+                    className={cn(
+                      'flex-1 py-2 text-sm transition-colors',
+                      newVacationForm.packliste_default_ansicht === 'packliste'
+                        ? 'bg-white text-[rgb(45,79,30)] shadow-sm rounded-md font-medium'
+                        : 'text-gray-600 hover:text-gray-900'
+                    )}
+                  >
+                    Packliste
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setNewVacationForm((prev) => ({ ...prev, packliste_default_ansicht: 'alles' }))}
+                    className={cn(
+                      'flex-1 py-2 text-sm transition-colors',
+                      newVacationForm.packliste_default_ansicht === 'alles'
+                        ? 'bg-white text-[rgb(45,79,30)] shadow-sm rounded-md font-medium'
+                        : 'text-gray-600 hover:text-gray-900'
+                    )}
+                  >
+                    Alles
+                  </button>
+                </div>
+              </div>
+              <Button variant="outline" className="w-full" onClick={() => setShowVacationSettingsModal(false)}>
+                Schließen
+              </Button>
+            </div>
+          </ResponsiveModal>
+
           {/* Urlaub löschen – Bestätigung */}
           <ConfirmDialog
             open={!!deleteVacationId}
@@ -1309,7 +1377,8 @@ export default function UrlaubePage() {
                 enddatum: '',
                 reiseziel_name: '',
                 reiseziel_adresse: '',
-                land_region: ''
+                land_region: '',
+                packliste_default_ansicht: 'packliste',
               })
               setVacationMitreisende([])
               setCampingSelectionIds([])
