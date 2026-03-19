@@ -231,12 +231,12 @@ export function SonnenAusrichtungCompass({
             />
           )}
 
-          {/* Degree markings: alle 15° deutlicher (1 Stunde), alle 1° sehr dezent */}
+          {/* Degree markings: alle 15° deutlicher (1 Stunde), alle 1° fein – gleiche Farben */}
           {Array.from({ length: 360 }, (_, i) => {
             const isMajor = i % 15 === 0
             const inSun = isInSunArc(i, sunArcStart, sunArcEnd, sunData.isPolarDay, sunData.isPolarNight)
             const outer = compassToSvg(i, cx, cy, r)
-            const tickLen = isMajor ? 8 : 2
+            const tickLen = isMajor ? 8 : 3
             const inner = compassToSvg(i, cx, cy, r - tickLen)
             return (
               <line
@@ -246,9 +246,9 @@ export function SonnenAusrichtungCompass({
                 x2={inner.x}
                 y2={inner.y}
                 stroke={inSun ? 'rgb(45,79,30)' : 'white'}
-                strokeWidth={isMajor ? 1.5 : 0.5}
+                strokeWidth={isMajor ? 1.5 : 0.6}
                 strokeLinecap="round"
-                opacity={isMajor ? (inSun ? 0.9 : 0.85) : 0.12}
+                opacity={isMajor ? (inSun ? 0.9 : 0.85) : (inSun ? 0.5 : 0.45)}
               />
             )
           })}
@@ -299,10 +299,11 @@ export function SonnenAusrichtungCompass({
             const sunsetIconPos = compassToSvg(ss - 4, cx, cy, labelR)
             return (
               <>
-                {/* Sonnenaufgang-Icon: vor der Uhrzeit, Richtung grüne Fläche */}
-                <g transform={`translate(${sunriseIconPos.x}, ${sunriseIconPos.y}) rotate(${-(sr + 4)})`}>
-                  <circle r={3.5} fill="rgb(45,79,30)" />
-                  <path d="M-4 4 L4 4" stroke="rgb(45,79,30)" strokeWidth={1.2} strokeLinecap="round" />
+                {/* Sonnenaufgang-Icon: Halbkreis + Horizont + Pfeil, mittig zum Text */}
+                <g transform={`translate(${sunriseIconPos.x}, ${sunriseIconPos.y}) rotate(${-(sr + 4)}) translate(0, 1)`}>
+                  <path d="M 2.5 0 A 2.5 2.5 0 0 0 -2.5 0" fill="rgb(45,79,30)" />
+                  <path d="M-3.5 0 L3.5 0" stroke="rgb(45,79,30)" strokeWidth={1.2} strokeLinecap="round" />
+                  <polygon points="0,-1.2 0.35,0.2 -0.35,0.2" fill="rgb(45,79,30)" />
                 </g>
                 <text
                   fontSize="11"
@@ -334,10 +335,11 @@ export function SonnenAusrichtungCompass({
                     {format(sunData.sunset, 'HH:mm', { locale: de })}
                   </textPath>
                 </text>
-                {/* Sonnenuntergang-Icon: hinter der Uhrzeit, Richtung grüne Fläche */}
-                <g transform={`translate(${sunsetIconPos.x}, ${sunsetIconPos.y}) rotate(${-(ss - 4) + 180})`}>
-                  <circle r={3.5} fill="rgb(45,79,30)" />
-                  <path d="M-4 4 L4 4" stroke="rgb(45,79,30)" strokeWidth={1.2} strokeLinecap="round" />
+                {/* Sonnenuntergang-Icon: Halbkreis + Horizont + Pfeil, mittig zum Text */}
+                <g transform={`translate(${sunsetIconPos.x}, ${sunsetIconPos.y}) rotate(${-(ss - 4) + 180}) translate(0, -1)`}>
+                  <path d="M -2.5 0 A 2.5 2.5 0 0 1 2.5 0" fill="rgb(45,79,30)" />
+                  <path d="M-3.5 0 L3.5 0" stroke="rgb(45,79,30)" strokeWidth={1.2} strokeLinecap="round" />
+                  <polygon points="0,1.2 0.35,-0.2 -0.35,-0.2" fill="rgb(45,79,30)" />
                 </g>
               </>
             )
