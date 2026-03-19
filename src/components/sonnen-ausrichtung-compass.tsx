@@ -194,10 +194,10 @@ export function SonnenAusrichtungCompass({
               const ss = sunData.sunsetAzimuth
               return (
                 <>
-                  {/* Sonnenaufgang: Bogen ins Gelbe (rechtsbündig), Text linksbündig am Anfang */}
+                  {/* Sonnenaufgang: Bogen dichter am grünen Rand, Icon am Anfang (zur grünen Fläche) */}
                   <path
                     id="time-path-sunrise"
-                    d={`M ${compassToSvg(sr + 8, cx, cy, labelR).x} ${compassToSvg(sr + 8, cx, cy, labelR).y} A ${labelR} ${labelR} 0 0 1 ${compassToSvg(sr + 28, cx, cy, labelR).x} ${compassToSvg(sr + 28, cx, cy, labelR).y}`}
+                    d={`M ${compassToSvg(sr + 4, cx, cy, labelR).x} ${compassToSvg(sr + 4, cx, cy, labelR).y} A ${labelR} ${labelR} 0 0 1 ${compassToSvg(sr + 24, cx, cy, labelR).x} ${compassToSvg(sr + 24, cx, cy, labelR).y}`}
                     fill="none"
                   />
                   {/* Mittagssonne: zentriert im Gelben */}
@@ -206,10 +206,10 @@ export function SonnenAusrichtungCompass({
                     d={`M ${compassToSvg(sn - 10, cx, cy, labelR).x} ${compassToSvg(sn - 10, cx, cy, labelR).y} A ${labelR} ${labelR} 0 0 1 ${compassToSvg(sn + 10, cx, cy, labelR).x} ${compassToSvg(sn + 10, cx, cy, labelR).y}`}
                     fill="none"
                   />
-                  {/* Sonnenuntergang: Bogen ins Gelbe (linksbündig), Text rechtsbündig am Ende */}
+                  {/* Sonnenuntergang: Bogen dichter am grünen Rand, Icon am Ende (zur grünen Fläche) */}
                   <path
                     id="time-path-sunset"
-                    d={`M ${compassToSvg(ss - 28, cx, cy, labelR).x} ${compassToSvg(ss - 28, cx, cy, labelR).y} A ${labelR} ${labelR} 0 0 1 ${compassToSvg(ss - 8, cx, cy, labelR).x} ${compassToSvg(ss - 8, cx, cy, labelR).y}`}
+                    d={`M ${compassToSvg(ss - 24, cx, cy, labelR).x} ${compassToSvg(ss - 24, cx, cy, labelR).y} A ${labelR} ${labelR} 0 0 1 ${compassToSvg(ss - 4, cx, cy, labelR).x} ${compassToSvg(ss - 4, cx, cy, labelR).y}`}
                     fill="none"
                   />
                 </>
@@ -231,24 +231,24 @@ export function SonnenAusrichtungCompass({
             />
           )}
 
-          {/* Degree markings: nur alle 30° (1 Stunde), Farbe je nach Sonnenbereich – über Sonnenbogen */}
-          {Array.from({ length: 12 }, (_, i) => {
-            const deg = i * 30
-            const inSun = isInSunArc(deg, sunArcStart, sunArcEnd, sunData.isPolarDay, sunData.isPolarNight)
-            const outer = compassToSvg(deg, cx, cy, r)
-            const tickLen = 8
-            const inner = compassToSvg(deg, cx, cy, r - tickLen)
+          {/* Degree markings: alle 15° deutlicher (1 Stunde), alle 1° sehr dezent */}
+          {Array.from({ length: 360 }, (_, i) => {
+            const isMajor = i % 15 === 0
+            const inSun = isInSunArc(i, sunArcStart, sunArcEnd, sunData.isPolarDay, sunData.isPolarNight)
+            const outer = compassToSvg(i, cx, cy, r)
+            const tickLen = isMajor ? 8 : 2
+            const inner = compassToSvg(i, cx, cy, r - tickLen)
             return (
               <line
-                key={deg}
+                key={i}
                 x1={outer.x}
                 y1={outer.y}
                 x2={inner.x}
                 y2={inner.y}
                 stroke={inSun ? 'rgb(45,79,30)' : 'white'}
-                strokeWidth={1.5}
+                strokeWidth={isMajor ? 1.5 : 0.5}
                 strokeLinecap="round"
-                opacity={inSun ? 0.9 : 0.85}
+                opacity={isMajor ? (inSun ? 0.9 : 0.85) : 0.12}
               />
             )
           })}
@@ -290,41 +290,58 @@ export function SonnenAusrichtungCompass({
             </text>
           </g>
 
-          {/* Uhrzeiten am Kreis: Sonnenaufgang, Mittagssonne, Sonnenuntergang – vollständig im gelben Bereich */}
-          {!sunData.isPolarDay && !sunData.isPolarNight && (
-            <>
-              <text
-                fontSize="11"
-                fill="rgb(45,79,30)"
-                fontWeight="600"
-                style={{ fontFamily: 'var(--font-geist-sans), sans-serif' }}
-              >
-                <textPath href="#time-path-sunrise" startOffset="0%" textAnchor="start">
-                  {format(sunData.sunrise, 'HH:mm', { locale: de })}
-                </textPath>
-              </text>
-              <text
-                fontSize="11"
-                fill="rgb(45,79,30)"
-                fontWeight="600"
-                style={{ fontFamily: 'var(--font-geist-sans), sans-serif' }}
-              >
-                <textPath href="#time-path-noon" startOffset="50%" textAnchor="middle">
-                  {format(sunData.solarNoon, 'HH:mm', { locale: de })}
-                </textPath>
-              </text>
-              <text
-                fontSize="11"
-                fill="rgb(45,79,30)"
-                fontWeight="600"
-                style={{ fontFamily: 'var(--font-geist-sans), sans-serif' }}
-              >
-                <textPath href="#time-path-sunset" startOffset="100%" textAnchor="end">
-                  {format(sunData.sunset, 'HH:mm', { locale: de })}
-                </textPath>
-              </text>
-            </>
-          )}
+          {/* Uhrzeiten am Kreis: Sonnenaufgang (Icon vor Uhrzeit), Mittagssonne, Sonnenuntergang (Icon hinter Uhrzeit) */}
+          {!sunData.isPolarDay && !sunData.isPolarNight && (() => {
+            const labelR = r - 22
+            const sr = sunData.sunriseAzimuth
+            const ss = sunData.sunsetAzimuth
+            const sunriseIconPos = compassToSvg(sr + 4, cx, cy, labelR)
+            const sunsetIconPos = compassToSvg(ss - 4, cx, cy, labelR)
+            return (
+              <>
+                {/* Sonnenaufgang-Icon: vor der Uhrzeit, Richtung grüne Fläche */}
+                <g transform={`translate(${sunriseIconPos.x}, ${sunriseIconPos.y}) rotate(${-(sr + 4)})`}>
+                  <circle r={3.5} fill="rgb(45,79,30)" />
+                  <path d="M-4 4 L4 4" stroke="rgb(45,79,30)" strokeWidth={1.2} strokeLinecap="round" />
+                </g>
+                <text
+                  fontSize="11"
+                  fill="rgb(45,79,30)"
+                  fontWeight="600"
+                  style={{ fontFamily: 'var(--font-geist-sans), sans-serif' }}
+                >
+                  <textPath href="#time-path-sunrise" startOffset="18%" textAnchor="start">
+                    {format(sunData.sunrise, 'HH:mm', { locale: de })}
+                  </textPath>
+                </text>
+                <text
+                  fontSize="11"
+                  fill="rgb(45,79,30)"
+                  fontWeight="600"
+                  style={{ fontFamily: 'var(--font-geist-sans), sans-serif' }}
+                >
+                  <textPath href="#time-path-noon" startOffset="50%" textAnchor="middle">
+                    {format(sunData.solarNoon, 'HH:mm', { locale: de })}
+                  </textPath>
+                </text>
+                <text
+                  fontSize="11"
+                  fill="rgb(45,79,30)"
+                  fontWeight="600"
+                  style={{ fontFamily: 'var(--font-geist-sans), sans-serif' }}
+                >
+                  <textPath href="#time-path-sunset" startOffset="82%" textAnchor="end">
+                    {format(sunData.sunset, 'HH:mm', { locale: de })}
+                  </textPath>
+                </text>
+                {/* Sonnenuntergang-Icon: hinter der Uhrzeit, Richtung grüne Fläche */}
+                <g transform={`translate(${sunsetIconPos.x}, ${sunsetIconPos.y}) rotate(${-(ss - 4) + 180})`}>
+                  <circle r={3.5} fill="rgb(45,79,30)" />
+                  <path d="M-4 4 L4 4" stroke="rgb(45,79,30)" strokeWidth={1.2} strokeLinecap="round" />
+                </g>
+              </>
+            )
+          })()}
         </svg>
         </div>
       </div>
