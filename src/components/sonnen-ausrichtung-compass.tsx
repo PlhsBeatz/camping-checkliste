@@ -17,6 +17,7 @@ interface SunData {
   solarNoon: Date
   sunriseAzimuth: number
   sunsetAzimuth: number
+  solarNoonAzimuth: number
   currentAzimuth: number
   currentAltitude: number
   isPolarDay: boolean
@@ -41,6 +42,7 @@ function computeSunData(
         solarNoon: solarNoon ?? new Date(),
         sunriseAzimuth: 0,
         sunsetAzimuth: 0,
+        solarNoonAzimuth: 180,
         currentAzimuth: 0,
         currentAltitude: 0,
         isPolarDay: true,
@@ -50,10 +52,12 @@ function computeSunData(
 
     const sunrisePos = SunCalc.getPosition(sunrise, lat, lng)
     const sunsetPos = SunCalc.getPosition(sunset, lat, lng)
+    const solarNoonPos = SunCalc.getPosition(solarNoon ?? date, lat, lng)
     const currentPos = SunCalc.getPosition(date, lat, lng)
 
     const sunriseAzimuth = suncalcAzimuthToCompass(sunrisePos.azimuth)
     const sunsetAzimuth = suncalcAzimuthToCompass(sunsetPos.azimuth)
+    const solarNoonAzimuth = suncalcAzimuthToCompass(solarNoonPos.azimuth)
     const currentAzimuth = suncalcAzimuthToCompass(currentPos.azimuth)
 
     const isPolarDay = sunrise.getTime() === sunset.getTime() && currentPos.altitude > 0
@@ -65,6 +69,7 @@ function computeSunData(
       solarNoon: solarNoon ?? new Date(),
       sunriseAzimuth,
       sunsetAzimuth,
+      solarNoonAzimuth,
       currentAzimuth,
       currentAltitude: currentPos.altitude,
       isPolarDay,
@@ -82,6 +87,23 @@ function compassToSvg(compassDeg: number, cx: number, cy: number, r: number) {
     x: cx + r * Math.cos(rad),
     y: cy - r * Math.sin(rad),
   }
+}
+
+/** Prüft ob Winkel im Sonnenbogen (gelber Bereich) liegt */
+function isInSunArc(
+  deg: number,
+  sunStart: number,
+  sunEnd: number,
+  isPolarDay: boolean,
+  isPolarNight: boolean
+): boolean {
+  if (isPolarDay) return true
+  if (isPolarNight) return false
+  const d = (deg + 360) % 360
+  const s = (sunStart + 360) % 360
+  const e = (sunEnd + 360) % 360
+  if (s <= e) return d >= s && d <= e
+  return d >= s || d <= e
 }
 
 interface SonnenAusrichtungCompassProps {
@@ -147,7 +169,7 @@ export function SonnenAusrichtungCompass({
   return (
     <div className="flex flex-col items-center gap-6">
       <div
-        className="relative transition-transform duration-100 rounded-full overflow-hidden w-full max-w-[min(calc(100vw-2rem),360px)] aspect-square bg-[rgb(45,79,30)]"
+        className="relative transition-transform duration-100 rounded-full overflow-hidden w-full max-w-[min(calc(100vw-2rem),360px)] aspect-square"
         style={{
           transform: `rotate(${rotation}deg)`,
           boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1)',
@@ -164,31 +186,32 @@ export function SonnenAusrichtungCompass({
               <stop offset="0%" stopColor="#fde68a" />
               <stop offset="100%" stopColor="#fcd34d" />
             </linearGradient>
+            {!sunData.isPolarDay && !sunData.isPolarNight &&
+              [
+                { azimuth: sunData.sunriseAzimuth },
+                { azimuth: sunData.solarNoonAzimuth },
+                { azimuth: sunData.sunsetAzimuth },
+              ].map(({ azimuth }, i) => {
+                const labelR = r - 22
+                const start = compassToSvg(azimuth - 12, cx, cy, labelR)
+                const end = compassToSvg(azimuth + 12, cx, cy, labelR)
+                return (
+                  <path
+                    key={`path-${i}`}
+                    id={`time-path-${i}`}
+                    d={`M ${start.x} ${start.y} A ${labelR} ${labelR} 0 0 1 ${end.x} ${end.y}`}
+                    fill="none"
+                  />
+                )
+              })
+            }
           </defs>
 
-          {/* Dark green background (night) - rgb(45,79,30) */}
-          <circle cx={cx} cy={cy} r={r} fill="rgb(45,79,30)" />
+          {/* Vollflächiger Hintergrund – kein Rand */}
+          <rect width={size} height={size} fill="rgb(45,79,30)" />
 
-          {/* Degree markings: every 15° deutlicher, every 1° sehr dezent */}
-          {Array.from({ length: 360 }, (_, i) => {
-            const isMajor = i % 15 === 0
-            const outer = compassToSvg(i, cx, cy, r)
-            const tickLen = isMajor ? 6 : 2
-            const inner = compassToSvg(i, cx, cy, r - tickLen)
-            return (
-              <line
-                key={i}
-                x1={outer.x}
-                y1={outer.y}
-                x2={inner.x}
-                y2={inner.y}
-                stroke="white"
-                strokeWidth={isMajor ? 1.2 : 0.5}
-                strokeLinecap="round"
-                opacity={isMajor ? 0.85 : 0.12}
-              />
-            )
-          })}
+          {/* Dark green compass circle (night) */}
+          <circle cx={cx} cy={cy} r={r} fill="rgb(45,79,30)" />
 
           {/* Yellow sun arc (daylight) - Packstatus fest installiert amber-200 */}
           {sunArcPath && (
@@ -197,6 +220,28 @@ export function SonnenAusrichtungCompass({
               fill="url(#sunArcGradient)"
             />
           )}
+
+          {/* Degree markings: nur alle 30° (1 Stunde), Farbe je nach Sonnenbereich – über Sonnenbogen */}
+          {Array.from({ length: 12 }, (_, i) => {
+            const deg = i * 30
+            const inSun = isInSunArc(deg, sunArcStart, sunArcEnd, sunData.isPolarDay, sunData.isPolarNight)
+            const outer = compassToSvg(deg, cx, cy, r)
+            const tickLen = 8
+            const inner = compassToSvg(deg, cx, cy, r - tickLen)
+            return (
+              <line
+                key={deg}
+                x1={outer.x}
+                y1={outer.y}
+                x2={inner.x}
+                y2={inner.y}
+                stroke={inSun ? 'rgb(45,79,30)' : 'white'}
+                strokeWidth={1.5}
+                strokeLinecap="round"
+                opacity={inSun ? 0.9 : 0.85}
+              />
+            )
+          })}
 
           {/* Sun symbol at current position (only if above horizon) - accent orange, schlicht */}
           {sunData.currentAltitude > -0.1 && (
@@ -234,6 +279,32 @@ export function SonnenAusrichtungCompass({
               N
             </text>
           </g>
+
+          {/* Uhrzeiten am Kreis: Sonnenaufgang, Mittagssonne, Sonnenuntergang – gebogen entlang des Kreises */}
+          {!sunData.isPolarDay && !sunData.isPolarNight && (
+            <>
+              {[
+                { azimuth: sunData.sunriseAzimuth, time: format(sunData.sunrise, 'HH:mm', { locale: de }) },
+                { azimuth: sunData.solarNoonAzimuth, time: format(sunData.solarNoon, 'HH:mm', { locale: de }) },
+                { azimuth: sunData.sunsetAzimuth, time: format(sunData.sunset, 'HH:mm', { locale: de }) },
+              ].map(({ azimuth, time }, i) => {
+                const inSun = isInSunArc(azimuth, sunArcStart, sunArcEnd, false, false)
+                return (
+                  <text
+                    key={`${azimuth.toFixed(1)}-${time}`}
+                    fontSize="11"
+                    fill={inSun ? 'rgb(45,79,30)' : 'white'}
+                    fontWeight="600"
+                    style={{ fontFamily: 'var(--font-geist-sans), sans-serif' }}
+                  >
+                    <textPath href={`#time-path-${i}`} startOffset="50%" textAnchor="middle">
+                      {time}
+                    </textPath>
+                  </text>
+                )
+              })}
+            </>
+          )}
         </svg>
       </div>
 
