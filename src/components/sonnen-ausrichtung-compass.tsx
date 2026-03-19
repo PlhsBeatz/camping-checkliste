@@ -168,13 +168,14 @@ export function SonnenAusrichtungCompass({
 
   return (
     <div className="flex flex-col items-center gap-6">
-      <div
-        className="relative transition-transform duration-100 rounded-full overflow-hidden w-full max-w-[min(calc(100vw-2rem),360px)] aspect-square"
-        style={{
-          transform: `rotate(${rotation}deg)`,
-          boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1)',
-        }}
-      >
+      <div className="p-4">
+        <div
+          className="relative transition-transform duration-100 rounded-full overflow-hidden w-full max-w-[min(calc(100vw-2rem),360px)] aspect-square"
+          style={{
+            transform: `rotate(${rotation}deg)`,
+            boxShadow: '0 25px 50px -12px rgb(0 0 0 / 0.45), 0 12px 24px -8px rgb(0 0 0 / 0.3)',
+          }}
+        >
         <svg
           width={size}
           height={size}
@@ -186,25 +187,34 @@ export function SonnenAusrichtungCompass({
               <stop offset="0%" stopColor="#fde68a" />
               <stop offset="100%" stopColor="#fcd34d" />
             </linearGradient>
-            {!sunData.isPolarDay && !sunData.isPolarNight &&
-              [
-                { azimuth: sunData.sunriseAzimuth },
-                { azimuth: sunData.solarNoonAzimuth },
-                { azimuth: sunData.sunsetAzimuth },
-              ].map(({ azimuth }, i) => {
-                const labelR = r - 22
-                const start = compassToSvg(azimuth - 12, cx, cy, labelR)
-                const end = compassToSvg(azimuth + 12, cx, cy, labelR)
-                return (
+            {!sunData.isPolarDay && !sunData.isPolarNight && (() => {
+              const labelR = r - 22
+              const sr = sunData.sunriseAzimuth
+              const sn = sunData.solarNoonAzimuth
+              const ss = sunData.sunsetAzimuth
+              return (
+                <>
+                  {/* Sonnenaufgang: Bogen ins Gelbe (rechtsbündig), Text linksbündig am Anfang */}
                   <path
-                    key={`path-${i}`}
-                    id={`time-path-${i}`}
-                    d={`M ${start.x} ${start.y} A ${labelR} ${labelR} 0 0 1 ${end.x} ${end.y}`}
+                    id="time-path-sunrise"
+                    d={`M ${compassToSvg(sr + 8, cx, cy, labelR).x} ${compassToSvg(sr + 8, cx, cy, labelR).y} A ${labelR} ${labelR} 0 0 1 ${compassToSvg(sr + 28, cx, cy, labelR).x} ${compassToSvg(sr + 28, cx, cy, labelR).y}`}
                     fill="none"
                   />
-                )
-              })
-            }
+                  {/* Mittagssonne: zentriert im Gelben */}
+                  <path
+                    id="time-path-noon"
+                    d={`M ${compassToSvg(sn - 10, cx, cy, labelR).x} ${compassToSvg(sn - 10, cx, cy, labelR).y} A ${labelR} ${labelR} 0 0 1 ${compassToSvg(sn + 10, cx, cy, labelR).x} ${compassToSvg(sn + 10, cx, cy, labelR).y}`}
+                    fill="none"
+                  />
+                  {/* Sonnenuntergang: Bogen ins Gelbe (linksbündig), Text rechtsbündig am Ende */}
+                  <path
+                    id="time-path-sunset"
+                    d={`M ${compassToSvg(ss - 28, cx, cy, labelR).x} ${compassToSvg(ss - 28, cx, cy, labelR).y} A ${labelR} ${labelR} 0 0 1 ${compassToSvg(ss - 8, cx, cy, labelR).x} ${compassToSvg(ss - 8, cx, cy, labelR).y}`}
+                    fill="none"
+                  />
+                </>
+              )
+            })()}
           </defs>
 
           {/* Vollflächiger Hintergrund – kein Rand */}
@@ -280,32 +290,43 @@ export function SonnenAusrichtungCompass({
             </text>
           </g>
 
-          {/* Uhrzeiten am Kreis: Sonnenaufgang, Mittagssonne, Sonnenuntergang – gebogen entlang des Kreises */}
+          {/* Uhrzeiten am Kreis: Sonnenaufgang, Mittagssonne, Sonnenuntergang – vollständig im gelben Bereich */}
           {!sunData.isPolarDay && !sunData.isPolarNight && (
             <>
-              {[
-                { azimuth: sunData.sunriseAzimuth, time: format(sunData.sunrise, 'HH:mm', { locale: de }) },
-                { azimuth: sunData.solarNoonAzimuth, time: format(sunData.solarNoon, 'HH:mm', { locale: de }) },
-                { azimuth: sunData.sunsetAzimuth, time: format(sunData.sunset, 'HH:mm', { locale: de }) },
-              ].map(({ azimuth, time }, i) => {
-                const inSun = isInSunArc(azimuth, sunArcStart, sunArcEnd, false, false)
-                return (
-                  <text
-                    key={`${azimuth.toFixed(1)}-${time}`}
-                    fontSize="11"
-                    fill={inSun ? 'rgb(45,79,30)' : 'white'}
-                    fontWeight="600"
-                    style={{ fontFamily: 'var(--font-geist-sans), sans-serif' }}
-                  >
-                    <textPath href={`#time-path-${i}`} startOffset="50%" textAnchor="middle">
-                      {time}
-                    </textPath>
-                  </text>
-                )
-              })}
+              <text
+                fontSize="11"
+                fill="rgb(45,79,30)"
+                fontWeight="600"
+                style={{ fontFamily: 'var(--font-geist-sans), sans-serif' }}
+              >
+                <textPath href="#time-path-sunrise" startOffset="0%" textAnchor="start">
+                  {format(sunData.sunrise, 'HH:mm', { locale: de })}
+                </textPath>
+              </text>
+              <text
+                fontSize="11"
+                fill="rgb(45,79,30)"
+                fontWeight="600"
+                style={{ fontFamily: 'var(--font-geist-sans), sans-serif' }}
+              >
+                <textPath href="#time-path-noon" startOffset="50%" textAnchor="middle">
+                  {format(sunData.solarNoon, 'HH:mm', { locale: de })}
+                </textPath>
+              </text>
+              <text
+                fontSize="11"
+                fill="rgb(45,79,30)"
+                fontWeight="600"
+                style={{ fontFamily: 'var(--font-geist-sans), sans-serif' }}
+              >
+                <textPath href="#time-path-sunset" startOffset="100%" textAnchor="end">
+                  {format(sunData.sunset, 'HH:mm', { locale: de })}
+                </textPath>
+              </text>
             </>
           )}
         </svg>
+        </div>
       </div>
 
       {/* Data panel */}
