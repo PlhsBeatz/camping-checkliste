@@ -88,8 +88,10 @@ export default function SonnenAusrichtungPage() {
       setCompassPermissionNeeded(true)
     } else if (!ev.requestPermission) {
       setCompassEnabled(true)
+    } else if (compassEnabled) {
+      setCompassPermissionNeeded(false)
     }
-  }, [])
+  }, [compassEnabled])
 
   return (
     <div className="min-h-screen bg-gray-50">

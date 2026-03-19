@@ -95,7 +95,7 @@ interface SonnenAusrichtungCompassProps {
 export function SonnenAusrichtungCompass({
   lat,
   lng,
-  date = new Date(),
+  date: _date,
   deviceHeading,
   compassEnabled,
 }: SonnenAusrichtungCompassProps) {
