@@ -18,11 +18,16 @@ export function NavigationSidebar({ isOpen, onClose }: NavigationSidebarProps) {
   const pathname = usePathname()
   const { canAccessConfig, logout } = useAuth()
   const [configExpanded, setConfigExpanded] = useState(false)
+  const [toolsExpanded, setToolsExpanded] = useState(false)
   const [isOnline, setIsOnline] = useState(true)
 
   useEffect(() => {
     return subscribeToOnlineStatus(setIsOnline)
   }, [])
+
+  useEffect(() => {
+    if (pathname.startsWith('/tools')) setToolsExpanded(true)
+  }, [pathname])
 
   const menuItems = [
     {
@@ -49,6 +54,10 @@ export function NavigationSidebar({ isOpen, onClose }: NavigationSidebarProps) {
       href: '/ausruestung',
       active: pathname.startsWith('/ausruestung')
     }
+  ]
+
+  const toolsItems: { label: string; href: string }[] = [
+    { label: 'SONNEN-AUSRICHTUNG', href: '/tools/sonnen-ausrichtung' }
   ]
 
   const configItems: { label: string; href: string; disabled?: boolean }[] = [
@@ -104,6 +113,45 @@ export function NavigationSidebar({ isOpen, onClose }: NavigationSidebarProps) {
                 )}
               </Link>
             ))}
+          </div>
+
+          {/* Tools Dropdown – für alle Nutzer */}
+          <div className="mt-4 px-3">
+            <button
+              onClick={() => setToolsExpanded(!toolsExpanded)}
+              className="flex items-center justify-between w-full px-4 py-3 text-sm font-medium text-gray-700 hover:bg-[rgb(250,250,249)] rounded-lg transition-colors"
+            >
+              <div className="flex items-center gap-3">
+                <span className="material-icons text-xl">build</span>
+                <span className="text-xs tracking-wide">TOOLS</span>
+              </div>
+              {toolsExpanded ? (
+                <ChevronDown className="w-4 h-4" />
+              ) : (
+                <ChevronRight className="w-4 h-4" />
+              )}
+            </button>
+
+            {/* Tools Submenu */}
+            {toolsExpanded && (
+              <div className="mt-1 ml-11 space-y-1">
+                {toolsItems.map((item) => (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={() => onClose()}
+                    className={cn(
+                      "block px-4 py-2 text-xs tracking-wide rounded-lg transition-colors",
+                      pathname === item.href
+                        ? "text-[rgb(45,79,30)] font-medium bg-[rgb(250,250,249)]"
+                        : "text-gray-600 hover:bg-[rgb(250,250,249)] hover:text-gray-900"
+                    )}
+                  >
+                    {item.label}
+                  </Link>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Configuration Dropdown – nur für Admin */}

@@ -173,6 +173,9 @@ importers:
       sonner:
         specifier: ^1.7.2
         version: 1.7.4(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+      suncalc:
+        specifier: ^1.9.0
+        version: 1.9.0
       tailwind-merge:
         specifier: ^2.6.0
         version: 2.6.1
@@ -4634,6 +4637,9 @@ packages:
     resolution: {integrity: sha512-DhuTmvZWux4H1UOnWMB3sk0sbaCVOoQZjv8u1rDoTV0HTdGem9hkAZtl4JZy8P2z4Bg0nT+YMeOFyVr4zcG5Tw==}
     engines: {node: '>=16 || 14 >=14.17'}
     hasBin: true
+
+  suncalc@1.9.0:
+    resolution: {integrity: sha512-vMJ8Byp1uIPoj+wb9c1AdK4jpkSKVAywgHX0lqY7zt6+EWRRC3Z+0Ucfjy/0yxTVO1hwwchZe4uoFNqrIC24+A==}
 
   supports-color@10.2.2:
     resolution: {integrity: sha512-SS+jx45GF1QjgEXQx4NJZV9ImqmO2NPz5FNsIHrsDjh2YsHnawpan7SNQ1o8NuhrbHZy9AZhIoCUiCeaW/C80g==}
@@ -10046,6 +10052,8 @@ snapshots:
       pirates: 4.0.7
       tinyglobby: 0.2.15
       ts-interface-checker: 0.1.13
+
+  suncalc@1.9.0: {}
 
   supports-color@10.2.2: {}
 
