@@ -674,10 +674,12 @@ export function PackingList({
     }
   }, [mainCategories, activeMainCategory]);
 
-  const effectivePacked = (g: boolean, v?: boolean) => g || !!v;
   // Für Admin (canConfirmVorgemerkt): Nur verifiziert (gepackt) zählt im Fortschritt; Kind/Gast: vorgemerkt zählt mit.
-  const countedAsPacked = (gepackt: boolean, vorgemerkt?: boolean) =>
-    canConfirmVorgemerkt ? gepackt : effectivePacked(gepackt, vorgemerkt);
+  const countedAsPacked = useCallback(
+    (gepackt: boolean, vorgemerkt?: boolean) =>
+      canConfirmVorgemerkt ? gepackt : gepackt || !!vorgemerkt,
+    [canConfirmVorgemerkt]
+  );
   // Fortschritt: Im Packprofil einer Person nur Einträge, die der Person zugeordnet sind; im Alle-Profil alle sichtbaren.
   const { packedCount, totalCount } = useMemo(() => {
     return visibleItems.reduce((acc, item) => {

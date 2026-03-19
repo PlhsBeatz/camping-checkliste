@@ -89,7 +89,6 @@ interface SonnenAusrichtungCompassProps {
   lng: number
   date?: Date
   deviceHeading: number | null
-  compassEnabled: boolean
 }
 
 export function SonnenAusrichtungCompass({
@@ -97,7 +96,6 @@ export function SonnenAusrichtungCompass({
   lng,
   date: _date,
   deviceHeading,
-  compassEnabled,
 }: SonnenAusrichtungCompassProps) {
   const [sunData, setSunData] = useState<SunData | null>(null)
 
@@ -118,7 +116,7 @@ export function SonnenAusrichtungCompass({
   const cy = size / 2
   const r = size / 2 - 12
 
-  const rotation = compassEnabled && deviceHeading != null ? -deviceHeading : 0
+  const rotation = deviceHeading != null ? -deviceHeading : 0
 
   let sunArcStart = sunData.sunriseAzimuth
   let sunArcEnd = sunData.sunsetAzimuth
@@ -149,59 +147,72 @@ export function SonnenAusrichtungCompass({
   return (
     <div className="flex flex-col items-center gap-6">
       <div
-        className="relative transition-transform duration-100"
+        className="relative transition-transform duration-100 shadow-xl rounded-full"
         style={{
           transform: `rotate(${rotation}deg)`,
+          boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1)',
         }}
       >
         <svg
           width={size}
           height={size}
           viewBox={`0 0 ${size} ${size}`}
-          className="max-w-full aspect-square"
+          className="max-w-full aspect-square rounded-full"
         >
           <defs>
-            <linearGradient id="sunGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#f97316" />
-              <stop offset="100%" stopColor="#ea580c" />
+            <linearGradient id="sunArcGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor="#fde68a" />
+              <stop offset="100%" stopColor="#fcd34d" />
             </linearGradient>
           </defs>
 
-          {/* Green background (night) */}
-          <circle cx={cx} cy={cy} r={r} fill="#22c55e" stroke="#16a34a" strokeWidth={2} />
+          {/* Dark green background (night) - rgb(45,79,30) */}
+          <circle cx={cx} cy={cy} r={r} fill="rgb(45,79,30)" />
 
-          {/* Orange sun arc (daylight) - drawn on top of green base */}
+          {/* Degree markings: every 15° deutlicher, every 1° sehr dezent */}
+          {Array.from({ length: 360 }, (_, i) => {
+            const isMajor = i % 15 === 0
+            const outer = compassToSvg(i, cx, cy, r)
+            const tickLen = isMajor ? 6 : 2
+            const inner = compassToSvg(i, cx, cy, r - tickLen)
+            return (
+              <line
+                key={i}
+                x1={outer.x}
+                y1={outer.y}
+                x2={inner.x}
+                y2={inner.y}
+                stroke="white"
+                strokeWidth={isMajor ? 1.2 : 0.5}
+                strokeLinecap="round"
+                opacity={isMajor ? 0.85 : 0.12}
+              />
+            )
+          })}
+
+          {/* Yellow sun arc (daylight) - Packstatus fest installiert amber-200 */}
           {sunArcPath && (
             <path
               d={`${sunArcPath} L ${cx} ${cy} Z`}
-              fill="url(#sunGradient)"
-              stroke="#ea580c"
-              strokeWidth={1}
+              fill="url(#sunArcGradient)"
             />
           )}
 
-          {/* Circle border */}
-          <circle cx={cx} cy={cy} r={r} fill="none" stroke="#16a34a" strokeWidth={2} />
-
-          {/* Sun symbol at current position (only if above horizon) */}
+          {/* Sun symbol at current position (only if above horizon) - accent orange, schlicht */}
           {sunData.currentAltitude > -0.1 && (
             <g transform={`translate(${sunPos.x}, ${sunPos.y})`}>
-              <circle r={12} fill="#fbbf24" stroke="#f59e0b" strokeWidth={2} />
-              {[0, 45, 90, 135, 180, 225, 270, 315].map((deg) => {
+              <circle r={8} fill="rgb(230,126,34)" />
+              {[0, 90, 180, 270].map((deg) => {
                 const rad = (deg * Math.PI) / 180
-                const x1 = 6 * Math.cos(rad)
-                const y1 = -6 * Math.sin(rad)
-                const x2 = 14 * Math.cos(rad)
-                const y2 = -14 * Math.sin(rad)
                 return (
                   <line
                     key={deg}
-                    x1={x1}
-                    y1={y1}
-                    x2={x2}
-                    y2={y2}
-                    stroke="#f59e0b"
-                    strokeWidth={2}
+                    x1={4 * Math.cos(rad)}
+                    y1={-4 * Math.sin(rad)}
+                    x2={8 * Math.cos(rad)}
+                    y2={-8 * Math.sin(rad)}
+                    stroke="rgb(230,126,34)"
+                    strokeWidth={1.5}
                     strokeLinecap="round"
                   />
                 )
@@ -209,15 +220,15 @@ export function SonnenAusrichtungCompass({
             </g>
           )}
 
-          {/* N with arrow at top */}
-          <g transform={`translate(${cx}, ${cy - r + 36})`}>
-            <polygon points="0,-16 6,-4 -6,-4" fill="#1f2937" />
+          {/* N with arrow at top - white */}
+          <g transform={`translate(${cx}, ${cy - r + 40})`}>
+            <polygon points="0,-18 5,-2 -5,-2" fill="white" stroke="white" strokeWidth={0.5} />
             <text
               x="0"
-              y="14"
+              y="16"
               textAnchor="middle"
               dominantBaseline="middle"
-              className="text-lg font-bold fill-gray-900"
+              className="text-lg font-bold fill-white"
               style={{ fontFamily: 'var(--font-geist-sans), sans-serif' }}
             >
               N

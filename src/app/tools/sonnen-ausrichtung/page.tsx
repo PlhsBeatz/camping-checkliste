@@ -66,20 +66,37 @@ export default function SonnenAusrichtungPage() {
   }, [])
 
   useEffect(() => {
-    if (!compassEnabled) return
-
     const handler = (event: DeviceOrientationEvent) => {
       const ev = event as DeviceOrientationEventWithWebkit
       if (typeof ev.webkitCompassHeading === 'number') {
         setDeviceHeading(ev.webkitCompassHeading)
-      } else if (ev.absolute && typeof ev.alpha === 'number') {
-        setDeviceHeading((360 - ev.alpha) % 360)
+      } else if (typeof ev.alpha === 'number') {
+        const heading = ev.absolute ? (360 - ev.alpha) % 360 : (360 - ev.alpha + 360) % 360
+        setDeviceHeading(heading)
+      }
+    }
+
+    const handlerAbsolute = (event: DeviceOrientationEvent) => {
+      if (typeof event.alpha === 'number') {
+        setDeviceHeading((360 - event.alpha + 360) % 360)
       }
     }
 
     window.addEventListener('deviceorientation', handler)
-    return () => window.removeEventListener('deviceorientation', handler)
-  }, [compassEnabled])
+    try {
+      window.addEventListener('deviceorientationabsolute', handlerAbsolute as EventListener)
+    } catch {
+      // deviceorientationabsolute not supported
+    }
+    return () => {
+      window.removeEventListener('deviceorientation', handler)
+      try {
+        window.removeEventListener('deviceorientationabsolute', handlerAbsolute as EventListener)
+      } catch {
+        // ignore
+      }
+    }
+  }, [])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -147,7 +164,6 @@ export default function SonnenAusrichtungPage() {
               lat={position.lat}
               lng={position.lng}
               deviceHeading={deviceHeading}
-              compassEnabled={compassEnabled}
             />
           )}
 
