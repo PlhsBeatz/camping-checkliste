@@ -3,9 +3,11 @@
 import { CampingAppIcon } from './camping-app-icon'
 
 interface AppLogoProps {
-  /** Wenn true, wird die Version "v 0.3 PRO" angezeigt (z.B. in der Sidebar) */
+  /** Wenn true, wird die Version "v 0.3 PRO" angezeigt */
   showVersion?: boolean
-  /** Größe: compact (10x10 wie Sidebar), default (14x14 für Auth-Seiten) */
+  /** Untertitel unter dem Logo (z.B. "Deine Packliste" in der Sidebar) – ersetzt Versionsanzeige */
+  bottomText?: string
+  /** Größe: compact (8x8 Icon), default (11x11 Icon) */
   size?: 'compact' | 'default'
   /** Layout: inline (Sidebar), centered (Auth-Seiten mit Icon über Text) */
   variant?: 'inline' | 'centered'
@@ -15,11 +17,12 @@ interface AppLogoProps {
 }
 
 /**
- * Einheitliches CAMPPACK-Logo – wie in der Navigation-Sidebar.
+ * Einheitliches CampCheck-Logo – wie in der Navigation-Sidebar.
  * Wird an allen Stellen der App verwendet (Sidebar, Login, Bootstrap, etc.).
  */
 export function AppLogo({
   showVersion = false,
+  bottomText,
   size = 'compact',
   variant = 'inline',
   subtitle,
@@ -41,9 +44,12 @@ export function AppLogo({
   const textBlock = (
     <div className={variant === 'centered' ? 'text-center' : ''}>
       <h1 className={`${isCompact ? 'text-xl' : 'text-2xl'} font-bold text-white leading-tight`}>
-        CAMPPACK
+        CampCheck
       </h1>
-      {showVersion && (
+      {bottomText && (
+        <p className="text-xs text-white/70">{bottomText}</p>
+      )}
+      {showVersion && !bottomText && (
         <p className="text-xs text-white/70">v 0.3 PRO</p>
       )}
       {subtitle && (

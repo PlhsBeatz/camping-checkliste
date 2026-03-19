@@ -3,7 +3,7 @@ import * as React from 'react'
 type CampingAppIconProps = React.SVGProps<SVGSVGElement>
 
 /**
- * Offizielles CAMPPACK-Logo auf grünem Quadrat (SVG aus Design-Datei).
+ * Offizielles CampCheck-Logo auf grünem Quadrat (SVG aus Design-Datei).
  * Wird für Favicon/PWA-Icons und als Logo-Bildmarke verwendet.
  */
 export function CampingAppIcon(props: CampingAppIconProps) {

@@ -85,9 +85,9 @@ export function NavigationSidebar({ isOpen, onClose }: NavigationSidebarProps) {
           isOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
         )}
       >
-        {/* Logo & Version */}
+        {/* Logo & Untertitel */}
         <div className="p-6 bg-[rgb(45,79,30)]">
-          <AppLogo showVersion size="compact" />
+          <AppLogo size="default" bottomText="Deine Packliste" />
         </div>
 
         {/* Navigation */}
