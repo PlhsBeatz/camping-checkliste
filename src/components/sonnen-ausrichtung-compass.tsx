@@ -111,10 +111,10 @@ export function SonnenAusrichtungCompass({
 
   if (!sunData) return null
 
-  const size = 280
+  const size = 360
   const cx = size / 2
   const cy = size / 2
-  const r = size / 2 - 12
+  const r = size / 2 - 8
 
   const rotation = deviceHeading != null ? -deviceHeading : 0
 
@@ -147,7 +147,7 @@ export function SonnenAusrichtungCompass({
   return (
     <div className="flex flex-col items-center gap-6">
       <div
-        className="relative transition-transform duration-100 shadow-xl rounded-full"
+        className="relative transition-transform duration-100 rounded-full overflow-hidden w-full max-w-[min(calc(100vw-2rem),360px)] aspect-square bg-[rgb(45,79,30)]"
         style={{
           transform: `rotate(${rotation}deg)`,
           boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1)',
@@ -157,7 +157,7 @@ export function SonnenAusrichtungCompass({
           width={size}
           height={size}
           viewBox={`0 0 ${size} ${size}`}
-          className="max-w-full aspect-square rounded-full"
+          className="w-full h-full block"
         >
           <defs>
             <linearGradient id="sunArcGradient" x1="0%" y1="0%" x2="100%" y2="100%">

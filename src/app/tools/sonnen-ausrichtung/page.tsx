@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { NavigationSidebar } from '@/components/navigation-sidebar'
 import { SonnenAusrichtungCompass } from '@/components/sonnen-ausrichtung-compass'
 import { Button } from '@/components/ui/button'
@@ -11,12 +11,24 @@ interface DeviceOrientationEventWithWebkit extends DeviceOrientationEvent {
   webkitCompassAccuracy?: number
 }
 
+/** Kürzeste Winkeldifferenz (für Glättung über 0°/360°-Grenze) */
+function shortestAngleDiff(from: number, to: number): number {
+  let diff = (to - from) % 360
+  if (diff > 180) diff -= 360
+  if (diff < -180) diff += 360
+  return diff
+}
+
 export default function SonnenAusrichtungPage() {
   const [showNavSidebar, setShowNavSidebar] = useState(false)
   const [position, setPosition] = useState<{ lat: number; lng: number } | null>(null)
   const [gpsError, setGpsError] = useState<string | null>(null)
   const [isLoadingGps, setIsLoadingGps] = useState(true)
   const [deviceHeading, setDeviceHeading] = useState<number | null>(null)
+  const [smoothedHeading, setSmoothedHeading] = useState<number | null>(null)
+  const smoothedRef = useRef<number | null>(null)
+  const targetHeadingRef = useRef<number | null>(null)
+  const rafRef = useRef<number | null>(null)
   const [compassEnabled, setCompassEnabled] = useState(false)
   const [compassPermissionNeeded, setCompassPermissionNeeded] = useState(false)
 
@@ -98,6 +110,36 @@ export default function SonnenAusrichtungPage() {
     }
   }, [])
 
+  // Glättung: sanft von smoothedHeading zu deviceHeading interpolieren
+  targetHeadingRef.current = deviceHeading
+  useEffect(() => {
+    if (deviceHeading == null) {
+      setSmoothedHeading(null)
+      smoothedRef.current = null
+      targetHeadingRef.current = null
+      return
+    }
+    if (smoothedRef.current == null) {
+      smoothedRef.current = deviceHeading
+      setSmoothedHeading(deviceHeading)
+    }
+    const SMOOTHING = 0.12
+    const tick = () => {
+      const target = targetHeadingRef.current
+      if (target == null) return
+      const current = smoothedRef.current ?? target
+      const diff = shortestAngleDiff(current, target)
+      const next = (current + diff * SMOOTHING + 360) % 360
+      smoothedRef.current = next
+      setSmoothedHeading(next)
+      rafRef.current = requestAnimationFrame(tick)
+    }
+    rafRef.current = requestAnimationFrame(tick)
+    return () => {
+      if (rafRef.current != null) cancelAnimationFrame(rafRef.current)
+    }
+  }, [deviceHeading])
+
   useEffect(() => {
     if (typeof window === 'undefined') return
     const ev = DeviceOrientationEvent as unknown as { requestPermission?: () => Promise<string> }
@@ -128,7 +170,7 @@ export default function SonnenAusrichtungPage() {
           <h1 className="text-lg font-semibold">Sonnen-Ausrichtung</h1>
         </header>
 
-        <main className="p-4 md:p-6">
+        <main className="p-4 md:p-6 pt-8">
           {isLoadingGps && (
             <div className="flex items-center gap-2 text-gray-600 py-8">
               <MapPin className="w-5 h-5 animate-pulse" />
@@ -160,11 +202,13 @@ export default function SonnenAusrichtungPage() {
           )}
 
           {position && (
-            <SonnenAusrichtungCompass
-              lat={position.lat}
-              lng={position.lng}
-              deviceHeading={deviceHeading}
-            />
+            <div className="pt-6">
+              <SonnenAusrichtungCompass
+                lat={position.lat}
+                lng={position.lng}
+                deviceHeading={smoothedHeading}
+              />
+            </div>
           )}
 
           {gpsError && position && (
