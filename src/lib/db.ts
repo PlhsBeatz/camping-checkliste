@@ -143,12 +143,22 @@ export interface MainCategory {
   pauschal_transport_id?: string | null
 }
 
+/** Kategorie für die Verwaltungs-Ansicht der Tags (z. B. Zeit, Aktivitäten) */
+export interface TagKategorie {
+  id: string
+  titel: string
+  reihenfolge: number
+  created_at: string
+}
+
 export interface Tag {
   id: string
   titel: string
   farbe?: string | null
   icon?: string | null
   beschreibung?: string | null
+  tag_kategorie_id: string
+  reihenfolge: number
   created_at: string
 }
 
@@ -2474,14 +2484,69 @@ export async function getDefaultMitreisende(db: D1Database): Promise<Mitreisende
  */
 
 /**
- * Abrufen aller Tags
+ * Alle Tag-Kategorien (Sortierung wie in der Verwaltung)
+ */
+export async function getTagKategorien(db: D1Database): Promise<TagKategorie[]> {
+  try {
+    const result = await db
+      .prepare('SELECT * FROM tag_kategorien ORDER BY reihenfolge, titel')
+      .all<TagKategorie>()
+    return result.results || []
+  } catch (error) {
+    console.error('Error fetching tag_kategorien:', error)
+    return []
+  }
+}
+
+/**
+ * Tag-Kategorie aktualisieren (z. B. Reihenfolge nach Drag-and-Drop)
+ */
+export async function updateTagKategorie(
+  db: D1Database,
+  id: string,
+  titel: string,
+  reihenfolge: number
+): Promise<boolean> {
+  try {
+    await db
+      .prepare('UPDATE tag_kategorien SET titel = ?, reihenfolge = ? WHERE id = ?')
+      .bind(titel, reihenfolge, id)
+      .run()
+    return true
+  } catch (error) {
+    console.error('Error updating tag_kategorie:', error)
+    return false
+  }
+}
+
+function rowToTag(row: Record<string, unknown>): Tag {
+  return {
+    id: String(row.id),
+    titel: String(row.titel),
+    farbe: row.farbe != null ? String(row.farbe) : null,
+    icon: row.icon != null ? String(row.icon) : null,
+    beschreibung: row.beschreibung != null ? String(row.beschreibung) : null,
+    tag_kategorie_id: String(row.tag_kategorie_id ?? ''),
+    reihenfolge: Number(row.reihenfolge ?? 0),
+    created_at: String(row.created_at || ''),
+  }
+}
+
+/**
+ * Abrufen aller Tags (nach Tag-Kategorie und Reihenfolge)
  */
 export async function getTags(db: D1Database): Promise<Tag[]> {
   try {
     const result = await db
-      .prepare('SELECT * FROM tags ORDER BY titel')
-      .all<Tag>()
-    return result.results || []
+      .prepare(`
+        SELECT t.id, t.titel, t.farbe, t.icon, t.beschreibung, t.tag_kategorie_id, t.reihenfolge, t.created_at
+        FROM tags t
+        INNER JOIN tag_kategorien tk ON t.tag_kategorie_id = tk.id
+        ORDER BY tk.reihenfolge, t.reihenfolge, t.titel
+      `)
+      .all<Record<string, unknown>>()
+    const rows = result.results || []
+    return rows.map((r) => rowToTag(r))
   } catch (error) {
     console.error('Error fetching tags:', error)
     return []
@@ -2494,6 +2559,8 @@ export async function getTags(db: D1Database): Promise<Tag[]> {
 export async function createTag(
   db: D1Database,
   titel: string,
+  tagKategorieId: string,
+  reihenfolge: number,
   farbe?: string | null,
   icon?: string | null,
   beschreibung?: string | null
@@ -2501,8 +2568,10 @@ export async function createTag(
   try {
     const id = crypto.randomUUID()
     await db
-      .prepare('INSERT INTO tags (id, titel, farbe, icon, beschreibung) VALUES (?, ?, ?, ?, ?)')
-      .bind(id, titel, farbe || null, icon || null, beschreibung || null)
+      .prepare(
+        'INSERT INTO tags (id, titel, farbe, icon, beschreibung, tag_kategorie_id, reihenfolge) VALUES (?, ?, ?, ?, ?, ?, ?)'
+      )
+      .bind(id, titel, farbe || null, icon || null, beschreibung || null, tagKategorieId, reihenfolge)
       .run()
     return id
   } catch (error) {
@@ -2518,14 +2587,18 @@ export async function updateTag(
   db: D1Database,
   id: string,
   titel: string,
+  tagKategorieId: string,
+  reihenfolge: number,
   farbe?: string | null,
   icon?: string | null,
   beschreibung?: string | null
 ): Promise<boolean> {
   try {
     await db
-      .prepare('UPDATE tags SET titel = ?, farbe = ?, icon = ?, beschreibung = ? WHERE id = ?')
-      .bind(titel, farbe || null, icon || null, beschreibung || null, id)
+      .prepare(
+        'UPDATE tags SET titel = ?, farbe = ?, icon = ?, beschreibung = ?, tag_kategorie_id = ?, reihenfolge = ? WHERE id = ?'
+      )
+      .bind(titel, farbe || null, icon || null, beschreibung || null, tagKategorieId, reihenfolge, id)
       .run()
     return true
   } catch (error) {
@@ -2562,24 +2635,20 @@ export async function getAllTagsForEquipment(db: D1Database): Promise<Map<string
   try {
     const result = await db
       .prepare(`
-        SELECT at.gegenstand_id, t.id, t.titel, t.farbe, t.icon, t.beschreibung, t.created_at
+        SELECT at.gegenstand_id,
+               t.id, t.titel, t.farbe, t.icon, t.beschreibung, t.tag_kategorie_id, t.reihenfolge, t.created_at
         FROM ausruestungsgegenstaende_tags at
         JOIN tags t ON t.id = at.tag_id
-        ORDER BY t.titel
+        INNER JOIN tag_kategorien tk ON t.tag_kategorie_id = tk.id
+        ORDER BY tk.reihenfolge, t.reihenfolge, t.titel
       `)
-      .all<{ gegenstand_id: string } & Tag>()
+      .all<Record<string, unknown>>()
     const rows = result.results || []
     const map = new Map<string, Tag[]>()
     for (const row of rows) {
       const gegenstandId = String(row.gegenstand_id)
-      const tag: Tag = {
-        id: String(row.id),
-        titel: String(row.titel),
-        farbe: row.farbe != null ? String(row.farbe) : null,
-        icon: row.icon != null ? String(row.icon) : null,
-        beschreibung: row.beschreibung != null ? String(row.beschreibung) : null,
-        created_at: String(row.created_at || ''),
-      }
+      const { gegenstand_id: _g, ...rest } = row
+      const tag = rowToTag(rest)
       const existing = map.get(gegenstandId) || []
       existing.push(tag)
       map.set(gegenstandId, existing)
@@ -2604,26 +2673,22 @@ export async function getTagsForEquipmentBatch(
     const placeholders = gegenstandIds.map(() => '?').join(', ')
     const result = await db
       .prepare(`
-        SELECT at.gegenstand_id, t.id, t.titel, t.farbe, t.icon, t.beschreibung, t.created_at
+        SELECT at.gegenstand_id,
+               t.id, t.titel, t.farbe, t.icon, t.beschreibung, t.tag_kategorie_id, t.reihenfolge, t.created_at
         FROM ausruestungsgegenstaende_tags at
         JOIN tags t ON t.id = at.tag_id
+        INNER JOIN tag_kategorien tk ON t.tag_kategorie_id = tk.id
         WHERE at.gegenstand_id IN (${placeholders})
-        ORDER BY t.titel
+        ORDER BY tk.reihenfolge, t.reihenfolge, t.titel
       `)
       .bind(...gegenstandIds)
-      .all<{ gegenstand_id: string } & Tag>()
+      .all<Record<string, unknown>>()
     const rows = result.results || []
     const map = new Map<string, Tag[]>()
     for (const row of rows) {
       const gegenstandId = String(row.gegenstand_id)
-      const tag: Tag = {
-        id: String(row.id),
-        titel: String(row.titel),
-        farbe: row.farbe != null ? String(row.farbe) : null,
-        icon: row.icon != null ? String(row.icon) : null,
-        beschreibung: row.beschreibung != null ? String(row.beschreibung) : null,
-        created_at: String(row.created_at || ''),
-      }
+      const { gegenstand_id: _g, ...rest } = row
+      const tag = rowToTag(rest)
       const existing = map.get(gegenstandId) || []
       existing.push(tag)
       map.set(gegenstandId, existing)
@@ -2682,15 +2747,17 @@ export async function getTagsForEquipment(db: D1Database, gegenstandId: string):
   try {
     const result = await db
       .prepare(`
-        SELECT t.* 
+        SELECT t.id, t.titel, t.farbe, t.icon, t.beschreibung, t.tag_kategorie_id, t.reihenfolge, t.created_at
         FROM tags t
         INNER JOIN ausruestungsgegenstaende_tags at ON t.id = at.tag_id
+        INNER JOIN tag_kategorien tk ON t.tag_kategorie_id = tk.id
         WHERE at.gegenstand_id = ?
-        ORDER BY t.titel
+        ORDER BY tk.reihenfolge, t.reihenfolge, t.titel
       `)
       .bind(gegenstandId)
-      .all<Tag>()
-    return result.results || []
+      .all<Record<string, unknown>>()
+    const rows = result.results || []
+    return rows.map((r) => rowToTag(r))
   } catch (error) {
     console.error('Error fetching tags for equipment:', error)
     return []

@@ -63,13 +63,28 @@ CREATE TABLE IF NOT EXISTS packlisten_vorlagen (
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS tag_kategorien (
+    id TEXT PRIMARY KEY,
+    titel TEXT NOT NULL,
+    reihenfolge INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+INSERT OR IGNORE INTO tag_kategorien (id, titel, reihenfolge) VALUES
+  ('tag-kat-zeit', 'Zeit', 0),
+  ('tag-kat-aktivitaeten', 'Aktivitäten', 1),
+  ('tag-kat-reiseziel', 'Reiseziel', 2);
+
 CREATE TABLE IF NOT EXISTS tags (
   id TEXT PRIMARY KEY,
   titel TEXT NOT NULL,
   farbe TEXT,
   icon TEXT,
   beschreibung TEXT,
-  created_at TEXT DEFAULT (datetime('now'))
+  tag_kategorie_id TEXT NOT NULL,
+  reihenfolge INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT DEFAULT (datetime('now')),
+  FOREIGN KEY (tag_kategorie_id) REFERENCES tag_kategorien(id) ON DELETE RESTRICT
 );
 
 -- 2. Tabellen mit Abhängigkeiten Ebene 1
@@ -208,6 +223,7 @@ CREATE INDEX idx_ausruestungsgegenstaende_standard_mitreisende_gegenstand_id ON 
 CREATE INDEX idx_ausruestungsgegenstaende_standard_mitreisende_mitreisender_id ON ausruestungsgegenstaende_standard_mitreisende(mitreisender_id);
 CREATE INDEX idx_packlisten_eintrag_mitreisende_gepackt ON packlisten_eintrag_mitreisende(gepackt);
 CREATE INDEX idx_tags_titel ON tags(titel);
+CREATE INDEX idx_tags_tag_kategorie_id ON tags(tag_kategorie_id);
 CREATE INDEX idx_ausruestungsgegenstaende_tags_gegenstand ON ausruestungsgegenstaende_tags(gegenstand_id);
 CREATE INDEX idx_ausruestungsgegenstaende_tags_tag ON ausruestungsgegenstaende_tags(tag_id);
 CREATE INDEX idx_ausruestungsgegenstaende_is_standard ON ausruestungsgegenstaende(is_standard);

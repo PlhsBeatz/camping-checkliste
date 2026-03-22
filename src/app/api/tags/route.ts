@@ -32,14 +32,22 @@ export async function POST(request: NextRequest) {
     if (adminErr) return adminErr
     const env = process.env as unknown as CloudflareEnv
     const db = getDB(env)
-    const body = (await request.json()) as { titel?: string; farbe?: string | null; icon?: string | null; beschreibung?: string | null }
-    const { titel, farbe, icon, beschreibung } = body
+    const body = (await request.json()) as {
+      titel?: string
+      tag_kategorie_id?: string
+      reihenfolge?: number
+      farbe?: string | null
+      icon?: string | null
+      beschreibung?: string | null
+    }
+    const { titel, tag_kategorie_id: tagKategorieId, reihenfolge, farbe, icon, beschreibung } = body
 
-    if (!titel) {
-      return NextResponse.json({ error: 'titel is required' }, { status: 400 })
+    if (!titel || !tagKategorieId) {
+      return NextResponse.json({ error: 'titel und tag_kategorie_id sind erforderlich' }, { status: 400 })
     }
 
-    const id = await createTag(db, titel, farbe, icon, beschreibung)
+    const r = reihenfolge ?? 0
+    const id = await createTag(db, titel, tagKategorieId, r, farbe, icon, beschreibung)
 
     if (!id) {
       return NextResponse.json({ error: 'Failed to create tag' }, { status: 400 })
@@ -60,14 +68,22 @@ export async function PUT(request: NextRequest) {
     if (adminErr) return adminErr
     const env = process.env as unknown as CloudflareEnv
     const db = getDB(env)
-    const body = (await request.json()) as { id?: string; titel?: string; farbe?: string | null; icon?: string | null; beschreibung?: string | null }
-    const { id, titel, farbe, icon, beschreibung } = body
+    const body = (await request.json()) as {
+      id?: string
+      titel?: string
+      tag_kategorie_id?: string
+      reihenfolge?: number
+      farbe?: string | null
+      icon?: string | null
+      beschreibung?: string | null
+    }
+    const { id, titel, tag_kategorie_id: tagKategorieId, reihenfolge, farbe, icon, beschreibung } = body
 
-    if (!id || !titel) {
-      return NextResponse.json({ error: 'id and titel are required' }, { status: 400 })
+    if (!id || !titel || !tagKategorieId || reihenfolge === undefined) {
+      return NextResponse.json({ error: 'id, titel, tag_kategorie_id und reihenfolge sind erforderlich' }, { status: 400 })
     }
 
-    const success = await updateTag(db, id, titel, farbe, icon, beschreibung)
+    const success = await updateTag(db, id, titel, tagKategorieId, reihenfolge, farbe, icon, beschreibung)
 
     if (!success) {
       return NextResponse.json({ error: 'Failed to update tag' }, { status: 400 })

@@ -7,7 +7,7 @@ import { NavigationSidebar } from '@/components/navigation-sidebar'
 import { TagManager } from '@/components/tag-manager'
 import { Menu } from 'lucide-react'
 import { useState, useEffect } from 'react'
-import { Tag } from '@/lib/db'
+import { Tag, TagKategorie } from '@/lib/db'
 import type { ApiResponse } from '@/lib/api-types'
 import { cn } from '@/lib/utils'
 import { getCachedTags } from '@/lib/offline-sync'
@@ -18,6 +18,7 @@ export default function TagsPage() {
   const router = useRouter()
   const [showNavSidebar, setShowNavSidebar] = useState(false)
   const [tags, setTags] = useState<Tag[]>([])
+  const [tagKategorien, setTagKategorien] = useState<TagKategorie[]>([])
 
   useEffect(() => {
     if (!loading && !canAccessConfig) router.replace('/')
@@ -38,15 +39,19 @@ export default function TagsPage() {
     }
   }, [showNavSidebar])
 
-  // Fetch Tags
+  // Tags und Tag-Kategorien laden
   useEffect(() => {
-    const fetchTags = async () => {
+    const fetchTagsPage = async () => {
       try {
-        const res = await fetch('/api/tags')
-        const data = (await res.json()) as ApiResponse<Tag[]>
-        if (data.success && data.data) {
-          setTags(data.data)
-          await cacheTags(data.data)
+        const [tagsRes, katRes] = await Promise.all([fetch('/api/tags'), fetch('/api/tag-kategorien')])
+        const tagsJson = (await tagsRes.json()) as ApiResponse<Tag[]>
+        const katJson = (await katRes.json()) as ApiResponse<TagKategorie[]>
+        if (tagsJson.success && tagsJson.data) {
+          setTags(tagsJson.data)
+          await cacheTags(tagsJson.data)
+        }
+        if (katJson.success && katJson.data) {
+          setTagKategorien(katJson.data)
         }
       } catch (error) {
         console.error('Failed to fetch tags:', error)
@@ -56,16 +61,20 @@ export default function TagsPage() {
         }
       }
     }
-    fetchTags()
+    fetchTagsPage()
   }, [])
 
   const handleRefresh = async () => {
     try {
-      const res = await fetch('/api/tags')
-      const data = (await res.json()) as ApiResponse<Tag[]>
-      if (data.success && data.data) {
-        setTags(data.data)
-        await cacheTags(data.data)
+      const [tagsRes, katRes] = await Promise.all([fetch('/api/tags'), fetch('/api/tag-kategorien')])
+      const tagsJson = (await tagsRes.json()) as ApiResponse<Tag[]>
+      const katJson = (await katRes.json()) as ApiResponse<TagKategorie[]>
+      if (tagsJson.success && tagsJson.data) {
+        setTags(tagsJson.data)
+        await cacheTags(tagsJson.data)
+      }
+      if (katJson.success && katJson.data) {
+        setTagKategorien(katJson.data)
       }
     } catch {
       if (typeof navigator !== 'undefined' && !navigator.onLine) {
@@ -112,10 +121,7 @@ export default function TagsPage() {
 
           {/* Tag Manager */}
           <div className="mt-4 md:mt-6 border rounded-lg p-4 md:p-6 bg-white shadow-sm">
-            <TagManager 
-              tags={tags} 
-              onRefresh={handleRefresh} 
-            />
+            <TagManager tagKategorien={tagKategorien} tags={tags} onRefresh={handleRefresh} />
           </div>
         </div>
       </div>
