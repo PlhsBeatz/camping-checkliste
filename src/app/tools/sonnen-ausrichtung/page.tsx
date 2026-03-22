@@ -87,9 +87,12 @@ export default function SonnenAusrichtungPage() {
       const ev = event as DeviceOrientationEventWithWebkit
       let raw: number | null = null
       if (typeof ev.webkitCompassHeading === 'number') {
+        // iOS: 0° = Nord, im Uhrzeigersinn
         raw = ev.webkitCompassHeading
       } else if (typeof ev.alpha === 'number') {
-        raw = normalizeHeading(360 - ev.alpha)
+        // Android/Chrome: üblich (360 - alpha); +180° korrigiert typische Screen-/Koordinaten-Inversion,
+        // damit „N“ zur geografischen Nordrichtung zeigt (nicht nach Süden).
+        raw = normalizeHeading(360 - ev.alpha + 180)
       }
       if (raw == null) return
 
