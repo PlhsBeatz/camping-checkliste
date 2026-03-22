@@ -35,7 +35,6 @@ export function compassHeadingFromEulerDeg(
   const sA = Math.sin(a)
   const cB = Math.cos(bRad)
   const sB = Math.sin(bRad)
-  const cG = Math.cos(gRad)
   const sG = Math.sin(gRad)
 
   // Häufig zitierte Umrechnung (z. B. Stack Overflow / Geräteorientierungs-Snippets)
