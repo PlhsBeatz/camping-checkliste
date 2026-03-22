@@ -212,12 +212,6 @@ export default function SonnenAusrichtungPage() {
 
           {position && (
             <div className="pt-6 space-y-3">
-              <p className="text-sm text-gray-600 max-w-xl">
-                <strong className="text-gray-800">Nordrichtung:</strong> Es wird nur die{' '}
-                <strong>absolute</strong> Kompass-Orientierung (Magnetometer) ausgewertet, nicht die
-                relative Drehung seit dem Laden der Seite. Dadurch bleibt Nord stabil, auch nach
-                einem Neuladen. Am besten das Gerät waagerecht halten.
-              </p>
               <SonnenAusrichtungCompass
                 lat={position.lat}
                 lng={position.lng}
