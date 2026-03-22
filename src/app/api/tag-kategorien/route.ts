@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getDB, getTagKategorien, updateTagKategorie, CloudflareEnv } from '@/lib/db'
 import { requireAuth, requireAdmin } from '@/lib/api-auth'
 
-export async function GET(_request: NextRequest) {
+export async function GET(request: NextRequest) {
   try {
     const auth = await requireAuth(request)
     if (auth instanceof NextResponse) return auth
