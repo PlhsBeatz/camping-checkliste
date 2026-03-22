@@ -5,11 +5,11 @@ import { NavigationSidebar } from '@/components/navigation-sidebar'
 import { SonnenAusrichtungCompass } from '@/components/sonnen-ausrichtung-compass'
 import { Button } from '@/components/ui/button'
 import { Menu, MapPin, Compass } from 'lucide-react'
-
-interface DeviceOrientationEventWithWebkit extends DeviceOrientationEvent {
-  webkitCompassHeading?: number
-  webkitCompassAccuracy?: number
-}
+import {
+  extractCompassHeadingDeg,
+  normalizeHeadingDeg,
+  type DeviceOrientationEventWithWebkit,
+} from '@/lib/device-compass-heading'
 
 /** Kürzeste Winkeldifferenz (robust gegen 0°/360°-Sprünge, kein JS-%-Bug) */
 function shortestAngleDiff(from: number, to: number): number {
@@ -17,10 +17,6 @@ function shortestAngleDiff(from: number, to: number): number {
   while (diff > 180) diff -= 360
   while (diff < -180) diff += 360
   return diff
-}
-
-function normalizeHeading(deg: number): number {
-  return ((deg % 360) + 360) % 360
 }
 
 export default function SonnenAusrichtungPage() {
@@ -83,30 +79,32 @@ export default function SonnenAusrichtungPage() {
   }, [])
 
   useEffect(() => {
+    if (typeof window === 'undefined') return
+
     const handler = (event: DeviceOrientationEvent) => {
-      const ev = event as DeviceOrientationEventWithWebkit
-      let raw: number | null = null
-      if (typeof ev.webkitCompassHeading === 'number') {
-        // iOS: 0° = Nord, im Uhrzeigersinn
-        raw = ev.webkitCompassHeading
-      } else if (typeof ev.alpha === 'number') {
-        // Android/Chrome: üblich (360 - alpha); +180° korrigiert typische Screen-/Koordinaten-Inversion,
-        // damit „N“ zur geografischen Nordrichtung zeigt (nicht nach Süden).
-        raw = normalizeHeading(360 - ev.alpha + 180)
-      }
+      const raw = extractCompassHeadingDeg(event as DeviceOrientationEventWithWebkit)
       if (raw == null) return
 
       const prev = rawFilteredRef.current
       const RAW_LERP = 0.28
       rawFilteredRef.current =
-        prev == null ? raw : normalizeHeading(prev + shortestAngleDiff(prev, raw) * RAW_LERP)
+        prev == null ? raw : normalizeHeadingDeg(prev + shortestAngleDiff(prev, raw) * RAW_LERP)
 
       setDeviceHeading(rawFilteredRef.current)
     }
 
-    window.addEventListener('deviceorientation', handler)
+    const useAbsolute = 'ondeviceorientationabsolute' in window
+
+    if (useAbsolute) {
+      window.addEventListener('deviceorientationabsolute', handler as EventListener)
+    }
+    window.addEventListener('deviceorientation', handler as EventListener)
+
     return () => {
-      window.removeEventListener('deviceorientation', handler)
+      if (useAbsolute) {
+        window.removeEventListener('deviceorientationabsolute', handler as EventListener)
+      }
+      window.removeEventListener('deviceorientation', handler as EventListener)
     }
   }, [])
 
@@ -136,7 +134,7 @@ export default function SonnenAusrichtungPage() {
       if (target == null) return
       const current = smoothedRef.current ?? target
       const diff = shortestAngleDiff(current, target)
-      const next = normalizeHeading(current + diff * DISPLAY_SMOOTH)
+      const next = normalizeHeadingDeg(current + diff * DISPLAY_SMOOTH)
       smoothedRef.current = next
       setSmoothedHeading(next)
       rafRef.current = requestAnimationFrame(tick)
@@ -197,7 +195,10 @@ export default function SonnenAusrichtungPage() {
           {compassPermissionNeeded && (
             <div className="rounded-lg bg-blue-50 border border-blue-200 p-4 text-blue-800 mb-4">
               <p className="font-medium">Kompass aktivieren</p>
-              <p className="text-sm mt-1">{'Für die dynamische Ausrichtung des Kompass wird die Geräte-Orientierung benötigt.'}</p>
+              <p className="text-sm mt-1">
+                Für die dynamische Ausrichtung wird die absolute Kompass-Orientierung benötigt (nach
+                Tipp auf „Kompass aktivieren“).
+              </p>
               <Button
                 onClick={requestCompassPermission}
                 className="mt-3"
@@ -210,7 +211,13 @@ export default function SonnenAusrichtungPage() {
           )}
 
           {position && (
-            <div className="pt-6">
+            <div className="pt-6 space-y-3">
+              <p className="text-sm text-gray-600 max-w-xl">
+                <strong className="text-gray-800">Nordrichtung:</strong> Es wird nur die{' '}
+                <strong>absolute</strong> Kompass-Orientierung (Magnetometer) ausgewertet, nicht die
+                relative Drehung seit dem Laden der Seite. Dadurch bleibt Nord stabil, auch nach
+                einem Neuladen. Am besten das Gerät waagerecht halten.
+              </p>
               <SonnenAusrichtungCompass
                 lat={position.lat}
                 lng={position.lng}
