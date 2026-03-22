@@ -11,12 +11,16 @@ interface DeviceOrientationEventWithWebkit extends DeviceOrientationEvent {
   webkitCompassAccuracy?: number
 }
 
-/** Kürzeste Winkeldifferenz (für Glättung über 0°/360°-Grenze) */
+/** Kürzeste Winkeldifferenz (robust gegen 0°/360°-Sprünge, kein JS-%-Bug) */
 function shortestAngleDiff(from: number, to: number): number {
-  let diff = (to - from) % 360
-  if (diff > 180) diff -= 360
-  if (diff < -180) diff += 360
+  let diff = to - from
+  while (diff > 180) diff -= 360
+  while (diff < -180) diff += 360
   return diff
+}
+
+function normalizeHeading(deg: number): number {
+  return ((deg % 360) + 360) % 360
 }
 
 export default function SonnenAusrichtungPage() {
@@ -27,6 +31,7 @@ export default function SonnenAusrichtungPage() {
   const [deviceHeading, setDeviceHeading] = useState<number | null>(null)
   const [smoothedHeading, setSmoothedHeading] = useState<number | null>(null)
   const smoothedRef = useRef<number | null>(null)
+  const rawFilteredRef = useRef<number | null>(null)
   const targetHeadingRef = useRef<number | null>(null)
   const rafRef = useRef<number | null>(null)
   const [compassEnabled, setCompassEnabled] = useState(false)
@@ -80,64 +85,64 @@ export default function SonnenAusrichtungPage() {
   useEffect(() => {
     const handler = (event: DeviceOrientationEvent) => {
       const ev = event as DeviceOrientationEventWithWebkit
+      let raw: number | null = null
       if (typeof ev.webkitCompassHeading === 'number') {
-        setDeviceHeading(ev.webkitCompassHeading)
+        raw = ev.webkitCompassHeading
       } else if (typeof ev.alpha === 'number') {
-        const heading = ev.absolute ? (360 - ev.alpha) % 360 : (360 - ev.alpha + 360) % 360
-        setDeviceHeading(heading)
+        raw = normalizeHeading(360 - ev.alpha)
       }
-    }
+      if (raw == null) return
 
-    const handlerAbsolute = (event: DeviceOrientationEvent) => {
-      if (typeof event.alpha === 'number') {
-        setDeviceHeading((360 - event.alpha + 360) % 360)
-      }
+      const prev = rawFilteredRef.current
+      const RAW_LERP = 0.28
+      rawFilteredRef.current =
+        prev == null ? raw : normalizeHeading(prev + shortestAngleDiff(prev, raw) * RAW_LERP)
+
+      setDeviceHeading(rawFilteredRef.current)
     }
 
     window.addEventListener('deviceorientation', handler)
-    try {
-      window.addEventListener('deviceorientationabsolute', handlerAbsolute as EventListener)
-    } catch {
-      // deviceorientationabsolute not supported
-    }
     return () => {
       window.removeEventListener('deviceorientation', handler)
-      try {
-        window.removeEventListener('deviceorientationabsolute', handlerAbsolute as EventListener)
-      } catch {
-        // ignore
-      }
     }
   }, [])
 
-  // Glättung: sanft von smoothedHeading zu deviceHeading interpolieren
+  // Glättung: Ziel ständig aus State (Ref), RAF-Schleife nur starten/stoppen — nicht bei jedem Sensor-Tick neu
   targetHeadingRef.current = deviceHeading
   useEffect(() => {
     if (deviceHeading == null) {
       setSmoothedHeading(null)
       smoothedRef.current = null
+      rawFilteredRef.current = null
       targetHeadingRef.current = null
+      if (rafRef.current != null) {
+        cancelAnimationFrame(rafRef.current)
+        rafRef.current = null
+      }
       return
     }
+
     if (smoothedRef.current == null) {
       smoothedRef.current = deviceHeading
       setSmoothedHeading(deviceHeading)
     }
-    const SMOOTHING = 0.12
+
+    const DISPLAY_SMOOTH = 0.07
     const tick = () => {
       const target = targetHeadingRef.current
       if (target == null) return
       const current = smoothedRef.current ?? target
       const diff = shortestAngleDiff(current, target)
-      const next = (current + diff * SMOOTHING + 360) % 360
+      const next = normalizeHeading(current + diff * DISPLAY_SMOOTH)
       smoothedRef.current = next
       setSmoothedHeading(next)
       rafRef.current = requestAnimationFrame(tick)
     }
-    rafRef.current = requestAnimationFrame(tick)
-    return () => {
-      if (rafRef.current != null) cancelAnimationFrame(rafRef.current)
+
+    if (rafRef.current == null) {
+      rafRef.current = requestAnimationFrame(tick)
     }
+    // Kein cancel bei jedem deviceHeading-Update — sonst ruckelt die Anzeige
   }, [deviceHeading])
 
   useEffect(() => {

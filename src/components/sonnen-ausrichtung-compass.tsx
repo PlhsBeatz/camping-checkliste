@@ -169,13 +169,17 @@ export function SonnenAusrichtungCompass({
   return (
     <div className="flex flex-col items-center gap-6">
       <div className="p-4">
+        {/* Schatten auf äußerem Container: rotiert nicht mit der Kompassfläche */}
         <div
-          className="relative transition-transform duration-100 rounded-full overflow-hidden w-full max-w-[min(calc(100vw-2rem),360px)] aspect-square"
+          className="relative rounded-full w-full max-w-[min(calc(100vw-2rem),360px)] aspect-square"
           style={{
-            transform: `rotate(${rotation}deg)`,
             boxShadow: '0 25px 50px -12px rgb(0 0 0 / 0.45), 0 12px 24px -8px rgb(0 0 0 / 0.3)',
           }}
         >
+          <div
+            className="relative rounded-full overflow-hidden w-full h-full will-change-transform"
+            style={{ transform: `rotate(${rotation}deg)` }}
+          >
         <svg
           width={size}
           height={size}
@@ -345,6 +349,7 @@ export function SonnenAusrichtungCompass({
             )
           })()}
         </svg>
+          </div>
         </div>
       </div>
 
