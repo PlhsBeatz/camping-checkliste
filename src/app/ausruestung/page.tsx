@@ -4,8 +4,8 @@ import { Button } from '@/components/ui/button'
 import { NavigationSidebar } from '@/components/navigation-sidebar'
 import { EquipmentTable } from '@/components/equipment-table'
 import { Plus, Menu, Star } from 'lucide-react'
-import { useState, useEffect } from 'react'
-import { EquipmentItem, Category, MainCategory, TransportVehicle, Tag, Mitreisender } from '@/lib/db'
+import { useState, useEffect, useMemo } from 'react'
+import { EquipmentItem, Category, MainCategory, TransportVehicle, Tag, TagKategorie, Mitreisender } from '@/lib/db'
 import type { ApiResponse } from '@/lib/api-types'
 import { ResponsiveModal } from '@/components/ui/responsive-modal'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
@@ -43,6 +43,59 @@ interface CategoryWithMain extends Category {
   hauptkategorie_titel: string
 }
 
+/** shadcn-Checkbox, dunkelgrün, gleiche Größe wie zuvor (h-3 w-3) */
+const EQUIPMENT_CHIP_CHECKBOX_CLASS =
+  'h-3 w-3 shrink-0 border-[rgb(45,79,30)] data-[state=checked]:bg-[rgb(45,79,30)] data-[state=checked]:text-white data-[state=checked]:border-[rgb(45,79,30)] [&_svg]:h-2.5 [&_svg]:w-2.5'
+
+/** shadcn-Checkbox, dunkelgrün, Zeilen wie „Als Standard markieren“ (h-4 w-4) */
+const EQUIPMENT_DIALOG_ROW_CHECKBOX_CLASS =
+  'h-4 w-4 shrink-0 border-[rgb(45,79,30)] data-[state=checked]:bg-[rgb(45,79,30)] data-[state=checked]:text-white data-[state=checked]:border-[rgb(45,79,30)]'
+
+type TagGroupForEquipment = { kat: TagKategorie; tags: Tag[] }
+
+function EquipmentTagsBlock({
+  groups,
+  selectedTagIds,
+  onToggleTag,
+  idPrefix,
+}: {
+  groups: TagGroupForEquipment[]
+  selectedTagIds: string[]
+  onToggleTag: (tagId: string, checked: boolean) => void
+  idPrefix: string
+}) {
+  return (
+    <div className="rounded-lg border border-border bg-muted/20 p-4 space-y-4">
+      {groups.length === 0 ? (
+        <p className="text-sm text-muted-foreground">Noch keine Tags angelegt.</p>
+      ) : (
+        groups.map(({ kat, tags: catTags }) => (
+          <div key={kat.id} className="space-y-2">
+            <Label className="text-sm font-medium">{kat.titel}</Label>
+            <div className="flex flex-wrap gap-2">
+              {catTags.map((tag) => (
+                <label
+                  key={tag.id}
+                  htmlFor={`${idPrefix}-tag-${tag.id}`}
+                  className="flex items-center gap-1.5 text-xs bg-background px-2 py-1 rounded cursor-pointer hover:bg-muted/80 border border-border/60"
+                >
+                  <Checkbox
+                    id={`${idPrefix}-tag-${tag.id}`}
+                    checked={selectedTagIds.includes(tag.id)}
+                    onCheckedChange={(c) => onToggleTag(tag.id, !!c)}
+                    className={EQUIPMENT_CHIP_CHECKBOX_CLASS}
+                  />
+                  <span>{tag.titel}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+        ))
+      )}
+    </div>
+  )
+}
+
 export default function AusruestungPage() {
   const { canAccessConfig } = useAuth()
   const canEditEquipment = canAccessConfig
@@ -52,6 +105,7 @@ export default function AusruestungPage() {
   const [mainCategories, setMainCategories] = useState<MainCategory[]>([])
   const [transportVehicles, setTransportVehicles] = useState<TransportVehicle[]>([])
   const [tags, setTags] = useState<Tag[]>([])
+  const [tagKategorien, setTagKategorien] = useState<TagKategorie[]>([])
   const [mitreisende, setMitreisende] = useState<{ id: string; name: string }[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
@@ -180,15 +234,19 @@ export default function AusruestungPage() {
     fetchTransportVehicles()
   }, [])
 
-  // Fetch Tags
+  // Tags und Tag-Kategorien (Reihenfolge für Dialoge)
   useEffect(() => {
-    const fetchTags = async () => {
+    const fetchTagsAndKategorien = async () => {
       try {
-        const res = await fetch('/api/tags')
-        const data = (await res.json()) as ApiResponse<Tag[]>
-        if (data.success && data.data) {
-          setTags(data.data)
-          await cacheTags(data.data)
+        const [tagsRes, katRes] = await Promise.all([fetch('/api/tags'), fetch('/api/tag-kategorien')])
+        const tagsJson = (await tagsRes.json()) as ApiResponse<Tag[]>
+        const katJson = (await katRes.json()) as ApiResponse<TagKategorie[]>
+        if (tagsJson.success && tagsJson.data) {
+          setTags(tagsJson.data)
+          await cacheTags(tagsJson.data)
+        }
+        if (katJson.success && katJson.data) {
+          setTagKategorien(katJson.data)
         }
       } catch (error) {
         console.error('Failed to fetch tags:', error)
@@ -198,8 +256,22 @@ export default function AusruestungPage() {
         }
       }
     }
-    fetchTags()
+    fetchTagsAndKategorien()
   }, [])
+
+  const tagGroupsForEquipment = useMemo((): TagGroupForEquipment[] => {
+    const sortedKats = [...tagKategorien].sort(
+      (a, b) => a.reihenfolge - b.reihenfolge || a.titel.localeCompare(b.titel)
+    )
+    return sortedKats
+      .map((kat) => ({
+        kat,
+        tags: tags
+          .filter((t) => t.tag_kategorie_id === kat.id)
+          .sort((a, b) => a.reihenfolge - b.reihenfolge || a.titel.localeCompare(b.titel)),
+      }))
+      .filter((g) => g.tags.length > 0)
+  }, [tagKategorien, tags])
 
   // Fetch Mitreisende
   useEffect(() => {
@@ -609,7 +681,7 @@ export default function AusruestungPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-4">
                 <div>
                   <Label htmlFor="mitreisenden_typ">Gepackt für</Label>
@@ -630,18 +702,19 @@ export default function AusruestungPage() {
                     <Label>Mitreisende</Label>
                     <div className="flex flex-wrap gap-2 mt-2">
                       {mitreisende.map(m => (
-                        <label key={m.id} className="flex items-center gap-1 text-xs bg-muted px-2 py-1 rounded cursor-pointer hover:bg-muted/80">
-                          <input
-                            type="checkbox"
+                        <label key={m.id} className="flex items-center gap-1.5 text-xs bg-muted px-2 py-1 rounded cursor-pointer hover:bg-muted/80">
+                          <Checkbox
                             checked={formData.standard_mitreisende.includes(m.id)}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setFormData({ ...formData, standard_mitreisende: [...formData.standard_mitreisende, m.id] })
-                              } else {
-                                setFormData({ ...formData, standard_mitreisende: formData.standard_mitreisende.filter(id => id !== m.id) })
-                              }
+                            onCheckedChange={(c) => {
+                              const checked = !!c
+                              setFormData((prev) => ({
+                                ...prev,
+                                standard_mitreisende: checked
+                                  ? [...prev.standard_mitreisende, m.id]
+                                  : prev.standard_mitreisende.filter((id) => id !== m.id),
+                              }))
                             }}
-                            className="h-3 w-3 rounded border-gray-300 text-[rgb(45,79,30)] focus:ring-[rgb(45,79,30)]"
+                            className={EQUIPMENT_CHIP_CHECKBOX_CLASS}
                           />
                           {m.name}
                         </label>
@@ -650,28 +723,19 @@ export default function AusruestungPage() {
                   </div>
                 )}
               </div>
-              
-              <div>
-                <Label>Tags</Label>
-                <div className="flex flex-wrap gap-2 mt-2">
-                  {tags.map(tag => (
-                    <label key={tag.id} className="flex items-center gap-1 text-xs bg-muted px-2 py-1 rounded cursor-pointer hover:bg-muted/80">
-                      <input
-                        type="checkbox"
-                        checked={formData.tags.includes(tag.id)}
-                        onChange={(e) => {
-                          const checked = e.target.checked
-                          setFormData(prev => ({
-                            ...prev,
-                            tags: checked ? [...prev.tags, tag.id] : prev.tags.filter(id => id !== tag.id)
-                          }))
-                        }}
-                        className="h-3 w-3 rounded border-gray-300 text-[rgb(45,79,30)] focus:ring-[rgb(45,79,30)]"
-                      />
-                      {tag.titel}
-                    </label>
-                  ))}
-                </div>
+
+              <div className="min-w-0">
+                <EquipmentTagsBlock
+                  groups={tagGroupsForEquipment}
+                  selectedTagIds={formData.tags}
+                  onToggleTag={(tagId, checked) => {
+                    setFormData((prev) => ({
+                      ...prev,
+                      tags: checked ? [...prev.tags, tagId] : prev.tags.filter((id) => id !== tagId),
+                    }))
+                  }}
+                  idPrefix="add-eq"
+                />
               </div>
             </div>
 
@@ -687,12 +751,11 @@ export default function AusruestungPage() {
             </div>
 
             <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
+              <Checkbox
                 id="is_standard"
                 checked={formData.is_standard}
-                onChange={(e) => setFormData({ ...formData, is_standard: e.target.checked })}
-                className="h-4 w-4 rounded border-gray-300 text-[rgb(45,79,30)] focus:ring-[rgb(45,79,30)]"
+                onCheckedChange={(c) => setFormData({ ...formData, is_standard: !!c })}
+                className={EQUIPMENT_DIALOG_ROW_CHECKBOX_CLASS}
               />
               <Label htmlFor="is_standard" className="cursor-pointer flex items-center gap-2">
                 <Star
@@ -702,14 +765,13 @@ export default function AusruestungPage() {
                 <span>Als Standard markieren</span>
               </Label>
             </div>
-            
+
             <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
+              <Checkbox
                 id="erst_abreisetag_gepackt"
                 checked={formData.erst_abreisetag_gepackt}
-                onChange={(e) => setFormData({ ...formData, erst_abreisetag_gepackt: e.target.checked })}
-                className="h-4 w-4 rounded border-gray-300 text-[rgb(45,79,30)] focus:ring-[rgb(45,79,30)]"
+                onCheckedChange={(c) => setFormData({ ...formData, erst_abreisetag_gepackt: !!c })}
+                className={EQUIPMENT_DIALOG_ROW_CHECKBOX_CLASS}
               />
               <Label htmlFor="erst_abreisetag_gepackt" className="cursor-pointer">
                 Erst am Abreisetag packen
@@ -873,7 +935,7 @@ export default function AusruestungPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-4">
                 <div>
                   <Label htmlFor="edit-mitreisenden_typ">Gepackt für</Label>
@@ -894,18 +956,19 @@ export default function AusruestungPage() {
                     <Label>Mitreisende</Label>
                     <div className="flex flex-wrap gap-2 mt-2">
                       {mitreisende.map(m => (
-                        <label key={m.id} className="flex items-center gap-1 text-xs bg-muted px-2 py-1 rounded cursor-pointer hover:bg-muted/80">
-                          <input
-                            type="checkbox"
+                        <label key={m.id} className="flex items-center gap-1.5 text-xs bg-muted px-2 py-1 rounded cursor-pointer hover:bg-muted/80">
+                          <Checkbox
                             checked={formData.standard_mitreisende.includes(m.id)}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setFormData({ ...formData, standard_mitreisende: [...formData.standard_mitreisende, m.id] })
-                              } else {
-                                setFormData({ ...formData, standard_mitreisende: formData.standard_mitreisende.filter(id => id !== m.id) })
-                              }
+                            onCheckedChange={(c) => {
+                              const checked = !!c
+                              setFormData((prev) => ({
+                                ...prev,
+                                standard_mitreisende: checked
+                                  ? [...prev.standard_mitreisende, m.id]
+                                  : prev.standard_mitreisende.filter((id) => id !== m.id),
+                              }))
                             }}
-                            className="h-3 w-3 rounded border-gray-300 text-[rgb(45,79,30)] focus:ring-[rgb(45,79,30)]"
+                            className={EQUIPMENT_CHIP_CHECKBOX_CLASS}
                           />
                           {m.name}
                         </label>
@@ -914,28 +977,19 @@ export default function AusruestungPage() {
                   </div>
                 )}
               </div>
-              
-              <div>
-                <Label>Tags</Label>
-                <div className="flex flex-wrap gap-2 mt-2">
-                  {tags.map(tag => (
-                    <label key={tag.id} className="flex items-center gap-1 text-xs bg-muted px-2 py-1 rounded cursor-pointer hover:bg-muted/80">
-                      <input
-                        type="checkbox"
-                        checked={formData.tags.includes(tag.id)}
-                        onChange={(e) => {
-                          const checked = e.target.checked
-                          setFormData(prev => ({
-                            ...prev,
-                            tags: checked ? [...prev.tags, tag.id] : prev.tags.filter(id => id !== tag.id)
-                          }))
-                        }}
-                        className="h-3 w-3 rounded border-gray-300 text-[rgb(45,79,30)] focus:ring-[rgb(45,79,30)]"
-                      />
-                      {tag.titel}
-                    </label>
-                  ))}
-                </div>
+
+              <div className="min-w-0">
+                <EquipmentTagsBlock
+                  groups={tagGroupsForEquipment}
+                  selectedTagIds={formData.tags}
+                  onToggleTag={(tagId, checked) => {
+                    setFormData((prev) => ({
+                      ...prev,
+                      tags: checked ? [...prev.tags, tagId] : prev.tags.filter((id) => id !== tagId),
+                    }))
+                  }}
+                  idPrefix="edit-eq"
+                />
               </div>
             </div>
 
@@ -951,12 +1005,11 @@ export default function AusruestungPage() {
             </div>
 
             <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
+              <Checkbox
                 id="edit_is_standard"
                 checked={formData.is_standard}
-                onChange={(e) => setFormData({ ...formData, is_standard: e.target.checked })}
-                className="h-4 w-4 rounded border-gray-300 text-[rgb(45,79,30)] focus:ring-[rgb(45,79,30)]"
+                onCheckedChange={(c) => setFormData({ ...formData, is_standard: !!c })}
+                className={EQUIPMENT_DIALOG_ROW_CHECKBOX_CLASS}
               />
               <Label htmlFor="edit_is_standard" className="cursor-pointer flex items-center gap-2">
                 <Star
@@ -966,14 +1019,13 @@ export default function AusruestungPage() {
                 <span>Als Standard markieren</span>
               </Label>
             </div>
-            
+
             <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
+              <Checkbox
                 id="edit_erst_abreisetag_gepackt"
                 checked={formData.erst_abreisetag_gepackt}
-                onChange={(e) => setFormData({ ...formData, erst_abreisetag_gepackt: e.target.checked })}
-                className="h-4 w-4 rounded border-gray-300 text-[rgb(45,79,30)] focus:ring-[rgb(45,79,30)]"
+                onCheckedChange={(c) => setFormData({ ...formData, erst_abreisetag_gepackt: !!c })}
+                className={EQUIPMENT_DIALOG_ROW_CHECKBOX_CLASS}
               />
               <Label htmlFor="edit_erst_abreisetag_gepackt" className="cursor-pointer">
                 Erst am Abreisetag packen
