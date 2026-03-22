@@ -16,33 +16,15 @@ export function normalizeHeadingDeg(deg: number): number {
 }
 
 /**
- * Aus absoluter Orientierung (alpha, beta, gamma in Grad): Kompass-Heading.
- * Funktioniert auch bei leicht geneigtem Gerät; für flaches Handy nähert sich das Ergebnis 360° − alpha.
+ * Kompass-Heading aus absolutem alpha (0–360°), typische Web-/W3C-Konvention
+ * für flaches Gerät in Portrait: heading = 360° − alpha.
+ *
+ * Hinweis: Die oft kopierte atan2-Euler-Formel aus Foren liefert hier leicht
+ * falsche Werte (Kompass dreht mit dem Gerät mit). Tilt-Kompensation wäre
+ * ein separates, getestetes Modell – bis dahin: einfache Formel.
  */
-export function compassHeadingFromEulerDeg(
-  alpha: number,
-  beta: number | null,
-  gamma: number | null
-): number {
-  const b = beta ?? 0
-  const g = gamma ?? 0
-  const degToRad = Math.PI / 180
-  const a = alpha * degToRad
-  const bRad = b * degToRad
-  const gRad = g * degToRad
-
-  const cA = Math.cos(a)
-  const sA = Math.sin(a)
-  const cB = Math.cos(bRad)
-  const sB = Math.sin(bRad)
-  const sG = Math.sin(gRad)
-
-  // Häufig zitierte Umrechnung (z. B. Stack Overflow / Geräteorientierungs-Snippets)
-  const y = -cA * sB - sA * sG * cB
-  const x = sA * sB - cA * sG * cB
-  let heading = Math.atan2(y, x) / degToRad
-  if (heading < 0) heading += 360
-  return normalizeHeadingDeg(heading)
+export function compassHeadingFromAbsoluteAlpha(alpha: number): number {
+  return normalizeHeadingDeg(360 - alpha)
 }
 
 export type DeviceOrientationEventWithWebkit = DeviceOrientationEvent & {
@@ -72,5 +54,5 @@ export function extractCompassHeadingDeg(
     return null
   }
 
-  return compassHeadingFromEulerDeg(event.alpha, event.beta, event.gamma)
+  return compassHeadingFromAbsoluteAlpha(event.alpha)
 }
