@@ -65,7 +65,7 @@ function EquipmentTagsBlock({
   idPrefix: string
 }) {
   return (
-    <div className="rounded-lg border border-border bg-muted/20 p-4 space-y-4">
+    <div className="space-y-4">
       {groups.length === 0 ? (
         <p className="text-sm text-muted-foreground">Noch keine Tags angelegt.</p>
       ) : (
