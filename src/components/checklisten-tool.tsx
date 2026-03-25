@@ -161,6 +161,7 @@ function SortableEditorCategoryBlock({
   titel: string
   onRename: () => void
   onDelete: () => void
+  children: ReactNode
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: kId(katId),
