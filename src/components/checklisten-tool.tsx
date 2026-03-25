@@ -366,7 +366,17 @@ function buildEntryReorderPayload(c: ChecklisteMitStruktur): {
   return updates
 }
 
-export function ChecklistenTool() {
+export type ChecklistenHeaderContext = {
+  subtitle: string | null
+  progress: { done: number; total: number } | null
+}
+
+export interface ChecklistenToolProps {
+  /** Steuert Sticky-Header (Untertitel + Fortschritt) auf der Checklisten-Seite */
+  onHeaderContextChange?: (ctx: ChecklistenHeaderContext) => void
+}
+
+export function ChecklistenTool({ onHeaderContextChange }: ChecklistenToolProps) {
   const { canAccessConfig } = useAuth()
   const { toast } = useToast()
   const [loading, setLoading] = useState(true)
@@ -421,6 +431,28 @@ export function ChecklistenTool() {
     () => (detailId ? data.find(c => c.id === detailId) : null),
     [data, detailId]
   )
+
+  useEffect(() => {
+    if (!onHeaderContextChange) return
+    if (!detailId) {
+      onHeaderContextChange({ subtitle: null, progress: null })
+      return
+    }
+    const c = data.find(x => x.id === detailId)
+    if (!c) {
+      onHeaderContextChange({ subtitle: null, progress: null })
+      return
+    }
+    const total = c.kategorien.reduce((n, k) => n + k.eintraege.length, 0)
+    const done = c.kategorien.reduce(
+      (n, k) => n + k.eintraege.filter(e => e.erledigt).length,
+      0
+    )
+    onHeaderContextChange({
+      subtitle: c.titel,
+      progress: total > 0 ? { done, total } : null,
+    })
+  }, [detailId, data, onHeaderContextChange])
 
   const sortedLists = useMemo(
     () => [...data].sort((a, b) => a.reihenfolge - b.reihenfolge || a.titel.localeCompare(b.titel)),
@@ -761,57 +793,45 @@ export function ChecklistenTool() {
 
   // Detail-Ansicht
   if (detailId && activeChecklist) {
-    const total = activeChecklist.kategorien.reduce((n, k) => n + k.eintraege.length, 0)
-    const done = activeChecklist.kategorien.reduce(
-      (n, k) => n + k.eintraege.filter(e => e.erledigt).length,
-      0
-    )
     const catsSorted = [...activeChecklist.kategorien].sort(
       (a, b) => a.reihenfolge - b.reihenfolge || a.titel.localeCompare(b.titel)
     )
 
     return (
       <div className="space-y-4">
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <Button variant="outline" size="sm" onClick={() => { setDetailId(null); setEditMode(false) }}>
             <ArrowLeft className="h-4 w-4 mr-1" />
             Zur Übersicht
           </Button>
-          <h2 className="text-lg font-semibold text-[rgb(45,79,30)] flex-1 min-w-[200px]">
-            {activeChecklist.titel}
-          </h2>
-          {!editMode && (
-            <Button variant="outline" size="sm" onClick={() => setResetListId(detailId)}>
-              <RotateCcw className="h-4 w-4 mr-1" />
-              Zurücksetzen
-            </Button>
-          )}
-          {canAccessConfig && !editMode && (
-            <Button size="sm" onClick={() => setEditMode(true)}>
-              Bearbeiten
-            </Button>
-          )}
-          {canAccessConfig && editMode && (
-            <>
-              <Button variant="secondary" size="sm" onClick={() => setEditMode(false)}>
-                Fertig
+          <div className="flex flex-wrap items-center gap-2">
+            {!editMode && (
+              <Button variant="outline" size="sm" onClick={() => setResetListId(detailId)}>
+                <RotateCcw className="h-4 w-4 mr-1" />
+                Zurücksetzen
               </Button>
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={() => setDeleteListId(detailId)}
-              >
-                Liste löschen
+            )}
+            {canAccessConfig && !editMode && (
+              <Button size="sm" onClick={() => setEditMode(true)}>
+                Bearbeiten
               </Button>
-            </>
-          )}
+            )}
+            {canAccessConfig && editMode && (
+              <>
+                <Button variant="secondary" size="sm" onClick={() => setEditMode(false)}>
+                  Fertig
+                </Button>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => setDeleteListId(detailId)}
+                >
+                  Liste löschen
+                </Button>
+              </>
+            )}
+          </div>
         </div>
-
-        {!editMode && (
-          <p className="text-sm text-muted-foreground">
-            Fortschritt: {done} von {total} erledigt
-          </p>
-        )}
 
         {editMode && canAccessConfig ? (
           <DndContext
