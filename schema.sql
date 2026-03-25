@@ -239,3 +239,43 @@ CREATE TRIGGER update_urlaube_timestamp AFTER UPDATE ON urlaube BEGIN UPDATE url
 CREATE TRIGGER update_packlisten_timestamp AFTER UPDATE ON packlisten BEGIN UPDATE packlisten SET updated_at = datetime('now') WHERE id = NEW.id; END;
 CREATE TRIGGER update_packlisten_eintraege_timestamp AFTER UPDATE ON packlisten_eintraege BEGIN UPDATE packlisten_eintraege SET updated_at = datetime('now') WHERE id = NEW.id; END;
 CREATE TRIGGER update_packlisten_vorlagen_timestamp AFTER UPDATE ON packlisten_vorlagen BEGIN UPDATE packlisten_vorlagen SET updated_at = datetime('now') WHERE id = NEW.id; END;
+
+-- Checklisten (Tools)
+CREATE TABLE IF NOT EXISTS checklisten (
+    id TEXT PRIMARY KEY,
+    titel TEXT NOT NULL,
+    reihenfolge INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS checklisten_kategorien (
+    id TEXT PRIMARY KEY,
+    checklist_id TEXT NOT NULL,
+    titel TEXT NOT NULL,
+    reihenfolge INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (checklist_id) REFERENCES checklisten(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS checklisten_eintraege (
+    id TEXT PRIMARY KEY,
+    checklist_id TEXT NOT NULL,
+    kategorie_id TEXT NOT NULL,
+    text TEXT NOT NULL,
+    reihenfolge INTEGER NOT NULL DEFAULT 0,
+    erledigt INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (checklist_id) REFERENCES checklisten(id) ON DELETE CASCADE,
+    FOREIGN KEY (kategorie_id) REFERENCES checklisten_kategorien(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_checklisten_kategorien_checklist_id ON checklisten_kategorien(checklist_id);
+CREATE INDEX IF NOT EXISTS idx_checklisten_eintraege_checklist_id ON checklisten_eintraege(checklist_id);
+CREATE INDEX IF NOT EXISTS idx_checklisten_eintraege_kategorie_id ON checklisten_eintraege(kategorie_id);
+
+CREATE TRIGGER IF NOT EXISTS update_checklisten_timestamp AFTER UPDATE ON checklisten BEGIN UPDATE checklisten SET updated_at = datetime('now') WHERE id = NEW.id; END;
+CREATE TRIGGER IF NOT EXISTS update_checklisten_kategorien_timestamp AFTER UPDATE ON checklisten_kategorien BEGIN UPDATE checklisten_kategorien SET updated_at = datetime('now') WHERE id = NEW.id; END;
+CREATE TRIGGER IF NOT EXISTS update_checklisten_eintraege_timestamp AFTER UPDATE ON checklisten_eintraege BEGIN UPDATE checklisten_eintraege SET updated_at = datetime('now') WHERE id = NEW.id; END;

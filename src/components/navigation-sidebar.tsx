@@ -57,7 +57,8 @@ export function NavigationSidebar({ isOpen, onClose }: NavigationSidebarProps) {
   ]
 
   const toolsItems: { label: string; href: string }[] = [
-    { label: 'SONNEN-AUSRICHTUNG', href: '/tools/sonnen-ausrichtung' }
+    { label: 'SONNEN-AUSRICHTUNG', href: '/tools/sonnen-ausrichtung' },
+    { label: 'CHECKLISTEN', href: '/tools/checklisten' },
   ]
 
   const configItems: { label: string; href: string; disabled?: boolean }[] = [
@@ -142,7 +143,7 @@ export function NavigationSidebar({ isOpen, onClose }: NavigationSidebarProps) {
                     onClick={() => onClose()}
                     className={cn(
                       "block px-4 py-2 text-xs tracking-wide rounded-lg transition-colors",
-                      pathname === item.href
+                      pathname === item.href || pathname.startsWith(item.href + '/')
                         ? "text-[rgb(45,79,30)] font-medium bg-[rgb(250,250,249)]"
                         : "text-gray-600 hover:bg-[rgb(250,250,249)] hover:text-gray-900"
                     )}

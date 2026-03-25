@@ -225,6 +225,39 @@ export interface Einladung {
   ablauf: string | null
 }
 
+/** Tools: benutzerdefinierte Checklisten (Abfahrt, Einwintern, …) */
+export interface Checkliste {
+  id: string
+  titel: string
+  reihenfolge: number
+  created_at: string
+  updated_at?: string
+}
+
+export interface ChecklisteKategorie {
+  id: string
+  checklist_id: string
+  titel: string
+  reihenfolge: number
+  created_at: string
+  updated_at?: string
+}
+
+export interface ChecklisteEintrag {
+  id: string
+  checklist_id: string
+  kategorie_id: string
+  text: string
+  reihenfolge: number
+  erledigt: boolean
+  created_at: string
+  updated_at?: string
+}
+
+export interface ChecklisteMitStruktur extends Checkliste {
+  kategorien: (ChecklisteKategorie & { eintraege: ChecklisteEintrag[] })[]
+}
+
 export interface CloudflareEnv {
   DB: D1Database
   PACKING_SYNC_DO?: DurableObjectNamespace
@@ -3547,6 +3580,396 @@ export async function setMitreisendeBerechtigungen(
     return true
   } catch (error) {
     console.error('Error setting mitreisende berechtigungen:', error)
+    return false
+  }
+}
+
+// --- Checklisten (Tools) ---
+
+function rowErledigtToBool(v: number | boolean | undefined): boolean {
+  return v === true || v === 1
+}
+
+export async function getChecklistenFullTree(db: D1Database): Promise<ChecklisteMitStruktur[]> {
+  try {
+    const lists = await db
+      .prepare('SELECT * FROM checklisten ORDER BY reihenfolge ASC, titel ASC')
+      .all<Checkliste>()
+    const rows = lists.results || []
+    const out: ChecklisteMitStruktur[] = []
+    for (const c of rows) {
+      const catsRes = await db
+        .prepare(
+          'SELECT * FROM checklisten_kategorien WHERE checklist_id = ? ORDER BY reihenfolge ASC, titel ASC'
+        )
+        .bind(c.id)
+        .all<ChecklisteKategorie>()
+      const cats = catsRes.results || []
+      const kategorien: (ChecklisteKategorie & { eintraege: ChecklisteEintrag[] })[] = []
+      for (const k of cats) {
+        const entRes = await db
+          .prepare(
+            'SELECT * FROM checklisten_eintraege WHERE kategorie_id = ? ORDER BY reihenfolge ASC'
+          )
+          .bind(k.id)
+          .all<ChecklisteEintrag & { erledigt: number }>()
+        const eintraege = (entRes.results || []).map(e => ({
+          ...e,
+          erledigt: rowErledigtToBool(e.erledigt as unknown as number),
+        }))
+        kategorien.push({ ...k, eintraege })
+      }
+      out.push({ ...c, kategorien })
+    }
+    return out
+  } catch (error) {
+    console.error('Error getChecklistenFullTree:', error)
+    return []
+  }
+}
+
+export async function getChecklisteById(
+  db: D1Database,
+  checklistId: string
+): Promise<ChecklisteMitStruktur | null> {
+  const tree = await getChecklistenFullTree(db)
+  return tree.find(c => c.id === checklistId) || null
+}
+
+export async function createCheckliste(db: D1Database, titel: string): Promise<string | null> {
+  try {
+    const id = crypto.randomUUID()
+    const maxRow = await db
+      .prepare('SELECT MAX(reihenfolge) as m FROM checklisten')
+      .first<{ m: number | null }>()
+    const reihenfolge = (maxRow?.m ?? -1) + 1
+    await db
+      .prepare(
+        'INSERT INTO checklisten (id, titel, reihenfolge) VALUES (?, ?, ?)'
+      )
+      .bind(id, titel.trim(), reihenfolge)
+      .run()
+    return id
+  } catch (error) {
+    console.error('Error createCheckliste:', error)
+    return null
+  }
+}
+
+export async function updateCheckliste(
+  db: D1Database,
+  id: string,
+  fields: { titel?: string; reihenfolge?: number }
+): Promise<boolean> {
+  try {
+    if (fields.titel !== undefined) {
+      await db
+        .prepare('UPDATE checklisten SET titel = ? WHERE id = ?')
+        .bind(fields.titel.trim(), id)
+        .run()
+    }
+    if (fields.reihenfolge !== undefined) {
+      await db
+        .prepare('UPDATE checklisten SET reihenfolge = ? WHERE id = ?')
+        .bind(fields.reihenfolge, id)
+        .run()
+    }
+    return true
+  } catch (error) {
+    console.error('Error updateCheckliste:', error)
+    return false
+  }
+}
+
+export async function deleteCheckliste(db: D1Database, id: string): Promise<boolean> {
+  try {
+    await db.prepare('DELETE FROM checklisten WHERE id = ?').bind(id).run()
+    return true
+  } catch (error) {
+    console.error('Error deleteCheckliste:', error)
+    return false
+  }
+}
+
+export async function reorderChecklisten(db: D1Database, orderedIds: string[]): Promise<boolean> {
+  try {
+    for (let i = 0; i < orderedIds.length; i++) {
+      await db
+        .prepare('UPDATE checklisten SET reihenfolge = ? WHERE id = ?')
+        .bind(i, orderedIds[i])
+        .run()
+    }
+    return true
+  } catch (error) {
+    console.error('Error reorderChecklisten:', error)
+    return false
+  }
+}
+
+export async function createChecklisteKategorie(
+  db: D1Database,
+  checklistId: string,
+  titel: string
+): Promise<string | null> {
+  try {
+    const id = crypto.randomUUID()
+    const maxRow = await db
+      .prepare(
+        'SELECT MAX(reihenfolge) as m FROM checklisten_kategorien WHERE checklist_id = ?'
+      )
+      .bind(checklistId)
+      .first<{ m: number | null }>()
+    const reihenfolge = (maxRow?.m ?? -1) + 1
+    await db
+      .prepare(
+        'INSERT INTO checklisten_kategorien (id, checklist_id, titel, reihenfolge) VALUES (?, ?, ?, ?)'
+      )
+      .bind(id, checklistId, titel.trim(), reihenfolge)
+      .run()
+    return id
+  } catch (error) {
+    console.error('Error createChecklisteKategorie:', error)
+    return null
+  }
+}
+
+export async function updateChecklisteKategorie(
+  db: D1Database,
+  checklistId: string,
+  id: string,
+  fields: { titel?: string; reihenfolge?: number }
+): Promise<boolean> {
+  try {
+    const exists = await db
+      .prepare(
+        'SELECT 1 as x FROM checklisten_kategorien WHERE id = ? AND checklist_id = ? LIMIT 1'
+      )
+      .bind(id, checklistId)
+      .first<{ x: number }>()
+    if (!exists) return false
+    if (fields.titel !== undefined) {
+      await db
+        .prepare(
+          'UPDATE checklisten_kategorien SET titel = ? WHERE id = ? AND checklist_id = ?'
+        )
+        .bind(fields.titel.trim(), id, checklistId)
+        .run()
+    }
+    if (fields.reihenfolge !== undefined) {
+      await db
+        .prepare(
+          'UPDATE checklisten_kategorien SET reihenfolge = ? WHERE id = ? AND checklist_id = ?'
+        )
+        .bind(fields.reihenfolge, id, checklistId)
+        .run()
+    }
+    return true
+  } catch (error) {
+    console.error('Error updateChecklisteKategorie:', error)
+    return false
+  }
+}
+
+export async function deleteChecklisteKategorie(
+  db: D1Database,
+  checklistId: string,
+  id: string
+): Promise<boolean> {
+  try {
+    const r = await db
+      .prepare('DELETE FROM checklisten_kategorien WHERE id = ? AND checklist_id = ?')
+      .bind(id, checklistId)
+      .run()
+    return r.success && (r.meta?.changes ?? 0) > 0
+  } catch (error) {
+    console.error('Error deleteChecklisteKategorie:', error)
+    return false
+  }
+}
+
+export async function reorderChecklisteKategorien(
+  db: D1Database,
+  checklistId: string,
+  orderedIds: string[]
+): Promise<boolean> {
+  try {
+    for (let i = 0; i < orderedIds.length; i++) {
+      await db
+        .prepare(
+          'UPDATE checklisten_kategorien SET reihenfolge = ? WHERE id = ? AND checklist_id = ?'
+        )
+        .bind(i, orderedIds[i], checklistId)
+        .run()
+    }
+    return true
+  } catch (error) {
+    console.error('Error reorderChecklisteKategorien:', error)
+    return false
+  }
+}
+
+export async function createChecklisteEintrag(
+  db: D1Database,
+  checklistId: string,
+  kategorieId: string,
+  text: string
+): Promise<string | null> {
+  try {
+    const cat = await db
+      .prepare('SELECT checklist_id FROM checklisten_kategorien WHERE id = ?')
+      .bind(kategorieId)
+      .first<{ checklist_id: string }>()
+    if (!cat || cat.checklist_id !== checklistId) return null
+    const id = crypto.randomUUID()
+    const maxRow = await db
+      .prepare(
+        'SELECT MAX(reihenfolge) as m FROM checklisten_eintraege WHERE kategorie_id = ?'
+      )
+      .bind(kategorieId)
+      .first<{ m: number | null }>()
+    const reihenfolge = (maxRow?.m ?? -1) + 1
+    await db
+      .prepare(
+        `INSERT INTO checklisten_eintraege (id, checklist_id, kategorie_id, text, reihenfolge, erledigt)
+         VALUES (?, ?, ?, ?, ?, 0)`
+      )
+      .bind(id, checklistId, kategorieId, text.trim(), reihenfolge)
+      .run()
+    return id
+  } catch (error) {
+    console.error('Error createChecklisteEintrag:', error)
+    return null
+  }
+}
+
+export async function updateChecklisteEintrag(
+  db: D1Database,
+  checklistId: string,
+  id: string,
+  fields: { text?: string; kategorie_id?: string; reihenfolge?: number }
+): Promise<boolean> {
+  try {
+    const row = await db
+      .prepare('SELECT checklist_id, kategorie_id FROM checklisten_eintraege WHERE id = ?')
+      .bind(id)
+      .first<{ checklist_id: string; kategorie_id: string }>()
+    if (!row || row.checklist_id !== checklistId) return false
+    if (fields.text !== undefined) {
+      await db
+        .prepare('UPDATE checklisten_eintraege SET text = ? WHERE id = ? AND checklist_id = ?')
+        .bind(fields.text.trim(), id, checklistId)
+        .run()
+    }
+    if (fields.kategorie_id !== undefined) {
+      const cat = await db
+        .prepare('SELECT checklist_id FROM checklisten_kategorien WHERE id = ?')
+        .bind(fields.kategorie_id)
+        .first<{ checklist_id: string }>()
+      if (!cat || cat.checklist_id !== checklistId) return false
+      await db
+        .prepare(
+          'UPDATE checklisten_eintraege SET kategorie_id = ? WHERE id = ? AND checklist_id = ?'
+        )
+        .bind(fields.kategorie_id, id, checklistId)
+        .run()
+    }
+    if (fields.reihenfolge !== undefined) {
+      await db
+        .prepare(
+          'UPDATE checklisten_eintraege SET reihenfolge = ? WHERE id = ? AND checklist_id = ?'
+        )
+        .bind(fields.reihenfolge, id, checklistId)
+        .run()
+    }
+    return true
+  } catch (error) {
+    console.error('Error updateChecklisteEintrag:', error)
+    return false
+  }
+}
+
+export async function deleteChecklisteEintrag(
+  db: D1Database,
+  checklistId: string,
+  id: string
+): Promise<boolean> {
+  try {
+    const r = await db
+      .prepare('DELETE FROM checklisten_eintraege WHERE id = ? AND checklist_id = ?')
+      .bind(id, checklistId)
+      .run()
+    return r.success
+  } catch (error) {
+    console.error('Error deleteChecklisteEintrag:', error)
+    return false
+  }
+}
+
+export async function reorderChecklisteEintraege(
+  db: D1Database,
+  checklistId: string,
+  updates: { id: string; kategorie_id: string; reihenfolge: number }[]
+): Promise<boolean> {
+  try {
+    for (const u of updates) {
+      const row = await db
+        .prepare('SELECT checklist_id FROM checklisten_eintraege WHERE id = ?')
+        .bind(u.id)
+        .first<{ checklist_id: string }>()
+      if (!row || row.checklist_id !== checklistId) return false
+      const cat = await db
+        .prepare('SELECT checklist_id FROM checklisten_kategorien WHERE id = ?')
+        .bind(u.kategorie_id)
+        .first<{ checklist_id: string }>()
+      if (!cat || cat.checklist_id !== checklistId) return false
+    }
+    for (const u of updates) {
+      await db
+        .prepare(
+          `UPDATE checklisten_eintraege SET kategorie_id = ?, reihenfolge = ?
+           WHERE id = ? AND checklist_id = ?`
+        )
+        .bind(u.kategorie_id, u.reihenfolge, u.id, checklistId)
+        .run()
+    }
+    return true
+  } catch (error) {
+    console.error('Error reorderChecklisteEintraege:', error)
+    return false
+  }
+}
+
+export async function setChecklisteEintragErledigt(
+  db: D1Database,
+  checklistId: string,
+  eintragId: string,
+  erledigt: boolean
+): Promise<boolean> {
+  try {
+    const r = await db
+      .prepare(
+        `UPDATE checklisten_eintraege SET erledigt = ? WHERE id = ? AND checklist_id = ?`
+      )
+      .bind(erledigt ? 1 : 0, eintragId, checklistId)
+      .run()
+    return r.success && (r.meta?.changes ?? 0) > 0
+  } catch (error) {
+    console.error('Error setChecklisteEintragErledigt:', error)
+    return false
+  }
+}
+
+export async function resetChecklisteErledigt(db: D1Database, checklistId: string): Promise<boolean> {
+  try {
+    await db
+      .prepare(
+        'UPDATE checklisten_eintraege SET erledigt = 0 WHERE checklist_id = ?'
+      )
+      .bind(checklistId)
+      .run()
+    return true
+  } catch (error) {
+    console.error('Error resetChecklisteErledigt:', error)
     return false
   }
 }
