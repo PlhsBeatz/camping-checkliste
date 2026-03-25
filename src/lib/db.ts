@@ -3590,6 +3590,9 @@ function rowErledigtToBool(v: number | boolean | undefined): boolean {
   return v === true || v === 1
 }
 
+/** D1-Zeile: SQLite liefert erledigt als 0/1 */
+type ChecklisteEintragRow = Omit<ChecklisteEintrag, 'erledigt'> & { erledigt: number }
+
 export async function getChecklistenFullTree(db: D1Database): Promise<ChecklisteMitStruktur[]> {
   try {
     const lists = await db
@@ -3612,11 +3615,14 @@ export async function getChecklistenFullTree(db: D1Database): Promise<Checkliste
             'SELECT * FROM checklisten_eintraege WHERE kategorie_id = ? ORDER BY reihenfolge ASC'
           )
           .bind(k.id)
-          .all<ChecklisteEintrag & { erledigt: number }>()
-        const eintraege = (entRes.results || []).map(e => ({
-          ...e,
-          erledigt: rowErledigtToBool(e.erledigt as unknown as number),
-        }))
+          .all<ChecklisteEintragRow>()
+        const eintraege = (entRes.results || []).map((e): ChecklisteEintrag => {
+          const row = e as ChecklisteEintragRow
+          return {
+            ...row,
+            erledigt: rowErledigtToBool(row.erledigt),
+          }
+        })
         kategorien.push({ ...k, eintraege })
       }
       out.push({ ...c, kategorien })
