@@ -107,24 +107,31 @@ export default {
   					transform: 'translateX(0)'
   				}
   			},
-  			'tab-swipe-in-from-left': {
-  				from: {
-  					opacity: '0.92',
-  					transform: 'translateX(-10px)'
-  				},
-  				to: {
-  					opacity: '1',
-  					transform: 'translateX(0)'
-  				}
-  			}
-  		},
-  		animation: {
-  			'accordion-down': 'accordion-down 0.2s ease-out',
-  			'accordion-up': 'accordion-up 0.2s ease-out',
-  			'pack-item-out': 'pack-item-out 0.25s ease-out forwards',
-  			'tab-swipe-in-from-right': 'tab-swipe-in-from-right 0.22s ease-out forwards',
-  			'tab-swipe-in-from-left': 'tab-swipe-in-from-left 0.22s ease-out forwards'
-  		}
+			'tab-swipe-in-from-left': {
+				from: {
+					opacity: '0.92',
+					transform: 'translateX(-10px)'
+				},
+				to: {
+					opacity: '1',
+					transform: 'translateX(0)'
+				}
+			},
+			/** Kurzes Einschnappen beim Abhaken (Checklisten, kompakter als Packliste) */
+			'checklist-row-tick': {
+				'0%': { transform: 'scale(1)' },
+				'40%': { transform: 'scale(0.985)' },
+				'100%': { transform: 'scale(1)' }
+			}
+		},
+		animation: {
+			'accordion-down': 'accordion-down 0.2s ease-out',
+			'accordion-up': 'accordion-up 0.2s ease-out',
+			'pack-item-out': 'pack-item-out 0.25s ease-out forwards',
+			'tab-swipe-in-from-right': 'tab-swipe-in-from-right 0.22s ease-out forwards',
+			'tab-swipe-in-from-left': 'tab-swipe-in-from-left 0.22s ease-out forwards',
+			'checklist-row-tick': 'checklist-row-tick 0.32s ease-out'
+		}
   	}
   },
   plugins: [require("tailwindcss-animate")],

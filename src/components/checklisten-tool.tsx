@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
   DndContext,
   closestCenter,
@@ -23,7 +23,7 @@ import { useAuth } from '@/components/auth-provider'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Card, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { ResponsiveModal } from '@/components/ui/responsive-modal'
 import { Label } from '@/components/ui/label'
@@ -45,6 +45,71 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useToast } from '@/hooks/use-toast'
+
+/** Checkbox wie in der Packliste (Pauschal / normales Abhaken) */
+const CHECKLIST_RUNNER_CHECKBOX_CLASS =
+  'h-6 w-6 min-h-6 min-w-6 rounded-md border-2 border-gray-300 data-[state=checked]:bg-[rgb(45,79,30)] data-[state=checked]:border-[rgb(45,79,30)]'
+
+function ChecklisteRunnerEintrag({
+  entry,
+  checklistId,
+  onToggle,
+}: {
+  entry: ChecklisteEintrag
+  checklistId: string
+  onToggle: (checklistId: string, entryId: string, erledigt: boolean) => void
+}) {
+  const [tickAnim, setTickAnim] = useState(false)
+  const tickTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (tickTimeoutRef.current != null) clearTimeout(tickTimeoutRef.current)
+    }
+  }, [])
+
+  const handleChecked = (checked: boolean) => {
+    if (checked) {
+      if (tickTimeoutRef.current != null) clearTimeout(tickTimeoutRef.current)
+      setTickAnim(true)
+      tickTimeoutRef.current = setTimeout(() => {
+        tickTimeoutRef.current = null
+        setTickAnim(false)
+      }, 360)
+    }
+    onToggle(checklistId, entry.id, checked)
+  }
+
+  return (
+    <div
+      className={cn(
+        'mb-2 py-2 px-3 bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden transition-all duration-200',
+        tickAnim && 'animate-checklist-row-tick',
+        entry.erledigt ? 'opacity-60' : 'hover:shadow-md'
+      )}
+    >
+      <div className="flex items-start space-x-3">
+        <div className="mt-0.5 flex-shrink-0">
+          <Checkbox
+            id={`chk-runner-${entry.id}`}
+            checked={entry.erledigt}
+            onCheckedChange={v => handleChecked(v === true)}
+            className={CHECKLIST_RUNNER_CHECKBOX_CLASS}
+          />
+        </div>
+        <label
+          htmlFor={`chk-runner-${entry.id}`}
+          className={cn(
+            'text-sm font-medium leading-snug cursor-pointer transition-colors flex-1 min-w-0 pt-0.5',
+            entry.erledigt ? 'line-through text-muted-foreground' : 'text-foreground'
+          )}
+        >
+          {entry.text}
+        </label>
+      </div>
+    </div>
+  )
+}
 
 const P_CL = 'cl:'
 const P_K = 'k:'
@@ -837,34 +902,28 @@ export function ChecklistenTool() {
             </SortableContext>
           </DndContext>
         ) : (
-          <div className="space-y-6">
-            {catsSorted.map(kat => (
-              <div key={kat.id}>
-                <h3 className="text-sm font-semibold text-[rgb(45,79,30)] mb-2 tracking-wide">
-                  {kat.titel}
-                </h3>
-                <ul className="space-y-2">
-                  {kat.eintraege.map(e => (
-                    <li
-                      key={e.id}
-                      className="flex items-start gap-3 rounded-lg border bg-white p-3 shadow-sm"
-                    >
-                      <Checkbox
-                        id={e.id}
-                        checked={e.erledigt}
-                        onCheckedChange={v =>
-                          toggleErledigt(detailId, e.id, v === true)
-                        }
-                        className="mt-0.5"
-                      />
-                      <label htmlFor={e.id} className="text-sm leading-snug cursor-pointer flex-1">
-                        {e.text}
-                      </label>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
+          <div className="-mx-4 sm:-mx-6 px-4 sm:px-6 py-4 bg-scroll-pattern rounded-lg">
+            <div className="space-y-6">
+              {catsSorted.map(kat => (
+                <div key={kat.id}>
+                  <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-3 px-1">
+                    {kat.titel}
+                  </h3>
+                  <Card className="border-none shadow-none overflow-hidden bg-transparent">
+                    <CardContent className="p-0 bg-transparent">
+                      {kat.eintraege.map(e => (
+                        <ChecklisteRunnerEintrag
+                          key={e.id}
+                          entry={e}
+                          checklistId={detailId}
+                          onToggle={toggleErledigt}
+                        />
+                      ))}
+                    </CardContent>
+                  </Card>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
