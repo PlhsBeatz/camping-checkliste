@@ -3593,41 +3593,61 @@ function rowErledigtToBool(v: number | boolean | undefined): boolean {
 /** D1-Zeile: SQLite liefert erledigt als 0/1 */
 type ChecklisteEintragRow = Omit<ChecklisteEintrag, 'erledigt'> & { erledigt: number }
 
+function mapEintragRow(e: ChecklisteEintragRow): ChecklisteEintrag {
+  return {
+    ...e,
+    erledigt: rowErledigtToBool(e.erledigt),
+  }
+}
+
 export async function getChecklistenFullTree(db: D1Database): Promise<ChecklisteMitStruktur[]> {
   try {
     const lists = await db
       .prepare('SELECT * FROM checklisten ORDER BY reihenfolge ASC, titel ASC')
       .all<Checkliste>()
     const rows = lists.results || []
-    const out: ChecklisteMitStruktur[] = []
-    for (const c of rows) {
-      const catsRes = await db
-        .prepare(
-          'SELECT * FROM checklisten_kategorien WHERE checklist_id = ? ORDER BY reihenfolge ASC, titel ASC'
-        )
-        .bind(c.id)
-        .all<ChecklisteKategorie>()
-      const cats = catsRes.results || []
-      const kategorien: (ChecklisteKategorie & { eintraege: ChecklisteEintrag[] })[] = []
-      for (const k of cats) {
-        const entRes = await db
-          .prepare(
-            'SELECT * FROM checklisten_eintraege WHERE kategorie_id = ? ORDER BY reihenfolge ASC'
-          )
-          .bind(k.id)
-          .all<ChecklisteEintragRow>()
-        const eintraege = (entRes.results || []).map((e): ChecklisteEintrag => {
-          const row = e as ChecklisteEintragRow
-          return {
-            ...row,
-            erledigt: rowErledigtToBool(row.erledigt),
-          }
-        })
-        kategorien.push({ ...k, eintraege })
-      }
-      out.push({ ...c, kategorien })
+    if (rows.length === 0) return []
+
+    const ids = rows.map(r => r.id)
+    const ph = ids.map(() => '?').join(',')
+
+    const catsRes = await db
+      .prepare(
+        `SELECT * FROM checklisten_kategorien WHERE checklist_id IN (${ph}) ORDER BY checklist_id, reihenfolge ASC, titel ASC`
+      )
+      .bind(...ids)
+      .all<ChecklisteKategorie>()
+    const allCats = catsRes.results || []
+
+    const entsRes = await db
+      .prepare(
+        `SELECT * FROM checklisten_eintraege WHERE checklist_id IN (${ph}) ORDER BY checklist_id, kategorie_id, reihenfolge ASC`
+      )
+      .bind(...ids)
+      .all<ChecklisteEintragRow>()
+    const allEnts = (entsRes.results || []).map(e => mapEintragRow(e as ChecklisteEintragRow))
+
+    const entsByKat = new Map<string, ChecklisteEintrag[]>()
+    for (const e of allEnts) {
+      const list = entsByKat.get(e.kategorie_id) ?? []
+      list.push(e)
+      entsByKat.set(e.kategorie_id, list)
     }
-    return out
+
+    const catsByList = new Map<string, ChecklisteKategorie[]>()
+    for (const k of allCats) {
+      const list = catsByList.get(k.checklist_id) ?? []
+      list.push(k)
+      catsByList.set(k.checklist_id, list)
+    }
+
+    return rows.map(c => ({
+      ...c,
+      kategorien: (catsByList.get(c.id) ?? []).map(kat => ({
+        ...kat,
+        eintraege: entsByKat.get(kat.id) ?? [],
+      })),
+    }))
   } catch (error) {
     console.error('Error getChecklistenFullTree:', error)
     return []
@@ -3638,8 +3658,47 @@ export async function getChecklisteById(
   db: D1Database,
   checklistId: string
 ): Promise<ChecklisteMitStruktur | null> {
-  const tree = await getChecklistenFullTree(db)
-  return tree.find(c => c.id === checklistId) || null
+  try {
+    const c = await db
+      .prepare('SELECT * FROM checklisten WHERE id = ?')
+      .bind(checklistId)
+      .first<Checkliste>()
+    if (!c) return null
+
+    const catsRes = await db
+      .prepare(
+        'SELECT * FROM checklisten_kategorien WHERE checklist_id = ? ORDER BY reihenfolge ASC, titel ASC'
+      )
+      .bind(checklistId)
+      .all<ChecklisteKategorie>()
+    const cats = catsRes.results || []
+
+    const entsRes = await db
+      .prepare(
+        'SELECT * FROM checklisten_eintraege WHERE checklist_id = ? ORDER BY kategorie_id, reihenfolge ASC'
+      )
+      .bind(checklistId)
+      .all<ChecklisteEintragRow>()
+    const allEnts = (entsRes.results || []).map(e => mapEintragRow(e as ChecklisteEintragRow))
+
+    const entsByKat = new Map<string, ChecklisteEintrag[]>()
+    for (const e of allEnts) {
+      const list = entsByKat.get(e.kategorie_id) ?? []
+      list.push(e)
+      entsByKat.set(e.kategorie_id, list)
+    }
+
+    return {
+      ...c,
+      kategorien: cats.map(kat => ({
+        ...kat,
+        eintraege: entsByKat.get(kat.id) ?? [],
+      })),
+    }
+  } catch (error) {
+    console.error('Error getChecklisteById:', error)
+    return null
+  }
 }
 
 export async function createCheckliste(db: D1Database, titel: string): Promise<string | null> {

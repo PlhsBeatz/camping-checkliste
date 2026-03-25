@@ -812,8 +812,15 @@ export function ChecklistenTool({ onHeaderContextChange }: ChecklistenToolProps)
               </Button>
             )}
             {canAccessConfig && !editMode && (
-              <Button size="sm" onClick={() => setEditMode(true)}>
-                Bearbeiten
+              <Button
+                type="button"
+                size="icon"
+                variant="default"
+                className="h-9 w-9 shrink-0"
+                onClick={() => setEditMode(true)}
+                aria-label="Bearbeiten"
+              >
+                <Pencil className="h-4 w-4" />
               </Button>
             )}
             {canAccessConfig && editMode && (
