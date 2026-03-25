@@ -485,20 +485,18 @@ export function ChecklistenTool() {
     }
 
     if (fromKat.id === toKatId) {
-      const ki = next.kategorien.findIndex(k => k.id === toKatId)
-      if (ki < 0) return
-      const list = [...next.kategorien[ki].eintraege]
+      const bucket = next.kategorien.find(k => k.id === toKatId)
+      if (!bucket) return
+      const list = [...bucket.eintraege]
       const oldIdx = list.findIndex(e => e.id === entryId)
       if (oldIdx < 0) return
 
       if (dropK === toKatId) {
-        const reordered = arrayMove(list, oldIdx, list.length - 1)
-        next.kategorien[ki] = { ...next.kategorien[ki], eintraege: reordered }
+        bucket.eintraege = arrayMove(list, oldIdx, list.length - 1)
       } else if (overEntryId && overEntryId !== entryId) {
         const newIdx = list.findIndex(e => e.id === overEntryId)
         if (newIdx < 0) return
-        const reordered = arrayMove(list, oldIdx, newIdx)
-        next.kategorien[ki] = { ...next.kategorien[ki], eintraege: reordered }
+        bucket.eintraege = arrayMove(list, oldIdx, newIdx)
       } else {
         return
       }
