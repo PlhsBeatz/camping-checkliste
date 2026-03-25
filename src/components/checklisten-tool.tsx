@@ -944,15 +944,6 @@ export function ChecklistenTool() {
   // Übersicht
   return (
     <div className="space-y-4">
-      {canAccessConfig && (
-        <div className="flex flex-wrap gap-2">
-          <Button size="sm" onClick={() => setNewListOpen(true)}>
-            <Plus className="h-4 w-4 mr-1" />
-            Neue Checkliste
-          </Button>
-        </div>
-      )}
-
       {canAccessConfig ? (
         <DndContext
           sensors={sensors}
@@ -1013,6 +1004,20 @@ export function ChecklistenTool() {
           <Button onClick={createList}>Anlegen</Button>
         </div>
       </ResponsiveModal>
+
+      {canAccessConfig && (
+        <div className="fixed bottom-6 right-6 z-30">
+          <Button
+            type="button"
+            size="icon"
+            onClick={() => setNewListOpen(true)}
+            className="h-14 w-14 rounded-full shadow-lg hover:shadow-xl transition-shadow bg-[rgb(45,79,30)] hover:bg-[rgb(45,79,30)]/90 text-white aspect-square p-0"
+            aria-label="Neue Checkliste"
+          >
+            <Plus className="h-6 w-6" strokeWidth={2.5} />
+          </Button>
+        </div>
+      )}
     </div>
   )
 }

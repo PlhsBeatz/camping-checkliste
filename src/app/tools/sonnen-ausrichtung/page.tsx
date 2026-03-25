@@ -5,6 +5,7 @@ import { NavigationSidebar } from '@/components/navigation-sidebar'
 import { SonnenAusrichtungCompass } from '@/components/sonnen-ausrichtung-compass'
 import { Button } from '@/components/ui/button'
 import { Menu, MapPin, Compass } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import {
   extractCompassHeadingDeg,
   normalizeHeadingDeg,
@@ -158,72 +159,97 @@ export default function SonnenAusrichtungPage() {
     }
   }, [compassEnabled])
 
+  useEffect(() => {
+    if (showNavSidebar) {
+      document.body.style.overflow = 'hidden'
+      document.documentElement.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+      document.documentElement.style.overflow = ''
+    }
+    return () => {
+      document.body.style.overflow = ''
+      document.documentElement.style.overflow = ''
+    }
+  }, [showNavSidebar])
+
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen flex">
       <NavigationSidebar isOpen={showNavSidebar} onClose={() => setShowNavSidebar(false)} />
 
-      <div className="lg:pl-[280px]">
-        <header className="sticky top-0 z-30 flex items-center gap-4 h-14 px-4 bg-white border-b border-gray-200">
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label="Menü öffnen"
-            onClick={() => setShowNavSidebar(true)}
-            className="lg:hidden"
-          >
-            <Menu className="w-5 h-5" />
-          </Button>
-          <h1 className="text-lg font-semibold">Sonnen-Ausrichtung</h1>
-        </header>
-
-        <main className="p-4 md:p-6 pt-8">
-          {isLoadingGps && (
-            <div className="flex items-center gap-2 text-gray-600 py-8">
-              <MapPin className="w-5 h-5 animate-pulse" />
-              <span>Standort wird ermittelt…</span>
-            </div>
-          )}
-
-          {gpsError && !position && (
-            <div className="rounded-lg bg-amber-50 border border-amber-200 p-4 text-amber-800">
-              <p className="font-medium">GPS nicht verfügbar</p>
-              <p className="text-sm mt-1">{gpsError}</p>
-              <p className="text-sm mt-2">Bitte erlauben Sie den Standortzugriff in den Browser-Einstellungen.</p>
-            </div>
-          )}
-
-          {compassPermissionNeeded && (
-            <div className="rounded-lg bg-blue-50 border border-blue-200 p-4 text-blue-800 mb-4">
-              <p className="font-medium">Kompass aktivieren</p>
-              <p className="text-sm mt-1">
-                Für die dynamische Ausrichtung wird die absolute Kompass-Orientierung benötigt (nach
-                Tipp auf „Kompass aktivieren“).
-              </p>
+      <div
+        className={cn(
+          'flex-1 transition-all duration-300 min-w-0 overflow-x-hidden',
+          'lg:ml-[280px]'
+        )}
+      >
+        <div className="container mx-auto p-4 md:p-6 space-y-6 max-w-full">
+          {/* Header - Sticky (analog Urlaube & Packliste-Ansicht) */}
+          <div className="sticky top-0 z-10 flex items-center justify-between bg-white shadow pb-4 -mx-4 px-4 -mt-4 pt-4 md:-mx-6 md:px-6 md:-mt-6 md:pt-6">
+            <div className="flex items-center gap-4">
               <Button
-                onClick={requestCompassPermission}
-                className="mt-3"
-                size="sm"
+                variant="outline"
+                size="icon"
+                onClick={() => setShowNavSidebar(true)}
+                className="lg:hidden"
               >
-                <Compass className="w-4 h-4 mr-2" />
-                Kompass aktivieren
+                <Menu className="h-5 w-5" />
               </Button>
+              <div>
+                <h1 className="text-lg sm:text-xl font-bold tracking-tight text-[rgb(45,79,30)]">
+                  Sonnen-Ausrichtung
+                </h1>
+              </div>
             </div>
-          )}
+          </div>
 
-          {position && (
-            <div className="pt-6 space-y-3">
-              <SonnenAusrichtungCompass
-                lat={position.lat}
-                lng={position.lng}
-                deviceHeading={smoothedHeading}
-              />
-            </div>
-          )}
+          <div className="space-y-6">
+            {isLoadingGps && (
+              <div className="flex items-center gap-2 text-muted-foreground py-4">
+                <MapPin className="w-5 h-5 animate-pulse shrink-0" />
+                <span>Standort wird ermittelt…</span>
+              </div>
+            )}
 
-          {gpsError && position && (
-            <p className="text-sm text-amber-600 mt-2">Hinweis: {gpsError}</p>
-          )}
-        </main>
+            {gpsError && !position && (
+              <div className="rounded-lg bg-amber-50 border border-amber-200 p-4 text-amber-800">
+                <p className="font-medium">GPS nicht verfügbar</p>
+                <p className="text-sm mt-1">{gpsError}</p>
+                <p className="text-sm mt-2">
+                  Bitte erlauben Sie den Standortzugriff in den Browser-Einstellungen.
+                </p>
+              </div>
+            )}
+
+            {compassPermissionNeeded && (
+              <div className="rounded-lg bg-blue-50 border border-blue-200 p-4 text-blue-800">
+                <p className="font-medium">Kompass aktivieren</p>
+                <p className="text-sm mt-1">
+                  Für die dynamische Ausrichtung wird die absolute Kompass-Orientierung benötigt (nach
+                  Tipp auf „Kompass aktivieren“).
+                </p>
+                <Button onClick={requestCompassPermission} className="mt-3" size="sm">
+                  <Compass className="w-4 h-4 mr-2" />
+                  Kompass aktivieren
+                </Button>
+              </div>
+            )}
+
+            {position && (
+              <div className="space-y-3">
+                <SonnenAusrichtungCompass
+                  lat={position.lat}
+                  lng={position.lng}
+                  deviceHeading={smoothedHeading}
+                />
+              </div>
+            )}
+
+            {gpsError && position && (
+              <p className="text-sm text-amber-600">Hinweis: {gpsError}</p>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   )
