@@ -61,7 +61,7 @@ function SortableSubcategoryRow({
     <div
       ref={setNodeRef}
       style={style}
-      className="flex items-center gap-2 py-2 rounded-md hover:bg-muted/50 border-b border-border/60 last-of-type:border-0"
+      className="flex items-center gap-2 py-2 rounded-md hover:bg-muted/50"
     >
       <div
         {...attributes}
@@ -615,14 +615,16 @@ export function CategoryManager({
                   items={mainCat.categories.map(c => c.id)}
                   strategy={verticalListSortingStrategy}
                 >
-                  {mainCat.categories.map((cat) => (
-                    <SortableSubcategoryRow
-                      key={cat.id}
-                      cat={cat}
-                      onEdit={() => openEditCategory(cat)}
-                      onDelete={() => handleDeleteCategory(cat.id)}
-                    />
-                  ))}
+                  <div className="divide-y divide-border/60">
+                    {mainCat.categories.map((cat) => (
+                      <SortableSubcategoryRow
+                        key={cat.id}
+                        cat={cat}
+                        onEdit={() => openEditCategory(cat)}
+                        onDelete={() => handleDeleteCategory(cat.id)}
+                      />
+                    ))}
+                  </div>
                 </SortableContext>
               )}
             </SortableMainCategoryRow>
