@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { Suspense, useState, useEffect, useCallback } from 'react'
 import { NavigationSidebar } from '@/components/navigation-sidebar'
 import {
   ChecklistenTool,
@@ -101,7 +101,15 @@ export default function ChecklistenPage() {
             ) : null}
           </div>
 
-          <ChecklistenTool onHeaderContextChange={onHeaderContextChange} />
+          <Suspense
+            fallback={
+              <div className="text-muted-foreground py-12 text-center">
+                Checklisten werden geladen…
+              </div>
+            }
+          >
+            <ChecklistenTool onHeaderContextChange={onHeaderContextChange} />
+          </Suspense>
         </div>
       </div>
     </div>

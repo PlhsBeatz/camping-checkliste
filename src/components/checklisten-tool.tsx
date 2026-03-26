@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import {
   DndContext,
   closestCenter,
@@ -176,27 +177,27 @@ function SortableChecklistCard({
         className="cursor-pointer hover:border-[rgb(45,79,30)]/40 transition-colors"
         onClick={() => onOpen()}
       >
-        <CardHeader className="pb-2 flex flex-row items-start gap-2 space-y-0">
+        <CardHeader className="flex flex-row items-center gap-2 space-y-0 p-3">
           <button
             type="button"
             {...attributes}
             {...listeners}
-            className="flex items-center justify-center min-w-[44px] min-h-[44px] -ml-2 -mt-1 text-muted-foreground cursor-grab active:cursor-grabbing shrink-0"
+            className="flex items-center justify-center min-w-[44px] min-h-[44px] -ml-2 text-muted-foreground cursor-grab active:cursor-grabbing shrink-0"
             style={{ touchAction: 'none' }}
             aria-label="Checkliste sortieren"
             onClick={e => e.stopPropagation()}
           >
             <GripVertical className="h-5 w-5" />
           </button>
-          <div className="flex-1 min-w-0">
+          <div className="flex-1 min-w-0 flex flex-col justify-center gap-0.5 py-0.5">
             <CardTitle className="text-base font-semibold text-[rgb(45,79,30)] leading-tight">
               {checklist.titel}
             </CardTitle>
-            <p className="text-xs text-muted-foreground mt-1">
+            <p className="text-xs text-muted-foreground">
               {done}/{total} erledigt
             </p>
           </div>
-          <ListChecks className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
+          <ListChecks className="h-5 w-5 text-muted-foreground shrink-0" />
         </CardHeader>
       </Card>
     </div>
@@ -376,12 +377,17 @@ export interface ChecklistenToolProps {
   onHeaderContextChange?: (ctx: ChecklistenHeaderContext) => void
 }
 
+const CHECKLISTEN_PATH = '/tools/checklisten'
+
 export function ChecklistenTool({ onHeaderContextChange }: ChecklistenToolProps) {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const detailId = searchParams.get('id')?.trim() || null
+
   const { canAccessConfig } = useAuth()
   const { toast } = useToast()
   const [loading, setLoading] = useState(true)
   const [data, setData] = useState<ChecklisteMitStruktur[]>([])
-  const [detailId, setDetailId] = useState<string | null>(null)
   const [editMode, setEditMode] = useState(false)
   const [newListOpen, setNewListOpen] = useState(false)
   const [newListTitel, setNewListTitel] = useState('')
@@ -426,6 +432,26 @@ export function ChecklistenTool({ onHeaderContextChange }: ChecklistenToolProps)
   useEffect(() => {
     load()
   }, [load])
+
+  useEffect(() => {
+    if (!detailId) setEditMode(false)
+  }, [detailId])
+
+  const openChecklist = useCallback((id: string) => {
+    router.push(`${CHECKLISTEN_PATH}?id=${encodeURIComponent(id)}`, { scroll: false })
+  }, [router])
+
+  const goToChecklistenOverview = useCallback(() => {
+    router.replace(CHECKLISTEN_PATH, { scroll: false })
+    setEditMode(false)
+  }, [router])
+
+  useEffect(() => {
+    if (loading) return
+    if (detailId && !data.some(c => c.id === detailId)) {
+      router.replace(CHECKLISTEN_PATH, { scroll: false })
+    }
+  }, [loading, detailId, data, router])
 
   const activeChecklist = useMemo(
     () => (detailId ? data.find(c => c.id === detailId) : null),
@@ -670,7 +696,7 @@ export function ChecklistenTool({ onHeaderContextChange }: ChecklistenToolProps)
       return
     }
     if (detailId === deleteListId) {
-      setDetailId(null)
+      router.replace(CHECKLISTEN_PATH, { scroll: false })
       setEditMode(false)
     }
     setDeleteListId(null)
@@ -800,7 +826,7 @@ export function ChecklistenTool({ onHeaderContextChange }: ChecklistenToolProps)
     return (
       <div className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <Button variant="outline" size="sm" onClick={() => { setDetailId(null); setEditMode(false) }}>
+          <Button variant="outline" size="sm" onClick={goToChecklistenOverview}>
             <ArrowLeft className="h-4 w-4 mr-1" />
             Zur Übersicht
           </Button>
@@ -1042,7 +1068,7 @@ export function ChecklistenTool({ onHeaderContextChange }: ChecklistenToolProps)
                 <SortableChecklistCard
                   key={c.id}
                   checklist={c}
-                  onOpen={() => setDetailId(c.id)}
+                  onOpen={() => openChecklist(c.id)}
                 />
               ))}
             </div>
@@ -1054,19 +1080,19 @@ export function ChecklistenTool({ onHeaderContextChange }: ChecklistenToolProps)
             <div key={c.id}>
               <Card
                 className="cursor-pointer hover:border-[rgb(45,79,30)]/40 transition-colors"
-                onClick={() => setDetailId(c.id)}
+                onClick={() => openChecklist(c.id)}
               >
-                <CardHeader className="pb-2 flex flex-row items-start gap-2 space-y-0">
-                  <div className="flex-1 min-w-0">
+                <CardHeader className="flex flex-row items-center gap-2 space-y-0 p-3">
+                  <div className="flex-1 min-w-0 flex flex-col justify-center gap-0.5 py-0.5">
                     <CardTitle className="text-base font-semibold text-[rgb(45,79,30)] leading-tight">
                       {c.titel}
                     </CardTitle>
-                    <p className="text-xs text-muted-foreground mt-1">
+                    <p className="text-xs text-muted-foreground">
                       {c.kategorien.reduce((n, k) => n + k.eintraege.filter(e => e.erledigt).length, 0)}/
                       {c.kategorien.reduce((n, k) => n + k.eintraege.length, 0)} erledigt
                     </p>
                   </div>
-                  <ListChecks className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
+                  <ListChecks className="h-5 w-5 text-muted-foreground shrink-0" />
                 </CardHeader>
               </Card>
             </div>
