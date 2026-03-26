@@ -193,15 +193,16 @@ export default function KategorienPage() {
             </div>
           </div>
 
-          {/* Category Manager */}
-          <CategoryManager
-            categories={categories}
-            mainCategories={mainCategories}
-            transportVehicles={transportVehicles}
-            onRefresh={handleRefresh}
-            openNewMainCategoryTrigger={openNewMainCategoryTrigger}
-            onOpenNewMainCategoryConsumed={() => setOpenNewMainCategoryTrigger(false)}
-          />
+          <div className="mt-4 md:mt-6">
+            <CategoryManager
+              categories={categories}
+              mainCategories={mainCategories}
+              transportVehicles={transportVehicles}
+              onRefresh={handleRefresh}
+              openNewMainCategoryTrigger={openNewMainCategoryTrigger}
+              onOpenNewMainCategoryConsumed={() => setOpenNewMainCategoryTrigger(false)}
+            />
+          </div>
         </div>
       </div>
 
