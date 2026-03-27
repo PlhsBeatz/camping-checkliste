@@ -2106,6 +2106,15 @@ export async function setStandardMitreisendeForEquipment(
   }
 }
 
+/** True, wenn der Packlisten-Eintrag in packlisten_eintraege_temporaer liegt (Mitreisende dann in *_mitreisende_temporaer). */
+async function isTemporaryPackingEintrag(db: D1Database, packlistenEintragId: string): Promise<boolean> {
+  const row = await db
+    .prepare('SELECT 1 FROM packlisten_eintraege_temporaer WHERE id = ? LIMIT 1')
+    .bind(packlistenEintragId)
+    .first()
+  return row != null
+}
+
 /**
  * Abhaken eines Packlisten-Eintrags für einen bestimmten Mitreisenden
  */
@@ -2116,22 +2125,24 @@ export async function togglePackingItemForMitreisender(
   gepackt: boolean
 ): Promise<boolean> {
   try {
-    // Prüfen, ob bereits ein Eintrag existiert
+    const temp = await isTemporaryPackingEintrag(db, packlistenEintragId)
+    const mitTable = temp ? 'packlisten_eintrag_mitreisende_temporaer' : 'packlisten_eintrag_mitreisende'
+
     const existing = await db
-      .prepare('SELECT gepackt FROM packlisten_eintrag_mitreisende WHERE packlisten_eintrag_id = ? AND mitreisender_id = ?')
+      .prepare(`SELECT gepackt FROM ${mitTable} WHERE packlisten_eintrag_id = ? AND mitreisender_id = ?`)
       .bind(packlistenEintragId, mitreisenderId)
       .first<{ gepackt: number }>()
-    
+
     if (existing) {
-      // Update – beim Abhaken auch vorgemerkt zurücksetzen
       await db
-        .prepare('UPDATE packlisten_eintrag_mitreisende SET gepackt = ?, gepackt_vorgemerkt = ? WHERE packlisten_eintrag_id = ? AND mitreisender_id = ?')
+        .prepare(
+          `UPDATE ${mitTable} SET gepackt = ?, gepackt_vorgemerkt = ? WHERE packlisten_eintrag_id = ? AND mitreisender_id = ?`
+        )
         .bind(gepackt ? 1 : 0, gepackt ? 0 : 0, packlistenEintragId, mitreisenderId)
         .run()
     } else {
-      // Insert
       await db
-        .prepare('INSERT INTO packlisten_eintrag_mitreisende (packlisten_eintrag_id, mitreisender_id, gepackt) VALUES (?, ?, ?)')
+        .prepare(`INSERT INTO ${mitTable} (packlisten_eintrag_id, mitreisender_id, gepackt) VALUES (?, ?, ?)`)
         .bind(packlistenEintragId, mitreisenderId, gepackt ? 1 : 0)
         .run()
     }
@@ -2152,19 +2163,24 @@ export async function togglePackingItemVorgemerktForMitreisender(
   vorgemerkt: boolean
 ): Promise<boolean> {
   try {
+    const temp = await isTemporaryPackingEintrag(db, packlistenEintragId)
+    const mitTable = temp ? 'packlisten_eintrag_mitreisende_temporaer' : 'packlisten_eintrag_mitreisende'
+
     const existing = await db
-      .prepare('SELECT gepackt, gepackt_vorgemerkt FROM packlisten_eintrag_mitreisende WHERE packlisten_eintrag_id = ? AND mitreisender_id = ?')
+      .prepare(`SELECT gepackt, gepackt_vorgemerkt FROM ${mitTable} WHERE packlisten_eintrag_id = ? AND mitreisender_id = ?`)
       .bind(packlistenEintragId, mitreisenderId)
       .first<{ gepackt: number; gepackt_vorgemerkt: number }>()
 
     if (existing) {
       await db
-        .prepare('UPDATE packlisten_eintrag_mitreisende SET gepackt_vorgemerkt = ? WHERE packlisten_eintrag_id = ? AND mitreisender_id = ?')
+        .prepare(`UPDATE ${mitTable} SET gepackt_vorgemerkt = ? WHERE packlisten_eintrag_id = ? AND mitreisender_id = ?`)
         .bind(vorgemerkt ? 1 : 0, packlistenEintragId, mitreisenderId)
         .run()
     } else {
       await db
-        .prepare('INSERT INTO packlisten_eintrag_mitreisende (packlisten_eintrag_id, mitreisender_id, gepackt, gepackt_vorgemerkt) VALUES (?, ?, 0, ?)')
+        .prepare(
+          `INSERT INTO ${mitTable} (packlisten_eintrag_id, mitreisender_id, gepackt, gepackt_vorgemerkt) VALUES (?, ?, 0, ?)`
+        )
         .bind(packlistenEintragId, mitreisenderId, vorgemerkt ? 1 : 0)
         .run()
     }
@@ -2197,8 +2213,12 @@ export async function confirmVorgemerktForMitreisender(
   mitreisenderId: string
 ): Promise<boolean> {
   try {
+    const temp = await isTemporaryPackingEintrag(db, packlistenEintragId)
+    const mitTable = temp ? 'packlisten_eintrag_mitreisende_temporaer' : 'packlisten_eintrag_mitreisende'
     const r = await db
-      .prepare('UPDATE packlisten_eintrag_mitreisende SET gepackt = 1, gepackt_vorgemerkt = 0 WHERE packlisten_eintrag_id = ? AND mitreisender_id = ? AND gepackt_vorgemerkt = 1')
+      .prepare(
+        `UPDATE ${mitTable} SET gepackt = 1, gepackt_vorgemerkt = 0 WHERE packlisten_eintrag_id = ? AND mitreisender_id = ? AND gepackt_vorgemerkt = 1`
+      )
       .bind(packlistenEintragId, mitreisenderId)
       .run()
     return (r.meta?.changes ?? 0) > 0
@@ -2219,8 +2239,11 @@ export async function setMitreisenderAnzahl(
   transportId?: string | null
 ): Promise<boolean> {
   try {
+    const temp = await isTemporaryPackingEintrag(db, packingItemId)
+    const mitTable = temp ? 'packlisten_eintrag_mitreisende_temporaer' : 'packlisten_eintrag_mitreisende'
+
     const existing = await db
-      .prepare('SELECT 1 FROM packlisten_eintrag_mitreisende WHERE packlisten_eintrag_id = ? AND mitreisender_id = ?')
+      .prepare(`SELECT 1 FROM ${mitTable} WHERE packlisten_eintrag_id = ? AND mitreisender_id = ?`)
       .bind(packingItemId, mitreisenderId)
       .first()
 
@@ -2228,12 +2251,12 @@ export async function setMitreisenderAnzahl(
 
     if (transportId !== undefined) {
       await db
-        .prepare('UPDATE packlisten_eintrag_mitreisende SET anzahl = ?, transport_id = ? WHERE packlisten_eintrag_id = ? AND mitreisender_id = ?')
+        .prepare(`UPDATE ${mitTable} SET anzahl = ?, transport_id = ? WHERE packlisten_eintrag_id = ? AND mitreisender_id = ?`)
         .bind(anzahl, transportId || null, packingItemId, mitreisenderId)
         .run()
     } else {
       await db
-        .prepare('UPDATE packlisten_eintrag_mitreisende SET anzahl = ? WHERE packlisten_eintrag_id = ? AND mitreisender_id = ?')
+        .prepare(`UPDATE ${mitTable} SET anzahl = ? WHERE packlisten_eintrag_id = ? AND mitreisender_id = ?`)
         .bind(anzahl, packingItemId, mitreisenderId)
         .run()
     }
