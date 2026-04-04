@@ -400,7 +400,6 @@ export async function POST(request: NextRequest) {
     }
 
     const photos: PlacePhotoForPicker[] = (place.photos ?? [])
-      .slice(0, 10)
       .map((p) => {
         const attrs = (p.authorAttributions ?? [])
           .map((a: { displayName?: string } | string) =>

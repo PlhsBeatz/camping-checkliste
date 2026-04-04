@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Campingplatz } from '@/lib/db'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -46,6 +46,8 @@ export function CampingplaetzeTable({
   const [filterArchiv, setFilterArchiv] = useState<string>(showArchived ? 'all' : 'active')
   const [showFilters, setShowFilters] = useState(false)
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
+  const [landFilterScrollbarVisible, setLandFilterScrollbarVisible] = useState(false)
+  const landScrollHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [distances, setDistances] = useState<
     Record<string, { distanceKm: number; durationMinutes: number }>
   >({})
@@ -135,6 +137,21 @@ export function CampingplaetzeTable({
     }
   }, [filtered, distances])
 
+  useEffect(() => {
+    return () => {
+      if (landScrollHideTimerRef.current) clearTimeout(landScrollHideTimerRef.current)
+    }
+  }, [])
+
+  const onLandFilterScroll = () => {
+    setLandFilterScrollbarVisible(true)
+    if (landScrollHideTimerRef.current) clearTimeout(landScrollHideTimerRef.current)
+    landScrollHideTimerRef.current = setTimeout(() => {
+      setLandFilterScrollbarVisible(false)
+      landScrollHideTimerRef.current = null
+    }, 900)
+  }
+
   const groupedByRegion = useMemo(() => {
     const map: Record<
       string,
@@ -166,7 +183,14 @@ export function CampingplaetzeTable({
     <div className="space-y-4">
       <div className="space-y-4 bg-white border rounded-lg p-4 bg-muted/30">
         {lands.length > 0 && (
-          <div className="flex gap-2 overflow-x-auto pb-1 mb-1">
+          <div
+            className={cn(
+              'mb-1 flex gap-2 overflow-x-auto pb-1',
+              !landFilterScrollbarVisible &&
+                '[-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden'
+            )}
+            onScroll={onLandFilterScroll}
+          >
             <button
               type="button"
               onClick={() => setFilterLand('all')}

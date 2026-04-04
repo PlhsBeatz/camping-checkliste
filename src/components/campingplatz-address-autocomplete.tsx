@@ -367,7 +367,6 @@ export function CampingplatzAddressAutocomplete(props: CampingplatzAddressAutoco
         })
         const photos = place.photos ?? []
         const forPicker: PlacePhotoForPicker[] = photos
-          .slice(0, 10)
           .map((p) => {
             const attrs = (p.authorAttributions ?? [])
               .map((a) => (typeof a === 'string' ? a : a.displayName))
