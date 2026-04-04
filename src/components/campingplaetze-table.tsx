@@ -22,6 +22,7 @@ import { Search, Filter, MoreVertical, Pencil, Trash2, Route, Globe2, PlayCircle
 import Image from 'next/image'
 import { cn } from '@/lib/utils'
 import { campingplatzListThumbnailSrc } from '@/lib/campingplatz-photo-url'
+import { countryFlagEmojiForLandName } from '@/lib/country-flag-emoji'
 
 interface CampingplaetzeTableProps {
   items: Campingplatz[]
@@ -195,29 +196,40 @@ export function CampingplaetzeTable({
               type="button"
               onClick={() => setFilterLand('all')}
               className={cn(
-                'px-3 py-1 rounded-full border text-xs whitespace-nowrap',
+                'inline-flex items-center gap-1.5 px-3 py-1 rounded-full border text-xs whitespace-nowrap',
                 filterLand === 'all'
                   ? 'bg-[rgb(45,79,30)] text-white border-[rgb(45,79,30)]'
                   : 'bg-white text-gray-700 hover:bg-muted'
               )}
             >
+              <span className="text-[1em] leading-none select-none" aria-hidden>
+                🌍
+              </span>
               Alle Länder
             </button>
-            {lands.map((land) => (
-              <button
-                key={land}
-                type="button"
-                onClick={() => setFilterLand(land)}
-                className={cn(
-                  'px-3 py-1 rounded-full border text-xs whitespace-nowrap',
-                  filterLand === land
-                    ? 'bg-[rgb(45,79,30)] text-white border-[rgb(45,79,30)]'
-                    : 'bg-white text-gray-700 hover:bg-muted'
-                )}
-              >
-                {land}
-              </button>
-            ))}
+            {lands.map((land) => {
+              const flag = countryFlagEmojiForLandName(land)
+              return (
+                <button
+                  key={land}
+                  type="button"
+                  onClick={() => setFilterLand(land)}
+                  className={cn(
+                    'inline-flex items-center gap-1.5 px-3 py-1 rounded-full border text-xs whitespace-nowrap',
+                    filterLand === land
+                      ? 'bg-[rgb(45,79,30)] text-white border-[rgb(45,79,30)]'
+                      : 'bg-white text-gray-700 hover:bg-muted'
+                  )}
+                >
+                  {flag ? (
+                    <span className="text-[1em] leading-none select-none" aria-hidden>
+                      {flag}
+                    </span>
+                  ) : null}
+                  {land}
+                </button>
+              )
+            })}
           </div>
         )}
         <div className="flex gap-2">
