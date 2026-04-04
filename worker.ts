@@ -4,7 +4,6 @@
  * Alle anderen Anfragen gehen an die Next.js-App (OpenNext).
  */
 
-// @ts-expect-error .open-next/worker.js wird beim Build erzeugt
 import { default as handler } from './.open-next/worker.js'
 import { PackingSyncDO } from './src/durable-objects/PackingSyncDO'
 

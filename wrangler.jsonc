@@ -15,6 +15,12 @@
       "database_id": "4858773e-e50d-4655-8bb3-5396c623ca2d"
     }
   ],
+  "r2_buckets": [
+    {
+      "binding": "CAMPING_PHOTOS",
+      "bucket_name": "camping-packliste-photos"
+    }
+  ],
   "durable_objects": {
     "bindings": [
       {

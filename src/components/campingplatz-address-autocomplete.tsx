@@ -23,7 +23,10 @@ type NewPlace = {
   formattedAddress?: string
   location?: PlaceLocation
   addressComponents?: PlaceAddressComponent[]
-  photos?: Array<{ name?: string }>
+  photos?: Array<{
+    name?: string
+    authorAttributions?: Array<{ displayName?: string } | string>
+  }>
   /** Klassisches Website-Feld der JS Places API */
   website?: string
   /** Bei neueren Versionen ggf. zusätzlich verfügbar */
@@ -44,7 +47,7 @@ export type CampingplatzAddressResolve = {
   website?: string | null
 }
 
-export type PlacePhotoForPicker = { name: string }
+export type PlacePhotoForPicker = { name: string; authorAttributions?: string[] }
 
 interface CampingplatzAddressAutocompleteProps {
   value: string
@@ -365,7 +368,12 @@ export function CampingplatzAddressAutocomplete(props: CampingplatzAddressAutoco
         const photos = place.photos ?? []
         const forPicker: PlacePhotoForPicker[] = photos
           .slice(0, 10)
-          .map((p) => ({ name: p.name ?? '' }))
+          .map((p) => {
+            const attrs = (p.authorAttributions ?? [])
+              .map((a) => (typeof a === 'string' ? a : a.displayName))
+              .filter((x): x is string => !!x)
+            return { name: p.name ?? '', authorAttributions: attrs.length ? attrs : undefined }
+          })
           .filter((p) => p.name)
         onPlacePhotos?.(forPicker)
         sessionTokenRef.current = null

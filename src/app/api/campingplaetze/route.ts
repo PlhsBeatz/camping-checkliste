@@ -8,6 +8,9 @@ import {
   deleteCampingplatz,
   archiveCampingplatz,
   getCampingplatzById,
+  getCampingplatzFotos,
+  createCampingplatzFoto,
+  getCampingPhotosR2,
   deleteRoutesForCampingplatz,
   CampingplatzTyp,
 } from '@/lib/db'
@@ -86,7 +89,21 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    return NextResponse.json({ success: true, data: campingplatz }, { status: 201 })
+    if (
+      body.photo_name &&
+      String(body.photo_name).startsWith('places/') &&
+      (await getCampingplatzFotos(db, campingplatz.id)).length === 0
+    ) {
+      await createCampingplatzFoto(db, {
+        campingplatz_id: campingplatz.id,
+        source: 'google',
+        google_photo_name: String(body.photo_name),
+        setAsCover: true,
+      })
+    }
+
+    const withJoin = await getCampingplatzById(db, campingplatz.id)
+    return NextResponse.json({ success: true, data: withJoin ?? campingplatz }, { status: 201 })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error)
     return NextResponse.json({ success: false, error: message }, { status: 500 })
@@ -160,7 +177,21 @@ export async function PUT(request: NextRequest) {
       await deleteRoutesForCampingplatz(db, updated.id)
     }
 
-    return NextResponse.json({ success: true, data: updated })
+    if (
+      body.photo_name &&
+      String(body.photo_name).startsWith('places/') &&
+      (await getCampingplatzFotos(db, updated.id)).length === 0
+    ) {
+      await createCampingplatzFoto(db, {
+        campingplatz_id: updated.id,
+        source: 'google',
+        google_photo_name: String(body.photo_name),
+        setAsCover: true,
+      })
+    }
+
+    const withJoin = await getCampingplatzById(db, updated.id)
+    return NextResponse.json({ success: true, data: withJoin ?? updated })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error)
     return NextResponse.json({ success: false, error: message }, { status: 500 })
@@ -213,6 +244,20 @@ export async function DELETE(request: NextRequest) {
         )
       }
       return NextResponse.json({ success: true, archived: true })
+    }
+
+    const r2Keys = await db
+      .prepare(
+        `SELECT r2_object_key FROM campingplatz_fotos
+         WHERE campingplatz_id = ? AND r2_object_key IS NOT NULL`
+      )
+      .bind(id)
+      .all<{ r2_object_key: string }>()
+    const bucket = getCampingPhotosR2(env)
+    if (bucket && r2Keys.results?.length) {
+      for (const row of r2Keys.results) {
+        if (row.r2_object_key) await bucket.delete(row.r2_object_key)
+      }
     }
 
     const success = await deleteCampingplatz(db, id)

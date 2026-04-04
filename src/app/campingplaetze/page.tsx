@@ -3,10 +3,11 @@
 import { useAuth } from '@/components/auth-provider'
 import { Button } from '@/components/ui/button'
 import { NavigationSidebar } from '@/components/navigation-sidebar'
-import { Plus, Menu } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { Plus, Menu, Star, Trash2, Upload } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import type { ApiResponse } from '@/lib/api-types'
-import { Campingplatz } from '@/lib/db'
+import { Campingplatz, type CampingplatzFoto } from '@/lib/db'
 import { cn } from '@/lib/utils'
 import { CampingplaetzeTable } from '@/components/campingplaetze-table'
 import { ResponsiveModal } from '@/components/ui/responsive-modal'
@@ -15,6 +16,8 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { CampingplatzAddressAutocomplete, type PlacePhotoForPicker } from '@/components/campingplatz-address-autocomplete'
 import Image from 'next/image'
+import { placesPhotoProxyUrl } from '@/lib/places-photo'
+import { campingplatzFotoImageSrc } from '@/lib/campingplatz-photo-url'
 import {
   Select,
   SelectContent,
@@ -59,6 +62,7 @@ function createEmptyForm(): CampingplatzFormState {
 }
 
 export default function CampingplaetzePage() {
+  const router = useRouter()
   const { canAccessConfig } = useAuth()
   const [showNavSidebar, setShowNavSidebar] = useState(false)
   const [items, setItems] = useState<Campingplatz[]>([])
@@ -70,7 +74,12 @@ export default function CampingplaetzePage() {
   const [deleteTarget, setDeleteTarget] = useState<Campingplatz | null>(null)
   const [archivePrompt, setArchivePrompt] = useState<Campingplatz | null>(null)
   const [placePhotos, setPlacePhotos] = useState<PlacePhotoForPicker[]>([])
+  const [savedFotos, setSavedFotos] = useState<CampingplatzFoto[]>([])
+  const [pendingGoogle, setPendingGoogle] = useState<PlacePhotoForPicker[]>([])
+  const [pendingFiles, setPendingFiles] = useState<File[]>([])
+  const [fotoBusy, setFotoBusy] = useState(false)
   const adresseElementRef = useRef<HTMLElement | null>(null)
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
 
   useEffect(() => {
     if (showNavSidebar) {
@@ -103,6 +112,41 @@ export default function CampingplaetzePage() {
     void load()
   }, [])
 
+  const loadFotos = useCallback(async (campingplatzId: string) => {
+    try {
+      const res = await fetch(`/api/campingplaetze/${campingplatzId}/fotos`)
+      const data = (await res.json()) as ApiResponse<CampingplatzFoto[]>
+      if (data.success && data.data) setSavedFotos(data.data)
+      else setSavedFotos([])
+    } catch {
+      setSavedFotos([])
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!showDialog || !editId) {
+      if (!showDialog) setSavedFotos([])
+      return
+    }
+    void loadFotos(editId)
+  }, [showDialog, editId, loadFotos])
+
+  const refreshCampingplatzInList = async (id: string) => {
+    try {
+      const r = await fetch(`/api/campingplaetze/${id}`)
+      const d = (await r.json()) as ApiResponse<{ campingplatz: Campingplatz; fotos: CampingplatzFoto[] }>
+      if (d.success && d.data?.campingplatz) {
+        const cp = d.data.campingplatz
+        setItems((prev) => {
+          const o = prev.filter((c) => c.id !== id)
+          return [...o, cp].sort((a, b) => a.name.localeCompare(b.name))
+        })
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
   const handleEdit = (item: Campingplatz) => {
     setEditId(item.id)
     setForm({
@@ -121,7 +165,10 @@ export default function CampingplaetzePage() {
       pros: item.pros.length ? item.pros : [''],
       cons: item.cons.length ? item.cons : [''],
     })
-    setPlacePhotos(item.photo_name ? [{ name: item.photo_name }] : [])
+    setPlacePhotos([])
+    setPendingGoogle([])
+    setPendingFiles([])
+    setSavedFotos([])
     setShowDialog(true)
   }
 
@@ -129,7 +176,136 @@ export default function CampingplaetzePage() {
     setEditId(null)
     setForm(createEmptyForm())
     setPlacePhotos([])
+    setPendingGoogle([])
+    setPendingFiles([])
+    setSavedFotos([])
     setShowDialog(true)
+  }
+
+  const googlePickerAlreadyAdded = (name: string) =>
+    savedFotos.some((f) => f.google_photo_name === name) ||
+    pendingGoogle.some((p) => p.name === name)
+
+  const addGoogleFromPicker = async (photo: PlacePhotoForPicker) => {
+    if (!photo.name) return
+    if (googlePickerAlreadyAdded(photo.name)) return
+    if (!editId) {
+      setPendingGoogle((prev) => [...prev, photo])
+      return
+    }
+    setFotoBusy(true)
+    try {
+      const res = await fetch(`/api/campingplaetze/${editId}/fotos`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          google_photo_name: photo.name,
+          google_attributions: photo.authorAttributions,
+          importToR2: true,
+          setAsCover: savedFotos.length === 0,
+        }),
+      })
+      const data = (await res.json()) as ApiResponse<CampingplatzFoto>
+      if (!data.success) {
+        alert(data.error ?? 'Foto konnte nicht hinzugefügt werden')
+        return
+      }
+      await loadFotos(editId)
+      await refreshCampingplatzInList(editId)
+    } finally {
+      setFotoBusy(false)
+    }
+  }
+
+  const removePendingGoogle = (name: string) => {
+    setPendingGoogle((prev) => prev.filter((p) => p.name !== name))
+  }
+
+  const removePendingFile = (index: number) => {
+    setPendingFiles((prev) => prev.filter((_, i) => i !== index))
+  }
+
+  const setCoverFoto = async (fotoId: string) => {
+    if (!editId) return
+    setFotoBusy(true)
+    try {
+      const res = await fetch(`/api/campingplaetze/${editId}/fotos/${fotoId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ setCover: true }),
+      })
+      const data = (await res.json()) as ApiResponse<unknown>
+      if (!data.success) {
+        alert(data.error ?? 'Standardbild konnte nicht gesetzt werden')
+        return
+      }
+      await loadFotos(editId)
+      await refreshCampingplatzInList(editId)
+    } finally {
+      setFotoBusy(false)
+    }
+  }
+
+  const deleteSavedFoto = async (fotoId: string) => {
+    if (!editId) return
+    setFotoBusy(true)
+    try {
+      const res = await fetch(`/api/campingplaetze/${editId}/fotos/${fotoId}`, {
+        method: 'DELETE',
+      })
+      const data = (await res.json()) as ApiResponse<unknown>
+      if (!data.success) {
+        alert(data.error ?? 'Foto konnte nicht gelöscht werden')
+        return
+      }
+      await loadFotos(editId)
+      await refreshCampingplatzInList(editId)
+    } finally {
+      setFotoBusy(false)
+    }
+  }
+
+  const onPickUploadFiles = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const list = e.target.files
+    if (!list?.length) return
+    const next: File[] = []
+    for (let i = 0; i < list.length; i++) {
+      const f = list.item(i)
+      if (f) next.push(f)
+    }
+    if (!editId) {
+      setPendingFiles((prev) => [...prev, ...next])
+    } else {
+      void uploadFilesForEdit(next)
+    }
+    e.target.value = ''
+  }
+
+  const uploadFilesForEdit = async (files: File[]) => {
+    if (!editId) return
+    setFotoBusy(true)
+    try {
+      let first = savedFotos.length === 0
+      for (const file of files) {
+        const fd = new FormData()
+        fd.append('file', file)
+        fd.append('setAsCover', first ? 'true' : 'false')
+        first = false
+        const res = await fetch(`/api/campingplaetze/${editId}/fotos`, {
+          method: 'POST',
+          body: fd,
+        })
+        const data = (await res.json()) as ApiResponse<CampingplatzFoto>
+        if (!data.success) {
+          alert(data.error ?? 'Upload fehlgeschlagen')
+          break
+        }
+      }
+      await loadFotos(editId)
+      await refreshCampingplatzInList(editId)
+    } finally {
+      setFotoBusy(false)
+    }
   }
 
   const handleChangeProsCons = (
@@ -165,7 +341,23 @@ export default function CampingplaetzePage() {
     setIsSaving(true)
     try {
       const method = editId ? 'PUT' : 'POST'
-      const payload = {
+      const coverGoogle = savedFotos.find((f) => f.is_cover)?.google_photo_name ?? null
+      const payload: {
+        id?: string
+        name: string
+        land: string
+        bundesland: string | null
+        ort: string
+        webseite: string | null
+        video_link: string | null
+        platz_typ: 'Durchreise' | 'Urlaubsplatz' | 'Stellplatz'
+        adresse: string | null
+        lat: number | null
+        lng: number | null
+        photo_name?: string | null
+        pros: string[]
+        cons: string[]
+      } = {
         id: editId ?? undefined,
         name: form.name.trim(),
         land: form.land.trim(),
@@ -177,9 +369,13 @@ export default function CampingplaetzePage() {
         adresse: form.adresse.trim() || null,
         lat: form.lat,
         lng: form.lng,
-        photo_name: form.photo_name ?? null,
         pros: form.pros.map((p) => p.trim()).filter((p) => p.length > 0),
         cons: form.cons.map((p) => p.trim()).filter((p) => p.length > 0),
+      }
+      if (editId) {
+        if (savedFotos.length > 0) payload.photo_name = coverGoogle
+      } else {
+        payload.photo_name = null
       }
       const res = await fetch('/api/campingplaetze', {
         method,
@@ -191,7 +387,66 @@ export default function CampingplaetzePage() {
         alert('Fehler beim Speichern des Campingplatzes: ' + (data.error ?? 'Unbekannt'))
         return
       }
-      const saved = data.data
+      let saved = data.data
+      const newId = saved.id
+
+      if (!editId && (pendingGoogle.length > 0 || pendingFiles.length > 0)) {
+        let isFirst = true
+        for (const p of pendingGoogle) {
+          if (!p.name) continue
+          const fr = await fetch(`/api/campingplaetze/${newId}/fotos`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              google_photo_name: p.name,
+              google_attributions: p.authorAttributions,
+              importToR2: true,
+              setAsCover: isFirst,
+            }),
+          })
+          const fd = (await fr.json()) as ApiResponse<CampingplatzFoto>
+          if (!fd.success) {
+            alert(fd.error ?? 'Google-Foto konnte nicht gespeichert werden')
+            break
+          }
+          isFirst = false
+        }
+        for (const file of pendingFiles) {
+          const formData = new FormData()
+          formData.append('file', file)
+          formData.append('setAsCover', isFirst ? 'true' : 'false')
+          isFirst = false
+          const fr = await fetch(`/api/campingplaetze/${newId}/fotos`, {
+            method: 'POST',
+            body: formData,
+          })
+          const fd = (await fr.json()) as ApiResponse<CampingplatzFoto>
+          if (!fd.success) {
+            alert(fd.error ?? 'Upload fehlgeschlagen')
+            break
+          }
+        }
+        const fotosRes = await fetch(`/api/campingplaetze/${newId}/fotos`)
+        const fotosJson = (await fotosRes.json()) as ApiResponse<CampingplatzFoto[]>
+        const syncName =
+          fotosJson.success && fotosJson.data
+            ? fotosJson.data.find((f) => f.is_cover)?.google_photo_name ?? null
+            : null
+        await fetch('/api/campingplaetze', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: newId, photo_name: syncName }),
+        }).catch(() => undefined)
+        const detail = await fetch(`/api/campingplaetze/${newId}`)
+        const dj = (await detail.json()) as ApiResponse<{
+          campingplatz: Campingplatz
+          fotos: CampingplatzFoto[]
+        }>
+        if (dj.success && dj.data?.campingplatz) saved = dj.data.campingplatz
+      } else if (editId) {
+        await refreshCampingplatzInList(editId)
+      }
+
       setItems((prev) => {
         const others = prev.filter((c) => c.id !== saved.id)
         return [...others, saved].sort((a, b) => a.name.localeCompare(b.name))
@@ -200,6 +455,9 @@ export default function CampingplaetzePage() {
       setEditId(null)
       setForm(createEmptyForm())
       setPlacePhotos([])
+      setSavedFotos([])
+      setPendingGoogle([])
+      setPendingFiles([])
     } catch (error) {
       console.error('Failed to save campingplatz:', error)
       alert('Fehler beim Speichern des Campingplatzes.')
@@ -326,6 +584,7 @@ export default function CampingplaetzePage() {
                 items={items}
                 onEdit={handleEdit}
                 onDelete={handleDeleteOrArchive}
+                onRowClick={(item) => router.push(`/campingplaetze/${item.id}`)}
               />
             )}
           </div>
@@ -352,6 +611,9 @@ export default function CampingplaetzePage() {
             setEditId(null)
             setForm(createEmptyForm())
             setPlacePhotos([])
+            setSavedFotos([])
+            setPendingGoogle([])
+            setPendingFiles([])
           } else {
             setShowDialog(true)
           }
@@ -470,38 +732,179 @@ export default function CampingplaetzePage() {
             </Select>
           </div>
 
-          <div>
-            <Label className="block mb-2">Bild aus Google Maps</Label>
-            {placePhotos.length > 0 ? (
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
-                {placePhotos.slice(0, 10).map((photo, idx) => {
-                  const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
-                  const photoUrl = apiKey && photo.name
-                    ? `https://places.googleapis.com/v1/${photo.name}/media?maxWidthPx=400&key=${apiKey}`
-                    : null
-                  const isSelected = form.photo_name === photo.name
-                  return (
-                    <button
-                      key={photo.name || idx}
-                      type="button"
-                      onClick={() => setForm((prev) => ({ ...prev, photo_name: photo.name }))}
-                      className={cn(
-                        'aspect-square rounded-lg border-2 overflow-hidden bg-muted hover:opacity-90 transition-opacity',
-                        isSelected ? 'border-[rgb(45,79,30)] ring-2 ring-[rgb(45,79,30)]' : 'border-transparent'
-                      )}
+          <div className="space-y-4">
+            <div>
+              <Label className="block mb-2">Gespeicherte Fotos</Label>
+              {editId && savedFotos.length > 0 ? (
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  {savedFotos.map((f) => (
+                    <div
+                      key={f.id}
+                      className="relative aspect-square rounded-lg border overflow-hidden bg-muted group"
                     >
-                      {photoUrl ? (
-                        <Image src={photoUrl} alt="" width={400} height={400} unoptimized className="w-full h-full object-cover" />
-                      ) : (
-                        <span className="text-xs text-muted-foreground flex items-center justify-center h-full">Foto</span>
+                      <Image
+                        src={campingplatzFotoImageSrc(f.id, 400)}
+                        alt=""
+                        width={400}
+                        height={400}
+                        unoptimized
+                        className="w-full h-full object-cover"
+                      />
+                      <div className="absolute inset-x-0 bottom-0 flex gap-1 p-1 bg-black/50 justify-center">
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant={f.is_cover ? 'default' : 'secondary'}
+                          className="h-8 w-8"
+                          disabled={fotoBusy || f.is_cover}
+                          title="Als Standard für die Liste"
+                          onClick={() => void setCoverFoto(f.id)}
+                        >
+                          <Star className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="destructive"
+                          className="h-8 w-8"
+                          disabled={fotoBusy}
+                          title="Foto löschen"
+                          onClick={() => void deleteSavedFoto(f.id)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                      {f.is_cover && (
+                        <span className="absolute top-1 left-1 text-[10px] bg-[rgb(45,79,30)] text-white px-1.5 py-0.5 rounded">
+                          Standard
+                        </span>
                       )}
-                    </button>
-                  )
-                })}
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                Für diesen Ort sind keine Bilder von Google Maps verfügbar. Wählen Sie einen Platz aus der Namenssuche, um bis zu 10 Bilder zur Auswahl zu sehen.
+                    </div>
+                  ))}
+                </div>
+              ) : !editId && (pendingGoogle.length > 0 || pendingFiles.length > 0) ? (
+                <div className="space-y-2 text-sm text-muted-foreground">
+                  <p>
+                    Nach dem Speichern des Campingplatzes werden {pendingGoogle.length} Google-Foto(s){' '}
+                    und {pendingFiles.length} Upload(s) übernommen.
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {pendingGoogle.map((p) => (
+                      <div
+                        key={p.name}
+                        className="flex items-center gap-1 rounded border px-2 py-1 bg-muted text-xs"
+                      >
+                        <span className="truncate max-w-[140px]">Google</span>
+                        <Button type="button" variant="ghost" size="sm" className="h-6 px-1" onClick={() => removePendingGoogle(p.name!)}>
+                          ×
+                        </Button>
+                      </div>
+                    ))}
+                    {pendingFiles.map((file, i) => (
+                      <div
+                        key={`${file.name}-${i}`}
+                        className="flex items-center gap-1 rounded border px-2 py-1 bg-muted text-xs"
+                      >
+                        <span className="truncate max-w-[140px]">{file.name}</span>
+                        <Button type="button" variant="ghost" size="sm" className="h-6 px-1" onClick={() => removePendingFile(i)}>
+                          ×
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : editId ? (
+                <p className="text-sm text-muted-foreground">Noch keine Fotos gespeichert.</p>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Speichern Sie zuerst den Campingplatz oder fügen Sie unten Google-Fotos / Uploads zur Warteliste hinzu.
+                </p>
+              )}
+            </div>
+
+            <div>
+              <Label className="block mb-2">Eigenes Foto hochladen</Label>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                multiple
+                className="hidden"
+                onChange={onPickUploadFiles}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={fotoBusy}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <Upload className="h-4 w-4 mr-2" />
+                Datei wählen…
+              </Button>
+            </div>
+
+            <div>
+              <Label className="block mb-2">Aus Google Maps hinzufügen</Label>
+              {placePhotos.length > 0 ? (
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+                  {placePhotos.slice(0, 10).map((photo, idx) => {
+                    const photoUrl = photo.name ? placesPhotoProxyUrl(photo.name, 400) : null
+                    const added = photo.name ? googlePickerAlreadyAdded(photo.name) : true
+                    return (
+                      <div key={photo.name || idx} className="flex flex-col gap-1">
+                        <div className="aspect-square rounded-lg border overflow-hidden bg-muted">
+                          {photoUrl ? (
+                            <Image
+                              src={photoUrl}
+                              alt=""
+                              width={400}
+                              height={400}
+                              unoptimized
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <span className="text-xs text-muted-foreground flex items-center justify-center h-full">
+                              Foto
+                            </span>
+                          )}
+                        </div>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant={added ? 'secondary' : 'default'}
+                          disabled={fotoBusy || added || !photo.name}
+                          className="w-full text-xs h-8"
+                          onClick={() => void addGoogleFromPicker(photo)}
+                        >
+                          {added ? 'Bereits hinzugefügt' : 'Hinzufügen'}
+                        </Button>
+                      </div>
+                    )
+                  })}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Wählen Sie einen Platz aus der Namenssuche – dann erscheinen bis zu 10 Google-Bilder zum Übernehmen.
+                </p>
+              )}
+            </div>
+
+            {savedFotos.some((f) => f.google_attributions_json) && (
+              <p className="text-[11px] text-muted-foreground leading-snug">
+                {savedFotos
+                  .flatMap((f) => {
+                    try {
+                      return f.google_attributions_json
+                        ? (JSON.parse(f.google_attributions_json) as string[])
+                        : []
+                    } catch {
+                      return []
+                    }
+                  })
+                  .filter(Boolean)
+                  .filter((v, i, a) => a.indexOf(v) === i)
+                  .join(' · ')}
               </p>
             )}
           </div>

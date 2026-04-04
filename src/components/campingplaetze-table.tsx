@@ -21,11 +21,14 @@ import {
 import { Search, Filter, MoreVertical, Pencil, Trash2, Route, Globe2, PlayCircle } from 'lucide-react'
 import Image from 'next/image'
 import { cn } from '@/lib/utils'
+import { campingplatzListThumbnailSrc } from '@/lib/campingplatz-photo-url'
 
 interface CampingplaetzeTableProps {
   items: Campingplatz[]
   onEdit: (item: Campingplatz) => void
   onDelete: (item: Campingplatz) => void
+  /** Zeile antippen → Detail (ohne Menü / externe Links) */
+  onRowClick?: (item: Campingplatz) => void
   showArchived?: boolean
 }
 
@@ -33,6 +36,7 @@ export function CampingplaetzeTable({
   items,
   onEdit,
   onDelete,
+  onRowClick,
   showArchived = false,
 }: CampingplaetzeTableProps) {
   const [search, setSearch] = useState('')
@@ -316,13 +320,26 @@ export function CampingplaetzeTable({
                             item.is_archived && 'opacity-60 bg-muted/60'
                           )}
                         >
-                          <div className="flex gap-3 flex-1 min-w-0">
+                          <div
+                            className={cn(
+                              'flex gap-3 flex-1 min-w-0 rounded-lg outline-none',
+                              onRowClick &&
+                                'cursor-pointer hover:bg-muted/30 -m-2 p-2 transition-colors'
+                            )}
+                            role={onRowClick ? 'button' : undefined}
+                            tabIndex={onRowClick ? 0 : undefined}
+                            onClick={() => onRowClick?.(item)}
+                            onKeyDown={(e) => {
+                              if (!onRowClick) return
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault()
+                                onRowClick(item)
+                              }
+                            }}
+                          >
                             {(() => {
-                              const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
-                              const hasPhoto = !!item.photo_name && !!apiKey
-                              const photoUrl = hasPhoto
-                                ? `https://places.googleapis.com/v1/${item.photo_name}/media?maxWidthPx=96&key=${apiKey}`
-                                : null
+                              const photoUrl = campingplatzListThumbnailSrc(item)
+                              const hasPhoto = !!photoUrl
                               return (
                                 <div className="flex-shrink-0 w-12 h-12 rounded-lg overflow-hidden bg-muted flex items-center justify-center">
                                   {photoUrl ? (
@@ -351,7 +368,10 @@ export function CampingplaetzeTable({
                                     <button
                                       type="button"
                                       className="p-1 rounded hover:bg-muted hover:text-blue-600 transition-colors"
-                                      onClick={() => window.open(item.webseite!, '_blank')}
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        window.open(item.webseite!, '_blank')
+                                      }}
                                       aria-label="Webseite öffnen"
                                       title="Webseite öffnen"
                                     >
@@ -362,7 +382,10 @@ export function CampingplaetzeTable({
                                     <button
                                       type="button"
                                       className="p-1 rounded hover:bg-muted hover:text-blue-600 transition-colors"
-                                      onClick={() => window.open(item.video_link!, '_blank')}
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        window.open(item.video_link!, '_blank')
+                                      }}
                                       aria-label="Video öffnen"
                                       title="Video öffnen"
                                     >
@@ -394,7 +417,10 @@ export function CampingplaetzeTable({
                             )}
                             </div>
                           </div>
-                          <div className="flex flex-col items-end gap-2">
+                          <div
+                            className="flex flex-col items-end gap-2 shrink-0"
+                            onClick={(e) => e.stopPropagation()}
+                          >
                             {item.is_archived && (
                               <span className="inline-flex items-center rounded-full bg-gray-200 text-gray-700 px-2 py-0.5 text-xs">
                                 Archiviert

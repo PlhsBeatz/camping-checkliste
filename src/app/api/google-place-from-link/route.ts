@@ -12,7 +12,10 @@ type PlaceServer = {
   formattedAddress?: string
   location?: { latitude?: number; longitude?: number }
   addressComponents?: PlaceAddressComponentServer[]
-  photos?: Array<{ name?: string }>
+  photos?: Array<{
+    name?: string
+    authorAttributions?: Array<{ displayName?: string } | string>
+  }>
   websiteUri?: string
 }
 
@@ -31,7 +34,7 @@ type CampingplatzAddressResolve = {
   website?: string | null
 }
 
-type PlacePhotoForPicker = { name: string }
+type PlacePhotoForPicker = { name: string; authorAttributions?: string[] }
 
 function pickComponent(comps: PlaceAddressComponentServer[] | undefined, type: string): string | null {
   if (!comps?.length) return null
@@ -396,10 +399,20 @@ export async function POST(request: NextRequest) {
       website,
     }
 
-    const photos = (place.photos ?? [])
+    const photos: PlacePhotoForPicker[] = (place.photos ?? [])
       .slice(0, 10)
-      .map((p) => ({ name: p.name ?? '' }))
-      .filter((p): p is PlacePhotoForPicker => !!p.name)
+      .map((p) => {
+        const attrs = (p.authorAttributions ?? [])
+          .map((a: { displayName?: string } | string) =>
+            typeof a === 'string' ? a : (a.displayName ?? '')
+          )
+          .filter((x: string) => !!x)
+        return {
+          name: p.name ?? '',
+          authorAttributions: attrs.length ? attrs : undefined,
+        }
+      })
+      .filter((p) => !!p.name)
 
     return NextResponse.json({
       success: true,

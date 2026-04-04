@@ -4,7 +4,7 @@
  * unter Verwendung der deutschen Tabellennamen aus dem ursprünglichen Schema.
  */
 
-import { D1Database } from '@cloudflare/workers-types'
+import { D1Database, R2Bucket } from '@cloudflare/workers-types'
 import { getCloudflareContext } from '@opennextjs/cloudflare'
 
 export interface Vacation {
@@ -164,6 +164,20 @@ export interface Tag {
 
 export type CampingplatzTyp = 'Durchreise' | 'Urlaubsplatz' | 'Stellplatz'
 
+export interface CampingplatzFoto {
+  id: string
+  campingplatz_id: string
+  sort_index: number
+  is_cover: boolean
+  source: 'google' | 'upload'
+  google_photo_name: string | null
+  r2_object_key: string | null
+  content_type: string
+  /** JSON-Array von Attribution-Strings (Google Places) */
+  google_attributions_json: string | null
+  created_at: string
+}
+
 export interface Campingplatz {
   id: string
   name: string
@@ -183,6 +197,10 @@ export interface Campingplatz {
   is_archived: boolean
   created_at: string
   updated_at?: string
+  /** Aus JOIN campingplatz_fotos (is_cover = 1) */
+  cover_foto_id?: string | null
+  cover_r2_object_key?: string | null
+  cover_google_photo_name?: string | null
 }
 
 export interface CampingplatzRouteCacheEntry {
@@ -261,6 +279,9 @@ export interface ChecklisteMitStruktur extends Checkliste {
 export interface CloudflareEnv {
   DB: D1Database
   PACKING_SYNC_DO?: DurableObjectNamespace
+  CAMPING_PHOTOS?: R2Bucket
+  GOOGLE_MAPS_API_KEY?: string
+  NEXT_PUBLIC_GOOGLE_MAPS_API_KEY?: string
 }
 
 /**
@@ -289,6 +310,69 @@ export function getDB(env?: CloudflareEnv): D1Database {
   }
 
   throw new Error('D1 Database binding "DB" not found. Bitte stellen Sie sicher, dass die Datenbank im Cloudflare Dashboard korrekt an den Worker gebunden ist.');
+}
+
+export function getCampingPhotosR2(env?: CloudflareEnv): R2Bucket | null {
+  try {
+    const { env: cloudflareEnv } = getCloudflareContext()
+    const b = (cloudflareEnv as CloudflareEnv | undefined)?.CAMPING_PHOTOS
+    if (b) return b as R2Bucket
+  } catch {
+    /* lokal ohne Worker */
+  }
+  if (env?.CAMPING_PHOTOS) return env.CAMPING_PHOTOS
+  const processEnv = process.env as unknown as CloudflareEnv
+  return processEnv?.CAMPING_PHOTOS ?? null
+}
+
+function mapCampingplatzRow(row: Record<string, unknown>): Campingplatz {
+  return {
+    id: String(row.id),
+    name: String(row.name),
+    land: String(row.land),
+    bundesland: row.bundesland != null ? String(row.bundesland) : null,
+    ort: String(row.ort),
+    webseite: row.webseite != null ? String(row.webseite) : null,
+    video_link: row.video_link != null ? String(row.video_link) : null,
+    platz_typ: String(row.platz_typ) as CampingplatzTyp,
+    pros: row.pros ? JSON.parse(String(row.pros)) : [],
+    cons: row.cons ? JSON.parse(String(row.cons)) : [],
+    adresse: row.adresse != null ? String(row.adresse) : null,
+    lat: row.lat != null ? Number(row.lat) : null,
+    lng: row.lng != null ? Number(row.lng) : null,
+    photo_name: row.photo_name != null ? String(row.photo_name) : null,
+    is_archived: !!(row.is_archived ?? 0),
+    created_at: String(row.created_at || ''),
+    updated_at: row.updated_at != null ? String(row.updated_at) : undefined,
+    cover_foto_id:
+      row.cover_foto_id != null && String(row.cover_foto_id) !== ''
+        ? String(row.cover_foto_id)
+        : null,
+    cover_r2_object_key:
+      row.cover_r2_object_key != null && String(row.cover_r2_object_key) !== ''
+        ? String(row.cover_r2_object_key)
+        : null,
+    cover_google_photo_name:
+      row.cover_google_photo_name != null && String(row.cover_google_photo_name) !== ''
+        ? String(row.cover_google_photo_name)
+        : null,
+  }
+}
+
+function mapCampingplatzFotoRow(row: Record<string, unknown>): CampingplatzFoto {
+  return {
+    id: String(row.id),
+    campingplatz_id: String(row.campingplatz_id),
+    sort_index: Number(row.sort_index ?? 0),
+    is_cover: !!(row.is_cover ?? 0),
+    source: row.source === 'upload' ? 'upload' : 'google',
+    google_photo_name: row.google_photo_name != null ? String(row.google_photo_name) : null,
+    r2_object_key: row.r2_object_key != null ? String(row.r2_object_key) : null,
+    content_type: row.content_type != null ? String(row.content_type) : 'image/jpeg',
+    google_attributions_json:
+      row.google_attributions_json != null ? String(row.google_attributions_json) : null,
+    created_at: String(row.created_at || ''),
+  }
 }
 
 /**
@@ -2979,30 +3063,19 @@ export async function getCampingplaetze(
 ): Promise<Campingplatz[]> {
   try {
     const includeArchived = options?.includeArchived ?? false
+    const baseFrom = `FROM campingplaetze c
+      LEFT JOIN campingplatz_fotos cf ON cf.campingplatz_id = c.id AND cf.is_cover = 1`
     const query = includeArchived
-      ? 'SELECT * FROM campingplaetze ORDER BY land, bundesland, ort, name'
-      : 'SELECT * FROM campingplaetze WHERE is_archived = 0 ORDER BY land, bundesland, ort, name'
+      ? `SELECT c.*, cf.id AS cover_foto_id, cf.r2_object_key AS cover_r2_object_key,
+         cf.google_photo_name AS cover_google_photo_name ${baseFrom}
+         ORDER BY c.land, c.bundesland, c.ort, c.name`
+      : `SELECT c.*, cf.id AS cover_foto_id, cf.r2_object_key AS cover_r2_object_key,
+         cf.google_photo_name AS cover_google_photo_name ${baseFrom}
+         WHERE c.is_archived = 0
+         ORDER BY c.land, c.bundesland, c.ort, c.name`
     const result = await db.prepare(query).all<Record<string, unknown>>()
     const rows = result.results || []
-    return rows.map((row) => ({
-      id: String(row.id),
-      name: String(row.name),
-      land: String(row.land),
-      bundesland: row.bundesland != null ? String(row.bundesland) : null,
-      ort: String(row.ort),
-      webseite: row.webseite != null ? String(row.webseite) : null,
-      video_link: row.video_link != null ? String(row.video_link) : null,
-      platz_typ: String(row.platz_typ) as CampingplatzTyp,
-      pros: row.pros ? JSON.parse(String(row.pros)) : [],
-      cons: row.cons ? JSON.parse(String(row.cons)) : [],
-      adresse: row.adresse != null ? String(row.adresse) : null,
-      lat: row.lat != null ? Number(row.lat) : null,
-      lng: row.lng != null ? Number(row.lng) : null,
-      photo_name: row.photo_name != null ? String(row.photo_name) : null,
-      is_archived: !!(row.is_archived ?? 0),
-      created_at: String(row.created_at || ''),
-      updated_at: row.updated_at != null ? String(row.updated_at) : undefined,
-    }))
+    return rows.map((row) => mapCampingplatzRow(row))
   } catch (error) {
     console.error('Error fetching campingplaetze:', error)
     return []
@@ -3014,32 +3087,268 @@ export async function getCampingplatzById(
   id: string
 ): Promise<Campingplatz | null> {
   try {
-    const row = await db.prepare('SELECT * FROM campingplaetze WHERE id = ?').bind(id).first<
-      Record<string, unknown>
-    >()
+    const row = await db
+      .prepare(
+        `SELECT c.*, cf.id AS cover_foto_id, cf.r2_object_key AS cover_r2_object_key,
+         cf.google_photo_name AS cover_google_photo_name
+         FROM campingplaetze c
+         LEFT JOIN campingplatz_fotos cf ON cf.campingplatz_id = c.id AND cf.is_cover = 1
+         WHERE c.id = ?`
+      )
+      .bind(id)
+      .first<Record<string, unknown>>()
     if (!row) return null
-    return {
-      id: String(row.id),
-      name: String(row.name),
-      land: String(row.land),
-      bundesland: row.bundesland != null ? String(row.bundesland) : null,
-      ort: String(row.ort),
-      webseite: row.webseite != null ? String(row.webseite) : null,
-      video_link: row.video_link != null ? String(row.video_link) : null,
-      platz_typ: String(row.platz_typ) as CampingplatzTyp,
-      pros: row.pros ? JSON.parse(String(row.pros)) : [],
-      cons: row.cons ? JSON.parse(String(row.cons)) : [],
-      adresse: row.adresse != null ? String(row.adresse) : null,
-      lat: row.lat != null ? Number(row.lat) : null,
-      lng: row.lng != null ? Number(row.lng) : null,
-      photo_name: row.photo_name != null ? String(row.photo_name) : null,
-      is_archived: !!(row.is_archived ?? 0),
-      created_at: String(row.created_at || ''),
-      updated_at: row.updated_at != null ? String(row.updated_at) : undefined,
-    }
+    return mapCampingplatzRow(row)
   } catch (error) {
     console.error('Error fetching campingplatz by id:', error)
     return null
+  }
+}
+
+export async function getCampingplatzFotos(
+  db: D1Database,
+  campingplatzId: string
+): Promise<CampingplatzFoto[]> {
+  try {
+    const result = await db
+      .prepare(
+        `SELECT * FROM campingplatz_fotos WHERE campingplatz_id = ?
+         ORDER BY sort_index ASC, created_at ASC`
+      )
+      .bind(campingplatzId)
+      .all<Record<string, unknown>>()
+    const rows = result.results || []
+    return rows.map((row) => mapCampingplatzFotoRow(row))
+  } catch (error) {
+    console.error('Error fetching campingplatz fotos:', error)
+    return []
+  }
+}
+
+export async function getCampingplatzFotoById(
+  db: D1Database,
+  fotoId: string
+): Promise<CampingplatzFoto | null> {
+  try {
+    const row = await db
+      .prepare('SELECT * FROM campingplatz_fotos WHERE id = ?')
+      .bind(fotoId)
+      .first<Record<string, unknown>>()
+    if (!row) return null
+    return mapCampingplatzFotoRow(row)
+  } catch (error) {
+    console.error('Error fetching campingplatz foto:', error)
+    return null
+  }
+}
+
+export async function syncCampingplatzPhotoNameFromCover(
+  db: D1Database,
+  campingplatzId: string
+): Promise<void> {
+  try {
+    const cover = await db
+      .prepare(
+        `SELECT google_photo_name FROM campingplatz_fotos
+         WHERE campingplatz_id = ? AND is_cover = 1 LIMIT 1`
+      )
+      .bind(campingplatzId)
+      .first<{ google_photo_name: string | null }>()
+    const name = cover?.google_photo_name != null ? String(cover.google_photo_name) : null
+    await db
+      .prepare(
+        `UPDATE campingplaetze SET photo_name = ?, updated_at = datetime('now') WHERE id = ?`
+      )
+      .bind(name, campingplatzId)
+      .run()
+  } catch (error) {
+    console.error('Error syncing photo_name from cover:', error)
+  }
+}
+
+export async function createCampingplatzFoto(
+  db: D1Database,
+  opts: {
+    campingplatz_id: string
+    source: 'google' | 'upload'
+    google_photo_name?: string | null
+    google_attributions?: string[] | null
+    r2_object_key?: string | null
+    content_type?: string
+    /** Wenn true, wird dieses Foto zum Cover (andere Cover werden zurückgesetzt). */
+    setAsCover?: boolean
+  }
+): Promise<CampingplatzFoto | null> {
+  try {
+    const countRow = await db
+      .prepare(
+        `SELECT COUNT(*) as n FROM campingplatz_fotos WHERE campingplatz_id = ?`
+      )
+      .bind(opts.campingplatz_id)
+      .first<{ n: number }>()
+    const n = Number(countRow?.n ?? 0)
+    const makeCover = opts.setAsCover === true || n === 0
+
+    if (makeCover) {
+      await db
+        .prepare(
+          `UPDATE campingplatz_fotos SET is_cover = 0 WHERE campingplatz_id = ?`
+        )
+        .bind(opts.campingplatz_id)
+        .run()
+    }
+
+    const id = crypto.randomUUID()
+    const sortIndex = n
+    const attrsJson =
+      opts.google_attributions && opts.google_attributions.length
+        ? JSON.stringify(opts.google_attributions)
+        : null
+
+    await db
+      .prepare(
+        `INSERT INTO campingplatz_fotos (
+          id, campingplatz_id, sort_index, is_cover, source,
+          google_photo_name, r2_object_key, content_type, google_attributions_json
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .bind(
+        id,
+        opts.campingplatz_id,
+        sortIndex,
+        makeCover ? 1 : 0,
+        opts.source,
+        opts.google_photo_name ?? null,
+        opts.r2_object_key ?? null,
+        opts.content_type ?? 'image/jpeg',
+        attrsJson
+      )
+      .run()
+
+    await syncCampingplatzPhotoNameFromCover(db, opts.campingplatz_id)
+    return getCampingplatzFotoById(db, id)
+  } catch (error) {
+    console.error('Error creating campingplatz foto:', error)
+    return null
+  }
+}
+
+export async function updateCampingplatzFotoR2(
+  db: D1Database,
+  fotoId: string,
+  r2_object_key: string,
+  content_type?: string
+): Promise<CampingplatzFoto | null> {
+  try {
+    await db
+      .prepare(
+        `UPDATE campingplatz_fotos SET r2_object_key = ?,
+         content_type = COALESCE(?, content_type)
+         WHERE id = ?`
+      )
+      .bind(r2_object_key, content_type ?? null, fotoId)
+      .run()
+    return getCampingplatzFotoById(db, fotoId)
+  } catch (error) {
+    console.error('Error updating campingplatz foto r2:', error)
+    return null
+  }
+}
+
+export async function setCampingplatzCoverFoto(
+  db: D1Database,
+  campingplatzId: string,
+  fotoId: string
+): Promise<boolean> {
+  try {
+    const exists = await db
+      .prepare(
+        `SELECT 1 FROM campingplatz_fotos WHERE id = ? AND campingplatz_id = ? LIMIT 1`
+      )
+      .bind(fotoId, campingplatzId)
+      .first()
+    if (!exists) return false
+
+    await db
+      .prepare(`UPDATE campingplatz_fotos SET is_cover = 0 WHERE campingplatz_id = ?`)
+      .bind(campingplatzId)
+      .run()
+    await db
+      .prepare(`UPDATE campingplatz_fotos SET is_cover = 1 WHERE id = ?`)
+      .bind(fotoId)
+      .run()
+    await syncCampingplatzPhotoNameFromCover(db, campingplatzId)
+    return true
+  } catch (error) {
+    console.error('Error setting cover foto:', error)
+    return false
+  }
+}
+
+export async function reorderCampingplatzFotos(
+  db: D1Database,
+  campingplatzId: string,
+  orderedIds: string[]
+): Promise<boolean> {
+  try {
+    for (let i = 0; i < orderedIds.length; i++) {
+      const fid = orderedIds[i]
+      await db
+        .prepare(
+          `UPDATE campingplatz_fotos SET sort_index = ?
+           WHERE id = ? AND campingplatz_id = ?`
+        )
+        .bind(i, fid, campingplatzId)
+        .run()
+    }
+    return true
+  } catch (error) {
+    console.error('Error reordering campingplatz fotos:', error)
+    return false
+  }
+}
+
+export async function deleteCampingplatzFoto(
+  db: D1Database,
+  campingplatzId: string,
+  fotoId: string
+): Promise<{ deleted: boolean; wasCover: boolean; r2_object_key: string | null }> {
+  try {
+    const row = await db
+      .prepare(
+        `SELECT is_cover, r2_object_key FROM campingplatz_fotos
+         WHERE id = ? AND campingplatz_id = ?`
+      )
+      .bind(fotoId, campingplatzId)
+      .first<{ is_cover: number; r2_object_key: string | null }>()
+    if (!row) return { deleted: false, wasCover: false, r2_object_key: null }
+
+    const wasCover = !!(row.is_cover ?? 0)
+    const r2Key = row.r2_object_key != null ? String(row.r2_object_key) : null
+
+    await db.prepare('DELETE FROM campingplatz_fotos WHERE id = ?').bind(fotoId).run()
+
+    if (wasCover) {
+      const next = await db
+        .prepare(
+          `SELECT id FROM campingplatz_fotos WHERE campingplatz_id = ?
+           ORDER BY sort_index ASC, created_at ASC LIMIT 1`
+        )
+        .bind(campingplatzId)
+        .first<{ id: string }>()
+      if (next?.id) {
+        await db
+          .prepare(`UPDATE campingplatz_fotos SET is_cover = 1 WHERE id = ?`)
+          .bind(next.id)
+          .run()
+      }
+    }
+
+    await syncCampingplatzPhotoNameFromCover(db, campingplatzId)
+    return { deleted: true, wasCover, r2_object_key: r2Key }
+  } catch (error) {
+    console.error('Error deleting campingplatz foto:', error)
+    return { deleted: false, wasCover: false, r2_object_key: null }
   }
 }
 
@@ -3226,34 +3535,18 @@ export async function getCampingplaetzeForVacation(
   try {
     const result = await db
       .prepare(
-        `SELECT c.* 
+        `SELECT c.*, cf.id AS cover_foto_id, cf.r2_object_key AS cover_r2_object_key,
+         cf.google_photo_name AS cover_google_photo_name
          FROM urlaub_campingplaetze uc
          JOIN campingplaetze c ON uc.campingplatz_id = c.id
+         LEFT JOIN campingplatz_fotos cf ON cf.campingplatz_id = c.id AND cf.is_cover = 1
          WHERE uc.urlaub_id = ?
          ORDER BY COALESCE(uc.sort_index, 999999), c.land, c.bundesland, c.ort, c.name`
       )
       .bind(vacationId)
       .all<Record<string, unknown>>()
     const rows = result.results || []
-    return rows.map((row) => ({
-      id: String(row.id),
-      name: String(row.name),
-      land: String(row.land),
-      bundesland: row.bundesland != null ? String(row.bundesland) : null,
-      ort: String(row.ort),
-      webseite: row.webseite != null ? String(row.webseite) : null,
-      video_link: row.video_link != null ? String(row.video_link) : null,
-      platz_typ: String(row.platz_typ) as CampingplatzTyp,
-      pros: row.pros ? JSON.parse(String(row.pros)) : [],
-      cons: row.cons ? JSON.parse(String(row.cons)) : [],
-      adresse: row.adresse != null ? String(row.adresse) : null,
-      lat: row.lat != null ? Number(row.lat) : null,
-      lng: row.lng != null ? Number(row.lng) : null,
-      photo_name: row.photo_name != null ? String(row.photo_name) : null,
-      is_archived: !!(row.is_archived ?? 0),
-      created_at: String(row.created_at || ''),
-      updated_at: row.updated_at != null ? String(row.updated_at) : undefined,
-    }))
+    return rows.map((row) => mapCampingplatzRow(row))
   } catch (error) {
     console.error('Error fetching campingplaetze for vacation:', error)
     return []

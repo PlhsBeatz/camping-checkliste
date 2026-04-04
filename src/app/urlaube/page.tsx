@@ -19,6 +19,7 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
+import { campingplatzListThumbnailSrc } from '@/lib/campingplatz-photo-url'
 import { useRouter } from 'next/navigation'
 import { getCachedVacations } from '@/lib/offline-sync'
 import { cacheVacations } from '@/lib/offline-db'
@@ -1264,12 +1265,8 @@ export default function UrlaubePage() {
                               >
                                 <div className="flex gap-3 flex-1 min-w-0">
                                   {(() => {
-                                    const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
-                                    const hasPhoto = !!cp.photo_name && !!apiKey
-                                    const photoUrl =
-                                      hasPhoto && cp.photo_name
-                                        ? `https://places.googleapis.com/v1/${cp.photo_name}/media?maxWidthPx=96&key=${apiKey}`
-                                        : null
+                                    const photoUrl = campingplatzListThumbnailSrc(cp)
+                                    const hasPhoto = !!photoUrl
                                     return (
                                       <div className="flex-shrink-0 w-12 h-12 rounded-lg overflow-hidden bg-muted flex items-center justify-center">
                                         {photoUrl ? (

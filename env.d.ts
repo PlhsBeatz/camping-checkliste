@@ -7,6 +7,7 @@ interface WindowEventMap {
 interface CloudflareEnv {
 	DB: D1Database;
 	ASSETS: Fetcher;
+	CAMPING_PHOTOS?: R2Bucket;
 	PACKING_SYNC_DO?: DurableObjectNamespace;
 	NEXTJS_ENV?: string;
 	NEXT_PUBLIC_GOOGLE_MAPS_API_KEY?: string;
