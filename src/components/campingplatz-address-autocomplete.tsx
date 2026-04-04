@@ -19,6 +19,8 @@ type PlaceAddressComponent = {
 }
 
 type NewPlace = {
+  /** Ressourcenname places/ChIJ… (für serverseitige Foto-Liste) */
+  id?: string
   displayName?: { text?: string }
   formattedAddress?: string
   location?: PlaceLocation
@@ -55,7 +57,7 @@ interface CampingplatzAddressAutocompleteProps {
   onResolve: (result: CampingplatzAddressResolve) => void
   placeholder?: string
   onElementReady?: (el: HTMLElement | null) => void
-  /** Optional: Fotos des gewählten Ortes (max. 10) für Bildauswahl */
+  /** Optional: Fotos des gewählten Ortes (alle von Google gelieferten, typisch bis zu 10 pro API) */
   onPlacePhotos?: (photos: PlacePhotoForPicker[]) => void
 }
 
@@ -74,6 +76,13 @@ function pickComponent(
       if (v && String(v).trim()) return String(v).trim()
     }
   }
+  return null
+}
+
+function rawGooglePlaceIdFromPlace(place: NewPlace): string | null {
+  const id = place.id?.trim()
+  if (id?.startsWith('places/')) return id.slice('places/'.length)
+  if (id && !id.includes('/')) return id
   return null
 }
 
@@ -374,7 +383,26 @@ export function CampingplatzAddressAutocomplete(props: CampingplatzAddressAutoco
             return { name: p.name ?? '', authorAttributions: attrs.length ? attrs : undefined }
           })
           .filter((p) => p.name)
-        onPlacePhotos?.(forPicker)
+
+        const rid = rawGooglePlaceIdFromPlace(place)
+        if (rid && onPlacePhotos) {
+          try {
+            const res = await fetch(`/api/google-place-photos?placeId=${encodeURIComponent(rid)}`)
+            const json = (await res.json()) as {
+              success?: boolean
+              data?: { photos?: PlacePhotoForPicker[] }
+            }
+            if (json.success && json.data?.photos && json.data.photos.length > 0) {
+              onPlacePhotos(json.data.photos)
+            } else {
+              onPlacePhotos(forPicker)
+            }
+          } catch {
+            onPlacePhotos(forPicker)
+          }
+        } else {
+          onPlacePhotos?.(forPicker)
+        }
         sessionTokenRef.current = null
         setDropdownOpen(false)
         setSuggestions([])

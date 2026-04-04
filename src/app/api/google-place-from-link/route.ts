@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth, requireAdmin } from '@/lib/api-auth'
+import { mergePlacePhotosWithLegacyDetails } from '@/lib/google-place-photos-merge'
 
 type PlaceAddressComponentServer = {
   longText?: string
@@ -8,6 +9,8 @@ type PlaceAddressComponentServer = {
 }
 
 type PlaceServer = {
+  /** Ressourcenname des Ortes, z. B. places/ChIJ… */
+  name?: string
   displayName?: { text?: string }
   formattedAddress?: string
   location?: { latitude?: number; longitude?: number }
@@ -399,7 +402,7 @@ export async function POST(request: NextRequest) {
       website,
     }
 
-    const photos: PlacePhotoForPicker[] = (place.photos ?? [])
+    const fromNew: PlacePhotoForPicker[] = (place.photos ?? [])
       .map((p) => {
         const attrs = (p.authorAttributions ?? [])
           .map((a: { displayName?: string } | string) =>
@@ -412,6 +415,15 @@ export async function POST(request: NextRequest) {
         }
       })
       .filter((p) => !!p.name)
+
+    const rawPlaceIdForPhotos =
+      (placeId && String(placeId).trim()) ||
+      (place.name?.startsWith('places/') ? place.name.slice('places/'.length) : '')
+
+    const photos =
+      rawPlaceIdForPhotos.length > 0
+        ? await mergePlacePhotosWithLegacyDetails(rawPlaceIdForPhotos, fromNew, apiKey)
+        : fromNew
 
     return NextResponse.json({
       success: true,
