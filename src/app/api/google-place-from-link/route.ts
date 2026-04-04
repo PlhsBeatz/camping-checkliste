@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth, requireAdmin } from '@/lib/api-auth'
-import { mergePlacePhotosWithLegacyDetails } from '@/lib/google-place-photos-merge'
+import { dedupePlacePhotos } from '@/lib/google-place-photos-merge'
 
 type PlaceAddressComponentServer = {
   longText?: string
@@ -416,14 +416,7 @@ export async function POST(request: NextRequest) {
       })
       .filter((p) => !!p.name)
 
-    const rawPlaceIdForPhotos =
-      (placeId && String(placeId).trim()) ||
-      (place.name?.startsWith('places/') ? place.name.slice('places/'.length) : '')
-
-    const photos =
-      rawPlaceIdForPhotos.length > 0
-        ? await mergePlacePhotosWithLegacyDetails(rawPlaceIdForPhotos, fromNew, apiKey)
-        : fromNew
+    const photos = dedupePlacePhotos(fromNew)
 
     return NextResponse.json({
       success: true,

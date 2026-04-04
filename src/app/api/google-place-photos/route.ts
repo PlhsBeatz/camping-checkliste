@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth, requireAdmin } from '@/lib/api-auth'
-import { fetchMergedPlacePhotosForPicker } from '@/lib/google-place-photos-merge'
+import { fetchPlacePhotosForPicker } from '@/lib/google-place-photos-merge'
 
 /**
- * Liefert alle Foto-Referenzen für eine Google-Place-ID, die aus Places API (New)
- * und optional Legacy Place Details kombiniert werden (ohne Dubletten).
- * Hinweis: Pro API-Antwort liefert Google höchstens 10 Fotos; mehr ist über die offizielle API nicht abrufbar.
+ * Liefert die Foto-Referenzen für eine Google-Place-ID (Places API New, dedupliziert).
+ * Google liefert höchstens 10 Fotos pro Place-Details-Antwort.
  */
 export async function GET(request: NextRequest) {
   try {
@@ -27,7 +26,7 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const photos = await fetchMergedPlacePhotosForPicker(placeId, apiKey)
+    const photos = await fetchPlacePhotosForPicker(placeId, apiKey)
     return NextResponse.json({ success: true, data: { photos } })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error)

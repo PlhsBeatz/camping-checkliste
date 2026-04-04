@@ -1,8 +1,8 @@
 /**
- * Google Places liefert in einer Place-Details-Antwort höchstens 10 Fotos (API-Vorgabe).
- * Wir kombinieren die Fotos aus der Places API (New) mit denen der Legacy Place Details API,
- * um alle von beiden zurückgegebenen Referenzen ohne Dubletten zu nutzen (gleiche Foto-Referenz
- * = ein Eintrag).
+ * Google Places liefert pro Place-Details-Antwort höchstens 10 Fotos (API-Vorgabe).
+ * Es gibt nur eine zuverlässige Quelle: Places API (New). Eine zweite Abfrage (Legacy)
+ * liefert dieselben Motive mit anderen Referenz-Strings und erzeugte bei uns fälschlich
+ * bis zu 20 Einträge mit Duplikaten – daher keine Doppelabfrage mehr.
  */
 
 export type PlacePhotoPickerEntry = { name: string; authorAttributions?: string[] }
@@ -20,75 +20,42 @@ function mapNewApiPhotos(photos: NewApiPhoto[] | undefined): PlacePhotoPickerEnt
         .map((a) => (typeof a === 'string' ? a : (a.displayName ?? '')))
         .filter((x: string) => !!x)
       return {
-        name: p.name ?? '',
+        name: (p.name ?? '').trim(),
         authorAttributions: attrs.length ? attrs : undefined,
       }
     })
     .filter((p) => p.name.startsWith('places/') && p.name.includes('/photos/'))
 }
 
-/** Letztes Pfadsegment nach …/photos/ (für Deduplizierung zwischen New und Legacy). */
-function photoResourceSuffix(photoResourceName: string): string {
-  const idx = photoResourceName.lastIndexOf('/photos/')
-  if (idx < 0) return photoResourceName
-  return photoResourceName.slice(idx + '/photos/'.length)
-}
-
-function stripHtmlAttribution(html: string): string {
-  return html.replace(/<[^>]+>/g, '').trim()
-}
-
 /**
- * Ergänzt die von der New API gelieferten Fotos um solche aus Legacy Place Details,
- * die noch nicht in der Liste vorkommen (gleiche Referenz = gleiches Suffix nach /photos/).
+ * Einheitlicher Schlüssel für dasselbe Foto (Suffix nach …/photos/, perzent-decodiert).
  */
-export async function mergePlacePhotosWithLegacyDetails(
-  rawPlaceId: string,
-  newApiPhotos: PlacePhotoPickerEntry[],
-  apiKey: string
-): Promise<PlacePhotoPickerEntry[]> {
-  const bySuffix = new Map<string, PlacePhotoPickerEntry>()
-  for (const p of newApiPhotos) {
-    const suf = photoResourceSuffix(p.name)
-    if (!suf) continue
-    bySuffix.set(suf, p)
-  }
-
+export function placePhotoDedupeKey(fullResourceName: string): string {
+  const t = fullResourceName.trim()
+  const i = t.lastIndexOf('/photos/')
+  const tail = i >= 0 ? t.slice(i + '/photos/'.length) : t
   try {
-    const legacyUrl = new URL('https://maps.googleapis.com/maps/api/place/details/json')
-    legacyUrl.searchParams.set('place_id', rawPlaceId)
-    legacyUrl.searchParams.set('fields', 'photos')
-    legacyUrl.searchParams.set('language', 'de')
-    legacyUrl.searchParams.set('key', apiKey)
-    const res = await fetch(legacyUrl.toString())
-    if (!res.ok) return [...bySuffix.values()]
-    const json = (await res.json()) as {
-      status?: string
-      result?: {
-        photos?: Array<{ photo_reference?: string; html_attributions?: string[] }>
-      }
-    }
-    if (json.status !== 'OK' || !json.result?.photos?.length) return [...bySuffix.values()]
-
-    for (const ph of json.result.photos) {
-      const ref = ph.photo_reference?.trim()
-      if (!ref) continue
-      if (bySuffix.has(ref)) continue
-      const name = `places/${rawPlaceId}/photos/${ref}`
-      const attrs = (ph.html_attributions ?? []).map(stripHtmlAttribution).filter(Boolean)
-      bySuffix.set(ref, {
-        name,
-        authorAttributions: attrs.length ? attrs : undefined,
-      })
-    }
+    return decodeURIComponent(tail)
   } catch {
-    /* Legacy optional */
+    return tail
   }
-
-  return [...bySuffix.values()]
 }
 
-/** Nur New API (FieldMask photos) – z. B. für serverseitige Nachladung nach Autocomplete. */
+/** Entfernt doppelte Foto-Einträge (gleiche Referenz, ggf. unterschiedlich kodiert). */
+export function dedupePlacePhotos(entries: PlacePhotoPickerEntry[]): PlacePhotoPickerEntry[] {
+  const seen = new Set<string>()
+  const out: PlacePhotoPickerEntry[] = []
+  for (const e of entries) {
+    if (!e.name.startsWith('places/') || !e.name.includes('/photos/')) continue
+    const k = placePhotoDedupeKey(e.name)
+    if (!k || seen.has(k)) continue
+    seen.add(k)
+    out.push(e)
+  }
+  return out
+}
+
+/** Nur New API (FieldMask photos). */
 export async function fetchNewPlacePhotosOnly(
   rawPlaceId: string,
   apiKey: string
@@ -105,10 +72,11 @@ export async function fetchNewPlacePhotosOnly(
   return mapNewApiPhotos(place.photos)
 }
 
-export async function fetchMergedPlacePhotosForPicker(
+/** New-API-Fotoliste, dedupliziert (für Picker / Server-Route). */
+export async function fetchPlacePhotosForPicker(
   rawPlaceId: string,
   apiKey: string
 ): Promise<PlacePhotoPickerEntry[]> {
-  const fromNew = await fetchNewPlacePhotosOnly(rawPlaceId, apiKey)
-  return mergePlacePhotosWithLegacyDetails(rawPlaceId, fromNew, apiKey)
+  const raw = await fetchNewPlacePhotosOnly(rawPlaceId, apiKey)
+  return dedupePlacePhotos(raw)
 }

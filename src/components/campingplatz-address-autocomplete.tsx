@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState, type FocusEvent } from 'react
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { dedupePlacePhotos } from '@/lib/google-place-photos-merge'
 
 type PlaceLocation = {
   lat?: number | (() => number)
@@ -375,14 +376,16 @@ export function CampingplatzAddressAutocomplete(props: CampingplatzAddressAutoco
           website,
         })
         const photos = place.photos ?? []
-        const forPicker: PlacePhotoForPicker[] = photos
-          .map((p) => {
-            const attrs = (p.authorAttributions ?? [])
-              .map((a) => (typeof a === 'string' ? a : a.displayName))
-              .filter((x): x is string => !!x)
-            return { name: p.name ?? '', authorAttributions: attrs.length ? attrs : undefined }
-          })
-          .filter((p) => p.name)
+        const forPicker: PlacePhotoForPicker[] = dedupePlacePhotos(
+          photos
+            .map((p) => {
+              const attrs = (p.authorAttributions ?? [])
+                .map((a) => (typeof a === 'string' ? a : a.displayName))
+                .filter((x): x is string => !!x)
+              return { name: (p.name ?? '').trim(), authorAttributions: attrs.length ? attrs : undefined }
+            })
+            .filter((p) => p.name.startsWith('places/') && p.name.includes('/photos/'))
+        )
 
         const rid = rawGooglePlaceIdFromPlace(place)
         if (rid && onPlacePhotos) {
@@ -393,7 +396,7 @@ export function CampingplatzAddressAutocomplete(props: CampingplatzAddressAutoco
               data?: { photos?: PlacePhotoForPicker[] }
             }
             if (json.success && json.data?.photos && json.data.photos.length > 0) {
-              onPlacePhotos(json.data.photos)
+              onPlacePhotos(dedupePlacePhotos(json.data.photos))
             } else {
               onPlacePhotos(forPicker)
             }
