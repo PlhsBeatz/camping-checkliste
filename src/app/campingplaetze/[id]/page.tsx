@@ -3,15 +3,24 @@
 import { useAuth } from '@/components/auth-provider'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { NavigationSidebar } from '@/components/navigation-sidebar'
-import { ArrowLeft, Menu, Route, Star, Trash2, Upload, Globe2, PlayCircle } from 'lucide-react'
+import {
+  ArrowLeft,
+  Menu,
+  Route,
+  Globe2,
+  PlayCircle,
+  Pencil,
+  Trash2,
+} from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { ApiResponse } from '@/lib/api-types'
 import { Campingplatz, type CampingplatzFoto } from '@/lib/db'
 import Image from 'next/image'
 import { campingplatzFotoImageSrc } from '@/lib/campingplatz-photo-url'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 
 export default function CampingplatzDetailPage() {
   const params = useParams()
@@ -22,12 +31,15 @@ export default function CampingplatzDetailPage() {
   const [campingplatz, setCampingplatz] = useState<Campingplatz | null>(null)
   const [fotos, setFotos] = useState<CampingplatzFoto[]>([])
   const [loadError, setLoadError] = useState<string | null>(null)
-  const [fotoBusy, setFotoBusy] = useState(false)
   const [routeInfo, setRouteInfo] = useState<{
     distanceKm: number
     durationMinutes: number
   } | null>(null)
-  const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<Campingplatz | null>(null)
+  const [archivePrompt, setArchivePrompt] = useState<Campingplatz | null>(null)
+  const [deleteBusy, setDeleteBusy] = useState(false)
+  const [homeCoords, setHomeCoords] = useState<{ lat: number; lng: number } | null>(null)
+  const [homeCoordsLoaded, setHomeCoordsLoaded] = useState(false)
 
   const load = useCallback(async () => {
     if (!id) return
@@ -93,69 +105,114 @@ export default function CampingplatzDetailPage() {
     }
   }, [campingplatz?.id, campingplatz?.lat, campingplatz?.lng])
 
-  const setCoverFoto = async (fotoId: string) => {
-    if (!id) return
-    setFotoBusy(true)
-    try {
-      const res = await fetch(`/api/campingplaetze/${id}/fotos/${fotoId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ setCover: true }),
-      })
-      const data = (await res.json()) as ApiResponse<unknown>
-      if (!data.success) {
-        alert(data.error ?? 'Standardbild konnte nicht gesetzt werden')
-        return
-      }
-      await load()
-    } finally {
-      setFotoBusy(false)
+  useEffect(() => {
+    if (showNavSidebar) {
+      document.body.style.overflow = 'hidden'
+      document.documentElement.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+      document.documentElement.style.overflow = ''
     }
+    return () => {
+      document.body.style.overflow = ''
+      document.documentElement.style.overflow = ''
+    }
+  }, [showNavSidebar])
+
+  const openInAdacMaps = async (cp: Campingplatz) => {
+    if (cp.lat == null || cp.lng == null) {
+      const labelFallback = `${cp.name}, ${cp.ort}, ${cp.land}`
+      const urlFallback = `https://maps.adac.de/routenplaner?poi=${encodeURIComponent(labelFallback)}`
+      window.open(urlFallback, '_blank')
+      return
+    }
+
+    let coords = homeCoords
+    if (!homeCoordsLoaded) {
+      try {
+        const res = await fetch('/api/profile/home-location')
+        const data = (await res.json()) as ApiResponse<{
+          heimat_lat: number | null
+          heimat_lng: number | null
+        }>
+        if (data.success && data.data && data.data.heimat_lat != null && data.data.heimat_lng != null) {
+          coords = { lat: data.data.heimat_lat, lng: data.data.heimat_lng }
+          setHomeCoords(coords)
+        } else {
+          coords = null
+        }
+      } catch {
+        coords = null
+      } finally {
+        setHomeCoordsLoaded(true)
+      }
+    }
+
+    if (!coords) {
+      const targetOnly = `${cp.lat.toFixed(5)}_${cp.lng.toFixed(5)}_6_0`
+      window.open(
+        `https://maps.adac.de/route?vehicle-type=trailer&places=${targetOnly}`,
+        '_blank'
+      )
+      return
+    }
+
+    const start = `${coords.lat.toFixed(5)}_${coords.lng.toFixed(5)}_1_0`
+    const target = `${cp.lat.toFixed(5)}_${cp.lng.toFixed(5)}_6_0`
+    window.open(
+      `https://maps.adac.de/route?vehicle-type=trailer&places=${start},${target}`,
+      '_blank'
+    )
   }
 
-  const deleteSavedFoto = async (fotoId: string) => {
-    if (!id) return
-    setFotoBusy(true)
+  const executeDelete = async () => {
+    if (!deleteTarget) return
+    const target = deleteTarget
+    setDeleteBusy(true)
     try {
-      const res = await fetch(`/api/campingplaetze/${id}/fotos/${fotoId}`, {
-        method: 'DELETE',
-      })
-      const data = (await res.json()) as ApiResponse<unknown>
-      if (!data.success) {
-        alert(data.error ?? 'Foto konnte nicht gelöscht werden')
-        return
-      }
-      await load()
-    } finally {
-      setFotoBusy(false)
-    }
-  }
-
-  const onPickUploadFiles = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!id || !canAccessConfig) return
-    const list = e.target.files
-    if (!list?.length) return
-    setFotoBusy(true)
-    try {
-      let first = fotos.length === 0
-      for (let i = 0; i < list.length; i++) {
-        const file = list.item(i)
-        if (!file) continue
-        const fd = new FormData()
-        fd.append('file', file)
-        fd.append('setAsCover', first ? 'true' : 'false')
-        first = false
-        const res = await fetch(`/api/campingplaetze/${id}/fotos`, { method: 'POST', body: fd })
-        const data = (await res.json()) as ApiResponse<CampingplatzFoto>
+      const res = await fetch(`/api/campingplaetze?id=${target.id}`, { method: 'DELETE' })
+      if (res.status === 409) {
+        const data = (await res.json()) as { requireArchive?: boolean; error?: string }
+        if (data.requireArchive) {
+          setArchivePrompt(target)
+        } else {
+          alert(data.error ?? 'Campingplatz kann nicht gelöscht werden.')
+        }
+      } else {
+        const data = (await res.json()) as { success?: boolean; error?: string; archived?: boolean }
         if (!data.success) {
-          alert(data.error ?? 'Upload fehlgeschlagen')
-          break
+          alert('Fehler beim Löschen: ' + (data.error ?? 'Unbekannt'))
+        } else {
+          router.push('/campingplaetze')
         }
       }
-      await load()
+    } catch {
+      alert('Fehler beim Löschen des Campingplatzes.')
     } finally {
-      setFotoBusy(false)
-      e.target.value = ''
+      setDeleteBusy(false)
+      setDeleteTarget(null)
+    }
+  }
+
+  const executeArchive = async () => {
+    if (!archivePrompt) return
+    setDeleteBusy(true)
+    try {
+      const res = await fetch(
+        `/api/campingplaetze?id=${archivePrompt.id}&forceArchive=true`,
+        { method: 'DELETE' }
+      )
+      const data = (await res.json()) as { success?: boolean; error?: string }
+      if (!data.success) {
+        alert('Fehler beim Archivieren: ' + (data.error ?? 'Unbekannt'))
+      } else {
+        router.push('/campingplaetze')
+      }
+    } catch {
+      alert('Fehler beim Archivieren.')
+    } finally {
+      setDeleteBusy(false)
+      setArchivePrompt(null)
     }
   }
 
@@ -168,35 +225,48 @@ export default function CampingplatzDetailPage() {
   })
   const uniqueAttr = [...new Set(attributions.filter(Boolean))]
 
+  const subtitle =
+    campingplatz != null
+      ? [campingplatz.ort, campingplatz.land].filter(Boolean).join(', ') +
+        (campingplatz.bundesland ? ` (${campingplatz.bundesland})` : '')
+      : '—'
+
   if (!id) {
     return null
   }
 
   return (
-    <div className="min-h-screen flex">
+    <div className="min-h-screen flex bg-white">
       <NavigationSidebar isOpen={showNavSidebar} onClose={() => setShowNavSidebar(false)} />
 
       <div
         className={cn(
-          'flex-1 flex flex-col min-h-0 min-w-0 transition-all duration-300',
+          'flex-1 flex flex-col min-h-0 min-w-0 transition-all duration-300 bg-white',
           'lg:ml-[280px]',
           'max-md:h-dvh max-md:min-h-dvh'
         )}
       >
-        <div className="flex flex-col flex-1 min-h-0 min-w-0 container mx-auto p-4 md:p-6">
-          <div className="sticky top-0 z-10 flex-shrink-0 flex items-center gap-3 bg-white shadow pb-4 -mx-4 px-4 -mt-4 pt-4 md:-mx-6 md:px-6 md:-mt-6 md:pt-6">
-            <Button variant="outline" size="icon" onClick={() => setShowNavSidebar(true)} className="lg:hidden">
-              <Menu className="h-5 w-5" />
-            </Button>
-            <Button variant="ghost" size="sm" asChild>
-              <Link href="/campingplaetze" className="gap-1">
-                <ArrowLeft className="h-4 w-4" />
-                Zur Liste
-              </Link>
-            </Button>
+        <div className="flex flex-col flex-1 min-h-0 min-w-0 container mx-auto p-4 md:p-6 space-y-6 bg-white">
+          <div className="sticky top-0 z-10 flex items-center justify-between bg-white shadow pb-4 -mx-4 px-4 -mt-4 pt-4 md:-mx-6 md:px-6 md:-mt-6 md:pt-6 md:pb-4">
+            <div className="flex items-center gap-4 min-w-0">
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => setShowNavSidebar(true)}
+                className="lg:hidden flex-shrink-0"
+              >
+                <Menu className="h-5 w-5" />
+              </Button>
+              <div className="min-w-0">
+                <h1 className="text-xl font-bold text-[rgb(45,79,30)] truncate">
+                  {campingplatz?.name ?? 'Campingplatz'}
+                </h1>
+                <p className="text-sm text-muted-foreground truncate">{subtitle}</p>
+              </div>
+            </div>
           </div>
 
-          <div className="flex-1 min-h-0 overflow-y-auto mt-4 space-y-6">
+          <div className="flex-1 min-h-0 space-y-6">
             {loadError && (
               <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-sm">
                 {loadError}
@@ -209,20 +279,13 @@ export default function CampingplatzDetailPage() {
 
             {campingplatz && (
               <>
-                <div>
-                  <h1 className="text-xl font-bold text-[rgb(45,79,30)]">{campingplatz.name}</h1>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    {campingplatz.ort}, {campingplatz.land}
-                    {campingplatz.bundesland && ` (${campingplatz.bundesland})`}
-                  </p>
-                  {campingplatz.is_archived && (
-                    <span className="inline-block mt-2 text-xs rounded-full bg-gray-200 text-gray-700 px-2 py-0.5">
-                      Archiviert
-                    </span>
-                  )}
-                </div>
-
                 <div className="flex flex-wrap gap-2">
+                  <Button variant="outline" size="sm" asChild>
+                    <Link href="/campingplaetze" className="gap-1">
+                      <ArrowLeft className="h-4 w-4" />
+                      Zur Liste
+                    </Link>
+                  </Button>
                   {campingplatz.webseite && (
                     <Button variant="outline" size="sm" asChild>
                       <a href={campingplatz.webseite} target="_blank" rel="noopener noreferrer">
@@ -239,7 +302,47 @@ export default function CampingplatzDetailPage() {
                       </a>
                     </Button>
                   )}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void openInAdacMaps(campingplatz)}
+                  >
+                    <Route className="h-4 w-4 mr-2" />
+                    Navigation (ADAC)
+                  </Button>
+                  {canAccessConfig && (
+                    <>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          router.push(`/campingplaetze?bearbeiten=${encodeURIComponent(campingplatz.id)}`)
+                        }
+                      >
+                        <Pencil className="h-4 w-4 mr-2" />
+                        Bearbeiten
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="text-destructive border-destructive/50 hover:bg-destructive/10"
+                        onClick={() => setDeleteTarget(campingplatz)}
+                      >
+                        <Trash2 className="h-4 w-4 mr-2" />
+                        Löschen
+                      </Button>
+                    </>
+                  )}
                 </div>
+
+                {campingplatz.is_archived && (
+                  <span className="inline-flex text-xs rounded-full bg-gray-200 text-gray-700 px-2 py-0.5">
+                    Archiviert
+                  </span>
+                )}
 
                 {routeInfo && (
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -261,31 +364,6 @@ export default function CampingplatzDetailPage() {
 
                 <section className="space-y-2">
                   <h2 className="text-sm font-semibold text-[rgb(45,79,30)]">Fotos</h2>
-                  {canAccessConfig && (
-                    <div className="flex flex-wrap items-center gap-2">
-                      <input
-                        ref={fileInputRef}
-                        type="file"
-                        accept="image/jpeg,image/png,image/webp"
-                        multiple
-                        className="hidden"
-                        onChange={onPickUploadFiles}
-                      />
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        disabled={fotoBusy}
-                        onClick={() => fileInputRef.current?.click()}
-                      >
-                        <Upload className="h-4 w-4 mr-2" />
-                        Foto hochladen
-                      </Button>
-                      <p className="text-xs text-muted-foreground">
-                        Google-Fotos können Sie im Bearbeiten-Dialog der Liste hinzufügen.
-                      </p>
-                    </div>
-                  )}
                   {fotos.length === 0 ? (
                     <p className="text-sm text-muted-foreground">Keine Fotos gespeichert.</p>
                   ) : (
@@ -305,30 +383,6 @@ export default function CampingplatzDetailPage() {
                               Standard (Liste)
                             </span>
                           )}
-                          {canAccessConfig && (
-                            <div className="absolute inset-x-0 bottom-0 flex gap-1 p-2 bg-black/50 justify-center">
-                              <Button
-                                type="button"
-                                size="icon"
-                                variant={f.is_cover ? 'default' : 'secondary'}
-                                className="h-8 w-8"
-                                disabled={fotoBusy || f.is_cover}
-                                onClick={() => void setCoverFoto(f.id)}
-                              >
-                                <Star className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                type="button"
-                                size="icon"
-                                variant="destructive"
-                                className="h-8 w-8"
-                                disabled={fotoBusy}
-                                onClick={() => void deleteSavedFoto(f.id)}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          )}
                         </div>
                       ))}
                     </div>
@@ -340,14 +394,7 @@ export default function CampingplatzDetailPage() {
 
                 <section className="space-y-2">
                   <h2 className="text-sm font-semibold text-[rgb(45,79,30)]">Adresse</h2>
-                  <p className="text-sm whitespace-pre-wrap">
-                    {campingplatz.adresse || '—'}
-                  </p>
-                  {campingplatz.lat != null && campingplatz.lng != null && (
-                    <p className="text-xs text-muted-foreground font-mono">
-                      {campingplatz.lat.toFixed(5)}, {campingplatz.lng.toFixed(5)}
-                    </p>
-                  )}
+                  <p className="text-sm whitespace-pre-wrap">{campingplatz.adresse || '—'}</p>
                 </section>
 
                 <section className="space-y-2">
@@ -386,6 +433,28 @@ export default function CampingplatzDetailPage() {
           </div>
         </div>
       </div>
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null)
+        }}
+        title="Campingplatz löschen"
+        description="Möchten Sie diesen Campingplatz wirklich löschen? Falls er Urlaubsreisen zugeordnet ist, werden Sie ggf. zum Archivieren aufgefordert."
+        onConfirm={executeDelete}
+        isLoading={deleteBusy}
+      />
+
+      <ConfirmDialog
+        open={!!archivePrompt}
+        onOpenChange={(open) => {
+          if (!open) setArchivePrompt(null)
+        }}
+        title="Campingplatz archivieren"
+        description="Dieser Campingplatz ist bereits Urlaubsreisen zugeordnet. Statt ihn zu löschen, kann er archiviert werden. Möchten Sie ihn archivieren?"
+        onConfirm={executeArchive}
+        isLoading={deleteBusy}
+      />
     </div>
   )
 }

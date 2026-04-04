@@ -4,8 +4,9 @@ import { useAuth } from '@/components/auth-provider'
 import { Button } from '@/components/ui/button'
 import { NavigationSidebar } from '@/components/navigation-sidebar'
 import { Plus, Menu, Star, Trash2, Upload } from 'lucide-react'
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { Suspense, useCallback, useEffect, useRef, useState } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { prepareCampingplatzUploadFile } from '@/lib/compress-upload-image'
 import type { ApiResponse } from '@/lib/api-types'
 import { Campingplatz, type CampingplatzFoto } from '@/lib/db'
 import { cn } from '@/lib/utils'
@@ -61,8 +62,9 @@ function createEmptyForm(): CampingplatzFormState {
   }
 }
 
-export default function CampingplaetzePage() {
+function CampingplaetzePageContent() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { canAccessConfig } = useAuth()
   const [showNavSidebar, setShowNavSidebar] = useState(false)
   const [items, setItems] = useState<Campingplatz[]>([])
@@ -111,6 +113,8 @@ export default function CampingplaetzePage() {
     }
     void load()
   }, [])
+
+  const bearbeitenId = searchParams.get('bearbeiten')
 
   const loadFotos = useCallback(async (campingplatzId: string) => {
     try {
@@ -171,6 +175,19 @@ export default function CampingplaetzePage() {
     setSavedFotos([])
     setShowDialog(true)
   }
+
+  useEffect(() => {
+    if (!bearbeitenId || isLoading || items.length === 0 || showDialog) return
+    const item = items.find((x) => x.id === bearbeitenId)
+    if (item) {
+      handleEdit(item)
+      router.replace('/campingplaetze', { scroll: false })
+    } else {
+      router.replace('/campingplaetze', { scroll: false })
+    }
+    // handleEdit bewusst ausgelassen: einmaliges Öffnen per ?bearbeiten=
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bearbeitenId, isLoading, items, showDialog, router])
 
   const handleAdd = () => {
     setEditId(null)
@@ -268,16 +285,19 @@ export default function CampingplaetzePage() {
   const onPickUploadFiles = (e: React.ChangeEvent<HTMLInputElement>) => {
     const list = e.target.files
     if (!list?.length) return
-    const next: File[] = []
+    const raw: File[] = []
     for (let i = 0; i < list.length; i++) {
       const f = list.item(i)
-      if (f) next.push(f)
+      if (f) raw.push(f)
     }
-    if (!editId) {
-      setPendingFiles((prev) => [...prev, ...next])
-    } else {
-      void uploadFilesForEdit(next)
-    }
+    void (async () => {
+      const next = await Promise.all(raw.map((f) => prepareCampingplatzUploadFile(f)))
+      if (!editId) {
+        setPendingFiles((prev) => [...prev, ...next])
+      } else {
+        void uploadFilesForEdit(next)
+      }
+    })()
     e.target.value = ''
   }
 
@@ -287,8 +307,9 @@ export default function CampingplaetzePage() {
     try {
       let first = savedFotos.length === 0
       for (const file of files) {
+        const prepared = await prepareCampingplatzUploadFile(file)
         const fd = new FormData()
-        fd.append('file', file)
+        fd.append('file', prepared)
         fd.append('setAsCover', first ? 'true' : 'false')
         first = false
         const res = await fetch(`/api/campingplaetze/${editId}/fotos`, {
@@ -412,8 +433,9 @@ export default function CampingplaetzePage() {
           isFirst = false
         }
         for (const file of pendingFiles) {
+          const prepared = await prepareCampingplatzUploadFile(file)
           const formData = new FormData()
-          formData.append('file', file)
+          formData.append('file', prepared)
           formData.append('setAsCover', isFirst ? 'true' : 'false')
           isFirst = false
           const fr = await fetch(`/api/campingplaetze/${newId}/fotos`, {
@@ -1024,6 +1046,20 @@ export default function CampingplaetzePage() {
         isLoading={isLoading}
       />
     </div>
+  )
+}
+
+export default function CampingplaetzePage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center text-muted-foreground">
+          Laden…
+        </div>
+      }
+    >
+      <CampingplaetzePageContent />
+    </Suspense>
   )
 }
 

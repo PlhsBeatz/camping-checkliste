@@ -14,7 +14,8 @@ import {
   downloadGooglePlacePhotoToR2,
 } from '@/lib/campingplatz-foto-import'
 
-const UPLOAD_MAX_BYTES = 5 * 1024 * 1024
+/** Nach clientseitiger Kompression i. d. R. deutlich kleiner; großzügiges Limit für Roh-Uploads (z. B. Mobilfotos). */
+const UPLOAD_MAX_BYTES = 32 * 1024 * 1024
 const ALLOWED_UPLOAD_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp'])
 
 export async function GET(
@@ -84,7 +85,10 @@ export async function POST(
         return NextResponse.json({ success: false, error: 'Datei fehlt' }, { status: 400 })
       }
       if (file.size > UPLOAD_MAX_BYTES) {
-        return NextResponse.json({ success: false, error: 'Datei zu groß (max. 5 MB)' }, { status: 400 })
+        return NextResponse.json(
+          { success: false, error: 'Datei zu groß (max. 32 MB). Bitte kleineres Bild wählen.' },
+          { status: 400 }
+        )
       }
       const mime = file.type || 'image/jpeg'
       if (!ALLOWED_UPLOAD_TYPES.has(mime)) {
