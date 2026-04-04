@@ -1,6 +1,5 @@
 /**
- * Flaggen-Emoji aus Ländernamen (übliche deutsche/englische Schreibweisen).
- * Unbekannte Namen → null (nur Text anzeigen).
+ * Flaggen-Emoji aus Länderfeld: ISO-3166-1 alpha-2 (z. B. DE, AT) oder Ländername (de/en/…).
  */
 
 function regionalIndicatorPair(iso3166Alpha2: string): string {
@@ -10,7 +9,12 @@ function regionalIndicatorPair(iso3166Alpha2: string): string {
   return String.fromCodePoint(base + cc.charCodeAt(0) - 65, base + cc.charCodeAt(1) - 65)
 }
 
-/** Diakritika entfernen für Lookup (Österreich → osterreich) */
+/** Nicht-ISO-Kürzel → ISO alpha-2 (z. B. EU-Handelsnotation) */
+const ISO2_ALIASES: Record<string, string> = {
+  uk: 'GB',
+  el: 'GR', // Griechenland (EU)
+}
+
 function landKey(s: string): string {
   return s
     .trim()
@@ -20,12 +24,11 @@ function landKey(s: string): string {
     .replace(/ß/g, 'ss')
 }
 
-/** ISO-3166-1 alpha-2, nur Kleinbuchstaben-Keys */
+/** Normalisierter Ländername → ISO alpha-2 (Europa + häufige Nicht-EU) */
 const LAND_NAME_TO_CC: Record<string, string> = {
   deutschland: 'DE',
   germany: 'DE',
   osterreich: 'AT',
-  at: 'AT',
   austria: 'AT',
   schweiz: 'CH',
   switzerland: 'CH',
@@ -39,6 +42,7 @@ const LAND_NAME_TO_CC: Record<string, string> = {
   niederlande: 'NL',
   holland: 'NL',
   netherlands: 'NL',
+  'die niederlande': 'NL',
   belgien: 'BE',
   belgium: 'BE',
   luxemburg: 'LU',
@@ -58,8 +62,9 @@ const LAND_NAME_TO_CC: Record<string, string> = {
   'vereinigtes konigreich': 'GB',
   grossbritannien: 'GB',
   'united kingdom': 'GB',
-  uk: 'GB',
   england: 'GB',
+  schottland: 'GB',
+  wales: 'GB',
   polen: 'PL',
   poland: 'PL',
   tschechien: 'CZ',
@@ -141,10 +146,60 @@ const LAND_NAME_TO_CC: Record<string, string> = {
   moldova: 'MD',
   russland: 'RU',
   russia: 'RU',
+  georgien: 'GE',
+  georgia: 'GE',
+  armenien: 'AM',
+  armenia: 'AM',
+  aserbaidschan: 'AZ',
+  azerbaijan: 'AZ',
+  kasachstan: 'KZ',
+  kazakhstan: 'KZ',
+  faroer: 'FO',
+  faroe: 'FO',
+  gronland: 'GL',
+  greenland: 'GL',
+  // Endonyme / weitere europäische Schreibweisen
+  allemagne: 'DE',
+  germania: 'DE',
+  alemania: 'DE',
+  autriche: 'AT',
+  suisse: 'CH',
+  svizzera: 'CH',
+  espagne: 'ES',
+  espana: 'ES',
+  paysbas: 'NL',
+  'pays-bas': 'NL',
+  suede: 'SE',
+  sverige: 'SE',
+  norge: 'NO',
+  suomi: 'FI',
+  eesti: 'EE',
+  eire: 'IE',
+  'crna gora': 'ME',
+  hrvatska: 'HR',
+  srbija: 'RS',
+  shqiperia: 'AL',
+  hellas: 'GR',
+  ellada: 'GR',
+  magyarorszag: 'HU',
+  cesko: 'CZ',
+  slovensko: 'SK',
+  polska: 'PL',
 }
 
 export function countryFlagEmojiForLandName(landName: string): string | null {
-  const cc = LAND_NAME_TO_CC[landKey(landName)]
+  const trimmed = landName.trim()
+  if (!trimmed) return null
+
+  // ISO-3166-1 alpha-2 (DE, DK, NL, …) — Hauptfall in der DB
+  if (/^[A-Za-z]{2}$/.test(trimmed)) {
+    const lk = trimmed.toLowerCase()
+    const cc = ISO2_ALIASES[lk] ?? lk.toUpperCase()
+    const emoji = regionalIndicatorPair(cc)
+    return emoji || null
+  }
+
+  const cc = LAND_NAME_TO_CC[landKey(trimmed)]
   if (!cc) return null
   const emoji = regionalIndicatorPair(cc)
   return emoji || null
