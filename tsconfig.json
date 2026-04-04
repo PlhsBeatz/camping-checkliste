@@ -22,11 +22,14 @@
   "include": [
     "next-env.d.ts",
     "env.d.ts",
-    "open-next-worker.d.ts",
     "**/*.ts",
     "**/*.tsx",
     ".next/types/**/*.ts",
     "next.config.mjs"
   ],
-  "exclude": ["node_modules", "public/sw.js"]
+  "exclude": [
+    "node_modules",
+    "public/sw.js",
+    "worker.ts"
+  ]
 }
