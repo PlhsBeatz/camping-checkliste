@@ -797,8 +797,12 @@ function CampingplaetzePageContent() {
                         </Button>
                       </div>
                       {f.is_cover && (
-                        <span className="absolute top-1 left-1 text-[10px] bg-[rgb(45,79,30)] text-white px-1.5 py-0.5 rounded">
-                          Standard
+                        <span
+                          className="pointer-events-none absolute top-1 left-1 inline-flex h-5 w-5 items-center justify-center rounded bg-[rgb(45,79,30)] text-white shadow-sm"
+                          aria-label="Standardbild für die Liste"
+                          title="Standardbild für die Liste"
+                        >
+                          <Star className="h-3.5 w-3.5 shrink-0 fill-white stroke-white" strokeWidth={1.25} />
                         </span>
                       )}
                     </div>

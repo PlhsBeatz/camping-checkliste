@@ -14,6 +14,7 @@ import {
   PlayCircle,
   Pencil,
   Trash2,
+  Star,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { ApiResponse } from '@/lib/api-types'
@@ -21,6 +22,8 @@ import { Campingplatz, type CampingplatzFoto } from '@/lib/db'
 import Image from 'next/image'
 import { campingplatzFotoImageSrc } from '@/lib/campingplatz-photo-url'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import { Card, CardContent } from '@/components/ui/card'
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 
 export default function CampingplatzDetailPage() {
   const params = useParams()
@@ -40,6 +43,7 @@ export default function CampingplatzDetailPage() {
   const [deleteBusy, setDeleteBusy] = useState(false)
   const [homeCoords, setHomeCoords] = useState<{ lat: number; lng: number } | null>(null)
   const [homeCoordsLoaded, setHomeCoordsLoaded] = useState(false)
+  const [lightboxFotoId, setLightboxFotoId] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     if (!id) return
@@ -235,18 +239,28 @@ export default function CampingplatzDetailPage() {
     return null
   }
 
+  const coverBadge = (
+    <span
+      className="pointer-events-none absolute top-2 left-2 inline-flex h-5 w-5 items-center justify-center rounded bg-[rgb(45,79,30)] text-white shadow-sm"
+      aria-label="Standardbild für die Liste"
+      title="Standardbild für die Liste"
+    >
+      <Star className="h-3.5 w-3.5 shrink-0 fill-white stroke-white" strokeWidth={1.25} />
+    </span>
+  )
+
   return (
-    <div className="min-h-screen flex bg-white">
+    <div className="min-h-screen flex bg-background">
       <NavigationSidebar isOpen={showNavSidebar} onClose={() => setShowNavSidebar(false)} />
 
       <div
         className={cn(
-          'flex-1 flex flex-col min-h-0 min-w-0 transition-all duration-300 bg-white',
+          'flex-1 flex flex-col min-h-0 min-w-0 transition-all duration-300 bg-background',
           'lg:ml-[280px]',
           'max-md:h-dvh max-md:min-h-dvh'
         )}
       >
-        <div className="flex flex-col flex-1 min-h-0 min-w-0 container mx-auto p-4 md:p-6 space-y-6 bg-white">
+        <div className="flex flex-col flex-1 min-h-0 min-w-0 container mx-auto p-4 md:p-6 space-y-6">
           <div className="sticky top-0 z-10 flex items-center justify-between bg-white shadow pb-4 -mx-4 px-4 -mt-4 pt-4 md:-mx-6 md:px-6 md:-mt-6 md:pt-6 md:pb-4">
             <div className="flex items-center gap-4 min-w-0">
               <Button
@@ -266,173 +280,197 @@ export default function CampingplatzDetailPage() {
             </div>
           </div>
 
-          <div className="flex-1 min-h-0 space-y-6">
-            {loadError && (
-              <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-sm">
-                {loadError}
-              </div>
-            )}
+          {loadError && (
+            <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-sm">
+              {loadError}
+            </div>
+          )}
 
-            {!campingplatz && !loadError && (
-              <div className="flex justify-center py-16 text-muted-foreground">Laden…</div>
-            )}
+          {!campingplatz && !loadError && (
+            <div className="flex justify-center py-16 text-muted-foreground">Laden…</div>
+          )}
 
-            {campingplatz && (
-              <>
-                <div className="flex flex-wrap gap-2">
+          {campingplatz && (
+            <>
+              <div className="flex flex-wrap gap-2">
+                <Button variant="outline" size="sm" asChild>
+                  <Link href="/campingplaetze" className="gap-1">
+                    <ArrowLeft className="h-4 w-4" />
+                    Zur Liste
+                  </Link>
+                </Button>
+                {campingplatz.webseite && (
                   <Button variant="outline" size="sm" asChild>
-                    <Link href="/campingplaetze" className="gap-1">
-                      <ArrowLeft className="h-4 w-4" />
-                      Zur Liste
-                    </Link>
+                    <a href={campingplatz.webseite} target="_blank" rel="noopener noreferrer">
+                      <Globe2 className="h-4 w-4 mr-2" />
+                      Webseite
+                    </a>
                   </Button>
-                  {campingplatz.webseite && (
-                    <Button variant="outline" size="sm" asChild>
-                      <a href={campingplatz.webseite} target="_blank" rel="noopener noreferrer">
-                        <Globe2 className="h-4 w-4 mr-2" />
-                        Webseite
-                      </a>
-                    </Button>
-                  )}
-                  {campingplatz.video_link && (
-                    <Button variant="outline" size="sm" asChild>
-                      <a href={campingplatz.video_link} target="_blank" rel="noopener noreferrer">
-                        <PlayCircle className="h-4 w-4 mr-2" />
-                        Video
-                      </a>
-                    </Button>
-                  )}
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => void openInAdacMaps(campingplatz)}
-                  >
-                    <Route className="h-4 w-4 mr-2" />
-                    Navigation (ADAC)
-                  </Button>
-                  {canAccessConfig && (
-                    <>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() =>
-                          router.push(`/campingplaetze?bearbeiten=${encodeURIComponent(campingplatz.id)}`)
-                        }
-                      >
-                        <Pencil className="h-4 w-4 mr-2" />
-                        Bearbeiten
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="text-destructive border-destructive/50 hover:bg-destructive/10"
-                        onClick={() => setDeleteTarget(campingplatz)}
-                      >
-                        <Trash2 className="h-4 w-4 mr-2" />
-                        Löschen
-                      </Button>
-                    </>
-                  )}
-                </div>
-
-                {campingplatz.is_archived && (
-                  <span className="inline-flex text-xs rounded-full bg-gray-200 text-gray-700 px-2 py-0.5">
-                    Archiviert
-                  </span>
                 )}
+                {campingplatz.video_link && (
+                  <Button variant="outline" size="sm" asChild>
+                    <a href={campingplatz.video_link} target="_blank" rel="noopener noreferrer">
+                      <PlayCircle className="h-4 w-4 mr-2" />
+                      Video
+                    </a>
+                  </Button>
+                )}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void openInAdacMaps(campingplatz)}
+                >
+                  <Route className="h-4 w-4 mr-2" />
+                  Navigation (ADAC)
+                </Button>
+                {canAccessConfig && (
+                  <>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        router.push(`/campingplaetze?bearbeiten=${encodeURIComponent(campingplatz.id)}`)
+                      }
+                    >
+                      <Pencil className="h-4 w-4 mr-2" />
+                      Bearbeiten
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="text-destructive border-destructive/50 hover:bg-destructive/10"
+                      onClick={() => setDeleteTarget(campingplatz)}
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Löschen
+                    </Button>
+                  </>
+                )}
+              </div>
 
-                {routeInfo && (
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Route className="h-4 w-4 text-[rgb(45,79,30)]" />
-                    <span>
-                      {Math.round(routeInfo.distanceKm)} km
-                      {(() => {
-                        const hours = Math.floor(routeInfo.durationMinutes / 60)
-                        const minutes = Math.round(routeInfo.durationMinutes % 60)
-                        const parts: string[] = []
-                        if (hours > 0) parts.push(`${hours} h`)
-                        if (minutes > 0 || hours === 0) parts.push(`${minutes} min`)
-                        return ` · ${parts.join(' ')}`
-                      })()}{' '}
-                      von der Heimatadresse
+              <Card>
+                <CardContent className="p-6 space-y-6">
+                  {campingplatz.is_archived && (
+                    <span className="inline-flex text-xs rounded-full bg-gray-200 text-gray-700 px-2 py-0.5">
+                      Archiviert
                     </span>
-                  </div>
-                )}
+                  )}
 
-                <section className="space-y-2">
-                  <h2 className="text-sm font-semibold text-[rgb(45,79,30)]">Fotos</h2>
-                  {fotos.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">Keine Fotos gespeichert.</p>
-                  ) : (
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                      {fotos.map((f) => (
-                        <div key={f.id} className="relative rounded-xl border overflow-hidden bg-muted aspect-[4/3]">
-                          <Image
-                            src={campingplatzFotoImageSrc(f.id, 800)}
-                            alt=""
-                            width={800}
-                            height={600}
-                            unoptimized
-                            className="w-full h-full object-cover"
-                          />
-                          {f.is_cover && (
-                            <span className="absolute top-2 left-2 text-[10px] bg-[rgb(45,79,30)] text-white px-2 py-0.5 rounded">
-                              Standard (Liste)
-                            </span>
-                          )}
-                        </div>
-                      ))}
+                  {routeInfo && (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Route className="h-4 w-4 text-[rgb(45,79,30)]" />
+                      <span>
+                        {Math.round(routeInfo.distanceKm)} km
+                        {(() => {
+                          const hours = Math.floor(routeInfo.durationMinutes / 60)
+                          const minutes = Math.round(routeInfo.durationMinutes % 60)
+                          const parts: string[] = []
+                          if (hours > 0) parts.push(`${hours} h`)
+                          if (minutes > 0 || hours === 0) parts.push(`${minutes} min`)
+                          return ` · ${parts.join(' ')}`
+                        })()}{' '}
+                        von der Heimatadresse
+                      </span>
                     </div>
                   )}
-                  {uniqueAttr.length > 0 && (
-                    <p className="text-[11px] text-muted-foreground leading-snug">{uniqueAttr.join(' · ')}</p>
-                  )}
-                </section>
 
-                <section className="space-y-2">
-                  <h2 className="text-sm font-semibold text-[rgb(45,79,30)]">Adresse</h2>
-                  <p className="text-sm whitespace-pre-wrap">{campingplatz.adresse || '—'}</p>
-                </section>
-
-                <section className="space-y-2">
-                  <h2 className="text-sm font-semibold text-[rgb(45,79,30)]">Platz-Typ</h2>
-                  <p className="text-sm">{campingplatz.platz_typ}</p>
-                </section>
-
-                <section className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-2">
-                    <h2 className="text-sm font-semibold text-[rgb(45,79,30)]">Pros</h2>
-                    {campingplatz.pros.filter((p) => p.trim()).length === 0 ? (
-                      <p className="text-sm text-muted-foreground">—</p>
+                  <section className="space-y-2">
+                    <h2 className="text-sm font-semibold text-[rgb(45,79,30)]">Fotos</h2>
+                    {fotos.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">Keine Fotos gespeichert.</p>
                     ) : (
-                      <ul className="text-sm list-disc pl-5 space-y-1">
-                        {campingplatz.pros.filter((p) => p.trim()).map((p, i) => (
-                          <li key={i}>{p}</li>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                        {fotos.map((f) => (
+                          <button
+                            key={f.id}
+                            type="button"
+                            className="relative aspect-[4/3] w-full overflow-hidden rounded-xl border bg-muted text-left outline-none ring-offset-2 transition hover:opacity-95 focus-visible:ring-2 focus-visible:ring-[rgb(45,79,30)]"
+                            onClick={() => setLightboxFotoId(f.id)}
+                          >
+                            <Image
+                              src={campingplatzFotoImageSrc(f.id, 800)}
+                              alt=""
+                              width={800}
+                              height={600}
+                              unoptimized
+                              className="h-full w-full object-cover"
+                            />
+                            {f.is_cover && coverBadge}
+                          </button>
                         ))}
-                      </ul>
+                      </div>
                     )}
-                  </div>
-                  <div className="space-y-2">
-                    <h2 className="text-sm font-semibold text-[rgb(45,79,30)]">Cons</h2>
-                    {campingplatz.cons.filter((c) => c.trim()).length === 0 ? (
-                      <p className="text-sm text-muted-foreground">—</p>
-                    ) : (
-                      <ul className="text-sm list-disc pl-5 space-y-1">
-                        {campingplatz.cons.filter((c) => c.trim()).map((c, i) => (
-                          <li key={i}>{c}</li>
-                        ))}
-                      </ul>
+                    {uniqueAttr.length > 0 && (
+                      <p className="text-[11px] text-muted-foreground leading-snug">
+                        {uniqueAttr.join(' · ')}
+                      </p>
                     )}
-                  </div>
-                </section>
-              </>
-            )}
-          </div>
+                  </section>
+
+                  <section className="space-y-2">
+                    <h2 className="text-sm font-semibold text-[rgb(45,79,30)]">Adresse</h2>
+                    <p className="text-sm whitespace-pre-wrap">{campingplatz.adresse || '—'}</p>
+                  </section>
+
+                  <section className="space-y-2">
+                    <h2 className="text-sm font-semibold text-[rgb(45,79,30)]">Platz-Typ</h2>
+                    <p className="text-sm">{campingplatz.platz_typ}</p>
+                  </section>
+
+                  <section className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <h2 className="text-sm font-semibold text-[rgb(45,79,30)]">Pros</h2>
+                      {campingplatz.pros.filter((p) => p.trim()).length === 0 ? (
+                        <p className="text-sm text-muted-foreground">—</p>
+                      ) : (
+                        <ul className="list-disc space-y-1 pl-5 text-sm">
+                          {campingplatz.pros.filter((p) => p.trim()).map((p, i) => (
+                            <li key={i}>{p}</li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                    <div className="space-y-2">
+                      <h2 className="text-sm font-semibold text-[rgb(45,79,30)]">Cons</h2>
+                      {campingplatz.cons.filter((c) => c.trim()).length === 0 ? (
+                        <p className="text-sm text-muted-foreground">—</p>
+                      ) : (
+                        <ul className="list-disc space-y-1 pl-5 text-sm">
+                          {campingplatz.cons.filter((c) => c.trim()).map((c, i) => (
+                            <li key={i}>{c}</li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  </section>
+                </CardContent>
+              </Card>
+            </>
+          )}
         </div>
       </div>
+
+      <Dialog open={lightboxFotoId != null} onOpenChange={(open) => !open && setLightboxFotoId(null)}>
+        <DialogContent
+          className="fixed left-0 top-0 z-50 flex h-dvh max-h-dvh w-screen max-w-none translate-x-0 translate-y-0 flex-col items-center justify-center gap-0 border-0 bg-black/92 p-4 shadow-none data-[state=closed]:slide-out-to-left-0 data-[state=closed]:slide-out-to-top-0 data-[state=open]:slide-in-from-left-0 data-[state=open]:slide-in-from-top-0 sm:rounded-none"
+          aria-describedby={undefined}
+        >
+          <DialogTitle className="sr-only">Foto Vollansicht</DialogTitle>
+          {lightboxFotoId ? (
+            <>
+              {/* eslint-disable-next-line @next/next/no-img-element -- Vollbild, dynamische API-URL */}
+              <img
+                src={campingplatzFotoImageSrc(lightboxFotoId, 2400)}
+                alt=""
+                className="max-h-[calc(100dvh-3rem)] max-w-full object-contain"
+              />
+            </>
+          ) : null}
+        </DialogContent>
+      </Dialog>
 
       <ConfirmDialog
         open={!!deleteTarget}
