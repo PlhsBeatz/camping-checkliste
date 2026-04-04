@@ -44,7 +44,8 @@ interface CampingplatzFormState {
   cons: string[]
 }
 
-const GOOGLE_PHOTOS_PAGE_SIZE = 8
+/** UI: Fotos pro Rasterseite (Google liefert max. 10 pro Place-Details-Antwort, ohne Pagination). */
+const GOOGLE_PHOTOS_PAGE_SIZE = 10
 
 function createEmptyForm(): CampingplatzFormState {
   return {
@@ -78,7 +79,7 @@ function CampingplaetzePageContent() {
   const [deleteTarget, setDeleteTarget] = useState<Campingplatz | null>(null)
   const [archivePrompt, setArchivePrompt] = useState<Campingplatz | null>(null)
   const [placePhotos, setPlacePhotos] = useState<PlacePhotoForPicker[]>([])
-  /** Google-Picker: je 8 Fotos pro Seite (Pfeile springen um 8) */
+  /** Google-Picker: je GOOGLE_PHOTOS_PAGE_SIZE Fotos pro Seite (Pfeile springen entsprechend) */
   const [googlePickerPageStart, setGooglePickerPageStart] = useState(0)
   const [savedFotos, setSavedFotos] = useState<CampingplatzFoto[]>([])
   const [pendingGoogle, setPendingGoogle] = useState<PlacePhotoForPicker[]>([])

@@ -1,8 +1,13 @@
 /**
- * Google Places liefert pro Place-Details-Antwort höchstens 10 Fotos (API-Vorgabe).
- * Es gibt nur eine zuverlässige Quelle: Places API (New). Eine zweite Abfrage (Legacy)
- * liefert dieselben Motive mit anderen Referenz-Strings und erzeugte bei uns fälschlich
- * bis zu 20 Einträge mit Duplikaten – daher keine Doppelabfrage mehr.
+ * Google Places (New): Pro Place Details / Text Search / Nearby Search liefert das Feld
+ * `photos[]` laut Dokumentation höchstens 10 Einträge pro Ort – gesamt, nicht „10 pro Seite“;
+ * es gibt keine pageToken-/Pagination für die Foto-Liste.
+ * @see https://developers.google.com/maps/documentation/places/web-service/place-photos
+ * („Each API can return up to 10 photos for a place location.“)
+ *
+ * Place Photos `getMedia` lädt nur ein einzelnes Bild anhand des Ressourcennamens, keine Liste.
+ *
+ * Zweite API (Legacy) lieferte dieselben Motive mit anderen Referenz-Strings → Dubletten; daher nur New API.
  */
 
 export type PlacePhotoPickerEntry = { name: string; authorAttributions?: string[] }
