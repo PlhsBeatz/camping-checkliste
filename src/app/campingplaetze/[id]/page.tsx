@@ -3,7 +3,14 @@
 import { useAuth } from '@/components/auth-provider'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type TransitionEvent,
+} from 'react'
 import { Button } from '@/components/ui/button'
 import { NavigationSidebar } from '@/components/navigation-sidebar'
 import {
@@ -26,7 +33,7 @@ import Image from 'next/image'
 import { campingplatzFotoImageSrc } from '@/lib/campingplatz-photo-url'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Card, CardContent } from '@/components/ui/card'
-import { Dialog, DialogClose, DialogContent, DialogTitle } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 
 export default function CampingplatzDetailPage() {
   const params = useParams()
@@ -48,6 +55,12 @@ export default function CampingplatzDetailPage() {
   const [homeCoordsLoaded, setHomeCoordsLoaded] = useState(false)
   const [lightboxFotoId, setLightboxFotoId] = useState<string | null>(null)
   const lightboxTouchRef = useRef<{ x: number; y: number } | null>(null)
+  const lightboxSwipeNavRef = useRef<'next' | 'prev' | null>(null)
+  const lightboxWasOpenRef = useRef(false)
+  const lightboxClosingRef = useRef(false)
+  const fotosRef = useRef(fotos)
+  const [lightboxImgTxPx, setLightboxImgTxPx] = useState(0)
+  const [lightboxImgTxOn, setLightboxImgTxOn] = useState(true)
 
   const lightboxIndex = useMemo(() => {
     if (!lightboxFotoId) return -1
@@ -88,6 +101,83 @@ export default function CampingplatzDetailPage() {
     window.addEventListener('keydown', onKey, true)
     return () => window.removeEventListener('keydown', onKey, true)
   }, [lightboxFotoId, goLightboxPrev, goLightboxNext])
+
+  useEffect(() => {
+    fotosRef.current = fotos
+  }, [fotos])
+
+  const closeLightbox = useCallback(() => {
+    if (lightboxClosingRef.current || lightboxFotoId == null) return
+    if (typeof window !== 'undefined' && (window.history.state as { cpLightbox?: boolean } | null)?.cpLightbox) {
+      lightboxClosingRef.current = true
+      window.history.back()
+    } else {
+      setLightboxFotoId(null)
+    }
+  }, [lightboxFotoId])
+
+  useEffect(() => {
+    const onPop = () => {
+      lightboxClosingRef.current = false
+      setLightboxFotoId((cur) => (cur != null ? null : cur))
+    }
+    window.addEventListener('popstate', onPop)
+    return () => window.removeEventListener('popstate', onPop)
+  }, [])
+
+  useEffect(() => {
+    const open = lightboxFotoId != null
+    if (open && !lightboxWasOpenRef.current) {
+      window.history.pushState({ cpLightbox: true }, '', window.location.href)
+    }
+    lightboxWasOpenRef.current = open
+    if (!open) {
+      lightboxClosingRef.current = false
+      setLightboxImgTxPx(0)
+      setLightboxImgTxOn(true)
+      lightboxSwipeNavRef.current = null
+    }
+  }, [lightboxFotoId])
+
+  const lightboxViewportW = useCallback(
+    () => (typeof window !== 'undefined' ? window.innerWidth : 400),
+    []
+  )
+
+  const applyLightboxEnterFromSide = useCallback((side: 'left' | 'right') => {
+    const vw = lightboxViewportW()
+    setLightboxImgTxOn(false)
+    setLightboxImgTxPx(side === 'right' ? vw : -vw)
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        setLightboxImgTxOn(true)
+        setLightboxImgTxPx(0)
+      })
+    })
+  }, [lightboxViewportW])
+
+  const onLightboxSlideTransitionEnd = useCallback(
+    (e: TransitionEvent<HTMLDivElement>) => {
+      if (e.propertyName !== 'transform' || e.target !== e.currentTarget) return
+      const nav = lightboxSwipeNavRef.current
+      if (!nav) return
+      lightboxSwipeNavRef.current = null
+      const list = fotosRef.current
+      const id = lightboxFotoId
+      if (!id) return
+      const i = list.findIndex((f) => f.id === id)
+      if (nav === 'next' && i >= 0 && i < list.length - 1) {
+        const next = list[i + 1]
+        if (next) setLightboxFotoId(next.id)
+        applyLightboxEnterFromSide('right')
+      } else if (nav === 'prev' && i > 0) {
+        const prev = list[i - 1]
+        if (prev) setLightboxFotoId(prev.id)
+        applyLightboxEnterFromSide('left')
+      }
+    },
+    [lightboxFotoId, applyLightboxEnterFromSide]
+  )
 
   const load = useCallback(async () => {
     if (!id) return
@@ -527,75 +617,143 @@ export default function CampingplatzDetailPage() {
         </div>
       </div>
 
-      <Dialog open={lightboxFotoId != null} onOpenChange={(open) => !open && setLightboxFotoId(null)}>
+      <Dialog open={lightboxFotoId != null} onOpenChange={(open) => !open && closeLightbox()}>
         <DialogContent
           hideCloseButton
-          className="fixed left-0 top-0 z-50 flex h-dvh max-h-dvh w-screen max-w-none translate-x-0 translate-y-0 flex-col items-center justify-center gap-0 border-0 bg-black/92 p-4 pt-14 shadow-none data-[state=closed]:slide-out-to-left-0 data-[state=closed]:slide-out-to-top-0 data-[state=open]:slide-in-from-left-0 data-[state=open]:slide-in-from-top-0 sm:rounded-none"
+          className="fixed left-0 top-0 z-50 flex h-dvh max-h-dvh w-screen max-w-none translate-x-0 translate-y-0 flex-col gap-0 border-0 bg-transparent p-0 shadow-none data-[state=closed]:slide-out-to-left-0 data-[state=closed]:slide-out-to-top-0 data-[state=open]:slide-in-from-left-0 data-[state=open]:slide-in-from-top-0 sm:rounded-none"
           aria-describedby={undefined}
           onOpenAutoFocus={(e) => e.preventDefault()}
+          onEscapeKeyDown={(e) => {
+            e.preventDefault()
+            closeLightbox()
+          }}
+          onPointerDownOutside={(e) => e.preventDefault()}
         >
           <DialogTitle className="sr-only">Foto Vollansicht</DialogTitle>
-          <DialogClose
-            className="absolute right-4 top-4 z-[60] flex h-10 w-10 items-center justify-center rounded-md bg-[rgb(45,79,30)] text-white shadow-md outline-none ring-offset-2 ring-offset-black/90 transition-opacity hover:opacity-95 focus-visible:ring-2 focus-visible:ring-white/70"
-            aria-label="Schließen"
-          >
-            <X className="h-5 w-5" strokeWidth={2.5} />
-          </DialogClose>
           {lightboxFotoId ? (
             <div
-              className="relative flex w-full max-w-full flex-1 items-center justify-center"
-              onTouchStart={(e) => {
-                const t = e.touches[0]
-                if (!t) return
-                lightboxTouchRef.current = { x: t.clientX, y: t.clientY }
-              }}
-              onTouchEnd={(e) => {
-                const start = lightboxTouchRef.current
-                lightboxTouchRef.current = null
-                if (!start || fotos.length < 2) return
-                const t = e.changedTouches[0]
-                if (!t) return
-                const dx = t.clientX - start.x
-                const dy = t.clientY - start.y
-                if (Math.abs(dx) < 56 || Math.abs(dx) < Math.abs(dy)) return
-                if (dx < 0) goLightboxNext()
-                else goLightboxPrev()
-              }}
+              className="flex h-dvh w-screen flex-col bg-black/92"
+              onClick={closeLightbox}
             >
-              {fotos.length > 1 && (
-                <button
-                  type="button"
-                  aria-label="Vorheriges Foto"
-                  disabled={lightboxIndex <= 0}
-                  className="absolute left-1 top-1/2 z-[55] flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-black/45 text-white shadow-md outline-none transition-opacity hover:bg-black/55 focus-visible:ring-2 focus-visible:ring-white/60 disabled:pointer-events-none disabled:opacity-25 md:left-3"
-                  onClick={() => goLightboxPrev()}
+              <button
+                type="button"
+                className="absolute right-4 top-4 z-[60] flex h-10 w-10 items-center justify-center rounded-md bg-[rgb(45,79,30)] text-white shadow-md outline-none ring-offset-2 ring-offset-black/90 transition-opacity hover:opacity-95 focus-visible:ring-2 focus-visible:ring-white/70"
+                aria-label="Schließen"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  closeLightbox()
+                }}
+              >
+                <X className="h-5 w-5" strokeWidth={2.5} />
+              </button>
+              <div
+                className="flex flex-1 flex-col items-center justify-center px-2 pb-6 pt-14"
+                onClick={closeLightbox}
+              >
+                <div
+                  className="relative flex max-h-full max-w-full items-center justify-center touch-none"
+                  onClick={(e) => e.stopPropagation()}
+                  onTouchStart={(e) => {
+                    const t = e.touches[0]
+                    if (!t) return
+                    lightboxTouchRef.current = { x: t.clientX, y: t.clientY }
+                    lightboxSwipeNavRef.current = null
+                    setLightboxImgTxOn(false)
+                  }}
+                  onTouchMove={(e) => {
+                    const start = lightboxTouchRef.current
+                    if (!start || fotos.length < 2) return
+                    const t = e.touches[0]
+                    if (!t) return
+                    const dx = t.clientX - start.x
+                    const dy = t.clientY - start.y
+                    if (Math.abs(dx) < Math.abs(dy) && Math.abs(dy) > 12) return
+                    setLightboxImgTxPx(dx)
+                  }}
+                  onTouchEnd={(e) => {
+                    const start = lightboxTouchRef.current
+                    lightboxTouchRef.current = null
+                    if (!start || fotos.length < 2) {
+                      setLightboxImgTxOn(true)
+                      setLightboxImgTxPx(0)
+                      return
+                    }
+                    const t = e.changedTouches[0]
+                    if (!t) {
+                      setLightboxImgTxOn(true)
+                      setLightboxImgTxPx(0)
+                      return
+                    }
+                    const dx = t.clientX - start.x
+                    const dy = t.clientY - start.y
+                    const vw = lightboxViewportW()
+                    const threshold = Math.min(80, vw * 0.18)
+                    if (Math.abs(dx) < threshold || Math.abs(dx) < Math.abs(dy)) {
+                      setLightboxImgTxOn(true)
+                      setLightboxImgTxPx(0)
+                      return
+                    }
+                    if (dx < 0 && lightboxIndex >= 0 && lightboxIndex < fotos.length - 1) {
+                      lightboxSwipeNavRef.current = 'next'
+                      setLightboxImgTxOn(true)
+                      setLightboxImgTxPx(-vw)
+                      return
+                    }
+                    if (dx > 0 && lightboxIndex > 0) {
+                      lightboxSwipeNavRef.current = 'prev'
+                      setLightboxImgTxOn(true)
+                      setLightboxImgTxPx(vw)
+                      return
+                    }
+                    setLightboxImgTxOn(true)
+                    setLightboxImgTxPx(0)
+                  }}
                 >
-                  <ChevronLeft className="h-7 w-7" strokeWidth={2} />
-                </button>
-              )}
-              {/* eslint-disable-next-line @next/next/no-img-element -- Vollbild, dynamische API-URL */}
-              <img
-                src={campingplatzFotoImageSrc(lightboxFotoId, 2400)}
-                alt=""
-                className="max-h-[calc(100dvh-5.5rem)] max-w-full object-contain select-none"
-                draggable={false}
-              />
-              {fotos.length > 1 && (
-                <button
-                  type="button"
-                  aria-label="Nächstes Foto"
-                  disabled={lightboxIndex < 0 || lightboxIndex >= fotos.length - 1}
-                  className="absolute right-1 top-1/2 z-[55] flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-black/45 text-white shadow-md outline-none transition-opacity hover:bg-black/55 focus-visible:ring-2 focus-visible:ring-white/60 disabled:pointer-events-none disabled:opacity-25 md:right-3"
-                  onClick={() => goLightboxNext()}
-                >
-                  <ChevronRight className="h-7 w-7" strokeWidth={2} />
-                </button>
-              )}
-              {fotos.length > 1 && lightboxIndex >= 0 && (
-                <p className="absolute bottom-1 left-1/2 z-[55] -translate-x-1/2 rounded bg-black/50 px-2 py-0.5 text-xs text-white">
-                  {lightboxIndex + 1} / {fotos.length}
-                </p>
-              )}
+                  {fotos.length > 1 && (
+                    <button
+                      type="button"
+                      aria-label="Vorheriges Foto"
+                      disabled={lightboxIndex <= 0}
+                      className="absolute left-1 top-1/2 z-[55] flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-black/45 text-white shadow-md outline-none transition-opacity hover:bg-black/55 focus-visible:ring-2 focus-visible:ring-white/60 disabled:pointer-events-none disabled:opacity-25 md:left-3"
+                      onClick={() => goLightboxPrev()}
+                    >
+                      <ChevronLeft className="h-7 w-7" strokeWidth={2} />
+                    </button>
+                  )}
+                  <div
+                    className="max-w-full overflow-hidden"
+                    style={{
+                      transform: `translateX(${lightboxImgTxPx}px)`,
+                      transition: lightboxImgTxOn ? 'transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)' : 'none',
+                    }}
+                    onTransitionEnd={onLightboxSlideTransitionEnd}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element -- Vollbild, dynamische API-URL */}
+                    <img
+                      src={campingplatzFotoImageSrc(lightboxFotoId, 2400)}
+                      alt=""
+                      className="max-h-[calc(100dvh-5.5rem)] max-w-full object-contain select-none"
+                      draggable={false}
+                    />
+                  </div>
+                  {fotos.length > 1 && (
+                    <button
+                      type="button"
+                      aria-label="Nächstes Foto"
+                      disabled={lightboxIndex < 0 || lightboxIndex >= fotos.length - 1}
+                      className="absolute right-1 top-1/2 z-[55] flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-black/45 text-white shadow-md outline-none transition-opacity hover:bg-black/55 focus-visible:ring-2 focus-visible:ring-white/60 disabled:pointer-events-none disabled:opacity-25 md:right-3"
+                      onClick={() => goLightboxNext()}
+                    >
+                      <ChevronRight className="h-7 w-7" strokeWidth={2} />
+                    </button>
+                  )}
+                  {fotos.length > 1 && lightboxIndex >= 0 && (
+                    <p className="pointer-events-none absolute bottom-1 left-1/2 z-[55] -translate-x-1/2 rounded bg-black/50 px-2 py-0.5 text-xs text-white">
+                      {lightboxIndex + 1} / {fotos.length}
+                    </p>
+                  )}
+                </div>
+              </div>
             </div>
           ) : null}
         </DialogContent>

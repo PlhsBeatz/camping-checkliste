@@ -44,6 +44,8 @@ interface CampingplatzFormState {
   cons: string[]
 }
 
+const GOOGLE_PHOTOS_PAGE_SIZE = 8
+
 function createEmptyForm(): CampingplatzFormState {
   return {
     name: '',
@@ -76,7 +78,8 @@ function CampingplaetzePageContent() {
   const [deleteTarget, setDeleteTarget] = useState<Campingplatz | null>(null)
   const [archivePrompt, setArchivePrompt] = useState<Campingplatz | null>(null)
   const [placePhotos, setPlacePhotos] = useState<PlacePhotoForPicker[]>([])
-  const [googlePickerIndex, setGooglePickerIndex] = useState(0)
+  /** Google-Picker: je 8 Fotos pro Seite (Pfeile springen um 8) */
+  const [googlePickerPageStart, setGooglePickerPageStart] = useState(0)
   const [savedFotos, setSavedFotos] = useState<CampingplatzFoto[]>([])
   const [pendingGoogle, setPendingGoogle] = useState<PlacePhotoForPicker[]>([])
   const [pendingFiles, setPendingFiles] = useState<File[]>([])
@@ -99,7 +102,7 @@ function CampingplaetzePageContent() {
   }, [showNavSidebar])
 
   useEffect(() => {
-    setGooglePickerIndex(0)
+    setGooglePickerPageStart(0)
   }, [placePhotos])
 
   useEffect(() => {
@@ -878,27 +881,52 @@ function CampingplaetzePageContent() {
             <div>
               <Label className="block mb-2">Aus Google Maps hinzufügen</Label>
               {placePhotos.length > 0 ? (
-                <div className="flex flex-col gap-3">
-                  <div className="flex items-stretch justify-center gap-2 sm:gap-3">
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center gap-2">
                     <Button
                       type="button"
                       variant="outline"
                       size="icon"
-                      className="h-auto min-h-[120px] w-10 shrink-0 self-center sm:w-11"
-                      disabled={googlePickerIndex <= 0}
-                      aria-label="Vorheriges Google-Foto"
-                      onClick={() => setGooglePickerIndex((i) => Math.max(0, i - 1))}
+                      className="h-8 w-8 shrink-0"
+                      disabled={googlePickerPageStart <= 0}
+                      aria-label="Vorherige Google-Fotos"
+                      onClick={() =>
+                        setGooglePickerPageStart((s) => Math.max(0, s - GOOGLE_PHOTOS_PAGE_SIZE))
+                      }
                     >
-                      <ChevronLeft className="h-5 w-5" />
+                      <ChevronLeft className="h-4 w-4" />
                     </Button>
-                    <div className="flex min-w-0 max-w-[280px] flex-1 flex-col gap-2">
-                      {(() => {
-                        const photo = placePhotos[googlePickerIndex]
-                        const photoUrl = photo?.name ? placesPhotoProxyUrl(photo.name, 400) : null
-                        const added = photo?.name ? googlePickerAlreadyAdded(photo.name) : true
+                    <p className="min-w-0 flex-1 text-center text-xs text-muted-foreground">
+                      {googlePickerPageStart + 1}–
+                      {Math.min(googlePickerPageStart + GOOGLE_PHOTOS_PAGE_SIZE, placePhotos.length)} von{' '}
+                      {placePhotos.length}
+                    </p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="h-8 w-8 shrink-0"
+                      disabled={googlePickerPageStart + GOOGLE_PHOTOS_PAGE_SIZE >= placePhotos.length}
+                      aria-label="Nächste Google-Fotos"
+                      onClick={() =>
+                        setGooglePickerPageStart((s) => s + GOOGLE_PHOTOS_PAGE_SIZE)
+                      }
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <div className="grid grid-cols-4 gap-1.5 sm:gap-2">
+                    {placePhotos
+                      .slice(googlePickerPageStart, googlePickerPageStart + GOOGLE_PHOTOS_PAGE_SIZE)
+                      .map((photo, idx) => {
+                        const photoUrl = photo.name ? placesPhotoProxyUrl(photo.name, 400) : null
+                        const added = photo.name ? googlePickerAlreadyAdded(photo.name) : true
                         return (
-                          <>
-                            <div className="aspect-square w-full overflow-hidden rounded-lg border bg-muted">
+                          <div
+                            key={photo.name || `${googlePickerPageStart}-${idx}`}
+                            className="flex min-w-0 flex-col gap-1"
+                          >
+                            <div className="aspect-square overflow-hidden rounded-lg border bg-muted">
                               {photoUrl ? (
                                 <Image
                                   src={photoUrl}
@@ -909,7 +937,7 @@ function CampingplaetzePageContent() {
                                   className="h-full w-full object-cover"
                                 />
                               ) : (
-                                <span className="flex h-full items-center justify-center text-xs text-muted-foreground">
+                                <span className="flex h-full items-center justify-center text-[10px] text-muted-foreground">
                                   Foto
                                 </span>
                               )}
@@ -918,33 +946,16 @@ function CampingplaetzePageContent() {
                               type="button"
                               size="sm"
                               variant={added ? 'secondary' : 'default'}
-                              disabled={fotoBusy || added || !photo?.name}
-                              className="h-8 w-full text-xs"
-                              onClick={() => photo && void addGoogleFromPicker(photo)}
+                              disabled={fotoBusy || added || !photo.name}
+                              className="h-7 w-full px-1 text-[10px] leading-tight sm:h-8 sm:text-xs"
+                              onClick={() => void addGoogleFromPicker(photo)}
                             >
                               {added ? 'Bereits hinzugefügt' : 'Hinzufügen'}
                             </Button>
-                          </>
+                          </div>
                         )
-                      })()}
-                    </div>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon"
-                      className="h-auto min-h-[120px] w-10 shrink-0 self-center sm:w-11"
-                      disabled={googlePickerIndex >= placePhotos.length - 1}
-                      aria-label="Nächstes Google-Foto"
-                      onClick={() =>
-                        setGooglePickerIndex((i) => Math.min(placePhotos.length - 1, i + 1))
-                      }
-                    >
-                      <ChevronRight className="h-5 w-5" />
-                    </Button>
+                      })}
                   </div>
-                  <p className="text-center text-xs text-muted-foreground">
-                    Foto {googlePickerIndex + 1} von {placePhotos.length}
-                  </p>
                 </div>
               ) : (
                 <p className="text-sm text-muted-foreground">
