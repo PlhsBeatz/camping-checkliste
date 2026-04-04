@@ -1266,7 +1266,6 @@ export default function UrlaubePage() {
                                 <div className="flex gap-3 flex-1 min-w-0">
                                   {(() => {
                                     const photoUrl = campingplatzListThumbnailSrc(cp)
-                                    const hasPhoto = !!photoUrl
                                     return (
                                       <div className="flex-shrink-0 w-12 h-12 rounded-lg overflow-hidden bg-muted flex items-center justify-center">
                                         {photoUrl ? (

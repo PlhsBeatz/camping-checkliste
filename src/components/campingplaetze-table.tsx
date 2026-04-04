@@ -339,7 +339,6 @@ export function CampingplaetzeTable({
                           >
                             {(() => {
                               const photoUrl = campingplatzListThumbnailSrc(item)
-                              const hasPhoto = !!photoUrl
                               return (
                                 <div className="flex-shrink-0 w-12 h-12 rounded-lg overflow-hidden bg-muted flex items-center justify-center">
                                   {photoUrl ? (
