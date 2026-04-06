@@ -93,11 +93,16 @@ export default function CampingplatzDetailPage() {
   const [lightboxFotoId, setLightboxFotoId] = useState<string | null>(null)
   const lightboxTouchRef = useRef<{ x: number; y: number } | null>(null)
   const lightboxSwipeNavRef = useRef<'next' | 'prev' | null>(null)
+  const lightboxGestureModeRef = useRef<'h' | 'v' | null>(null)
+  const lightboxDismissFinishingRef = useRef(false)
   const lightboxWasOpenRef = useRef(false)
   const lightboxClosingRef = useRef(false)
   const fotosRef = useRef(fotos)
   const [lightboxImgTxPx, setLightboxImgTxPx] = useState(0)
   const [lightboxImgTxOn, setLightboxImgTxOn] = useState(true)
+  /** Nach-unten-Wischen: vertikaler Offset + Verkleinerung (Lightbox schließen) */
+  const [lightboxPullDy, setLightboxPullDy] = useState(0)
+  const lightboxPullDyRef = useRef(0)
 
   const lightboxIndex = useMemo(() => {
     if (!lightboxFotoId) return -1
@@ -173,6 +178,10 @@ export default function CampingplatzDetailPage() {
       setLightboxImgTxPx(0)
       setLightboxImgTxOn(true)
       lightboxSwipeNavRef.current = null
+      lightboxGestureModeRef.current = null
+      lightboxDismissFinishingRef.current = false
+      lightboxPullDyRef.current = 0
+      setLightboxPullDy(0)
     }
   }, [lightboxFotoId])
 
@@ -193,16 +202,23 @@ export default function CampingplatzDetailPage() {
     })
   }, [lightboxViewportW])
 
-  const onLightboxSlideTransitionEnd = useCallback(
+  const onLightboxTransformTransitionEnd = useCallback(
     (e: TransitionEvent<HTMLDivElement>) => {
       if (e.propertyName !== 'transform' || e.target !== e.currentTarget) return
+      if (lightboxDismissFinishingRef.current) {
+        lightboxDismissFinishingRef.current = false
+        lightboxPullDyRef.current = 0
+        setLightboxPullDy(0)
+        closeLightbox()
+        return
+      }
       const nav = lightboxSwipeNavRef.current
       if (!nav) return
       lightboxSwipeNavRef.current = null
       const list = fotosRef.current
-      const id = lightboxFotoId
-      if (!id) return
-      const i = list.findIndex((f) => f.id === id)
+      const curId = lightboxFotoId
+      if (!curId) return
+      const i = list.findIndex((f) => f.id === curId)
       if (nav === 'next' && i >= 0 && i < list.length - 1) {
         const next = list[i + 1]
         if (next) setLightboxFotoId(next.id)
@@ -213,7 +229,7 @@ export default function CampingplatzDetailPage() {
         applyLightboxEnterFromSide('left')
       }
     },
-    [lightboxFotoId, applyLightboxEnterFromSide]
+    [lightboxFotoId, applyLightboxEnterFromSide, closeLightbox]
   )
 
   const load = useCallback(async () => {
@@ -463,9 +479,9 @@ export default function CampingplatzDetailPage() {
                 <DropdownMenuTrigger asChild>
                   <Button
                     type="button"
-                    variant="outline"
+                    variant="ghost"
                     size="icon"
-                    className="h-9 w-9 shrink-0 bg-white hover:bg-neutral-50"
+                    className="h-9 w-9 shrink-0 rounded-full border-0 bg-transparent text-foreground shadow-none hover:bg-neutral-100 focus-visible:ring-2 focus-visible:ring-[rgb(45,79,30)]/30"
                     aria-label="Weitere Aktionen"
                   >
                     <MoreVertical className="h-5 w-5" />
@@ -681,7 +697,19 @@ export default function CampingplatzDetailPage() {
           <DialogTitle className="sr-only">Foto Vollansicht</DialogTitle>
           {lightboxFotoId ? (
             <div
-              className="flex h-dvh w-screen flex-col bg-black/92"
+              className="flex h-dvh w-screen flex-col"
+              style={{
+                backgroundColor: `rgba(0,0,0,${Math.max(
+                  0.05,
+                  0.92 *
+                    (1 -
+                      Math.min(
+                        1,
+                        lightboxPullDy /
+                          (typeof window !== 'undefined' ? window.innerHeight * 0.68 : 640)
+                      ))
+                )})`,
+              }}
               onClick={closeLightbox}
             >
               <button
@@ -707,24 +735,71 @@ export default function CampingplatzDetailPage() {
                     if (!t) return
                     lightboxTouchRef.current = { x: t.clientX, y: t.clientY }
                     lightboxSwipeNavRef.current = null
+                    lightboxGestureModeRef.current = null
                     setLightboxImgTxOn(false)
                   }}
                   onTouchMove={(e) => {
                     const start = lightboxTouchRef.current
-                    if (!start || fotos.length < 2) return
+                    if (!start) return
                     const t = e.touches[0]
                     if (!t) return
                     const dx = t.clientX - start.x
                     const dy = t.clientY - start.y
-                    if (Math.abs(dx) < Math.abs(dy) && Math.abs(dy) > 12) return
-                    setLightboxImgTxPx(dx)
+                    const lockPx = 12
+
+                    if (!lightboxGestureModeRef.current) {
+                      if (Math.hypot(dx, dy) < lockPx) return
+                      if (fotos.length < 2) {
+                        lightboxGestureModeRef.current =
+                          dy > 0 && dy >= Math.abs(dx) * 0.55 ? 'v' : 'h'
+                      } else {
+                        lightboxGestureModeRef.current =
+                          Math.abs(dx) >= Math.abs(dy) ? 'h' : 'v'
+                      }
+                    }
+
+                    const mode = lightboxGestureModeRef.current
+                    if (mode === 'v') {
+                      const pull = Math.max(0, dy)
+                      lightboxPullDyRef.current = pull
+                      setLightboxPullDy(pull)
+                      return
+                    }
+                    if (mode === 'h' && fotos.length >= 2) {
+                      if (Math.abs(dx) < Math.abs(dy) && Math.abs(dy) > 12) return
+                      setLightboxImgTxPx(dx)
+                    }
                   }}
                   onTouchEnd={(e) => {
                     const start = lightboxTouchRef.current
                     lightboxTouchRef.current = null
+                    const mode = lightboxGestureModeRef.current
+                    lightboxGestureModeRef.current = null
+
+                    if (mode === 'v') {
+                      const vw = lightboxViewportW()
+                      const vh = typeof window !== 'undefined' ? window.innerHeight : 640
+                      const threshold = Math.min(110, vw * 0.22)
+                      const pull = lightboxPullDyRef.current
+                      if (pull > threshold) {
+                        lightboxDismissFinishingRef.current = true
+                        setLightboxImgTxOn(true)
+                        lightboxPullDyRef.current = vh * 1.15
+                        setLightboxPullDy(vh * 1.15)
+                      } else {
+                        setLightboxImgTxOn(true)
+                        lightboxPullDyRef.current = 0
+                        setLightboxPullDy(0)
+                      }
+                      setLightboxImgTxPx(0)
+                      return
+                    }
+
                     if (!start || fotos.length < 2) {
                       setLightboxImgTxOn(true)
                       setLightboxImgTxPx(0)
+                      lightboxPullDyRef.current = 0
+                      setLightboxPullDy(0)
                       return
                     }
                     const t = e.changedTouches[0]
@@ -770,18 +845,21 @@ export default function CampingplatzDetailPage() {
                     </button>
                   )}
                   <div
-                    className="max-w-full overflow-hidden"
+                    className="max-w-full overflow-visible"
                     style={{
-                      transform: `translateX(${lightboxImgTxPx}px)`,
-                      transition: lightboxImgTxOn ? 'transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)' : 'none',
+                      transform: `translateX(${lightboxImgTxPx}px) translateY(${lightboxPullDy}px) scale(${Math.max(0.3, 1 - lightboxPullDy / 520)})`,
+                      transition: lightboxImgTxOn
+                        ? 'transform 0.32s cubic-bezier(0.25, 0.8, 0.25, 1)'
+                        : 'none',
+                      transformOrigin: 'center center',
                     }}
-                    onTransitionEnd={onLightboxSlideTransitionEnd}
+                    onTransitionEnd={onLightboxTransformTransitionEnd}
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element -- Vollbild, dynamische API-URL */}
                     <img
                       src={campingplatzFotoImageSrc(lightboxFotoId, 2400)}
                       alt=""
-                      className="max-h-[calc(100dvh-5.5rem)] max-w-full object-contain select-none"
+                      className="max-h-[calc(100dvh-5.5rem)] max-w-full rounded-lg object-contain select-none shadow-2xl"
                       draggable={false}
                     />
                   </div>
