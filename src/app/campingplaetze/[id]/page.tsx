@@ -1,9 +1,10 @@
 'use client'
 
 import { useAuth } from '@/components/auth-provider'
-import { useParams, useRouter } from 'next/navigation'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import {
+  Suspense,
   useCallback,
   useEffect,
   useMemo,
@@ -42,6 +43,34 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { CampingplatzEditModal } from '@/components/campingplatz-edit-modal'
+
+function CampingplatzDetailEditModalGate({
+  detailId,
+  campingplatz,
+  onSaved,
+  onRefreshCampingplatz,
+}: {
+  detailId: string
+  campingplatz: Campingplatz | null
+  onSaved: (saved: Campingplatz) => void
+  onRefreshCampingplatz?: (id: string) => Promise<void>
+}) {
+  const searchParams = useSearchParams()
+  const router = useRouter()
+  const open = searchParams.has('bearbeiten') && campingplatz != null
+  return (
+    <CampingplatzEditModal
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) router.replace(`/campingplaetze/${detailId}`, { scroll: false })
+      }}
+      initialCampingplatz={campingplatz}
+      onSaved={onSaved}
+      onRefreshCampingplatz={onRefreshCampingplatz}
+    />
+  )
+}
 
 export default function CampingplatzDetailPage() {
   const params = useParams()
@@ -446,7 +475,10 @@ export default function CampingplatzDetailPage() {
                   <DropdownMenuItem
                     className="cursor-pointer gap-2"
                     onClick={() =>
-                      router.push(`/campingplaetze?bearbeiten=${encodeURIComponent(campingplatz.id)}`)
+                      router.replace(
+                        `/campingplaetze/${encodeURIComponent(id)}?bearbeiten=1`,
+                        { scroll: false }
+                      )
                     }
                   >
                     <Pencil className="h-4 w-4" />
@@ -775,6 +807,17 @@ export default function CampingplatzDetailPage() {
           ) : null}
         </DialogContent>
       </Dialog>
+
+      <Suspense fallback={null}>
+        <CampingplatzDetailEditModalGate
+          detailId={id}
+          campingplatz={campingplatz}
+          onSaved={(saved) => setCampingplatz(saved)}
+          onRefreshCampingplatz={async (cid) => {
+            if (cid === id) await load()
+          }}
+        />
+      </Suspense>
 
       <ConfirmDialog
         open={!!deleteTarget}
