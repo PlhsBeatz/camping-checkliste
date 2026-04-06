@@ -18,6 +18,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Menu,
+  MoreVertical,
   Route,
   Globe2,
   PlayCircle,
@@ -34,6 +35,13 @@ import { campingplatzFotoImageSrc } from '@/lib/campingplatz-photo-url'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Card, CardContent } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 
 export default function CampingplatzDetailPage() {
   const params = useParams()
@@ -373,6 +381,15 @@ export default function CampingplatzDetailPage() {
     return null
   }
 
+  const webseiteLink = (() => {
+    const raw = campingplatz?.webseite?.trim()
+    if (!raw) return null
+    const href =
+      raw.startsWith('http://') || raw.startsWith('https://') ? raw : `https://${raw}`
+    const label = raw.replace(/^https?:\/\//i, '')
+    return { href, label }
+  })()
+
   const coverBadge = (
     <span
       className="pointer-events-none absolute top-2 left-2 inline-flex h-5 w-5 items-center justify-center rounded bg-[rgb(45,79,30)] text-white shadow-sm"
@@ -395,8 +412,8 @@ export default function CampingplatzDetailPage() {
         )}
       >
         <div className="flex flex-col flex-1 min-h-0 min-w-0 container mx-auto p-4 md:p-6 space-y-6">
-          <div className="sticky top-0 z-10 flex items-center justify-between bg-white shadow pb-4 -mx-4 px-4 -mt-4 pt-4 md:-mx-6 md:px-6 md:-mt-6 md:pt-6 md:pb-4">
-            <div className="flex items-center gap-4 min-w-0">
+          <div className="sticky top-0 z-10 flex items-center justify-between gap-3 bg-white shadow pb-4 -mx-4 px-4 -mt-4 pt-4 md:-mx-6 md:px-6 md:-mt-6 md:pt-6 md:pb-4">
+            <div className="flex min-w-0 flex-1 items-center gap-4">
               <Button
                 variant="outline"
                 size="icon"
@@ -412,6 +429,40 @@ export default function CampingplatzDetailPage() {
                 <p className="text-sm text-muted-foreground truncate">{subtitle}</p>
               </div>
             </div>
+            {canAccessConfig && campingplatz && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="h-9 w-9 shrink-0 bg-white hover:bg-neutral-50"
+                    aria-label="Weitere Aktionen"
+                  >
+                    <MoreVertical className="h-5 w-5" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="min-w-[10rem]">
+                  <DropdownMenuItem
+                    className="cursor-pointer gap-2"
+                    onClick={() =>
+                      router.push(`/campingplaetze?bearbeiten=${encodeURIComponent(campingplatz.id)}`)
+                    }
+                  >
+                    <Pencil className="h-4 w-4" />
+                    Bearbeiten
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    className="cursor-pointer gap-2 text-destructive focus:text-destructive"
+                    onClick={() => setDeleteTarget(campingplatz)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    Löschen
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
           </div>
 
           {loadError && (
@@ -426,13 +477,8 @@ export default function CampingplatzDetailPage() {
 
           {campingplatz && (
             <>
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="bg-white hover:bg-neutral-50"
-                  asChild
-                >
+              <div className="hidden flex-wrap gap-2 md:flex">
+                <Button variant="outline" size="sm" className="bg-white hover:bg-neutral-50" asChild>
                   <Link
                     href="/campingplaetze"
                     className="inline-flex items-center gap-2 whitespace-nowrap"
@@ -441,78 +487,6 @@ export default function CampingplatzDetailPage() {
                     Zur Liste
                   </Link>
                 </Button>
-                {campingplatz.webseite && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="bg-white hover:bg-neutral-50"
-                    asChild
-                  >
-                    <a
-                      href={campingplatz.webseite}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-2 whitespace-nowrap"
-                    >
-                      <Globe2 className="h-4 w-4 shrink-0" />
-                      Webseite
-                    </a>
-                  </Button>
-                )}
-                {campingplatz.video_link && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="bg-white hover:bg-neutral-50"
-                    asChild
-                  >
-                    <a
-                      href={campingplatz.video_link}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-2 whitespace-nowrap"
-                    >
-                      <PlayCircle className="h-4 w-4 shrink-0" />
-                      Video
-                    </a>
-                  </Button>
-                )}
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="bg-white hover:bg-neutral-50 inline-flex items-center gap-2 whitespace-nowrap"
-                  onClick={() => void openInAdacMaps(campingplatz)}
-                >
-                  <Route className="h-4 w-4 shrink-0" />
-                  Navigation (ADAC)
-                </Button>
-                {canAccessConfig && (
-                  <>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="bg-white hover:bg-neutral-50 inline-flex items-center gap-2 whitespace-nowrap"
-                      onClick={() =>
-                        router.push(`/campingplaetze?bearbeiten=${encodeURIComponent(campingplatz.id)}`)
-                      }
-                    >
-                      <Pencil className="h-4 w-4 shrink-0" />
-                      Bearbeiten
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="bg-white hover:bg-neutral-50 text-destructive border-destructive/50 hover:bg-destructive/10 inline-flex items-center gap-2 whitespace-nowrap"
-                      onClick={() => setDeleteTarget(campingplatz)}
-                    >
-                      <Trash2 className="h-4 w-4 shrink-0" />
-                      Löschen
-                    </Button>
-                  </>
-                )}
               </div>
 
               <Card>
@@ -543,10 +517,10 @@ export default function CampingplatzDetailPage() {
 
                   <section className="space-y-2">
                     <h2 className="text-sm font-semibold text-[rgb(45,79,30)]">Fotos</h2>
-                    {fotos.length === 0 ? (
+                    {fotos.length === 0 && !campingplatz.video_link ? (
                       <p className="text-sm text-muted-foreground">Keine Fotos gespeichert.</p>
                     ) : (
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                         {fotos.map((f) => (
                           <button
                             key={f.id}
@@ -565,6 +539,21 @@ export default function CampingplatzDetailPage() {
                             {f.is_cover && coverBadge}
                           </button>
                         ))}
+                        {campingplatz.video_link ? (
+                          <a
+                            href={campingplatz.video_link}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="relative flex aspect-[4/3] w-full flex-col items-center justify-center gap-1 overflow-hidden rounded-xl border border-input bg-muted px-2 text-center outline-none ring-offset-2 transition hover:bg-muted/90 hover:opacity-95 focus-visible:ring-2 focus-visible:ring-[rgb(45,79,30)]"
+                          >
+                            <PlayCircle
+                              className="h-8 w-8 shrink-0 text-[rgb(45,79,30)] sm:h-9 sm:w-9"
+                              strokeWidth={1.5}
+                              aria-hidden
+                            />
+                            <span className="text-xs font-medium text-[rgb(45,79,30)]">Video</span>
+                          </a>
+                        ) : null}
                       </div>
                     )}
                     {uniqueAttr.length > 0 && (
@@ -574,9 +563,37 @@ export default function CampingplatzDetailPage() {
                     )}
                   </section>
 
-                  <section className="space-y-2">
+                  <section className="space-y-3">
                     <h2 className="text-sm font-semibold text-[rgb(45,79,30)]">Adresse</h2>
                     <p className="text-sm whitespace-pre-wrap">{campingplatz.adresse || '—'}</p>
+                    {webseiteLink && (
+                      <div className="flex flex-wrap items-start gap-2 text-sm">
+                        <Globe2
+                          className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground"
+                          aria-hidden
+                        />
+                        <a
+                          href={webseiteLink.href}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="min-w-0 break-all text-[rgb(45,79,30)] underline underline-offset-2 hover:opacity-90"
+                          title={webseiteLink.href}
+                        >
+                          {webseiteLink.label}
+                        </a>
+                      </div>
+                    )}
+                    <div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="h-7 gap-1.5 bg-white px-2.5 text-xs hover:bg-neutral-50"
+                        onClick={() => void openInAdacMaps(campingplatz)}
+                      >
+                        <Route className="h-3.5 w-3.5 shrink-0" />
+                        Navigation (ADAC)
+                      </Button>
+                    </div>
                   </section>
 
                   <section className="space-y-2">
