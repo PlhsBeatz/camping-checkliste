@@ -19,6 +19,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Menu,
+  MapPin,
   MoreVertical,
   Route,
   Globe2,
@@ -44,6 +45,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { CampingplatzEditModal } from '@/components/campingplatz-edit-modal'
+import { CampingplatzOverviewMap } from '@/components/campingplatz-overview-map'
 
 function CampingplatzDetailEditModalGate({
   detailId,
@@ -446,12 +448,12 @@ export default function CampingplatzDetailPage() {
   )
 
   return (
-    <div className="min-h-screen flex bg-background">
+    <div className="min-h-screen flex">
       <NavigationSidebar isOpen={showNavSidebar} onClose={() => setShowNavSidebar(false)} />
 
       <div
         className={cn(
-          'flex-1 flex flex-col min-h-0 min-w-0 transition-all duration-300 bg-background',
+          'flex-1 flex flex-col min-h-0 min-w-0 transition-all duration-300',
           'lg:ml-[280px]',
           'max-md:h-dvh max-md:min-h-dvh'
         )}
@@ -614,6 +616,17 @@ export default function CampingplatzDetailPage() {
                   <section className="space-y-3">
                     <h2 className="text-sm font-semibold text-[rgb(45,79,30)]">Adresse</h2>
                     <p className="text-sm whitespace-pre-wrap">{campingplatz.adresse || '—'}</p>
+                    <div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="h-7 gap-1.5 bg-white px-2.5 text-xs hover:bg-neutral-50"
+                        onClick={() => void openInAdacMaps(campingplatz)}
+                      >
+                        <Route className="h-3.5 w-3.5 shrink-0" />
+                        Navigation (ADAC)
+                      </Button>
+                    </div>
                     {webseiteLink && (
                       <div className="flex flex-wrap items-start gap-2 text-sm">
                         <Globe2
@@ -631,17 +644,23 @@ export default function CampingplatzDetailPage() {
                         </a>
                       </div>
                     )}
-                    <div>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="h-7 gap-1.5 bg-white px-2.5 text-xs hover:bg-neutral-50"
-                        onClick={() => void openInAdacMaps(campingplatz)}
-                      >
-                        <Route className="h-3.5 w-3.5 shrink-0" />
-                        Navigation (ADAC)
-                      </Button>
-                    </div>
+                    {campingplatz.lat != null && campingplatz.lng != null && (
+                      <div className="mt-4 space-y-2 border-t border-border/60 pt-4">
+                        <h3 className="flex items-center gap-2 text-sm font-semibold text-[rgb(45,79,30)]">
+                          <MapPin className="h-4 w-4 shrink-0 text-[rgb(45,79,30)]" aria-hidden />
+                          Lage
+                        </h3>
+                        <p className="text-xs text-muted-foreground leading-snug">
+                          Grober Überblick: Land und angrenzende Regionen, nur die wichtigsten
+                          Orientierungslinien – nicht für die genaue Navigation gedacht.
+                        </p>
+                        <CampingplatzOverviewMap
+                          lat={campingplatz.lat}
+                          lng={campingplatz.lng}
+                          title={campingplatz.name}
+                        />
+                      </div>
+                    )}
                   </section>
 
                   <section className="space-y-2">
