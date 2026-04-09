@@ -870,118 +870,129 @@ export function ChecklistenTool({ onHeaderContextChange, headerTrailingRef }: Ch
     return (
       <div className="space-y-4">
         {headerTrailingEl && detailActionsMenu ? createPortal(detailActionsMenu, headerTrailingEl) : null}
-        <div className="-mx-4 px-4 md:-mx-6 md:px-6 -mt-6 pt-4 pb-3 bg-white flex flex-wrap items-center justify-between gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={goToChecklistenOverview}
-            className="bg-white hover:bg-neutral-50 shadow-sm border-gray-200"
-          >
-            <ArrowLeft className="h-4 w-4 mr-1 shrink-0" />
-            Zur Übersicht
-          </Button>
-          {canAccessConfig && editMode ? (
-            <div className="flex flex-wrap items-center gap-2">
-              <Button variant="secondary" size="sm" onClick={() => setEditMode(false)}>
-                Fertig
-              </Button>
-              <Button variant="destructive" size="sm" onClick={() => setDeleteListId(detailId)}>
-                Liste löschen
-              </Button>
-            </div>
-          ) : null}
-        </div>
 
         {editMode && canAccessConfig ? (
-          <DndContext
-            sensors={sensors}
-            collisionDetection={closestCenter}
-            onDragEnd={handleDragEndEditor}
-          >
-            <SortableContext items={allEditorSortableIds} strategy={verticalListSortingStrategy}>
-              <div className="space-y-4">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    setKatModal({ checklistId: detailId, katId: null, titel: '' })
-                    setKatTitel('')
-                  }}
-                >
-                  <Plus className="h-4 w-4 mr-1" />
-                  Kategorie hinzufügen
+          <>
+            <div className="-mx-4 sm:-mx-6 px-4 sm:px-6 py-3 bg-scroll-pattern rounded-lg flex flex-wrap items-center justify-between gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={goToChecklistenOverview}
+                className="bg-white hover:bg-neutral-50"
+              >
+                <ArrowLeft className="h-4 w-4 mr-1 shrink-0" />
+                Zur Übersicht
+              </Button>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button variant="secondary" size="sm" onClick={() => setEditMode(false)}>
+                  Fertig
                 </Button>
-                {catsSorted.map(kat => (
-                  <SortableEditorCategoryBlock
-                    key={kat.id}
-                    katId={kat.id}
-                    titel={kat.titel}
-                    onRename={() => {
-                      setKatModal({ checklistId: detailId, katId: kat.id, titel: kat.titel })
-                      setKatTitel(kat.titel)
-                    }}
-                    onDelete={() =>
-                      setDeleteKat({
-                        checklistId: detailId,
-                        katId: kat.id,
-                        titel: kat.titel,
-                      })
-                    }
-                  >
-                    <CategoryDropZone kategorieId={kat.id}>
-                      {kat.eintraege.map(e => (
-                        <SortableEntryRow
-                          key={e.id}
-                          entry={e}
-                          onEdit={() => {
-                            setEntryModal({
-                              checklistId: detailId,
-                              kategorieId: kat.id,
-                              entry: e,
-                            })
-                            setEntryText(e.text)
-                          }}
-                          onDelete={async () => {
-                            const res = await fetch(
-                              `/api/checklisten/${detailId}/eintraege/${e.id}`,
-                              { method: 'DELETE' }
-                            )
-                            const j = (await res.json()) as { success?: boolean; error?: string }
-                            if (!res.ok || !j.success)
-                              toast({
-                                title: j.error || 'Löschen fehlgeschlagen',
-                                variant: 'destructive',
-                              })
-                            else await load()
-                          }}
-                        />
-                      ))}
-                      <div className="px-3 py-2 border-t border-dashed">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-[rgb(45,79,30)]"
-                          onClick={() => {
-                            setEntryModal({
-                              checklistId: detailId,
-                              kategorieId: kat.id,
-                              entry: null,
-                            })
-                            setEntryText('')
-                          }}
-                        >
-                          <Plus className="h-4 w-4 mr-1" />
-                          Eintrag
-                        </Button>
-                      </div>
-                    </CategoryDropZone>
-                  </SortableEditorCategoryBlock>
-                ))}
+                <Button variant="destructive" size="sm" onClick={() => setDeleteListId(detailId)}>
+                  Liste löschen
+                </Button>
               </div>
-            </SortableContext>
-          </DndContext>
+            </div>
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEndEditor}
+            >
+              <SortableContext items={allEditorSortableIds} strategy={verticalListSortingStrategy}>
+                <div className="space-y-4">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setKatModal({ checklistId: detailId, katId: null, titel: '' })
+                      setKatTitel('')
+                    }}
+                  >
+                    <Plus className="h-4 w-4 mr-1" />
+                    Kategorie hinzufügen
+                  </Button>
+                  {catsSorted.map(kat => (
+                    <SortableEditorCategoryBlock
+                      key={kat.id}
+                      katId={kat.id}
+                      titel={kat.titel}
+                      onRename={() => {
+                        setKatModal({ checklistId: detailId, katId: kat.id, titel: kat.titel })
+                        setKatTitel(kat.titel)
+                      }}
+                      onDelete={() =>
+                        setDeleteKat({
+                          checklistId: detailId,
+                          katId: kat.id,
+                          titel: kat.titel,
+                        })
+                      }
+                    >
+                      <CategoryDropZone kategorieId={kat.id}>
+                        {kat.eintraege.map(e => (
+                          <SortableEntryRow
+                            key={e.id}
+                            entry={e}
+                            onEdit={() => {
+                              setEntryModal({
+                                checklistId: detailId,
+                                kategorieId: kat.id,
+                                entry: e,
+                              })
+                              setEntryText(e.text)
+                            }}
+                            onDelete={async () => {
+                              const res = await fetch(
+                                `/api/checklisten/${detailId}/eintraege/${e.id}`,
+                                { method: 'DELETE' }
+                              )
+                              const j = (await res.json()) as { success?: boolean; error?: string }
+                              if (!res.ok || !j.success)
+                                toast({
+                                  title: j.error || 'Löschen fehlgeschlagen',
+                                  variant: 'destructive',
+                                })
+                              else await load()
+                            }}
+                          />
+                        ))}
+                        <div className="px-3 py-2 border-t border-dashed">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-[rgb(45,79,30)]"
+                            onClick={() => {
+                              setEntryModal({
+                                checklistId: detailId,
+                                kategorieId: kat.id,
+                                entry: null,
+                              })
+                              setEntryText('')
+                            }}
+                          >
+                            <Plus className="h-4 w-4 mr-1" />
+                            Eintrag
+                          </Button>
+                        </div>
+                      </CategoryDropZone>
+                    </SortableEditorCategoryBlock>
+                  ))}
+                </div>
+              </SortableContext>
+            </DndContext>
+          </>
         ) : (
-          <div className="-mx-4 sm:-mx-6 px-4 sm:px-6 py-4 bg-scroll-pattern rounded-lg">
+          <div className="-mx-4 sm:-mx-6 px-4 sm:px-6 py-4 bg-scroll-pattern rounded-lg space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={goToChecklistenOverview}
+                className="bg-white hover:bg-neutral-50"
+              >
+                <ArrowLeft className="h-4 w-4 mr-1 shrink-0" />
+                Zur Übersicht
+              </Button>
+            </div>
             <div className="space-y-6">
               {catsSorted.map(kat => (
                 <div key={kat.id}>
