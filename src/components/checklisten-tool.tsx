@@ -1,6 +1,7 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react'
+import { createPortal } from 'react-dom'
 import { useRouter, useSearchParams } from 'next/navigation'
 import {
   DndContext,
@@ -32,6 +33,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import {
@@ -375,11 +377,13 @@ export type ChecklistenHeaderContext = {
 export interface ChecklistenToolProps {
   /** Steuert Sticky-Header (Untertitel + Fortschritt) auf der Checklisten-Seite */
   onHeaderContextChange?: (ctx: ChecklistenHeaderContext) => void
+  /** Ziel für Drei-Punkte-Menü rechts im Sticky-Header (Detailansicht) */
+  headerTrailingRef?: RefObject<HTMLDivElement | null>
 }
 
 const CHECKLISTEN_PATH = '/tools/checklisten'
 
-export function ChecklistenTool({ onHeaderContextChange }: ChecklistenToolProps) {
+export function ChecklistenTool({ onHeaderContextChange, headerTrailingRef }: ChecklistenToolProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const detailId = searchParams.get('id')?.trim() || null
@@ -823,47 +827,69 @@ export function ChecklistenTool({ onHeaderContextChange }: ChecklistenToolProps)
       (a, b) => a.reihenfolge - b.reihenfolge || a.titel.localeCompare(b.titel)
     )
 
+    const headerTrailingEl = headerTrailingRef?.current ?? null
+    const detailActionsMenu =
+      headerTrailingEl && !editMode ? (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-9 w-9 shrink-0 rounded-full border-0 bg-transparent text-foreground shadow-none hover:bg-neutral-100 focus-visible:ring-2 focus-visible:ring-[rgb(45,79,30)]/30"
+              aria-label="Weitere Aktionen"
+            >
+              <MoreVertical className="h-5 w-5" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="min-w-[10rem]">
+            <DropdownMenuItem className="cursor-pointer gap-2" onSelect={() => setResetListId(detailId)}>
+              <RotateCcw className="h-4 w-4" />
+              Zurücksetzen
+            </DropdownMenuItem>
+            {canAccessConfig ? (
+              <>
+                <DropdownMenuItem className="cursor-pointer gap-2" onSelect={() => setEditMode(true)}>
+                  <Pencil className="h-4 w-4" />
+                  Bearbeiten
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  className="cursor-pointer gap-2 text-destructive focus:text-destructive"
+                  onSelect={() => setDeleteListId(detailId)}
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Löschen
+                </DropdownMenuItem>
+              </>
+            ) : null}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ) : null
+
     return (
       <div className="space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <Button variant="outline" size="sm" onClick={goToChecklistenOverview}>
-            <ArrowLeft className="h-4 w-4 mr-1" />
+        {headerTrailingEl && detailActionsMenu ? createPortal(detailActionsMenu, headerTrailingEl) : null}
+        <div className="-mx-4 px-4 md:-mx-6 md:px-6 -mt-6 pt-4 pb-3 bg-white flex flex-wrap items-center justify-between gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={goToChecklistenOverview}
+            className="bg-white hover:bg-neutral-50 shadow-sm border-gray-200"
+          >
+            <ArrowLeft className="h-4 w-4 mr-1 shrink-0" />
             Zur Übersicht
           </Button>
-          <div className="flex flex-wrap items-center gap-2">
-            {!editMode && (
-              <Button variant="outline" size="sm" onClick={() => setResetListId(detailId)}>
-                <RotateCcw className="h-4 w-4 mr-1" />
-                Zurücksetzen
+          {canAccessConfig && editMode ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <Button variant="secondary" size="sm" onClick={() => setEditMode(false)}>
+                Fertig
               </Button>
-            )}
-            {canAccessConfig && !editMode && (
-              <Button
-                type="button"
-                size="icon"
-                variant="default"
-                className="h-9 w-9 shrink-0"
-                onClick={() => setEditMode(true)}
-                aria-label="Bearbeiten"
-              >
-                <Pencil className="h-4 w-4" />
+              <Button variant="destructive" size="sm" onClick={() => setDeleteListId(detailId)}>
+                Liste löschen
               </Button>
-            )}
-            {canAccessConfig && editMode && (
-              <>
-                <Button variant="secondary" size="sm" onClick={() => setEditMode(false)}>
-                  Fertig
-                </Button>
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={() => setDeleteListId(detailId)}
-                >
-                  Liste löschen
-                </Button>
-              </>
-            )}
-          </div>
+            </div>
+          ) : null}
         </div>
 
         {editMode && canAccessConfig ? (

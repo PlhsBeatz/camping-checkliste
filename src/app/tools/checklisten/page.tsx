@@ -1,6 +1,6 @@
 'use client'
 
-import { Suspense, useState, useEffect, useCallback } from 'react'
+import { Suspense, useState, useEffect, useCallback, useRef } from 'react'
 import { NavigationSidebar } from '@/components/navigation-sidebar'
 import {
   ChecklistenTool,
@@ -12,6 +12,7 @@ import { cn } from '@/lib/utils'
 
 export default function ChecklistenPage() {
   const [showNavSidebar, setShowNavSidebar] = useState(false)
+  const headerTrailingRef = useRef<HTMLDivElement>(null)
   const [headerContext, setHeaderContext] = useState<ChecklistenHeaderContext>({
     subtitle: null,
     progress: null,
@@ -59,8 +60,8 @@ export default function ChecklistenPage() {
         <div className="container mx-auto p-4 md:p-6 space-y-6">
           {/* Header - Sticky (wie Kategorien / Mitreisende) + Fortschritt */}
           <div className="sticky top-0 z-10 bg-white shadow pb-4 -mx-4 px-4 -mt-4 pt-4 md:-mx-6 md:px-6 md:-mt-6 md:pt-6">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4 min-w-0">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-4 min-w-0 flex-1">
                 <Button
                   variant="outline"
                   size="icon"
@@ -80,6 +81,7 @@ export default function ChecklistenPage() {
                   ) : null}
                 </div>
               </div>
+              <div ref={headerTrailingRef} className="flex shrink-0 items-center justify-end min-h-9" />
             </div>
             {headerContext.progress && headerContext.progress.total > 0 ? (
               <div className="mt-3 space-y-2 bg-white px-1">
@@ -108,7 +110,10 @@ export default function ChecklistenPage() {
               </div>
             }
           >
-            <ChecklistenTool onHeaderContextChange={onHeaderContextChange} />
+            <ChecklistenTool
+              onHeaderContextChange={onHeaderContextChange}
+              headerTrailingRef={headerTrailingRef}
+            />
           </Suspense>
         </div>
       </div>
