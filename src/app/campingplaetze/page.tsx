@@ -89,7 +89,6 @@ function CampingplaetzePageContent() {
       router.replace('/campingplaetze', { scroll: false })
     }
     // handleEdit bewusst ausgelassen: einmaliges Öffnen per ?bearbeiten=
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bearbeitenId, isLoading, items, showDialog, router])
 
   const handleAdd = () => {
