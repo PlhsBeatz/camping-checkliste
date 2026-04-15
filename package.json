@@ -76,7 +76,7 @@
     "zod": "^3.24.1"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20260317.1",
+    "@cloudflare/workers-types": "^4.20260415.1",
     "@eslint/eslintrc": "^3",
     "@opennextjs/cloudflare": "^1.16.4",
     "@types/node": "^20.19.33",
@@ -91,7 +91,14 @@
     "tailwindcss": "^3.4.1",
     "turbo": "^2.3.3",
     "typescript": "^5",
-    "wrangler": "^4.76.0"
+    "wrangler": "^4.83.0"
   },
-  "packageManager": "pnpm@10.0.0-rc.2+sha512.b6e59b96f90ca92449ac2f6dca9b430880448fc97d21f0fa9200e3d5ddb5289ad535255400554f7f3486e2d60058492161aaa9b58828e81f50c096718be9d156"
+  "packageManager": "pnpm@10.0.0-rc.2+sha512.b6e59b96f90ca92449ac2f6dca9b430880448fc97d21f0fa9200e3d5ddb5289ad535255400554f7f3486e2d60058492161aaa9b58828e81f50c096718be9d156",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "workerd",
+      "@esbuild/win32-x64"
+    ]
+  }
 }

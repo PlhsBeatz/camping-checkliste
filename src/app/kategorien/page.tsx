@@ -5,7 +5,8 @@ import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { NavigationSidebar } from '@/components/navigation-sidebar'
 import { CategoryManager } from '@/components/category-manager'
-import { Menu, Plus } from 'lucide-react'
+import { FabMenuM3 } from '@/components/fab-menu-m3'
+import { FolderPlus, Layers, Menu } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { Category, MainCategory, TransportVehicle } from '@/lib/db'
 import type { ApiResponse } from '@/lib/api-types'
@@ -36,7 +37,9 @@ export default function KategorienPage() {
   const [categories, setCategories] = useState<CategoryWithMain[]>([])
   const [mainCategories, setMainCategories] = useState<MainCategory[]>([])
   const [transportVehicles, setTransportVehicles] = useState<TransportVehicle[]>([])
+  const [fabMenuOpen, setFabMenuOpen] = useState(false)
   const [openNewMainCategoryTrigger, setOpenNewMainCategoryTrigger] = useState(false)
+  const [openNewCategoryTrigger, setOpenNewCategoryTrigger] = useState(false)
 
   // Sidebar offen: Body-Scroll sperren
   useEffect(() => {
@@ -158,6 +161,8 @@ export default function KategorienPage() {
     }
   }
 
+  const canCreateSubcategory = mainCategories.length > 0
+
   return (
     <div className="min-h-screen flex">
       {/* Navigation Sidebar */}
@@ -201,21 +206,34 @@ export default function KategorienPage() {
               onRefresh={handleRefresh}
               openNewMainCategoryTrigger={openNewMainCategoryTrigger}
               onOpenNewMainCategoryConsumed={() => setOpenNewMainCategoryTrigger(false)}
+              openNewCategoryTrigger={openNewCategoryTrigger}
+              onOpenNewCategoryConsumed={() => setOpenNewCategoryTrigger(false)}
             />
           </div>
         </div>
       </div>
 
-      {/* FAB: Neue Hauptkategorie */}
-      <div className="fixed bottom-6 right-6 z-30">
-        <Button
-          size="icon"
-          onClick={() => setOpenNewMainCategoryTrigger(true)}
-          className="h-14 w-14 rounded-full shadow-lg hover:shadow-xl transition-shadow bg-[rgb(45,79,30)] hover:bg-[rgb(45,79,30)]/90 text-white aspect-square p-0"
-        >
-          <Plus className="h-6 w-6" strokeWidth={2.5} />
-        </Button>
-      </div>
+      <FabMenuM3
+        open={fabMenuOpen}
+        onOpenChange={setFabMenuOpen}
+        ariaLabel="Neue Hauptkategorie oder neue Kategorie"
+        actions={[
+          {
+            id: 'subcategory',
+            label: 'Neue Kategorie',
+            icon: <FolderPlus className="h-[22px] w-[22px]" strokeWidth={2} aria-hidden />,
+            onSelect: () => setOpenNewCategoryTrigger(true),
+            disabled: !canCreateSubcategory,
+            disabledHint: 'Zuerst eine Hauptkategorie anlegen.',
+          },
+          {
+            id: 'main',
+            label: 'Neue Hauptkategorie',
+            icon: <Layers className="h-[22px] w-[22px]" strokeWidth={2} aria-hidden />,
+            onSelect: () => setOpenNewMainCategoryTrigger(true),
+          },
+        ]}
+      />
     </div>
   )
 }

@@ -183,6 +183,9 @@ interface CategoryManagerProps {
   /** Wenn true, wird der Dialog für neue Hauptkategorie geöffnet (z.B. von FAB); nach Öffnen wird onOpenNewMainCategoryConsumed aufgerufen */
   openNewMainCategoryTrigger?: boolean
   onOpenNewMainCategoryConsumed?: () => void
+  /** Wenn true, wird der Dialog für neue Kategorie (Unterkategorie) geöffnet; nach Öffnen wird onOpenNewCategoryConsumed aufgerufen */
+  openNewCategoryTrigger?: boolean
+  onOpenNewCategoryConsumed?: () => void
 }
 
 export function CategoryManager({
@@ -191,7 +194,9 @@ export function CategoryManager({
   transportVehicles,
   onRefresh,
   openNewMainCategoryTrigger,
-  onOpenNewMainCategoryConsumed
+  onOpenNewMainCategoryConsumed,
+  openNewCategoryTrigger,
+  onOpenNewCategoryConsumed
 }: CategoryManagerProps) {
   const [showMainCategoryDialog, setShowMainCategoryDialog] = useState(false)
   const [showCategoryDialog, setShowCategoryDialog] = useState(false)
@@ -232,6 +237,25 @@ export function CategoryManager({
       onOpenNewMainCategoryConsumed?.()
     }
   }, [openNewMainCategoryTrigger, onOpenNewMainCategoryConsumed])
+
+  // FAB-Trigger: Neue Kategorie (Unterkategorie) – erste Hauptkategorie als Vorauswahl
+  useEffect(() => {
+    if (!openNewCategoryTrigger) return
+    const sorted = [...mainCategories].sort(
+      (a, b) => a.reihenfolge - b.reihenfolge || a.titel.localeCompare(b.titel)
+    )
+    const defaultMainId = sorted[0]?.id ?? ''
+    setEditingCategory(null)
+    setCategoryForm({
+      titel: '',
+      hauptkategorieId: defaultMainId,
+      pauschalgewicht: '',
+      pauschal_pro_person: false,
+      pauschal_transport_id: ''
+    })
+    setShowCategoryDialog(true)
+    onOpenNewCategoryConsumed?.()
+  }, [openNewCategoryTrigger, onOpenNewCategoryConsumed, mainCategories])
 
   const handleCreateMainCategory = async () => {
     if (!mainCategoryForm.titel) {
@@ -632,7 +656,9 @@ export function CategoryManager({
         </SortableContext>
 
         {mainCategories.length === 0 && (
-          <p className="text-sm text-muted-foreground text-center py-8">Noch keine Kategorien. Legen Sie über den + Button eine Hauptkategorie an.</p>
+          <p className="text-sm text-muted-foreground text-center py-8">
+            Noch keine Kategorien. Legen Sie über den Button unten („Neue Hauptkategorie“) eine Hauptkategorie an.
+          </p>
         )}
       </div>
     </DndContext>
