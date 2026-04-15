@@ -1,0 +1,239 @@
+"filename", "language", "Markdown", "TypeScript", "JavaScript", "JSON", "JSON with Comments", "YAML", "MS SQL", "TypeScript JSX", "CSS", "comment", "blank", "total"
+"c:\Dev\camping-checkliste\.github\workflows\deploy.yml", "YAML", 0, 0, 0, 0, 0, 37, 0, 0, 0, 0, 10, 47
+"c:\Dev\camping-checkliste\CATEGORY_MANAGEMENT_FEATURE.md", "Markdown", 192, 0, 0, 0, 0, 0, 0, 0, 0, 0, 52, 244
+"c:\Dev\camping-checkliste\CLOUDFLARE_DEPLOYMENT.md", "Markdown", 182, 0, 0, 0, 0, 0, 0, 0, 0, 0, 67, 249
+"c:\Dev\camping-checkliste\ESLINT_FIXES.md", "Markdown", 95, 0, 0, 0, 0, 0, 0, 0, 0, 0, 28, 123
+"c:\Dev\camping-checkliste\IMPLEMENTATION_GUIDE.md", "Markdown", 315, 0, 0, 0, 0, 0, 0, 0, 0, 0, 104, 419
+"c:\Dev\camping-checkliste\MITREISENDE_CHECKBOXES_FIX.md", "Markdown", 74, 0, 0, 0, 0, 0, 0, 0, 0, 0, 27, 101
+"c:\Dev\camping-checkliste\PHASE3_IMPLEMENTATION.md", "Markdown", 64, 0, 0, 0, 0, 0, 0, 0, 0, 0, 32, 96
+"c:\Dev\camping-checkliste\QUICK_START.md", "Markdown", 157, 0, 0, 0, 0, 0, 0, 0, 0, 0, 55, 212
+"c:\Dev\camping-checkliste\README.md", "Markdown", 23, 0, 0, 0, 0, 0, 0, 0, 0, 0, 14, 37
+"c:\Dev\camping-checkliste\STEP4_CORRECTED.md", "Markdown", 93, 0, 0, 0, 0, 0, 0, 0, 0, 0, 17, 110
+"c:\Dev\camping-checkliste\STEP4_FIXES_SUMMARY.md", "Markdown", 85, 0, 0, 0, 0, 0, 0, 0, 0, 0, 29, 114
+"c:\Dev\camping-checkliste\TAG_SYSTEM_DOCUMENTATION.md", "Markdown", 293, 0, 0, 0, 0, 0, 0, 0, 0, 0, 91, 384
+"c:\Dev\camping-checkliste\TAG_SYSTEM_INTEGRATION_GUIDE.md", "Markdown", 402, 0, 0, 0, 0, 0, 0, 0, 0, 0, 58, 460
+"c:\Dev\camping-checkliste\TRAVELERS_FIXES.md", "Markdown", 163, 0, 0, 0, 0, 0, 0, 0, 0, 0, 44, 207
+"c:\Dev\camping-checkliste\TRAVELERS_MANAGEMENT_FEATURE.md", "Markdown", 272, 0, 0, 0, 0, 0, 0, 0, 0, 0, 71, 343
+"c:\Dev\camping-checkliste\UI_INTEGRATION_MANUAL.md", "Markdown", 277, 0, 0, 0, 0, 0, 0, 0, 0, 0, 43, 320
+"c:\Dev\camping-checkliste\VACATION_AND_TAGS_FIXES.md", "Markdown", 223, 0, 0, 0, 0, 0, 0, 0, 0, 0, 55, 278
+"c:\Dev\camping-checkliste\cloudflare-workers.d.ts", "TypeScript", 0, 5, 0, 0, 0, 0, 0, 0, 0, 6, 1, 12
+"c:\Dev\camping-checkliste\components.json", "JSON", 0, 0, 0, 21, 0, 0, 0, 0, 0, 0, 0, 21
+"c:\Dev\camping-checkliste\env.d.ts", "TypeScript", 0, 12, 0, 0, 0, 0, 0, 0, 0, 1, 3, 16
+"c:\Dev\camping-checkliste\eslint.config.mjs", "JavaScript", 0, 0, 25, 0, 0, 0, 0, 0, 0, 0, 5, 30
+"c:\Dev\camping-checkliste\migrations\0001_initial.sql", "MS SQL", 0, 0, 0, 0, 0, 0, 235, 0, 0, 18, 35, 288
+"c:\Dev\camping-checkliste\migrations\0002_transport_mitreisenden.sql", "MS SQL", 0, 0, 0, 0, 0, 0, 20, 0, 0, 17, 6, 43
+"c:\Dev\camping-checkliste\migrations\0002_transport_mitreisenden_v2.sql", "MS SQL", 0, 0, 0, 0, 0, 0, 16, 0, 0, 16, 6, 38
+"c:\Dev\camping-checkliste\migrations\0003_anzahl_per_mitreisender.sql", "MS SQL", 0, 0, 0, 0, 0, 0, 1, 0, 0, 3, 1, 5
+"c:\Dev\camping-checkliste\migrations\0004_erst_abreisetag_gepackt.sql", "MS SQL", 0, 0, 0, 0, 0, 0, 1, 0, 0, 2, 2, 5
+"c:\Dev\camping-checkliste\migrations\0005_mitreisende_farbe.sql", "MS SQL", 0, 0, 0, 0, 0, 0, 1, 0, 0, 3, 2, 6
+"c:\Dev\camping-checkliste\migrations\0006_transportmittel_festgewicht.sql", "MS SQL", 0, 0, 0, 0, 0, 0, 11, 0, 0, 5, 4, 20
+"c:\Dev\camping-checkliste\migrations\0007_add_pauschalgewicht.sql", "MS SQL", 0, 0, 0, 0, 0, 0, 6, 0, 0, 7, 4, 17
+"c:\Dev\camping-checkliste\migrations\0008_auth_system.sql", "MS SQL", 0, 0, 0, 0, 0, 0, 37, 0, 0, 8, 6, 51
+"c:\Dev\camping-checkliste\migrations\0009_einladungen_admin.sql", "MS SQL", 0, 0, 0, 0, 0, 0, 17, 0, 0, 4, 2, 23
+"c:\Dev\camping-checkliste\migrations\0010_mitreisender_transport.sql", "MS SQL", 0, 0, 0, 0, 0, 0, 1, 0, 0, 2, 1, 4
+"c:\Dev\camping-checkliste\migrations\0011_must_change_password.sql", "MS SQL", 0, 0, 0, 0, 0, 0, 1, 0, 0, 2, 2, 5
+"c:\Dev\camping-checkliste\migrations\0012_temporary_packlist_entries.sql", "MS SQL", 0, 0, 0, 0, 0, 0, 32, 0, 0, 3, 3, 38
+"c:\Dev\camping-checkliste\migrations\0013_campingplaetze_and_routes.sql", "MS SQL", 0, 0, 0, 0, 0, 0, 48, 0, 0, 6, 9, 63
+"c:\Dev\camping-checkliste\migrations\0014_campingplaetze_photo.sql", "MS SQL", 0, 0, 0, 0, 0, 0, 1, 0, 0, 2, 2, 5
+"c:\Dev\camping-checkliste\migrations\0015_urlaub_campingplaetze_sort_index.sql", "MS SQL", 0, 0, 0, 0, 0, 0, 1, 0, 0, 2, 3, 6
+"c:\Dev\camping-checkliste\migrations\0016_packliste_default_ansicht.sql", "MS SQL", 0, 0, 0, 0, 0, 0, 1, 0, 0, 2, 1, 4
+"c:\Dev\camping-checkliste\migrations\0017_tag_kategorien.sql", "MS SQL", 0, 0, 0, 0, 0, 0, 23, 0, 0, 2, 7, 32
+"c:\Dev\camping-checkliste\migrations\0018_checklisten.sql", "MS SQL", 0, 0, 0, 0, 0, 0, 110, 0, 0, 2, 9, 121
+"c:\Dev\camping-checkliste\migrations\0019_campingplatz_fotos.sql", "MS SQL", 0, 0, 0, 0, 0, 0, 38, 0, 0, 3, 5, 46
+"c:\Dev\camping-checkliste\migrations\MIGRATION_ANLEITUNG.md", "Markdown", 67, 0, 0, 0, 0, 0, 0, 0, 0, 0, 21, 88
+"c:\Dev\camping-checkliste\migrations\README.md", "Markdown", 22, 0, 0, 0, 0, 0, 0, 0, 0, 0, 13, 35
+"c:\Dev\camping-checkliste\migrations\add_tags_system.sql", "MS SQL", 0, 0, 0, 0, 0, 0, 28, 0, 0, 8, 6, 42
+"c:\Dev\camping-checkliste\next-env.d.ts", "TypeScript", 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 2, 6
+"c:\Dev\camping-checkliste\next.config.mjs", "JavaScript", 0, 0, 46, 0, 0, 0, 0, 0, 0, 2, 6, 54
+"c:\Dev\camping-checkliste\next.config.ts", "TypeScript", 0, 10, 0, 0, 0, 0, 0, 0, 0, 3, 4, 17
+"c:\Dev\camping-checkliste\open-next.config.ts", "TypeScript", 0, 3, 0, 0, 0, 0, 0, 0, 0, 3, 3, 9
+"c:\Dev\camping-checkliste\package.json", "JSON", 0, 0, 0, 97, 0, 0, 0, 0, 0, 0, 1, 98
+"c:\Dev\camping-checkliste\pnpm-lock.yaml", "YAML", 0, 0, 0, 0, 0, 8550, 0, 0, 0, 0, 1936, 10486
+"c:\Dev\camping-checkliste\postcss.config.mjs", "JavaScript", 0, 0, 6, 0, 0, 0, 0, 0, 0, 1, 2, 9
+"c:\Dev\camping-checkliste\public\manifest.json", "JSON", 0, 0, 0, 38, 0, 0, 0, 0, 0, 0, 1, 39
+"c:\Dev\camping-checkliste\public\workbox-e9849328.js", "JavaScript", 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 2
+"c:\Dev\camping-checkliste\schema.sql", "MS SQL", 0, 0, 0, 0, 0, 0, 249, 0, 0, 7, 25, 281
+"c:\Dev\camping-checkliste\src\app\api\auth\accept-invite\route.ts", "TypeScript", 0, 86, 0, 0, 0, 0, 0, 0, 0, 0, 11, 97
+"c:\Dev\camping-checkliste\src\app\api\auth\assign-me\route.ts", "TypeScript", 0, 47, 0, 0, 0, 0, 0, 0, 0, 4, 8, 59
+"c:\Dev\camping-checkliste\src\app\api\auth\bootstrap\route.ts", "TypeScript", 0, 53, 0, 0, 0, 0, 0, 0, 0, 5, 7, 65
+"c:\Dev\camping-checkliste\src\app\api\auth\change-password\route.ts", "TypeScript", 0, 67, 0, 0, 0, 0, 0, 0, 0, 5, 9, 81
+"c:\Dev\camping-checkliste\src\app\api\auth\invite\route.ts", "TypeScript", 0, 57, 0, 0, 0, 0, 0, 0, 0, 0, 8, 65
+"c:\Dev\camping-checkliste\src\app\api\auth\login\route.ts", "TypeScript", 0, 53, 0, 0, 0, 0, 0, 0, 0, 1, 8, 62
+"c:\Dev\camping-checkliste\src\app\api\auth\logout\route.ts", "TypeScript", 0, 12, 0, 0, 0, 0, 0, 0, 0, 0, 2, 14
+"c:\Dev\camping-checkliste\src\app\api\auth\me\route.ts", "TypeScript", 0, 35, 0, 0, 0, 0, 0, 0, 0, 0, 5, 40
+"c:\Dev\camping-checkliste\src\app\api\auth\password-reset\route.ts", "TypeScript", 0, 63, 0, 0, 0, 0, 0, 0, 0, 1, 9, 73
+"c:\Dev\camping-checkliste\src\app\api\campingplaetze\[id]\fotos\[fotoId]\route.ts", "TypeScript", 0, 78, 0, 0, 0, 0, 0, 0, 0, 0, 13, 91
+"c:\Dev\camping-checkliste\src\app\api\campingplaetze\[id]\fotos\reorder\route.ts", "TypeScript", 0, 37, 0, 0, 0, 0, 0, 0, 0, 0, 7, 44
+"c:\Dev\camping-checkliste\src\app\api\campingplaetze\[id]\fotos\route.ts", "TypeScript", 0, 152, 0, 0, 0, 0, 0, 0, 0, 1, 15, 168
+"c:\Dev\camping-checkliste\src\app\api\campingplaetze\[id]\route.ts", "TypeScript", 0, 32, 0, 0, 0, 0, 0, 0, 0, 0, 5, 37
+"c:\Dev\camping-checkliste\src\app\api\campingplaetze\fotos\[fotoId]\image\route.ts", "TypeScript", 0, 84, 0, 0, 0, 0, 0, 0, 0, 0, 10, 94
+"c:\Dev\camping-checkliste\src\app\api\campingplaetze\route.ts", "TypeScript", 0, 248, 0, 0, 0, 0, 0, 0, 0, 0, 32, 280
+"c:\Dev\camping-checkliste\src\app\api\categories\route.ts", "TypeScript", 0, 147, 0, 0, 0, 0, 0, 0, 0, 0, 23, 170
+"c:\Dev\camping-checkliste\src\app\api\checklisten\[id]\eintraege\[eintragId]\route.ts", "TypeScript", 0, 103, 0, 0, 0, 0, 0, 0, 0, 0, 4, 107
+"c:\Dev\camping-checkliste\src\app\api\checklisten\[id]\eintraege\reorder\route.ts", "TypeScript", 0, 54, 0, 0, 0, 0, 0, 0, 0, 0, 3, 57
+"c:\Dev\camping-checkliste\src\app\api\checklisten\[id]\eintraege\route.ts", "TypeScript", 0, 37, 0, 0, 0, 0, 0, 0, 0, 0, 2, 39
+"c:\Dev\camping-checkliste\src\app\api\checklisten\[id]\kategorien\[kategorieId]\route.ts", "TypeScript", 0, 67, 0, 0, 0, 0, 0, 0, 0, 0, 3, 70
+"c:\Dev\camping-checkliste\src\app\api\checklisten\[id]\kategorien\reorder\route.ts", "TypeScript", 0, 40, 0, 0, 0, 0, 0, 0, 0, 0, 2, 42
+"c:\Dev\camping-checkliste\src\app\api\checklisten\[id]\kategorien\route.ts", "TypeScript", 0, 38, 0, 0, 0, 0, 0, 0, 0, 0, 2, 40
+"c:\Dev\camping-checkliste\src\app\api\checklisten\[id]\reset\route.ts", "TypeScript", 0, 23, 0, 0, 0, 0, 0, 0, 0, 0, 2, 25
+"c:\Dev\camping-checkliste\src\app\api\checklisten\[id]\route.ts", "TypeScript", 0, 62, 0, 0, 0, 0, 0, 0, 0, 0, 3, 65
+"c:\Dev\camping-checkliste\src\app\api\checklisten\route.ts", "TypeScript", 0, 86, 0, 0, 0, 0, 0, 0, 0, 1, 4, 91
+"c:\Dev\camping-checkliste\src\app\api\equipment-by-tags\route.ts", "TypeScript", 0, 40, 0, 0, 0, 0, 0, 0, 0, 1, 6, 47
+"c:\Dev\camping-checkliste\src\app\api\equipment-items\route.ts", "TypeScript", 0, 208, 0, 0, 0, 0, 0, 0, 0, 4, 25, 237
+"c:\Dev\camping-checkliste\src\app\api\equipment\route.ts", "TypeScript", 0, 32, 0, 0, 0, 0, 0, 0, 0, 2, 5, 39
+"c:\Dev\camping-checkliste\src\app\api\google-place-from-link\route.ts", "TypeScript", 0, 394, 0, 0, 0, 0, 0, 0, 0, 13, 27, 434
+"c:\Dev\camping-checkliste\src\app\api\google-place-photos\route.ts", "TypeScript", 0, 27, 0, 0, 0, 0, 0, 0, 0, 4, 5, 36
+"c:\Dev\camping-checkliste\src\app\api\init\route.ts", "TypeScript", 0, 14, 0, 0, 0, 0, 0, 0, 0, 0, 2, 16
+"c:\Dev\camping-checkliste\src\app\api\main-categories\route.ts", "TypeScript", 0, 120, 0, 0, 0, 0, 0, 0, 0, 0, 18, 138
+"c:\Dev\camping-checkliste\src\app\api\mitreisende\[id]\berechtigungen\route.ts", "TypeScript", 0, 55, 0, 0, 0, 0, 0, 0, 0, 0, 8, 63
+"c:\Dev\camping-checkliste\src\app\api\mitreisende\route.ts", "TypeScript", 0, 140, 0, 0, 0, 0, 0, 0, 0, 20, 24, 184
+"c:\Dev\camping-checkliste\src\app\api\pack-status\route.ts", "TypeScript", 0, 29, 0, 0, 0, 0, 0, 0, 0, 0, 6, 35
+"c:\Dev\camping-checkliste\src\app\api\packing-items\batch\route.ts", "TypeScript", 0, 64, 0, 0, 0, 0, 0, 0, 0, 1, 8, 73
+"c:\Dev\camping-checkliste\src\app\api\packing-items\confirm-vorgemerkt\route.ts", "TypeScript", 0, 64, 0, 0, 0, 0, 0, 0, 0, 0, 9, 73
+"c:\Dev\camping-checkliste\src\app\api\packing-items\remove-mitreisender\route.ts", "TypeScript", 0, 54, 0, 0, 0, 0, 0, 0, 0, 0, 8, 62
+"c:\Dev\camping-checkliste\src\app\api\packing-items\route.ts", "TypeScript", 0, 191, 0, 0, 0, 0, 0, 0, 0, 1, 26, 218
+"c:\Dev\camping-checkliste\src\app\api\packing-items\set-mitreisender-anzahl\route.ts", "TypeScript", 0, 58, 0, 0, 0, 0, 0, 0, 0, 0, 9, 67
+"c:\Dev\camping-checkliste\src\app\api\packing-items\toggle-mitreisender\route.ts", "TypeScript", 0, 61, 0, 0, 0, 0, 0, 0, 0, 0, 9, 70
+"c:\Dev\camping-checkliste\src\app\api\places-photo\route.ts", "TypeScript", 0, 51, 0, 0, 0, 0, 0, 0, 0, 0, 9, 60
+"c:\Dev\camping-checkliste\src\app\api\profile\home-location\route.ts", "TypeScript", 0, 61, 0, 0, 0, 0, 0, 0, 0, 1, 12, 74
+"c:\Dev\camping-checkliste\src\app\api\routes\campingplatz\route.ts", "TypeScript", 0, 62, 0, 0, 0, 0, 0, 0, 0, 0, 9, 71
+"c:\Dev\camping-checkliste\src\app\api\tag-kategorien\route.ts", "TypeScript", 0, 39, 0, 0, 0, 0, 0, 0, 0, 0, 5, 44
+"c:\Dev\camping-checkliste\src\app\api\tags\route.ts", "TypeScript", 0, 108, 0, 0, 0, 0, 0, 0, 0, 0, 18, 126
+"c:\Dev\camping-checkliste\src\app\api\transport-vehicles\festgewicht-manuell\route.ts", "TypeScript", 0, 91, 0, 0, 0, 0, 0, 0, 0, 11, 10, 112
+"c:\Dev\camping-checkliste\src\app\api\transport-vehicles\festgewicht\route.ts", "TypeScript", 0, 37, 0, 0, 0, 0, 0, 0, 0, 4, 6, 47
+"c:\Dev\camping-checkliste\src\app\api\transport-vehicles\route.ts", "TypeScript", 0, 174, 0, 0, 0, 0, 0, 0, 0, 12, 17, 203
+"c:\Dev\camping-checkliste\src\app\api\users\[id]\role\route.ts", "TypeScript", 0, 36, 0, 0, 0, 0, 0, 0, 0, 0, 5, 41
+"c:\Dev\camping-checkliste\src\app\api\users\route.ts", "TypeScript", 0, 24, 0, 0, 0, 0, 0, 0, 0, 0, 3, 27
+"c:\Dev\camping-checkliste\src\app\api\vacations\campingplaetze\route.ts", "TypeScript", 0, 63, 0, 0, 0, 0, 0, 0, 0, 0, 11, 74
+"c:\Dev\camping-checkliste\src\app\api\vacations\route.ts", "TypeScript", 0, 122, 0, 0, 0, 0, 0, 0, 0, 0, 18, 140
+"c:\Dev\camping-checkliste\src\app\apple-icon.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 26, 0, 0, 4, 30
+"c:\Dev\camping-checkliste\src\app\ausruestung\page.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 988, 0, 20, 70, 1078
+"c:\Dev\camping-checkliste\src\app\bootstrap\page.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 112, 0, 0, 10, 122
+"c:\Dev\camping-checkliste\src\app\campingplaetze\[id]\page.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 891, 0, 2, 50, 943
+"c:\Dev\camping-checkliste\src\app\campingplaetze\page.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 271, 0, 3, 22, 296
+"c:\Dev\camping-checkliste\src\app\einladung\[token]\page.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 153, 0, 0, 12, 165
+"c:\Dev\camping-checkliste\src\app\globals.css", "CSS", 0, 0, 0, 0, 0, 0, 0, 0, 180, 18, 40, 238
+"c:\Dev\camping-checkliste\src\app\icon.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 43, 0, 0, 4, 47
+"c:\Dev\camping-checkliste\src\app\icons\[size]\route.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 39, 0, 0, 4, 43
+"c:\Dev\camping-checkliste\src\app\kategorien\page.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 198, 0, 9, 15, 222
+"c:\Dev\camping-checkliste\src\app\layout.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 66, 0, 0, 6, 72
+"c:\Dev\camping-checkliste\src\app\login\page.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 108, 0, 0, 11, 119
+"c:\Dev\camping-checkliste\src\app\mitreisende\page.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 116, 0, 7, 11, 134
+"c:\Dev\camping-checkliste\src\app\pack-status\page.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 404, 0, 7, 29, 440
+"c:\Dev\camping-checkliste\src\app\page.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 1401, 0, 93, 113, 1607
+"c:\Dev\camping-checkliste\src\app\passwort-vergessen\page.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 26, 0, 0, 3, 29
+"c:\Dev\camping-checkliste\src\app\profil\page.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 201, 0, 0, 11, 212
+"c:\Dev\camping-checkliste\src\app\profil\passwort-aendern\page.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 252, 0, 0, 15, 267
+"c:\Dev\camping-checkliste\src\app\sw.ts", "TypeScript", 0, 32, 0, 0, 0, 0, 0, 0, 0, 0, 6, 38
+"c:\Dev\camping-checkliste\src\app\tags\page.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 113, 0, 6, 11, 130
+"c:\Dev\camping-checkliste\src\app\tools\checklisten\page.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 113, 0, 1, 9, 123
+"c:\Dev\camping-checkliste\src\app\tools\sonnen-ausrichtung\page.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 222, 0, 4, 26, 252
+"c:\Dev\camping-checkliste\src\app\transportmittel\page.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 115, 0, 6, 11, 132
+"c:\Dev\camping-checkliste\src\app\urlaube\page.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 1308, 0, 24, 55, 1387
+"c:\Dev\camping-checkliste\src\app\~offline\page.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 27, 0, 0, 2, 29
+"c:\Dev\camping-checkliste\src\components\add-single-item-dialog.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 459, 0, 0, 16, 475
+"c:\Dev\camping-checkliste\src\components\app-logo.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 60, 0, 9, 9, 78
+"c:\Dev\camping-checkliste\src\components\auth-provider.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 82, 0, 3, 12, 97
+"c:\Dev\camping-checkliste\src\components\camping-app-icon.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 46, 0, 4, 4, 54
+"c:\Dev\camping-checkliste\src\components\campingplaetze-table.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 515, 0, 2, 18, 535
+"c:\Dev\camping-checkliste\src\components\campingplatz-address-autocomplete.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 551, 0, 10, 37, 598
+"c:\Dev\camping-checkliste\src\components\campingplatz-edit-modal.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 835, 0, 6, 36, 877
+"c:\Dev\camping-checkliste\src\components\campingplatz-overview-map.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 45, 0, 4, 4, 53
+"c:\Dev\camping-checkliste\src\components\category-manager.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 780, 0, 11, 48, 839
+"c:\Dev\camping-checkliste\src\components\checklisten-tool.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 1101, 0, 7, 65, 1173
+"c:\Dev\camping-checkliste\src\components\equipment-table.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 619, 0, 33, 43, 695
+"c:\Dev\camping-checkliste\src\components\home-address-autocomplete.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 145, 0, 6, 27, 178
+"c:\Dev\camping-checkliste\src\components\initialize-db.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 15, 0, 0, 5, 20
+"c:\Dev\camping-checkliste\src\components\mark-all-confirmation-dialog.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 153, 0, 6, 11, 170
+"c:\Dev\camping-checkliste\src\components\mitreisende-manager.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 205, 0, 5, 14, 224
+"c:\Dev\camping-checkliste\src\components\must-change-password-guard.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 16, 0, 3, 5, 24
+"c:\Dev\camping-checkliste\src\components\navigation-sidebar.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 225, 0, 12, 19, 256
+"c:\Dev\camping-checkliste\src\components\packing-list-enhanced.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 970, 0, 65, 68, 1103
+"c:\Dev\camping-checkliste\src\components\packing-list-generator.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 261, 0, 5, 18, 284
+"c:\Dev\camping-checkliste\src\components\packing-settings-sidebar.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 189, 0, 10, 13, 212
+"c:\Dev\camping-checkliste\src\components\pwa-update-prompt.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 127, 0, 0, 15, 142
+"c:\Dev\camping-checkliste\src\components\sonnen-ausrichtung-compass.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 333, 0, 17, 34, 384
+"c:\Dev\camping-checkliste\src\components\tag-manager.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 580, 0, 0, 47, 627
+"c:\Dev\camping-checkliste\src\components\transportmittel-manager.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 517, 0, 0, 25, 542
+"c:\Dev\camping-checkliste\src\components\travelers-manager.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 792, 0, 11, 33, 836
+"c:\Dev\camping-checkliste\src\components\ui\accordion.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 50, 0, 0, 8, 58
+"c:\Dev\camping-checkliste\src\components\ui\alert-dialog.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 127, 0, 0, 15, 142
+"c:\Dev\camping-checkliste\src\components\ui\alert.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 53, 0, 0, 7, 60
+"c:\Dev\camping-checkliste\src\components\ui\aspect-ratio.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 4, 0, 0, 4, 8
+"c:\Dev\camping-checkliste\src\components\ui\avatar.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 44, 0, 0, 7, 51
+"c:\Dev\camping-checkliste\src\components\ui\badge.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 31, 0, 0, 6, 37
+"c:\Dev\camping-checkliste\src\components\ui\breadcrumb.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 105, 0, 0, 11, 116
+"c:\Dev\camping-checkliste\src\components\ui\button.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 49, 0, 0, 5, 54
+"c:\Dev\camping-checkliste\src\components\ui\calendar.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 73, 0, 0, 6, 79
+"c:\Dev\camping-checkliste\src\components\ui\card.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 70, 0, 0, 8, 78
+"c:\Dev\camping-checkliste\src\components\ui\carousel.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 232, 0, 0, 31, 263
+"c:\Dev\camping-checkliste\src\components\ui\chart.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 328, 0, 2, 37, 367
+"c:\Dev\camping-checkliste\src\components\ui\checkbox.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 29, 0, 0, 5, 34
+"c:\Dev\camping-checkliste\src\components\ui\collapsible.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 6, 0, 0, 6, 12
+"c:\Dev\camping-checkliste\src\components\ui\command.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 136, 0, 0, 18, 154
+"c:\Dev\camping-checkliste\src\components\ui\confirm-dialog.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 67, 0, 5, 6, 78
+"c:\Dev\camping-checkliste\src\components\ui\context-menu.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 182, 0, 0, 19, 201
+"c:\Dev\camping-checkliste\src\components\ui\dialog.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 111, 0, 0, 14, 125
+"c:\Dev\camping-checkliste\src\components\ui\drawer.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 105, 0, 0, 14, 119
+"c:\Dev\camping-checkliste\src\components\ui\dropdown-menu.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 183, 0, 0, 19, 202
+"c:\Dev\camping-checkliste\src\components\ui\form.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 153, 0, 0, 26, 179
+"c:\Dev\camping-checkliste\src\components\ui\hover-card.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 23, 0, 0, 7, 30
+"c:\Dev\camping-checkliste\src\components\ui\input-otp.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 64, 0, 0, 9, 73
+"c:\Dev\camping-checkliste\src\components\ui\input.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 19, 0, 0, 3, 22
+"c:\Dev\camping-checkliste\src\components\ui\label.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 21, 0, 0, 6, 27
+"c:\Dev\camping-checkliste\src\components\ui\menubar.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 217, 0, 0, 20, 237
+"c:\Dev\camping-checkliste\src\components\ui\navigation-menu.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 117, 0, 0, 12, 129
+"c:\Dev\camping-checkliste\src\components\ui\pagination.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 107, 0, 0, 11, 118
+"c:\Dev\camping-checkliste\src\components\ui\popover.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 26, 0, 0, 8, 34
+"c:\Dev\camping-checkliste\src\components\ui\progress.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 24, 0, 0, 5, 29
+"c:\Dev\camping-checkliste\src\components\ui\radio-group.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 39, 0, 0, 6, 45
+"c:\Dev\camping-checkliste\src\components\ui\resizable.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 39, 0, 0, 7, 46
+"c:\Dev\camping-checkliste\src\components\ui\responsive-modal.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 133, 0, 11, 21, 165
+"c:\Dev\camping-checkliste\src\components\ui\scroll-area.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 43, 0, 0, 6, 49
+"c:\Dev\camping-checkliste\src\components\ui\select.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 146, 0, 0, 14, 160
+"c:\Dev\camping-checkliste\src\components\ui\separator.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 27, 0, 0, 5, 32
+"c:\Dev\camping-checkliste\src\components\ui\sheet.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 125, 0, 0, 16, 141
+"c:\Dev\camping-checkliste\src\components\ui\sidebar.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 697, 0, 12, 55, 764
+"c:\Dev\camping-checkliste\src\components\ui\skeleton.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 13, 0, 0, 3, 16
+"c:\Dev\camping-checkliste\src\components\ui\slider.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 24, 0, 0, 5, 29
+"c:\Dev\camping-checkliste\src\components\ui\sonner.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 26, 0, 0, 6, 32
+"c:\Dev\camping-checkliste\src\components\ui\switch.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 25, 0, 0, 5, 30
+"c:\Dev\camping-checkliste\src\components\ui\table.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 110, 0, 0, 11, 121
+"c:\Dev\camping-checkliste\src\components\ui\tabs.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 48, 0, 0, 8, 56
+"c:\Dev\camping-checkliste\src\components\ui\textarea.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 20, 0, 1, 5, 26
+"c:\Dev\camping-checkliste\src\components\ui\toast.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 116, 0, 0, 14, 130
+"c:\Dev\camping-checkliste\src\components\ui\toaster.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 32, 0, 0, 4, 36
+"c:\Dev\camping-checkliste\src\components\ui\toggle-group.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 52, 0, 0, 10, 62
+"c:\Dev\camping-checkliste\src\components\ui\toggle.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 39, 0, 0, 7, 46
+"c:\Dev\camping-checkliste\src\components\ui\tooltip.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 25, 0, 0, 8, 33
+"c:\Dev\camping-checkliste\src\components\ui\weight-input.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 77, 0, 4, 9, 90
+"c:\Dev\camping-checkliste\src\components\undo-toast.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 55, 0, 0, 8, 63
+"c:\Dev\camping-checkliste\src\durable-objects\PackingSyncDO.ts", "TypeScript", 0, 56, 0, 0, 0, 0, 0, 0, 0, 17, 16, 89
+"c:\Dev\camping-checkliste\src\hooks\use-mobile.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 15, 0, 0, 5, 20
+"c:\Dev\camping-checkliste\src\hooks\use-packing-sync.ts", "TypeScript", 0, 81, 0, 0, 0, 0, 0, 0, 0, 9, 12, 102
+"c:\Dev\camping-checkliste\src\hooks\use-toast.ts", "TypeScript", 0, 160, 0, 0, 0, 0, 0, 0, 0, 3, 32, 195
+"c:\Dev\camping-checkliste\src\lib\api-auth.ts", "TypeScript", 0, 23, 0, 0, 0, 0, 0, 0, 0, 3, 4, 30
+"c:\Dev\camping-checkliste\src\lib\api-types.ts", "TypeScript", 0, 5, 0, 0, 0, 0, 0, 0, 0, 3, 1, 9
+"c:\Dev\camping-checkliste\src\lib\auth.ts", "TypeScript", 0, 169, 0, 0, 0, 0, 0, 0, 0, 10, 19, 198
+"c:\Dev\camping-checkliste\src\lib\campingplatz-foto-import.ts", "TypeScript", 0, 30, 0, 0, 0, 0, 0, 0, 0, 0, 5, 35
+"c:\Dev\camping-checkliste\src\lib\campingplatz-photo-url.ts", "TypeScript", 0, 15, 0, 0, 0, 0, 0, 0, 0, 1, 3, 19
+"c:\Dev\camping-checkliste\src\lib\compress-upload-image.ts", "TypeScript", 0, 34, 0, 0, 0, 0, 0, 0, 0, 4, 3, 41
+"c:\Dev\camping-checkliste\src\lib\country-flag-emoji.ts", "TypeScript", 0, 192, 0, 0, 0, 0, 0, 0, 0, 7, 8, 207
+"c:\Dev\camping-checkliste\src\lib\db.ts", "TypeScript", 0, 3759, 0, 0, 0, 0, 0, 0, 0, 314, 284, 4357
+"c:\Dev\camping-checkliste\src\lib\device-compass-heading.ts", "TypeScript", 0, 27, 0, 0, 0, 0, 0, 0, 0, 24, 8, 59
+"c:\Dev\camping-checkliste\src\lib\google-place-photos-merge.ts", "TypeScript", 0, 63, 0, 0, 0, 0, 0, 0, 0, 17, 8, 88
+"c:\Dev\camping-checkliste\src\lib\offline-db.ts", "TypeScript", 0, 128, 0, 0, 0, 0, 0, 0, 0, 8, 24, 160
+"c:\Dev\camping-checkliste\src\lib\offline-sync.ts", "TypeScript", 0, 145, 0, 0, 0, 0, 0, 0, 0, 16, 22, 183
+"c:\Dev\camping-checkliste\src\lib\packing-sync.ts", "TypeScript", 0, 19, 0, 0, 0, 0, 0, 0, 0, 10, 4, 33
+"c:\Dev\camping-checkliste\src\lib\permissions.ts", "TypeScript", 0, 57, 0, 0, 0, 0, 0, 0, 0, 11, 11, 79
+"c:\Dev\camping-checkliste\src\lib\places-photo.ts", "TypeScript", 0, 27, 0, 0, 0, 0, 0, 0, 0, 5, 4, 36
+"c:\Dev\camping-checkliste\src\lib\routes.ts", "TypeScript", 0, 131, 0, 0, 0, 0, 0, 0, 0, 0, 14, 145
+"c:\Dev\camping-checkliste\src\lib\user-colors.ts", "TypeScript", 0, 54, 0, 0, 0, 0, 0, 0, 0, 10, 7, 71
+"c:\Dev\camping-checkliste\src\lib\utils.ts", "TypeScript", 0, 120, 0, 0, 0, 0, 0, 0, 0, 46, 16, 182
+"c:\Dev\camping-checkliste\src\middleware.ts", "TypeScript", 0, 50, 0, 0, 0, 0, 0, 0, 0, 0, 9, 59
+"c:\Dev\camping-checkliste\tailwind.config.ts", "TypeScript", 0, 136, 0, 0, 0, 0, 0, 0, 0, 1, 2, 139
+"c:\Dev\camping-checkliste\tsconfig.json", "JSON with Comments", 0, 0, 0, 0, 35, 0, 0, 0, 0, 0, 1, 36
+"c:\Dev\camping-checkliste\tsconfig.tsbuildinfo", "JSON", 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1
+"c:\Dev\camping-checkliste\worker.ts", "TypeScript", 0, 63, 0, 0, 0, 0, 0, 0, 0, 10, 10, 83
+"c:\Dev\camping-checkliste\wrangler.jsonc", "JSON with Comments", 0, 0, 0, 0, 41, 0, 0, 0, 0, 0, 1, 42
+"Total", "-", 2999, 9786, 78, 157, 76, 8587, 878, 21496, 180, 1229, 5747, 51213

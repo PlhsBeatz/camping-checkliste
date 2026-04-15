@@ -2659,6 +2659,48 @@ export async function updateTagKategorie(
   }
 }
 
+/**
+ * Neue Tag-Kategorie anlegen
+ */
+export async function createTagKategorie(
+  db: D1Database,
+  titel: string,
+  reihenfolge: number
+): Promise<string | null> {
+  try {
+    const id = crypto.randomUUID()
+    await db
+      .prepare('INSERT INTO tag_kategorien (id, titel, reihenfolge) VALUES (?, ?, ?)')
+      .bind(id, titel, reihenfolge)
+      .run()
+    return id
+  } catch (error) {
+    console.error('Error creating tag_kategorie:', error)
+    return null
+  }
+}
+
+/**
+ * Tag-Kategorie löschen inkl. aller zugehörigen Tags und Ausrüstungs-Zuordnungen
+ */
+export async function deleteTagKategorie(db: D1Database, id: string): Promise<boolean> {
+  try {
+    const tagsResult = await db
+      .prepare('SELECT id FROM tags WHERE tag_kategorie_id = ?')
+      .bind(id)
+      .all<{ id: string }>()
+    const tagIds = tagsResult.results?.map((r) => r.id) ?? []
+    for (const tagId of tagIds) {
+      await deleteTag(db, tagId)
+    }
+    await db.prepare('DELETE FROM tag_kategorien WHERE id = ?').bind(id).run()
+    return true
+  } catch (error) {
+    console.error('Error deleting tag_kategorie:', error)
+    return false
+  }
+}
+
 function rowToTag(row: Record<string, unknown>): Tag {
   return {
     id: String(row.id),

@@ -35,7 +35,15 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { MoreVertical, Pencil, Plus, Trash2, Tag as TagIcon, GripVertical } from 'lucide-react'
+import {
+  MoreVertical,
+  Pencil,
+  Plus,
+  Trash2,
+  Tag as TagLucideIcon,
+  GripVertical,
+  FolderPlus,
+} from 'lucide-react'
 import { Tag, TagKategorie } from '@/lib/db'
 import type { ApiResponse } from '@/lib/api-types'
 import { USER_COLORS, DEFAULT_USER_COLOR_BG, toColorInputValue } from '@/lib/user-colors'
@@ -84,7 +92,7 @@ function SortableTagRow({
           {tag.icon ? (
             <span className="text-white text-sm">{tag.icon}</span>
           ) : (
-            <TagIcon className="h-4 w-4 text-white" />
+            <TagLucideIcon className="h-4 w-4 text-white" />
           )}
         </div>
         <div className="flex-1 min-w-0">
@@ -129,13 +137,18 @@ function SortableTagRow({
 function SortableTagCategoryRow({
   kat,
   isCompact,
+  onEditKategorie,
+  onDeleteKategorie,
   children,
 }: {
   kat: TagKategorieWithTags
   isCompact: boolean
+  onEditKategorie: () => void
+  onDeleteKategorie: () => void
   children: ReactNode
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: kat.id })
+  const [katMenuOpen, setKatMenuOpen] = useState(false)
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -158,12 +171,47 @@ function SortableTagCategoryRow({
         <div className="flex-1 min-w-0">
           <p className="font-semibold text-[rgb(45,79,30)]">{kat.titel}</p>
         </div>
+        <DropdownMenu open={katMenuOpen} onOpenChange={setKatMenuOpen}>
+          <DropdownMenuTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 shrink-0"
+              aria-label="Label-Kategorie bearbeiten oder löschen"
+              onPointerDown={(e) => e.stopPropagation()}
+            >
+              <MoreVertical className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem
+              onSelect={() => {
+                setKatMenuOpen(false)
+                onEditKategorie()
+              }}
+            >
+              <Pencil className="h-4 w-4 mr-2" />
+              Bearbeiten
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onSelect={() => {
+                setKatMenuOpen(false)
+                onDeleteKategorie()
+              }}
+              className="text-destructive focus:text-destructive"
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Löschen
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
       {!isCompact && (
         <div className="px-3 pb-2 space-y-1">
           {children}
           {kat.tags.length === 0 && (
-            <p className="text-sm text-muted-foreground italic py-2">Keine Tags in dieser Kategorie</p>
+            <p className="text-sm text-muted-foreground italic py-2">Keine Labels in dieser Kategorie</p>
           )}
         </div>
       )}
@@ -181,6 +229,11 @@ export function TagManager({ tagKategorien, tags, onRefresh }: TagManagerProps) 
   const [showDialog, setShowDialog] = useState(false)
   const [editingTag, setEditingTag] = useState<Tag | null>(null)
   const [deleteTagId, setDeleteTagId] = useState<string | null>(null)
+  const [showKategorieDialog, setShowKategorieDialog] = useState(false)
+  const [editingKategorie, setEditingKategorie] = useState<TagKategorie | null>(null)
+  const [katTitel, setKatTitel] = useState('')
+  const [deleteKatId, setDeleteKatId] = useState<string | null>(null)
+  const [fabMenuOpen, setFabMenuOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [draggingTagKatId, setDraggingTagKatId] = useState<string | null>(null)
 
@@ -206,6 +259,7 @@ export function TagManager({ tagKategorien, tags, onRefresh }: TagManagerProps) 
   )
 
   const defaultKategorieId = tagKategorienSorted[0]?.id ?? ''
+  const canCreateLabel = tagKategorien.length > 0
 
   const [form, setForm] = useState({
     titel: '',
@@ -367,6 +421,97 @@ export function TagManager({ tagKategorien, tags, onRefresh }: TagManagerProps) 
     setShowDialog(true)
   }
 
+  const openNewKategorie = () => {
+    setEditingKategorie(null)
+    setKatTitel('')
+    setShowKategorieDialog(true)
+  }
+
+  const openEditKategorie = (kat: TagKategorie) => {
+    setEditingKategorie(kat)
+    setKatTitel(kat.titel)
+    setShowKategorieDialog(true)
+  }
+
+  const handleSaveKategorie = async () => {
+    const t = katTitel.trim()
+    if (!t) {
+      alert('Bitte einen Titel eingeben')
+      return
+    }
+
+    setIsLoading(true)
+    try {
+      if (editingKategorie) {
+        const res = await fetch('/api/tag-kategorien', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: editingKategorie.id,
+            titel: t,
+            reihenfolge: editingKategorie.reihenfolge,
+          }),
+        })
+        const data = (await res.json()) as ApiResponse<unknown>
+        if (data.success) {
+          setShowKategorieDialog(false)
+          setEditingKategorie(null)
+          setKatTitel('')
+          onRefresh()
+        } else {
+          alert('Fehler: ' + (data.error ?? 'Unbekannt'))
+        }
+      } else {
+        const nextReihenfolge =
+          tagKategorienSorted.length > 0
+            ? Math.max(...tagKategorienSorted.map((k) => k.reihenfolge)) + 1
+            : 0
+        const res = await fetch('/api/tag-kategorien', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ titel: t, reihenfolge: nextReihenfolge }),
+        })
+        const data = (await res.json()) as ApiResponse<unknown>
+        if (data.success) {
+          setShowKategorieDialog(false)
+          setKatTitel('')
+          onRefresh()
+        } else {
+          alert('Fehler: ' + (data.error ?? 'Unbekannt'))
+        }
+      }
+    } catch (error) {
+      console.error('Failed to save tag category:', error)
+      alert('Fehler beim Speichern')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const executeDeleteKategorie = async () => {
+    if (!deleteKatId) return
+    const id = deleteKatId
+
+    setIsLoading(true)
+    try {
+      const res = await fetch(`/api/tag-kategorien?id=${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+      })
+      const data = (await res.json()) as ApiResponse<unknown>
+      if (data.success) {
+        setDeleteKatId(null)
+        onRefresh()
+      } else {
+        alert('Fehler: ' + (data.error ?? 'Unbekannt'))
+      }
+    } catch (error) {
+      console.error('Failed to delete tag category:', error)
+      alert('Fehler beim Löschen')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   const handleDragStart = useCallback(
     (event: DragStartEvent) => {
       const katIds = new Set(tagKategorien.map((k) => k.id))
@@ -451,19 +596,22 @@ export function TagManager({ tagKategorien, tags, onRefresh }: TagManagerProps) 
   )
 
   const hasStructure = tagKategorien.length > 0
+  const pendingDeleteKatGroup = deleteKatId ? tagsByKat.find((k) => k.id === deleteKatId) : undefined
+  const pendingDeleteKatLabelCount = pendingDeleteKatGroup?.tags.length ?? 0
 
   return (
     <div className="relative">
       {!hasStructure ? (
         <p className="text-sm text-muted-foreground text-center py-8">
-          Noch keine Tag-Kategorien geladen. Bitte Seite neu laden oder Migration prüfen.
+          Noch keine Label-Kategorien. Legen Sie die erste Kategorie über den runden Button unten und
+          „Neue Kategorie“ an.
         </p>
       ) : null}
 
       {hasStructure && tags.length === 0 && (
         <p className="text-sm text-muted-foreground text-center py-4">
-          Noch keine Tags vorhanden. Legen Sie über + einen Tag an – die Kategorien können per Ziehen sortiert
-          werden.
+          Noch keine Labels vorhanden. Über den runden Button unten: „Neues Label“ anlegen – Kategorien sortieren
+          Sie per Ziehen am Griff-Symbol.
         </p>
       )}
 
@@ -484,6 +632,8 @@ export function TagManager({ tagKategorien, tags, onRefresh }: TagManagerProps) 
                   key={kat.id}
                   kat={kat}
                   isCompact={!!draggingTagKatId}
+                  onEditKategorie={() => openEditKategorie(kat)}
+                  onDeleteKategorie={() => setDeleteKatId(kat.id)}
                 >
                   {kat.tags.length > 0 && (
                     <SortableContext items={kat.tags.map((t) => t.id)} strategy={verticalListSortingStrategy}>
@@ -509,24 +659,49 @@ export function TagManager({ tagKategorien, tags, onRefresh }: TagManagerProps) 
       )}
 
       <div className="fixed bottom-6 right-6 z-30">
-        <Button
-          size="icon"
-          onClick={openNew}
-          disabled={!hasStructure}
-          className="h-14 w-14 rounded-full shadow-lg hover:shadow-xl transition-shadow bg-[rgb(45,79,30)] hover:bg-[rgb(45,79,30)]/90 text-white aspect-square p-0"
-        >
-          <Plus className="h-6 w-6" strokeWidth={2.5} />
-        </Button>
+        <DropdownMenu open={fabMenuOpen} onOpenChange={setFabMenuOpen}>
+          <DropdownMenuTrigger asChild>
+            <Button
+              type="button"
+              size="icon"
+              aria-label="Neue Label-Kategorie oder neues Label"
+              className="h-14 w-14 rounded-full shadow-lg hover:shadow-xl transition-shadow bg-[rgb(45,79,30)] hover:bg-[rgb(45,79,30)]/90 text-white aspect-square p-0"
+            >
+              <Plus className="h-6 w-6" strokeWidth={2.5} />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent side="top" align="end" className="min-w-[13rem]">
+            <DropdownMenuItem
+              onSelect={() => {
+                setFabMenuOpen(false)
+                openNewKategorie()
+              }}
+            >
+              <FolderPlus className="h-4 w-4 mr-2" />
+              Neue Kategorie
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              disabled={!canCreateLabel}
+              onSelect={() => {
+                setFabMenuOpen(false)
+                openNew()
+              }}
+            >
+              <TagLucideIcon className="h-4 w-4 mr-2" />
+              Neues Label
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       <ResponsiveModal
         open={showDialog}
         onOpenChange={setShowDialog}
-        title={editingTag ? 'Tag bearbeiten' : 'Neuer Tag'}
+        title={editingTag ? 'Label bearbeiten' : 'Neues Label'}
         description={
           editingTag
-            ? 'Ändern Sie die Details des Tags'
-            : 'Erstellen Sie einen neuen Tag für die Packlisten-Generierung'
+            ? 'Ändern Sie die Details des Labels'
+            : 'Erstellen Sie ein neues Label für die Packlisten-Generierung'
         }
       >
         <div className="space-y-4">
@@ -602,7 +777,7 @@ export function TagManager({ tagKategorien, tags, onRefresh }: TagManagerProps) 
               id="tag-beschreibung"
               value={form.beschreibung}
               onChange={(e) => setForm({ ...form, beschreibung: e.target.value })}
-              placeholder="Kurze Beschreibung des Tags..."
+              placeholder="Kurze Beschreibung des Labels…"
               rows={2}
             />
           </div>
@@ -613,12 +788,58 @@ export function TagManager({ tagKategorien, tags, onRefresh }: TagManagerProps) 
         </div>
       </ResponsiveModal>
 
+      <ResponsiveModal
+        open={showKategorieDialog}
+        onOpenChange={(open) => {
+          setShowKategorieDialog(open)
+          if (!open) {
+            setEditingKategorie(null)
+            setKatTitel('')
+          }
+        }}
+        title={editingKategorie ? 'Label-Kategorie bearbeiten' : 'Neue Label-Kategorie'}
+        description={
+          editingKategorie
+            ? 'Ändern Sie den Namen der Kategorie'
+            : 'Gruppieren Sie Labels z. B. nach Zeit, Aktivität oder Reiseziel'
+        }
+      >
+        <div className="space-y-4">
+          <div>
+            <Label htmlFor="tag-kat-titel">Titel *</Label>
+            <Input
+              id="tag-kat-titel"
+              value={katTitel}
+              onChange={(e) => setKatTitel(e.target.value)}
+              placeholder="z. B. Wetter, Transport"
+              className="mt-1"
+            />
+          </div>
+          <Button onClick={handleSaveKategorie} disabled={isLoading} className="w-full">
+            {isLoading ? 'Wird gespeichert…' : editingKategorie ? 'Aktualisieren' : 'Erstellen'}
+          </Button>
+        </div>
+      </ResponsiveModal>
+
       <ConfirmDialog
         open={!!deleteTagId}
         onOpenChange={(open) => !open && setDeleteTagId(null)}
-        title="Tag löschen"
-        description="Möchten Sie diesen Tag wirklich löschen? Er wird von allen Ausrüstungsgegenständen entfernt."
+        title="Label löschen"
+        description="Möchten Sie dieses Label wirklich löschen? Es wird von allen Ausrüstungsgegenständen entfernt."
         onConfirm={executeDeleteTag}
+        isLoading={isLoading}
+      />
+
+      <ConfirmDialog
+        open={!!deleteKatId}
+        onOpenChange={(open) => !open && setDeleteKatId(null)}
+        title="Label-Kategorie löschen?"
+        description={
+          pendingDeleteKatLabelCount > 0
+            ? `Diese Kategorie enthält ${pendingDeleteKatLabelCount} Label${pendingDeleteKatLabelCount === 1 ? '' : 's'}. Alle zugehörigen Labels und ihre Zuordnungen zu Ausrüstung werden mitgelöscht.`
+            : 'Die leere Kategorie wird unwiderruflich entfernt.'
+        }
+        onConfirm={executeDeleteKategorie}
         isLoading={isLoading}
       />
     </div>
