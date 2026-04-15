@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils'
 
 /**
  * Vertikales FAB-Menü nach Material Design 3 (Speed-Dial / FAB menu):
- * Primär-FAB 56×56, darüber kleine FABs 40×40 mit zugehörigem Textlabel,
+ * Primär-FAB 56×56, darüber zusammenhängende Pill-Buttons (Text + Icon),
  * Scrim beim Öffnen, Schließen per Scrim-Tap oder X-Icon.
  * @see https://m3.material.io/components/fab-menu/overview
  */
@@ -97,9 +97,7 @@ export function FabMenuM3({ open, onOpenChange, actions, ariaLabel, className }:
             {actions.map((action, index) => (
               <div
                 key={action.id}
-                role="none"
                 className={cn(
-                  'flex flex-row items-center justify-end gap-3',
                   'motion-safe:animate-in motion-safe:fade-in-0 motion-safe:zoom-in-95 motion-safe:slide-in-from-bottom-2',
                   'duration-200'
                 )}
@@ -108,14 +106,6 @@ export function FabMenuM3({ open, onOpenChange, actions, ariaLabel, className }:
                   animationFillMode: 'backwards',
                 }}
               >
-                <span
-                  className={cn(
-                    'max-w-[13rem] select-none text-right text-sm font-medium leading-5 tracking-[0.00625em] text-foreground',
-                    action.disabled && 'text-muted-foreground'
-                  )}
-                >
-                  {action.label}
-                </span>
                 <button
                   type="button"
                   role="menuitem"
@@ -130,19 +120,30 @@ export function FabMenuM3({ open, onOpenChange, actions, ariaLabel, className }:
                     action.onSelect()
                   }}
                   className={cn(
-                    'flex h-10 min-h-10 w-10 min-w-10 items-center justify-center rounded-full',
-                    'border border-black/[0.08] bg-white text-[rgb(45,79,30)]',
-                    'shadow-[0_3px_4px_0_rgba(0,0,0,0.15),0_1px_3px_0_rgba(0,0,0,0.3)]',
+                    'flex max-w-[min(90vw,18rem)] flex-row items-stretch gap-0 overflow-hidden rounded-full border border-black/[0.08]',
+                    'bg-white text-left text-[rgb(45,79,30)] shadow-[0_3px_4px_0_rgba(0,0,0,0.15),0_1px_3px_0_rgba(0,0,0,0.3)]',
                     'transition-[box-shadow,transform,background-color] duration-200 ease-out',
                     'hover:bg-neutral-50 hover:shadow-[0_4px_8px_3px_rgba(0,0,0,0.12)]',
-                    'active:scale-[0.96]',
+                    'active:scale-[0.98]',
                     'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[rgb(45,79,30)]',
                     'disabled:pointer-events-none disabled:opacity-[0.38]'
                   )}
-                  aria-label={action.label}
                 >
-                  <span className="flex h-6 w-6 items-center justify-center [&>svg]:h-[22px] [&>svg]:w-[22px]">
-                    {action.icon}
+                  <span
+                    className={cn(
+                      'flex min-w-0 flex-1 select-none items-center px-4 py-2.5 text-sm font-medium leading-5 tracking-[0.00625em]',
+                      action.disabled && 'text-muted-foreground'
+                    )}
+                  >
+                    {action.label}
+                  </span>
+                  <span
+                    className="flex w-10 min-w-10 shrink-0 items-center justify-center border-l border-black/[0.06] bg-[rgb(45,79,30)]/[0.08] text-[rgb(45,79,30)]"
+                    aria-hidden
+                  >
+                    <span className="flex h-6 w-6 items-center justify-center [&>svg]:h-[22px] [&>svg]:w-[22px]">
+                      {action.icon}
+                    </span>
                   </span>
                 </button>
                 {action.disabled && action.disabledHint ? (
