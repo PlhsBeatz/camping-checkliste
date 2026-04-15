@@ -38,7 +38,6 @@ import {
 import {
   MoreVertical,
   Pencil,
-  Plus,
   Trash2,
   Tag as TagLucideIcon,
   GripVertical,
@@ -48,6 +47,7 @@ import { Tag, TagKategorie } from '@/lib/db'
 import type { ApiResponse } from '@/lib/api-types'
 import { USER_COLORS, DEFAULT_USER_COLOR_BG, toColorInputValue } from '@/lib/user-colors'
 import type { ReactNode } from 'react'
+import { FabMenuM3 } from '@/components/fab-menu-m3'
 
 type TagKategorieWithTags = TagKategorie & { tags: Tag[] }
 
@@ -658,41 +658,27 @@ export function TagManager({ tagKategorien, tags, onRefresh }: TagManagerProps) 
         <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-lg bg-background/40" />
       )}
 
-      <div className="fixed bottom-6 right-6 z-30">
-        <DropdownMenu open={fabMenuOpen} onOpenChange={setFabMenuOpen}>
-          <DropdownMenuTrigger asChild>
-            <Button
-              type="button"
-              size="icon"
-              aria-label="Neue Label-Kategorie oder neues Label"
-              className="h-14 w-14 rounded-full shadow-lg hover:shadow-xl transition-shadow bg-[rgb(45,79,30)] hover:bg-[rgb(45,79,30)]/90 text-white aspect-square p-0"
-            >
-              <Plus className="h-6 w-6" strokeWidth={2.5} />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent side="top" align="end" className="min-w-[13rem]">
-            <DropdownMenuItem
-              onSelect={() => {
-                setFabMenuOpen(false)
-                openNewKategorie()
-              }}
-            >
-              <FolderPlus className="h-4 w-4 mr-2" />
-              Neue Kategorie
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              disabled={!canCreateLabel}
-              onSelect={() => {
-                setFabMenuOpen(false)
-                openNew()
-              }}
-            >
-              <TagLucideIcon className="h-4 w-4 mr-2" />
-              Neues Label
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
+      <FabMenuM3
+        open={fabMenuOpen}
+        onOpenChange={setFabMenuOpen}
+        ariaLabel="Neue Label-Kategorie oder neues Label"
+        actions={[
+          {
+            id: 'label',
+            label: 'Neues Label',
+            icon: <TagLucideIcon className="h-[22px] w-[22px]" strokeWidth={2} aria-hidden />,
+            onSelect: openNew,
+            disabled: !canCreateLabel,
+            disabledHint: 'Zuerst eine Label-Kategorie anlegen.',
+          },
+          {
+            id: 'kategorie',
+            label: 'Neue Kategorie',
+            icon: <FolderPlus className="h-[22px] w-[22px]" strokeWidth={2} aria-hidden />,
+            onSelect: openNewKategorie,
+          },
+        ]}
+      />
 
       <ResponsiveModal
         open={showDialog}
