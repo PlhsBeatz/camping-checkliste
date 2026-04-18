@@ -2023,17 +2023,24 @@ export async function getMitreisende(db: D1Database): Promise<Mitreisender[]> {
  */
 export async function getMitreisendeForVacation(db: D1Database, vacationId: string): Promise<Mitreisender[]> {
   try {
+    // user_email/user_role per LEFT JOIN mitladen – wichtig für die Auswertung
+    // von Mengenregeln (Kind-Erkennung über user_role === 'kind').
     const result = await db
       .prepare(`
-        SELECT m.* 
+        SELECT m.*, u.email as user_email, u.role as user_role
         FROM mitreisende m
         INNER JOIN urlaub_mitreisende um ON m.id = um.mitreisender_id
+        LEFT JOIN users u ON m.user_id = u.id
         WHERE um.urlaub_id = ?
         ORDER BY m.name
       `)
       .bind(vacationId)
-      .all<Mitreisender>()
-    return result.results || []
+      .all<Mitreisender & { user_email?: string | null; user_role?: string }>()
+    return (result.results || []).map((r) => ({
+      ...r,
+      user_email: r.user_email ?? null,
+      user_role: r.user_role as Mitreisender['user_role'] | undefined,
+    }))
   } catch (error) {
     console.error('Error fetching mitreisende for vacation:', error)
     return []

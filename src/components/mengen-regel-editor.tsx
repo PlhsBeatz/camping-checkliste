@@ -9,6 +9,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { ChevronDown, ChevronRight, Plus, Trash2 } from 'lucide-react'
 import {
   berechneAnzahl,
+  regelKurzLabel,
   type MengenRegel,
   type MengenRegelTyp,
   type SchwellwertStufe,
@@ -19,7 +20,7 @@ import {
  * über dem Regel-Editor angeboten – ein Klick füllt die Felder.
  */
 const PRESETS: Array<{ label: string; build: () => MengenRegel }> = [
-  { label: 'Pro Tag +2 Reserve, max 10', build: () => ({ typ: 'pro_tag', proTag: 1, reserve: 2, max: 10 }) },
+  { label: 'Pro Tag +2 Reserve, max 16', build: () => ({ typ: 'pro_tag', proTag: 1, reserve: 2, max: 16 }) },
   { label: 'Alle 3 Tage (max 4)', build: () => ({ typ: 'pro_n_tage', n: 3, max: 4 }) },
   { label: 'Wöchentlich 1', build: () => ({ typ: 'pro_woche', proWoche: 1 }) },
   { label: 'Ab 7 Tagen 1', build: () => ({ typ: 'schwellwert', stufen: [{ abTage: 0, menge: 0 }, { abTage: 7, menge: 1 }] }) },
@@ -57,6 +58,10 @@ export function MengenRegelEditor({
   kindOverrideDisabled = false,
 }: MengenRegelEditorProps) {
   const [showKind, setShowKind] = useState<boolean>(!!value?.kind)
+  // Editor ist standardmäßig eingeklappt. Wird er bereits mit einer Regel
+  // geladen (z.B. Bearbeiten-Dialog), starten wir trotzdem kollabiert – der
+  // Nutzer sieht dann das Kurz-Label und öffnet bei Bedarf gezielt.
+  const [expanded, setExpanded] = useState<boolean>(false)
 
   useEffect(() => {
     if (!value?.kind) return
@@ -70,14 +75,39 @@ export function MengenRegelEditor({
     onChange(defaultRegel(nextTyp))
   }
 
+  const kurzLabel = regelKurzLabel(value)
+
   return (
-    <div className="space-y-3 rounded-md border border-border/60 bg-muted/20 p-3">
-      <div className="space-y-2">
-        <Label className="text-sm font-medium">Mengenregel</Label>
-        <p className="text-xs text-muted-foreground">
-          Optional: Anzahl abhängig von Reisedauer und Kind/Erwachsener automatisch berechnen.
-        </p>
-      </div>
+    <Collapsible
+      open={expanded}
+      onOpenChange={setExpanded}
+      className="rounded-md border border-border/60 bg-muted/20"
+    >
+      <CollapsibleTrigger asChild>
+        <button
+          type="button"
+          className="w-full flex items-center justify-between gap-2 px-3 py-2 text-left hover:bg-muted/30 rounded-md"
+        >
+          <span className="flex items-center gap-1.5 min-w-0">
+            {expanded ? (
+              <ChevronDown className="h-4 w-4 flex-shrink-0" />
+            ) : (
+              <ChevronRight className="h-4 w-4 flex-shrink-0" />
+            )}
+            <span className="text-sm font-medium">Mengenregel</span>
+            {value ? (
+              <span className="text-xs text-muted-foreground truncate">· {kurzLabel}</span>
+            ) : (
+              <span className="text-xs text-muted-foreground truncate">· optional</span>
+            )}
+          </span>
+        </button>
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <div className="space-y-3 px-3 pb-3 pt-1">
+          <p className="text-xs text-muted-foreground">
+            Anzahl abhängig von Reisedauer und Kind/Erwachsener automatisch berechnen.
+          </p>
 
       {/* Preset-Chips */}
       <div className="flex flex-wrap gap-1.5">
@@ -168,7 +198,9 @@ export function MengenRegelEditor({
 
       {/* Live-Vorschau */}
       {value && <RegelVorschau regel={value} />}
-    </div>
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
   )
 }
 
@@ -254,15 +286,22 @@ function RegelFelder({
       )
     }
     case 'pro_n_tage': {
-      const v = effectiveValue as Partial<{ n: number; max: number }>
+      const v = effectiveValue as Partial<{ n: number; reserve: number; max: number }>
       const base = value
       return (
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-3 gap-2">
           <NumberField
             label="alle N Tage 1"
             value={v.n}
             placeholder={isKind ? `wie Erw. (${base.n})` : undefined}
             onChange={(n) => update({ n } as Partial<MengenRegel>)}
+            allowEmpty={isKind}
+          />
+          <NumberField
+            label="Reserve"
+            value={v.reserve}
+            placeholder={isKind ? `wie Erw. (${base.reserve ?? 0})` : '0'}
+            onChange={(n) => update({ reserve: n } as Partial<MengenRegel>)}
             allowEmpty={isKind}
           />
           <NumberField
@@ -276,15 +315,22 @@ function RegelFelder({
       )
     }
     case 'pro_woche': {
-      const v = effectiveValue as Partial<{ proWoche: number; max: number }>
+      const v = effectiveValue as Partial<{ proWoche: number; reserve: number; max: number }>
       const base = value
       return (
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-3 gap-2">
           <NumberField
             label="pro Woche"
             value={v.proWoche}
             placeholder={isKind ? `wie Erw. (${base.proWoche})` : undefined}
             onChange={(n) => update({ proWoche: n } as Partial<MengenRegel>)}
+            allowEmpty={isKind}
+          />
+          <NumberField
+            label="Reserve"
+            value={v.reserve}
+            placeholder={isKind ? `wie Erw. (${base.reserve ?? 0})` : '0'}
+            onChange={(n) => update({ reserve: n } as Partial<MengenRegel>)}
             allowEmpty={isKind}
           />
           <NumberField

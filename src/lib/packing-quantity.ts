@@ -40,17 +40,21 @@ export interface MengenRegelProNTage {
   typ: 'pro_n_tage'
   /** 1 Stück pro angefangene N Tage */
   n: number
+  /** Zusätzlicher Puffer (addiert auf das Ergebnis) */
+  reserve?: number
   /** Obergrenze der Gesamtzahl (optional) */
   max?: number
-  kind?: Partial<{ n: number; max: number }>
+  kind?: Partial<{ n: number; reserve: number; max: number }>
 }
 
 export interface MengenRegelProWoche {
   typ: 'pro_woche'
   /** Stück pro angefangene Woche */
   proWoche: number
+  /** Zusätzlicher Puffer (addiert auf das Ergebnis) */
+  reserve?: number
   max?: number
-  kind?: Partial<{ proWoche: number; max: number }>
+  kind?: Partial<{ proWoche: number; reserve: number; max: number }>
 }
 
 export interface SchwellwertStufe {
@@ -82,11 +86,35 @@ export const MENGEN_REGEL_TYPEN: MengenRegelTyp[] = [
 ]
 
 /**
- * Tage eines Urlaubs bestimmen (Anreise- und Abreisetag zählen mit).
+ * Parst ein Datum im Format `YYYY-MM-DD` (ggf. mit Zeitkomponente) robust
+ * als UTC-Midnight. So fallen Zeitkomponenten in der DB (z.B. "00:00:00",
+ * "23:59:59") und Zeitzonen-Effekte aus der Differenzberechnung heraus.
+ */
+function parseDateAsUTCMidnight(raw: string): number | null {
+  const match = raw.trim().match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (!match) {
+    const fallback = new Date(raw)
+    if (isNaN(fallback.getTime())) return null
+    return Date.UTC(fallback.getUTCFullYear(), fallback.getUTCMonth(), fallback.getUTCDate())
+  }
+  const y = Number(match[1])
+  const m = Number(match[2]) - 1
+  const d = Number(match[3])
+  return Date.UTC(y, m, d)
+}
+
+/**
+ * Tage/Übernachtungen eines Urlaubs bestimmen.
+ *
+ * Konvention (Camping): `enddatum - startdatum` in Kalendertagen – das
+ * entspricht der Anzahl Übernachtungen und den Tagen, für die gepackt werden
+ * muss (Abreisetag zählt nicht extra, weil man da i.d.R. die Klamotten des
+ * Vortags anhat bzw. nach Hause fährt).
  *
  * - `abfahrtdatum` geht vor `startdatum`, falls vorhanden (real gepackter Tag).
- * - Bei fehlendem/ungültigem Enddatum → 1 Tag.
+ * - Fehlendes/ungültiges Enddatum → 1 Tag.
  * - Mindestwert 1, damit Regeln sinnvoll greifen.
+ * - Robust gegen Zeitkomponenten in DB-Strings (UTC-Midnight-Normalisierung).
  */
 export function berechneReiseTage(vacation: {
   startdatum: string
@@ -95,11 +123,11 @@ export function berechneReiseTage(vacation: {
 }): number {
   const startStr = vacation.abfahrtdatum?.trim() || vacation.startdatum
   const endStr = vacation.enddatum?.trim() || vacation.startdatum
-  const start = new Date(startStr)
-  const end = new Date(endStr)
-  if (isNaN(start.getTime()) || isNaN(end.getTime())) return 1
+  const startMs = parseDateAsUTCMidnight(startStr)
+  const endMs = parseDateAsUTCMidnight(endStr)
+  if (startMs === null || endMs === null) return 1
   const MS_PER_DAY = 86_400_000
-  const diffDays = Math.ceil((end.getTime() - start.getTime()) / MS_PER_DAY) + 1
+  const diffDays = Math.round((endMs - startMs) / MS_PER_DAY)
   return Math.max(1, diffDays)
 }
 
@@ -150,15 +178,17 @@ export function berechneAnzahl(
     }
     case 'pro_n_tage': {
       const n = kind ? regel.kind?.n ?? regel.n : regel.n
+      const reserve = kind ? regel.kind?.reserve ?? regel.reserve ?? 0 : regel.reserve ?? 0
       const max = kind ? regel.kind?.max ?? regel.max : regel.max
       if (!n || n <= 0) return 0
-      const raw = Math.ceil(tage / n)
+      const raw = Math.ceil(tage / n) + reserve
       return clampMax(Math.max(0, raw), max)
     }
     case 'pro_woche': {
       const proWoche = kind ? regel.kind?.proWoche ?? regel.proWoche : regel.proWoche
+      const reserve = kind ? regel.kind?.reserve ?? regel.reserve ?? 0 : regel.reserve ?? 0
       const max = kind ? regel.kind?.max ?? regel.max : regel.max
-      const raw = Math.ceil(tage / 7) * proWoche
+      const raw = Math.ceil(tage / 7) * proWoche + reserve
       return clampMax(Math.max(0, raw), max)
     }
     case 'schwellwert': {
@@ -240,9 +270,13 @@ export function regelKurzLabel(regel: MengenRegel | null | undefined): string {
         regel.max !== undefined ? ` (max ${regel.max})` : ''
       }`
     case 'pro_n_tage':
-      return `Alle ${regel.n} Tage 1${regel.max !== undefined ? ` (max ${regel.max})` : ''}`
+      return `Alle ${regel.n} Tage 1${regel.reserve ? ` +${regel.reserve} Reserve` : ''}${
+        regel.max !== undefined ? ` (max ${regel.max})` : ''
+      }`
     case 'pro_woche':
-      return `Pro Woche ${regel.proWoche}${regel.max !== undefined ? ` (max ${regel.max})` : ''}`
+      return `Pro Woche ${regel.proWoche}${regel.reserve ? ` +${regel.reserve} Reserve` : ''}${
+        regel.max !== undefined ? ` (max ${regel.max})` : ''
+      }`
     case 'schwellwert':
       return `Nach Reisedauer (${regel.stufen.length} Stufen)`
     default:
