@@ -128,7 +128,18 @@ export function berechneReiseTage(vacation: {
   if (startMs === null || endMs === null) return 1
   const MS_PER_DAY = 86_400_000
   const diffDays = Math.round((endMs - startMs) / MS_PER_DAY)
-  return Math.max(1, diffDays)
+  const result = Math.max(1, diffDays)
+  if (typeof console !== 'undefined') {
+    console.debug('[berechneReiseTage]', {
+      startdatum: vacation.startdatum,
+      abfahrtdatum: vacation.abfahrtdatum,
+      enddatum: vacation.enddatum,
+      verwendet: { startStr, endStr },
+      diffDays,
+      result,
+    })
+  }
+  return result
 }
 
 /**

@@ -373,11 +373,19 @@ const PackingItem: React.FC<PackingItemProps> = ({
                 )}
               >
                 {was}{' '}
-                {(selectedProfile && selectedTravelerItem?.anzahl != null
-                  ? selectedTravelerItem.anzahl
-                  : anzahl) > 1
-                  ? `(${(selectedProfile && selectedTravelerItem?.anzahl != null ? selectedTravelerItem.anzahl : anzahl)}x)`
-                  : ''}
+                {(() => {
+                  // Ermittele die anzuzeigende Anzahl:
+                  //  - Person-Profil: persönliche anzahl (Fallback auf pe.anzahl)
+                  //  - Alle-Profil & Pauschal: pe.anzahl
+                  //  - Alle-Profil & Mehrpersonen-Eintrag: keine Anzeige
+                  //    (die Zahl wäre entweder ein Default oder eine Summe und in
+                  //     beiden Fällen in dieser Sicht irreführend).
+                  if (!selectedProfile && mitreisenden_typ !== 'pauschal') return ''
+                  const anzahlZuZeigen = selectedProfile && selectedTravelerItem?.anzahl != null
+                    ? selectedTravelerItem.anzahl
+                    : anzahl
+                  return anzahlZuZeigen > 1 ? `(${anzahlZuZeigen}x)` : ''
+                })()}
               </label>
             </div>
             

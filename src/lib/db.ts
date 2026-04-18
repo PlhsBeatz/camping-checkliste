@@ -2243,7 +2243,13 @@ export async function togglePackingItemForMitreisender(
   db: D1Database,
   packlistenEintragId: string,
   mitreisenderId: string,
-  gepackt: boolean
+  gepackt: boolean,
+  /**
+   * Optionale pro-Person-Anzahl (z.B. aus einer Mengenregel berechnet).
+   * Nur beim INSERT relevant – bei bestehenden Zuordnungen wird die Menge
+   * nicht überschrieben (Gepackt-Toggle soll kein Override durchführen).
+   */
+  anzahl?: number | null,
 ): Promise<boolean> {
   try {
     const temp = await isTemporaryPackingEintrag(db, packlistenEintragId)
@@ -2261,10 +2267,15 @@ export async function togglePackingItemForMitreisender(
         )
         .bind(gepackt ? 1 : 0, gepackt ? 0 : 0, packlistenEintragId, mitreisenderId)
         .run()
-    } else {
+    } else if (temp) {
       await db
         .prepare(`INSERT INTO ${mitTable} (packlisten_eintrag_id, mitreisender_id, gepackt) VALUES (?, ?, ?)`)
         .bind(packlistenEintragId, mitreisenderId, gepackt ? 1 : 0)
+        .run()
+    } else {
+      await db
+        .prepare(`INSERT INTO ${mitTable} (packlisten_eintrag_id, mitreisender_id, gepackt, anzahl) VALUES (?, ?, ?, ?)`)
+        .bind(packlistenEintragId, mitreisenderId, gepackt ? 1 : 0, anzahl ?? null)
         .run()
     }
     return true

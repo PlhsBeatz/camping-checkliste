@@ -542,10 +542,14 @@ function HomeContent() {
             )
             return { id, anzahl }
           })
-          const summe = mitreisendeMitAnzahl.reduce((acc, m) => acc + m.anzahl, 0)
+          // pe.anzahl ist hier der Pro-Person-Default (Erwachsenen-Wert); die
+          // tatsächlichen Pro-Person-Werte stehen in mitreisende[].anzahl.
+          // So bleibt der Eintrag in der „Alle"-Sicht ohne irreführende Summe
+          // und der Wert dient als Fallback für Weight-Queries.
+          const erwachsenenWert = berechneAnzahl(item.mengenregel, reiseTage, false)
           return {
             gegenstandId: item.id,
-            anzahl: Math.max(summe, 0),
+            anzahl: Math.max(erwachsenenWert, 1),
             transportId: item.transport_id || null,
             mitreisende: mitreisendeMitAnzahl,
           }
@@ -1056,8 +1060,10 @@ function HomeContent() {
             )
             return { id, anzahl }
           })
-          const summe = mitreisendeMitAnzahl.reduce((acc, m) => acc + m.anzahl, 0)
-          return { anzahl: Math.max(summe, 0), mitreisende: mitreisendeMitAnzahl as Array<string | { id: string; anzahl?: number | null }> }
+          // pe.anzahl = Erwachsenen-Wert als Pro-Person-Default, die individuellen
+          // Werte liegen in mitreisende[].anzahl (→ keine irreführende Summe in „Alle").
+          const erwachsenenWert = berechneAnzahl(eq.mengenregel, reiseTage, false)
+          return { anzahl: Math.max(erwachsenenWert, 1), mitreisende: mitreisendeMitAnzahl as Array<string | { id: string; anzahl?: number | null }> }
         }
         const anzahl = eq?.mengenregel
           ? berechneAnzahl(eq.mengenregel, reiseTage, false)
@@ -1072,14 +1078,23 @@ function HomeContent() {
           const existingItem = packingItems.find((p) => p.gegenstand_id === equipmentId)
 
           if (existingItem) {
-            // Eintrag existiert – Person per Toggle hinzufügen
+            // Eintrag existiert – Person per Toggle hinzufügen. Bei aktiver
+            // Mengenregel zusätzlich die pro-Person-Anzahl mitschicken, damit
+            // nachträglich ergänzte Personen nicht die Menge der Erst-Zuordnung
+            // erben, sondern ihren eigenen Regel-Wert bekommen.
+            let addAnzahl: number | null = null
+            if (eq?.mengenregel) {
+              const person = vacationMitreisendeById.get(selectedPackProfile)
+              addAnzahl = berechneAnzahl(eq.mengenregel, reiseTage, person ? istKind(person) : false)
+            }
             const res = await fetch('/api/packing-items/toggle-mitreisender', {
               method: 'PUT',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 packingItemId: existingItem.id,
                 mitreisenderId: selectedPackProfile,
-                gepackt: false
+                gepackt: false,
+                anzahl: addAnzahl,
               })
             })
             if (!res.ok) {
@@ -1138,9 +1153,15 @@ function HomeContent() {
               })
             )
           } else {
-            // Bestehender Eintrag: nur fehlende Mitreisende hinzufügen (keine Doppel)
+            // Bestehender Eintrag: nur fehlende Mitreisende hinzufügen (keine Doppel).
+            // Bei Mengenregel-Einträgen pro Person individuell berechnen.
             const missingIds = expectedIds.filter((id) => !existingIds.has(id))
             for (const mitreisenderId of missingIds) {
+              let addAnzahl: number | null = null
+              if (eq?.mengenregel) {
+                const person = vacationMitreisendeById.get(mitreisenderId)
+                addAnzahl = berechneAnzahl(eq.mengenregel, reiseTage, person ? istKind(person) : false)
+              }
               promises.push(
                 fetch('/api/packing-items/toggle-mitreisender', {
                   method: 'PUT',
@@ -1148,7 +1169,8 @@ function HomeContent() {
                   body: JSON.stringify({
                     packingItemId: existingItem.id,
                     mitreisenderId,
-                    gepackt: false
+                    gepackt: false,
+                    anzahl: addAnzahl,
                   })
                 })
               )

@@ -23,8 +23,10 @@ export async function PUT(request: NextRequest) {
       packingItemId?: string
       mitreisenderId?: string
       gepackt?: boolean
+      /** Optionale Pro-Person-Anzahl beim Anlegen einer neuen Zuordnung. */
+      anzahl?: number | null
     }
-    const { packingItemId, mitreisenderId, gepackt } = body
+    const { packingItemId, mitreisenderId, gepackt, anzahl } = body
 
     if (!packingItemId || !mitreisenderId || gepackt === undefined) {
       return NextResponse.json(
@@ -44,7 +46,7 @@ export async function PUT(request: NextRequest) {
     const useVorgemerkt = gepacktRequiresParentApproval(auth.userContext)
     const success = useVorgemerkt
       ? await togglePackingItemVorgemerktForMitreisender(db, packingItemId, mitreisenderId, gepackt)
-      : await togglePackingItemForMitreisender(db, packingItemId, mitreisenderId, gepackt)
+      : await togglePackingItemForMitreisender(db, packingItemId, mitreisenderId, gepackt, anzahl)
 
     if (!success) {
       return NextResponse.json(
