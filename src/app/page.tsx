@@ -1272,7 +1272,6 @@ function HomeContent() {
                       </h1>
                       <p className="text-xs sm:text-sm text-muted-foreground truncate">
                         {new Date(currentVacation.startdatum).toLocaleDateString('de-DE')} - {new Date(currentVacation.enddatum).toLocaleDateString('de-DE')}
-                        <span className="ml-2 opacity-60">· {berechneReiseTage(currentVacation)} Tage</span>
                       </p>
                     </div>
                   </div>

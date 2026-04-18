@@ -297,13 +297,14 @@ export function AddSingleItemDialog({
                   id="add-standard-anzahl"
                   type="number"
                   min="1"
-                  value={form.standard_anzahl}
+                  value={form.mengenregel ? '' : form.standard_anzahl}
                   onChange={(e) => setForm((p) => ({ ...p, standard_anzahl: e.target.value }))}
                   disabled={!!form.mengenregel}
+                  placeholder={form.mengenregel ? 'dynamisch' : undefined}
                 />
                 {form.mengenregel && (
                   <p className="text-[11px] text-muted-foreground mt-1">
-                    Aus Mengenregel abgeleitet.
+                    Wird dynamisch aus der Mengenregel berechnet.
                   </p>
                 )}
               </div>

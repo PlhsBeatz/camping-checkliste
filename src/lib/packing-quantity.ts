@@ -128,25 +128,7 @@ export function berechneReiseTage(vacation: {
   if (startMs === null || endMs === null) return 1
   const MS_PER_DAY = 86_400_000
   const diffDays = Math.round((endMs - startMs) / MS_PER_DAY)
-  const result = Math.max(1, diffDays)
-  if (typeof console !== 'undefined') {
-    // bewusst console.log, damit das Filter "Verbose" in DevTools nicht greift
-    console.log('[berechneReiseTage]', {
-      startdatum: vacation.startdatum,
-      abfahrtdatum: vacation.abfahrtdatum,
-      enddatum: vacation.enddatum,
-      verwendet: { startStr, endStr },
-      parsed: {
-        startMs,
-        endMs,
-        startISO: new Date(startMs).toISOString(),
-        endISO: new Date(endMs).toISOString(),
-      },
-      diffDays,
-      result,
-    })
-  }
-  return result
+  return Math.max(1, diffDays)
 }
 
 /**
@@ -181,9 +163,6 @@ export function berechneAnzahl(
 ): number {
   if (!regel) return 0
   const tage = Math.max(1, Math.floor(reiseTage))
-  if (typeof console !== 'undefined') {
-    console.log('[berechneAnzahl]', { regelTyp: regel.typ, reiseTage, tage, kind })
-  }
 
   switch (regel.typ) {
     case 'fest': {

@@ -18,8 +18,9 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Search, Filter, Star, MoreVertical, Pencil, Trash2, ExternalLink } from 'lucide-react'
+import { Search, Filter, Star, MoreVertical, Pencil, Trash2, ExternalLink, Sigma } from 'lucide-react'
 import { EquipmentItem, Category, MainCategory, TransportVehicle, Tag } from '@/lib/db'
+import { regelKurzLabel } from '@/lib/packing-quantity'
 import { cn } from '@/lib/utils'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -586,7 +587,18 @@ export const EquipmentTable = React.memo(({
                             formatWeight(item.einzelgewicht)
                           )}
                         </div>
-                        <div className={`px-4 py-2 text-sm flex items-center justify-center ${colAlign.anzahl}`}>{item.standard_anzahl}</div>
+                        <div className={`px-4 py-2 text-sm flex items-center justify-center gap-1 ${colAlign.anzahl}`}>
+                          {item.mengenregel ? (
+                            <span
+                              className="inline-flex items-center gap-1 text-muted-foreground"
+                              title={`Dynamische Regel: ${regelKurzLabel(item.mengenregel)}`}
+                            >
+                              <Sigma className="h-3.5 w-3.5" />
+                            </span>
+                          ) : (
+                            <span>{item.standard_anzahl}</span>
+                          )}
+                        </div>
                         <div className={`px-4 py-2 flex items-center ${colAlign.status}`}>
                           <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(item.status)}`}>
                             {item.status}

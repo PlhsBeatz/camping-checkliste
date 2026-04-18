@@ -651,13 +651,14 @@ export default function AusruestungPage() {
                   id="anzahl"
                   type="number"
                   min="1"
-                  value={formData.standard_anzahl}
+                  value={formData.mengenregel ? '' : formData.standard_anzahl}
                   onChange={(e) => setFormData({ ...formData, standard_anzahl: e.target.value })}
                   disabled={!!formData.mengenregel}
+                  placeholder={formData.mengenregel ? 'dynamisch' : undefined}
                 />
                 {formData.mengenregel && (
                   <p className="text-[11px] text-muted-foreground mt-1">
-                    Wird aus der Mengenregel abgeleitet (für Gewichts-Schätzung).
+                    Wird dynamisch aus der Mengenregel berechnet.
                   </p>
                 )}
               </div>
@@ -917,13 +918,14 @@ export default function AusruestungPage() {
                   id="edit-anzahl"
                   type="number"
                   min="1"
-                  value={formData.standard_anzahl}
+                  value={formData.mengenregel ? '' : formData.standard_anzahl}
                   onChange={(e) => setFormData({ ...formData, standard_anzahl: e.target.value })}
                   disabled={!!formData.mengenregel}
+                  placeholder={formData.mengenregel ? 'dynamisch' : undefined}
                 />
                 {formData.mengenregel && (
                   <p className="text-[11px] text-muted-foreground mt-1">
-                    Wird aus der Mengenregel abgeleitet (für Gewichts-Schätzung).
+                    Wird dynamisch aus der Mengenregel berechnet.
                   </p>
                 )}
               </div>
