@@ -11,6 +11,7 @@ import {
   CloudflareEnv,
 } from '@/lib/db'
 import { requireAuth, requireAdmin } from '@/lib/api-auth'
+import type { MengenRegel } from '@/lib/packing-quantity'
 
 interface EquipmentItemBody {
   was?: string
@@ -25,6 +26,7 @@ interface EquipmentItemBody {
   mitreisenden_typ?: 'pauschal' | 'alle' | 'ausgewaehlte'
   standard_mitreisende?: string[]
   in_pauschale_inbegriffen?: boolean
+  mengenregel?: MengenRegel | null
   tags?: string[]
   links?: string[]
 }
@@ -103,6 +105,7 @@ export async function POST(request: NextRequest) {
       mitreisenden_typ,
       standard_mitreisende,
       in_pauschale_inbegriffen,
+      mengenregel,
       tags,
       links,
     } = body
@@ -126,6 +129,7 @@ export async function POST(request: NextRequest) {
       mitreisenden_typ,
       standard_mitreisende,
       in_pauschale_inbegriffen,
+      mengenregel,
       tags,
       links
     })
@@ -167,6 +171,7 @@ export async function PUT(request: NextRequest) {
       mitreisenden_typ,
       standard_mitreisende,
       in_pauschale_inbegriffen,
+      mengenregel,
       tags,
       links,
     } = body
@@ -188,6 +193,7 @@ export async function PUT(request: NextRequest) {
       mitreisenden_typ,
       standard_mitreisende,
       in_pauschale_inbegriffen,
+      mengenregel,
       tags,
       links
     })

@@ -19,7 +19,12 @@ export async function POST(request: NextRequest) {
         anzahl?: number
         bemerkung?: string | null
         transportId?: string | null
-        mitreisende?: string[]
+        /**
+         * Mitreisende können als IDs oder als `{ id, anzahl }` übergeben werden.
+         * `anzahl` setzt optional einen Pro-Person-Wert
+         * (verwendet `packlisten_eintrag_mitreisende.anzahl`).
+         */
+        mitreisende?: Array<string | { id: string; anzahl?: number | null }>
       }>
     }
     const { vacationId, items } = body

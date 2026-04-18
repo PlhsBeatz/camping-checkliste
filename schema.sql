@@ -133,6 +133,7 @@ CREATE TABLE IF NOT EXISTS ausruestungsgegenstaende (
     updated_at TEXT NOT NULL DEFAULT (datetime('now')), 
     mitreisenden_typ TEXT NOT NULL DEFAULT 'pauschal' CHECK (mitreisenden_typ IN ('pauschal', 'alle', 'ausgewaehlte')), is_standard INTEGER DEFAULT 0,
     in_pauschale_inbegriffen INTEGER DEFAULT 0,
+    mengenregel TEXT,
     CHECK (einzelgewicht >= 0 OR einzelgewicht IS NULL),
     CHECK (standard_anzahl >= 0),
     CHECK (status IN ('Normal', 'Ausgemustert', 'Fest Installiert', 'Immer gepackt')),

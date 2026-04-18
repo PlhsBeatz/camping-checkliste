@@ -11,6 +11,7 @@ import { Plus, Sparkles, Menu, Search, Users } from 'lucide-react'
 import { useState, useEffect, Suspense, useMemo, useCallback, useRef } from 'react'
 import { Vacation, PackingItem, TransportVehicle, Mitreisender, EquipmentItem, Category, MainCategory } from '@/lib/db'
 import type { ApiResponse } from '@/lib/api-types'
+import { berechneAnzahl, berechneReiseTage, istKind, regelKurzLabel } from '@/lib/packing-quantity'
 import { ResponsiveModal } from '@/components/ui/responsive-modal'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { MarkAllConfirmationDialog } from '@/components/mark-all-confirmation-dialog'
@@ -511,6 +512,8 @@ function HomeContent() {
 
     const vacationMitreisendeIds = vacationMitreisende.map(m => m.id)
     const vacationMitreisendeSet = new Set(vacationMitreisendeIds)
+    const vacationMitreisendeById = new Map(vacationMitreisende.map(m => [m.id, m]))
+    const reiseTage = currentVacation ? berechneReiseTage(currentVacation) : 1
 
     try {
       const items = toAdd.map((item) => {
@@ -524,9 +527,36 @@ function HomeContent() {
           // Fallback: Wenn keine Überlappung (z.B. andere Urlaubsgruppe) → alle Urlaubs-Mitreisenden
           mitreisendeIds = filtered.length > 0 ? filtered : vacationMitreisendeIds
         }
+
+        // Mengenregel auswerten:
+        //  - pauschal: Regel einmal für Erwachsenen-Fall berechnen, sonst standard_anzahl.
+        //  - alle/ausgewaehlte: Pro Person (Kind/Erwachsener) einzeln rechnen.
+        //    Zeilen-anzahl = Summe, Pro-Person-Anzahl wandert in die Junction.
+        if (item.mengenregel && typ !== 'pauschal' && mitreisendeIds.length > 0) {
+          const mitreisendeMitAnzahl = mitreisendeIds.map((id) => {
+            const person = vacationMitreisendeById.get(id)
+            const anzahl = berechneAnzahl(
+              item.mengenregel,
+              reiseTage,
+              person ? istKind(person) : false,
+            )
+            return { id, anzahl }
+          })
+          const summe = mitreisendeMitAnzahl.reduce((acc, m) => acc + m.anzahl, 0)
+          return {
+            gegenstandId: item.id,
+            anzahl: Math.max(summe, 0),
+            transportId: item.transport_id || null,
+            mitreisende: mitreisendeMitAnzahl,
+          }
+        }
+
+        const anzahl = item.mengenregel
+          ? berechneAnzahl(item.mengenregel, reiseTage, false)
+          : item.standard_anzahl ?? 1
         return {
           gegenstandId: item.id,
-          anzahl: item.standard_anzahl ?? 1,
+          anzahl: Math.max(anzahl, 0),
           transportId: item.transport_id || null,
           mitreisende: mitreisendeIds,
         }
@@ -1009,6 +1039,31 @@ function HomeContent() {
     setIsLoading(true)
     try {
       const vacationMitreisendeIds = vacationMitreisende.map((m) => m.id)
+      const vacationMitreisendeById = new Map(vacationMitreisende.map((m) => [m.id, m]))
+      const reiseTage = currentVacation ? berechneReiseTage(currentVacation) : 1
+
+      // Zeilen-anzahl und Pro-Person-Anzahlen für einen neuen Eintrag berechnen.
+      // Bei personenbezogenen Einträgen mit Regel: Pro-Person rechnen + Summe als Zeilenwert.
+      const buildItemPayload = (eq: EquipmentItem | undefined, expectedIds: string[]) => {
+        const typ = (eq?.mitreisenden_typ ?? 'pauschal') as 'pauschal' | 'alle' | 'ausgewaehlte'
+        if (eq?.mengenregel && typ !== 'pauschal' && expectedIds.length > 0) {
+          const mitreisendeMitAnzahl = expectedIds.map((id) => {
+            const person = vacationMitreisendeById.get(id)
+            const anzahl = berechneAnzahl(
+              eq.mengenregel,
+              reiseTage,
+              person ? istKind(person) : false,
+            )
+            return { id, anzahl }
+          })
+          const summe = mitreisendeMitAnzahl.reduce((acc, m) => acc + m.anzahl, 0)
+          return { anzahl: Math.max(summe, 0), mitreisende: mitreisendeMitAnzahl as Array<string | { id: string; anzahl?: number | null }> }
+        }
+        const anzahl = eq?.mengenregel
+          ? berechneAnzahl(eq.mengenregel, reiseTage, false)
+          : eq?.standard_anzahl ?? 1
+        return { anzahl: Math.max(anzahl, 0), mitreisende: expectedIds as Array<string | { id: string; anzahl?: number | null }> }
+      }
 
       if (selectedPackProfile) {
         // Packprofil Mitreisender: Person zu bestehendem Eintrag hinzufügen oder neuen erstellen
@@ -1032,16 +1087,17 @@ function HomeContent() {
             }
           } else {
             // Neuer Eintrag – nur für diesen Mitreisenden
+            const payload = buildItemPayload(eq, [selectedPackProfile])
             await fetch('/api/packing-items', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 vacationId: selectedVacationId,
                 gegenstandId: equipmentId,
-                anzahl: eq?.standard_anzahl ?? 1,
+                anzahl: payload.anzahl,
                 bemerkung: null,
                 transportId: eq?.transport_id ?? null,
-                mitreisende: [selectedPackProfile]
+                mitreisende: payload.mitreisende
               })
             })
           }
@@ -1066,6 +1122,7 @@ function HomeContent() {
 
           if (!existingItem) {
             // Neuer Eintrag: vollständige Zuordnung anlegen
+            const payload = buildItemPayload(eq, expectedIds)
             promises.push(
               fetch('/api/packing-items', {
                 method: 'POST',
@@ -1073,10 +1130,10 @@ function HomeContent() {
                 body: JSON.stringify({
                   vacationId: selectedVacationId,
                   gegenstandId: equipmentId,
-                  anzahl: eq?.standard_anzahl ?? 1,
+                  anzahl: payload.anzahl,
                   bemerkung: null,
                   transportId: eq?.transport_id ?? null,
-                  mitreisende: expectedIds
+                  mitreisende: payload.mitreisende
                 })
               })
             )
@@ -1301,6 +1358,17 @@ function HomeContent() {
                   value={packingItemForm.anzahl}
                   onChange={(e) => setPackingItemForm({ ...packingItemForm, anzahl: e.target.value })}
                 />
+                {(() => {
+                  // Info-Tooltip: Zeigt, ob der Wert aus einer Mengenregel berechnet wurde.
+                  // Nutzer kann den Wert weiterhin manuell überschreiben.
+                  const eq = equipmentItems.find((e) => e.id === packingItemForm.gegenstandId)
+                  if (!eq?.mengenregel) return null
+                  return (
+                    <p className="text-[11px] text-muted-foreground mt-1">
+                      Ursprünglich berechnet aus Regel: {regelKurzLabel(eq.mengenregel)}
+                    </p>
+                  )
+                })()}
               </div>
               {!editingForMitreisenderId && (
               <div>

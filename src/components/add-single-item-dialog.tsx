@@ -18,6 +18,8 @@ import {
 import { parseWeightInput } from '@/lib/utils'
 import type { ApiResponse } from '@/lib/api-types'
 import type { EquipmentItem } from '@/lib/db'
+import { MengenRegelEditor } from '@/components/mengen-regel-editor'
+import { regelToStandardAnzahl, type MengenRegel } from '@/lib/packing-quantity'
 
 interface CategoryWithMain {
   id: string
@@ -58,6 +60,7 @@ const defaultForm = {
   tags: [] as string[],
   links: [] as { url: string }[],
   standard_mitreisende: [] as string[],
+  mengenregel: null as MengenRegel | null,
 }
 
 export function AddSingleItemDialog({
@@ -118,6 +121,15 @@ export function AddSingleItemDialog({
     return !!(c && c.pauschalgewicht != null && c.pauschalgewicht > 0)
   }
 
+  const handleMengenRegelChange = (regel: MengenRegel | null) => {
+    setForm((prev) => {
+      if (!regel) return { ...prev, mengenregel: null }
+      const curStd = parseInt(prev.standard_anzahl) || 1
+      const derived = regelToStandardAnzahl(regel, curStd)
+      return { ...prev, mengenregel: regel, standard_anzahl: String(Math.max(1, derived)) }
+    })
+  }
+
   const handleSubmit = async () => {
     const was = form.was.trim()
     if (!was) {
@@ -148,6 +160,7 @@ export function AddSingleItemDialog({
           standard_mitreisende: form.standard_mitreisende,
           tags: form.tags,
           links: form.links.filter((l) => l.url.trim()).map((l) => l.url),
+          mengenregel: form.mengenregel,
         }
         const resEq = await fetch('/api/equipment-items', {
           method: 'POST',
@@ -286,9 +299,20 @@ export function AddSingleItemDialog({
                   min="1"
                   value={form.standard_anzahl}
                   onChange={(e) => setForm((p) => ({ ...p, standard_anzahl: e.target.value }))}
+                  disabled={!!form.mengenregel}
                 />
+                {form.mengenregel && (
+                  <p className="text-[11px] text-muted-foreground mt-1">
+                    Aus Mengenregel abgeleitet.
+                  </p>
+                )}
               </div>
             </div>
+            <MengenRegelEditor
+              value={form.mengenregel}
+              onChange={handleMengenRegelChange}
+              kindOverrideDisabled={form.mitreisenden_typ === 'pauschal'}
+            />
             {hasPauschaleForCategory(form.kategorie_id) && (
               <div className="flex items-center gap-2">
                 <Checkbox

@@ -56,7 +56,13 @@ export async function POST(request: NextRequest) {
       anzahl?: number
       bemerkung?: string | null
       transportId?: string | null
-      mitreisende?: string[]
+      /**
+       * Mitreisende können als IDs oder als `{ id, anzahl }` übergeben werden.
+       * Letzteres setzt eine Pro-Person-Anzahl
+       * (`packlisten_eintrag_mitreisende.anzahl`). Für temporäre Einträge wird
+       * nur die ID ausgewertet.
+       */
+      mitreisende?: Array<string | { id: string; anzahl?: number | null }>
       temporary?: boolean
       was?: string
       kategorieId?: string
@@ -80,6 +86,9 @@ export async function POST(request: NextRequest) {
     let itemId: string | null
 
     if (temporary && was != null && was.trim() !== '' && kategorieId) {
+      // Temporäre Einträge unterstützen keine Pro-Person-Anzahl –
+      // auf reine IDs normalisieren.
+      const mitreisendeIds = (mitreisende ?? []).map((m) => (typeof m === 'string' ? m : m.id))
       itemId = await addTemporaryPackingItem(
         db,
         packlisteId,
@@ -88,7 +97,7 @@ export async function POST(request: NextRequest) {
         anzahl ?? 1,
         bemerkung,
         transportId,
-        mitreisende
+        mitreisendeIds
       )
     } else if (gegenstandId) {
       itemId = await addPackingItem(db, packlisteId, gegenstandId, anzahl || 1, bemerkung, transportId, mitreisende)

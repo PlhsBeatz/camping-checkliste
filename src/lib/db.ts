@@ -6,6 +6,8 @@
 
 import { D1Database, R2Bucket } from '@cloudflare/workers-types'
 import { getCloudflareContext } from '@opennextjs/cloudflare'
+import type { MengenRegel } from './packing-quantity'
+import { parseRegel, serializeRegel } from './packing-quantity'
 
 export interface Vacation {
   id: string
@@ -97,6 +99,12 @@ export interface EquipmentItem {
   in_pauschale_inbegriffen?: boolean // Gewicht in Pauschale (Kategorie/Hauptkategorie) enthalten
   tags?: Tag[] // Zugeordnete Tags
   links?: EquipmentLink[]
+  /**
+   * Dynamische Mengenregel (optional). Wird beim Generieren der Packliste
+   * abhängig von Reisedauer und Mitreisenden-Typ (Erwachsener/Kind)
+   * ausgewertet. `null`/undefined → Fallback auf `standard_anzahl`.
+   */
+  mengenregel?: MengenRegel | null
   created_at: string
 }
 
@@ -971,6 +979,7 @@ export async function getEquipmentItems(db: D1Database): Promise<EquipmentItem[]
         mitreisenden_typ: String(row.mitreisenden_typ || 'pauschal') as 'pauschal' | 'alle' | 'ausgewaehlte',
         standard_mitreisende,
         in_pauschale_inbegriffen: !!(row.in_pauschale_inbegriffen ?? 0),
+        mengenregel: parseRegel(row.mengenregel as string | null | undefined),
         tags: [],
         links,
         created_at: String(row.created_at || ''),
@@ -1000,7 +1009,7 @@ export async function getEquipmentItem(db: D1Database, id: string): Promise<Equi
       LEFT JOIN transportmittel t ON ag.transport_id = t.id
       WHERE ag.id = ?
     `
-    const item = await db.prepare(query).bind(id).first<EquipmentItem>()
+    const item = await db.prepare(query).bind(id).first<EquipmentItem & { mengenregel?: string | null }>()
     if (!item) return null
     
     // Fetch links for this equipment item
@@ -1016,6 +1025,7 @@ export async function getEquipmentItem(db: D1Database, id: string): Promise<Equi
     return {
       ...item,
       in_pauschale_inbegriffen: !!(item.in_pauschale_inbegriffen ?? 0),
+      mengenregel: parseRegel(item.mengenregel as string | null | undefined),
       links: links.results || [],
       standard_mitreisende: standardMitreisende.results?.map((m) => m.mitreisender_id) || []
     }
@@ -1043,6 +1053,7 @@ export async function createEquipmentItem(
     mitreisenden_typ?: 'pauschal' | 'alle' | 'ausgewaehlte'
     standard_mitreisende?: string[]
     in_pauschale_inbegriffen?: boolean
+    mengenregel?: MengenRegel | null
     tags?: string[]
     links?: string[]
   }
@@ -1052,8 +1063,8 @@ export async function createEquipmentItem(
     await db
       .prepare(
         `INSERT INTO ausruestungsgegenstaende 
-         (id, was, kategorie_id, transport_id, einzelgewicht, standard_anzahl, status, details, is_standard, erst_abreisetag_gepackt, mitreisenden_typ, in_pauschale_inbegriffen) 
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+         (id, was, kategorie_id, transport_id, einzelgewicht, standard_anzahl, status, details, is_standard, erst_abreisetag_gepackt, mitreisenden_typ, in_pauschale_inbegriffen, mengenregel) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .bind(
         id,
@@ -1067,7 +1078,8 @@ export async function createEquipmentItem(
         item.is_standard ? 1 : 0,
         item.erst_abreisetag_gepackt ? 1 : 0,
         item.mitreisenden_typ || 'pauschal',
-        item.in_pauschale_inbegriffen ? 1 : 0
+        item.in_pauschale_inbegriffen ? 1 : 0,
+        serializeRegel(item.mengenregel)
       )
       .run()
 
@@ -1121,6 +1133,7 @@ export async function updateEquipmentItem(
     mitreisenden_typ?: 'pauschal' | 'alle' | 'ausgewaehlte'
     standard_mitreisende?: string[]
     in_pauschale_inbegriffen?: boolean
+    mengenregel?: MengenRegel | null
     tags?: string[]
     links?: string[]
   }
@@ -1172,6 +1185,10 @@ export async function updateEquipmentItem(
     if (updates.in_pauschale_inbegriffen !== undefined) {
       fields.push('in_pauschale_inbegriffen = ?')
       values.push(updates.in_pauschale_inbegriffen ? 1 : 0)
+    }
+    if (updates.mengenregel !== undefined) {
+      fields.push('mengenregel = ?')
+      values.push(serializeRegel(updates.mengenregel))
     }
 
     if (fields.length > 0) {
@@ -1822,7 +1839,18 @@ export async function getPackStatus(db: D1Database, vacationId: string): Promise
 }
 
 /**
- * Hinzufügen eines Gegenstands zur Packliste
+ * Eintrag in der Mitreisenden-Zuordnung für einen Packlisten-Eintrag.
+ * `id` ist immer der Mitreisenden-ID; `anzahl` setzt optional einen
+ * abweichenden Pro-Person-Wert (NULL → verwendet Eintrags-Gesamtanzahl).
+ */
+export type PackingItemMitreisenderInput = string | { id: string; anzahl?: number | null }
+
+/**
+ * Hinzufügen eines Gegenstands zur Packliste.
+ *
+ * Unterstützt Pro-Person-Mengen: Mitreisende können entweder als reine IDs
+ * oder als `{ id, anzahl }` übergeben werden. Bei gesetzter `anzahl` wird der
+ * Wert in `packlisten_eintrag_mitreisende.anzahl` hinterlegt (Migration 0003).
  */
 export async function addPackingItem(
   db: D1Database,
@@ -1831,7 +1859,7 @@ export async function addPackingItem(
   anzahl: number,
   bemerkung?: string | null,
   transportId?: string | null,
-  mitreisende?: string[]
+  mitreisende?: PackingItemMitreisenderInput[]
 ): Promise<string | null> {
   try {
     const id = crypto.randomUUID()
@@ -1844,10 +1872,12 @@ export async function addPackingItem(
 
     // Add mitreisende associations if provided
     if (mitreisende && mitreisende.length > 0) {
-      for (const mitreisenderId of mitreisende) {
+      for (const entry of mitreisende) {
+        const mitreisenderId = typeof entry === 'string' ? entry : entry.id
+        const personAnzahl = typeof entry === 'string' ? null : (entry.anzahl ?? null)
         await db
-          .prepare('INSERT INTO packlisten_eintrag_mitreisende (packlisten_eintrag_id, mitreisender_id, gepackt) VALUES (?, ?, ?)')
-          .bind(id, mitreisenderId, 0)
+          .prepare('INSERT INTO packlisten_eintrag_mitreisende (packlisten_eintrag_id, mitreisender_id, gepackt, anzahl) VALUES (?, ?, ?, ?)')
+          .bind(id, mitreisenderId, 0, personAnzahl)
           .run()
       }
     }
@@ -3041,6 +3071,7 @@ export async function getEquipmentByTags(
         is_standard: !!row.is_standard,
         mitreisenden_typ,
         standard_mitreisende: [], // wird von equipment-by-tags Route per Batch ergänzt
+        mengenregel: parseRegel(row.mengenregel as string | null | undefined),
         tags: [],
         links: [],
         created_at: String(row.created_at || ''),

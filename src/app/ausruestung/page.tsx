@@ -22,6 +22,8 @@ import {
 } from '@/components/ui/select'
 import { Checkbox } from '@/components/ui/checkbox'
 import { cn, parseWeightInput } from '@/lib/utils'
+import { MengenRegelEditor } from '@/components/mengen-regel-editor'
+import { regelToStandardAnzahl, type MengenRegel } from '@/lib/packing-quantity'
 import {
   getCachedEquipment,
   getCachedCategories,
@@ -131,8 +133,25 @@ export default function AusruestungPage() {
     in_pauschale_inbegriffen: false,
     tags: [] as string[],
     links: [] as { url: string }[],
-    standard_mitreisende: [] as string[]
+    standard_mitreisende: [] as string[],
+    mengenregel: null as MengenRegel | null
   })
+
+  /**
+   * Synchronisiert `standard_anzahl` mit der gewählten Regel.
+   * - Regel vom Typ „fest": immer gekoppelt.
+   * - Variable Regeln: Fallback auf einen plausiblen Wert (7 Tage), damit die
+   *   Gewichtsberechnung (einzelgewicht × standard_anzahl) realistisch bleibt.
+   * - Keine Regel: Feld bleibt frei editierbar.
+   */
+  const handleMengenRegelChange = (regel: MengenRegel | null) => {
+    setFormData((prev) => {
+      if (!regel) return { ...prev, mengenregel: null }
+      const curStd = parseInt(prev.standard_anzahl) || 1
+      const derived = regelToStandardAnzahl(regel, curStd)
+      return { ...prev, mengenregel: regel, standard_anzahl: String(Math.max(1, derived)) }
+    })
+  }
 
   // Sidebar offen: Body-Scroll sperren
   useEffect(() => {
@@ -309,7 +328,8 @@ export default function AusruestungPage() {
       in_pauschale_inbegriffen: false,
       tags: [],
       links: [],
-      standard_mitreisende: []
+      standard_mitreisende: [],
+      mengenregel: null
     })
   }
 
@@ -334,7 +354,8 @@ export default function AusruestungPage() {
       in_pauschale_inbegriffen: item.in_pauschale_inbegriffen || false,
       tags: item.tags?.map((t) => (typeof t === 'object' ? t.id : t)) || [],
       links: item.links || [],
-      standard_mitreisende: item.standard_mitreisende || []
+      standard_mitreisende: item.standard_mitreisende || [],
+      mengenregel: item.mengenregel ?? null
     })
     setShowEditDialog(true)
   }
@@ -361,7 +382,8 @@ export default function AusruestungPage() {
         in_pauschale_inbegriffen: formData.in_pauschale_inbegriffen,
         standard_mitreisende: formData.standard_mitreisende,
         tags: formData.tags,
-        links: formData.links.filter((link) => link.url.trim() !== '').map((link) => link.url)
+        links: formData.links.filter((link) => link.url.trim() !== '').map((link) => link.url),
+        mengenregel: formData.mengenregel
       }
 
       const res = await fetch('/api/equipment-items', {
@@ -415,7 +437,8 @@ export default function AusruestungPage() {
         in_pauschale_inbegriffen: formData.in_pauschale_inbegriffen,
         standard_mitreisende: formData.standard_mitreisende,
         tags: formData.tags,
-        links: formData.links.filter((link) => link.url.trim() !== '').map((link) => link.url)
+        links: formData.links.filter((link) => link.url.trim() !== '').map((link) => link.url),
+        mengenregel: formData.mengenregel
       }
 
       const res = await fetch('/api/equipment-items', {
@@ -630,9 +653,21 @@ export default function AusruestungPage() {
                   min="1"
                   value={formData.standard_anzahl}
                   onChange={(e) => setFormData({ ...formData, standard_anzahl: e.target.value })}
+                  disabled={!!formData.mengenregel}
                 />
+                {formData.mengenregel && (
+                  <p className="text-[11px] text-muted-foreground mt-1">
+                    Wird aus der Mengenregel abgeleitet (für Gewichts-Schätzung).
+                  </p>
+                )}
               </div>
             </div>
+
+            <MengenRegelEditor
+              value={formData.mengenregel}
+              onChange={handleMengenRegelChange}
+              kindOverrideDisabled={formData.mitreisenden_typ === 'pauschal'}
+            />
 
             {hasPauschaleForCategory(formData.kategorie_id) && (
               <div className="flex items-center gap-2">
@@ -884,9 +919,21 @@ export default function AusruestungPage() {
                   min="1"
                   value={formData.standard_anzahl}
                   onChange={(e) => setFormData({ ...formData, standard_anzahl: e.target.value })}
+                  disabled={!!formData.mengenregel}
                 />
+                {formData.mengenregel && (
+                  <p className="text-[11px] text-muted-foreground mt-1">
+                    Wird aus der Mengenregel abgeleitet (für Gewichts-Schätzung).
+                  </p>
+                )}
               </div>
             </div>
+
+            <MengenRegelEditor
+              value={formData.mengenregel}
+              onChange={handleMengenRegelChange}
+              kindOverrideDisabled={formData.mitreisenden_typ === 'pauschal'}
+            />
 
             {hasPauschaleForCategory(formData.kategorie_id) && (
               <div className="flex items-center gap-2">
