@@ -10,7 +10,11 @@ const ITERATIONS = 100_000
 const KEY_LENGTH = 32
 const JWT_SECRET_ENV = 'JWT_SECRET'
 const COOKIE_NAME = 'auth-token'
-const TOKEN_AGE_SEC = 7 * 24 * 60 * 60 // 7 Tage
+/** JWT- und Cookie-Laufzeit (gleich halten) */
+const TOKEN_AGE_SEC = 365 * 24 * 60 * 60 // 1 Jahr
+
+/** Wenn die verbleibende JWT-Lebensdauer darunter fällt, wird in der Middleware neu ausgestellt */
+export const TOKEN_ROTATE_IF_REMAINING_SEC = 14 * 24 * 60 * 60 // 14 Tage
 
 export type UserRole = 'admin' | 'kind' | 'gast'
 
@@ -106,6 +110,23 @@ function timingSafeEqual(a: string, b: string): boolean {
   return result === 0
 }
 
+/** httpOnly-Session-Cookie: gleiche maxAge wie JWT */
+export function getAuthCookieOptions(): {
+  httpOnly: true
+  secure: boolean
+  sameSite: 'lax'
+  maxAge: number
+  path: string
+} {
+  return {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    maxAge: TOKEN_AGE_SEC,
+    path: '/'
+  }
+}
+
 function getJwtSecret(): Uint8Array {
   const secret = process.env[JWT_SECRET_ENV]
   if (!secret || secret.length < 32) {
@@ -195,3 +216,9 @@ export async function getSessionFromCookies(): Promise<SessionUser | null> {
 }
 
 export { COOKIE_NAME, TOKEN_AGE_SEC }
+
+/** Vor Ablauf neu ausstellen, solange das Token noch gültig ist */
+export function shouldRotateAuthToken(payload: JWTPayload, nowSec: number): boolean {
+  if (payload.exp == null) return false
+  return payload.exp - nowSec < TOKEN_ROTATE_IF_REMAINING_SEC
+}

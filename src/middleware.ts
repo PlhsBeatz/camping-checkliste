@@ -1,6 +1,12 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
-import { verifyToken } from '@/lib/auth'
+import {
+  verifyToken,
+  createToken,
+  COOKIE_NAME,
+  getAuthCookieOptions,
+  shouldRotateAuthToken
+} from '@/lib/auth'
 
 const PUBLIC_PATHS = [
   '/login',
@@ -26,7 +32,7 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next()
   }
 
-  const token = request.cookies.get('auth-token')?.value
+  const token = request.cookies.get(COOKIE_NAME)?.value
   if (!token) {
     if (pathname.startsWith('/api/')) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -40,17 +46,28 @@ export async function middleware(request: NextRequest) {
   if (!payload) {
     if (pathname.startsWith('/api/')) {
       const res = NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-      res.cookies.delete('auth-token')
+      res.cookies.delete(COOKIE_NAME)
       return res
     }
     const loginUrl = new URL('/login', request.url)
     loginUrl.searchParams.set('callbackUrl', pathname)
     const res = NextResponse.redirect(loginUrl)
-    res.cookies.delete('auth-token')
+    res.cookies.delete(COOKIE_NAME)
     return res
   }
 
-  return NextResponse.next()
+  const res = NextResponse.next()
+  const nowSec = Math.floor(Date.now() / 1000)
+  if (shouldRotateAuthToken(payload, nowSec)) {
+    const newToken = await createToken({
+      id: payload.sub,
+      email: payload.email,
+      role: payload.role,
+      mitreisender_id: payload.mitreisender_id ?? null
+    })
+    res.cookies.set(COOKIE_NAME, newToken, getAuthCookieOptions())
+  }
+  return res
 }
 
 export const config = {

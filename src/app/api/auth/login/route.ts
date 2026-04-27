@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDB, getUserByEmail, CloudflareEnv } from '@/lib/db'
-import { verifyPassword, createToken } from '@/lib/auth'
+import { verifyPassword, createToken, COOKIE_NAME, getAuthCookieOptions } from '@/lib/auth'
 
 export async function POST(request: NextRequest) {
   try {
@@ -43,13 +43,7 @@ export async function POST(request: NextRequest) {
     })
 
     const response = NextResponse.json({ success: true })
-    response.cookies.set('auth-token', token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 7 * 24 * 60 * 60,
-      path: '/'
-    })
+    response.cookies.set(COOKIE_NAME, token, getAuthCookieOptions())
     return response
   } catch (error) {
     console.error('Login error:', error)

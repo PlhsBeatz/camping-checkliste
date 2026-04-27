@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDB, getInvitationByToken, acceptInvitation, createUser, updateMitreisenderUserId, CloudflareEnv } from '@/lib/db'
-import { hashPassword, createToken } from '@/lib/auth'
+import { hashPassword, createToken, COOKIE_NAME, getAuthCookieOptions } from '@/lib/auth'
 
 export async function GET(request: NextRequest) {
   const token = request.nextUrl.searchParams.get('token')
@@ -78,13 +78,7 @@ export async function POST(request: NextRequest) {
     })
 
     const response = NextResponse.json({ success: true })
-    response.cookies.set('auth-token', jwt, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 7 * 24 * 60 * 60,
-      path: '/'
-    })
+    response.cookies.set(COOKIE_NAME, jwt, getAuthCookieOptions())
     return response
   } catch (error) {
     console.error('Accept invite error:', error)
