@@ -244,20 +244,43 @@ export const EquipmentTable = React.memo(({
     return rows
   }, [groupedItems])
 
+  // Konstante Zeilenhöhen – müssen mit estimateSize unten übereinstimmen
+  const MAIN_CAT_HEIGHT = 36
+  const CATEGORY_HEIGHT = 36
+  const ITEM_HEIGHT = 52
+
   const parentRef = useRef<HTMLDivElement>(null)
+  const columnHeaderRef = useRef<HTMLDivElement>(null)
+  const [columnHeaderHeight, setColumnHeaderHeight] = useState(44)
+
   const virtualizer = useVirtualizer({
     count: flatRows.length,
     getScrollElement: () => parentRef.current,
     getItemKey: useCallback((index: number) => flatRows[index]?.id ?? index, [flatRows]),
     estimateSize: (index) => {
       const row = flatRows[index]
-      if (!row) return 52
-      if (row.type === 'main-category') return 36
-      if (row.type === 'category') return 36
-      return 52
+      if (!row) return ITEM_HEIGHT
+      if (row.type === 'main-category') return MAIN_CAT_HEIGHT
+      if (row.type === 'category') return CATEGORY_HEIGHT
+      return ITEM_HEIGHT
     },
     overscan: 5,
   })
+
+  // Spaltenkopfhöhe messen (für korrekte top-Offsets der Sticky-Bänder).
+  // ResizeObserver, falls sich die Höhe durch Layout-Änderungen anpasst.
+  useEffect(() => {
+    const el = columnHeaderRef.current
+    if (!el) return
+    const measure = () => {
+      const h = el.getBoundingClientRect().height
+      if (h > 0) setColumnHeaderHeight(h)
+    }
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
 
   // Bei Filteränderung: Nach oben scrollen (verhindert leere/verschobene Zeilen)
   const filterKey = `${filterMainCategory}-${filterCategory}-${filterTransport}-${filterStatus.join(',')}-${filterTag}-${filterStandard}-${searchTerm}`
@@ -266,6 +289,111 @@ export const EquipmentTable = React.memo(({
     if (el) el.scrollTop = 0
     virtualizer.measure()
   }, [filterKey, virtualizer])
+
+  // Vorberechnete Zeilen-Startpositionen (deterministisch, da estimateSize fix ist)
+  const rowStarts = useMemo(() => {
+    const starts: number[] = []
+    let cur = 0
+    for (const r of flatRows) {
+      starts.push(cur)
+      cur += r.type === 'main-category' || r.type === 'category' ? MAIN_CAT_HEIGHT : ITEM_HEIGHT
+    }
+    return starts
+  }, [flatRows])
+
+  // Aktive Hauptkategorie/Kategorie + Push-Offsets aus dem aktuellen Scroll
+  const stickyState = useMemo<{
+    main: { name: string; pushY: number } | null
+    category: { name: string; count: number; pushY: number } | null
+  }>(() => {
+    if (flatRows.length === 0) return { main: null, category: null }
+
+    const scrollOffset = virtualizer.scrollOffset ?? 0
+    const mainStickyTop = columnHeaderHeight
+    const categoryStickyTop = columnHeaderHeight + MAIN_CAT_HEIGHT
+
+    let activeMainIdx = -1
+    let nextMainIdx = -1
+    for (let i = 0; i < flatRows.length; i++) {
+      const row = flatRows[i]
+      const start = rowStarts[i]
+      if (!row || start === undefined) continue
+      if (row.type !== 'main-category') continue
+      if (start <= scrollOffset + mainStickyTop) {
+        activeMainIdx = i
+      } else {
+        nextMainIdx = i
+        break
+      }
+    }
+
+    if (activeMainIdx === -1) return { main: null, category: null }
+
+    const activeMainRow = flatRows[activeMainIdx]
+    if (!activeMainRow || activeMainRow.type !== 'main-category') {
+      return { main: null, category: null }
+    }
+
+    let mainPushY = 0
+    if (nextMainIdx !== -1) {
+      const nextStart = rowStarts[nextMainIdx]
+      if (nextStart !== undefined) {
+        const distance = nextStart - scrollOffset - mainStickyTop
+        if (distance < MAIN_CAT_HEIGHT) {
+          mainPushY = distance - MAIN_CAT_HEIGHT // negativ -> schiebt nach oben raus
+        }
+      }
+    }
+
+    // Kategorie-Sticky: nur Kategorien innerhalb der aktiven Hauptkategorie
+    const categoryEndBoundary = nextMainIdx === -1 ? flatRows.length : nextMainIdx
+    let activeCategoryIdx = -1
+    let nextCategoryIdx = -1
+    for (let i = activeMainIdx + 1; i < categoryEndBoundary; i++) {
+      const row = flatRows[i]
+      const start = rowStarts[i]
+      if (!row || start === undefined) continue
+      if (row.type !== 'category') continue
+      if (start <= scrollOffset + categoryStickyTop) {
+        activeCategoryIdx = i
+      } else {
+        nextCategoryIdx = i
+        break
+      }
+    }
+
+    let categoryData: { name: string; count: number; pushY: number } | null = null
+    if (activeCategoryIdx !== -1) {
+      const activeCategoryRow = flatRows[activeCategoryIdx]
+      if (activeCategoryRow && activeCategoryRow.type === 'category') {
+        // Push-Boundary: nächste Kategorie im selben Main, sonst nächste Main
+        let pushBoundary: number | null = null
+        if (nextCategoryIdx !== -1) {
+          pushBoundary = rowStarts[nextCategoryIdx] ?? null
+        } else if (nextMainIdx !== -1) {
+          pushBoundary = rowStarts[nextMainIdx] ?? null
+        }
+
+        let categoryPushY = 0
+        if (pushBoundary !== null) {
+          const distance = pushBoundary - scrollOffset - categoryStickyTop
+          if (distance < CATEGORY_HEIGHT) {
+            categoryPushY = distance - CATEGORY_HEIGHT
+          }
+        }
+        categoryData = {
+          name: activeCategoryRow.name,
+          count: activeCategoryRow.count,
+          pushY: categoryPushY,
+        }
+      }
+    }
+
+    return {
+      main: { name: activeMainRow.name, pushY: mainPushY },
+      category: categoryData,
+    }
+  }, [flatRows, rowStarts, virtualizer.scrollOffset, columnHeaderHeight])
 
   // Feste Spaltenbreiten: was, transport, gewicht, anzahl, status, abreise, gepacktFuer, details, tags, links, actions
   // Auf dem Smartphone etwas breitere Tags-Spalte und genügend Platz für Links
@@ -502,6 +630,7 @@ export const EquipmentTable = React.memo(({
             >
               {/* Tabellenkopf – bleibt beim vertikalen Scrollen sichtbar (im selben Scroll-Container) */}
               <div
+                ref={columnHeaderRef}
                 className="grid gap-px bg-border border-b bg-gray-50 sticky top-0 z-20"
                 style={{ gridTemplateColumns: gridCols }}
               >
@@ -517,6 +646,32 @@ export const EquipmentTable = React.memo(({
                 <div className={`px-4 py-3 font-medium text-sm ${colAlign.links}`}>Links</div>
                 <div className={`px-1 py-3 font-medium text-sm sticky right-0 z-25 bg-gray-50 ${colAlign.actions}`}></div>
               </div>
+              {/* Sticky-Band: aktuelle Hauptkategorie (mit Push-Effekt beim Übergang) */}
+              {stickyState.main && (
+                <div
+                  className="sticky z-[19] flex items-center bg-[rgb(45,79,30)] text-white font-bold text-base px-4 pointer-events-none"
+                  style={{
+                    top: columnHeaderHeight,
+                    height: MAIN_CAT_HEIGHT,
+                    transform: `translateY(${stickyState.main.pushY}px)`,
+                  }}
+                >
+                  {stickyState.main.name}
+                </div>
+              )}
+              {/* Sticky-Band: aktuelle Kategorie (gestapelt unter Hauptkategorie) */}
+              {stickyState.category && (
+                <div
+                  className="sticky z-[18] flex items-center bg-muted/95 backdrop-blur-sm font-semibold px-4 pointer-events-none"
+                  style={{
+                    top: columnHeaderHeight + MAIN_CAT_HEIGHT,
+                    height: CATEGORY_HEIGHT,
+                    transform: `translateY(${stickyState.category.pushY}px)`,
+                  }}
+                >
+                  {stickyState.category.name} ({stickyState.category.count})
+                </div>
+              )}
               {flatRows.length === 0 ? (
                 <div className="py-16 text-center text-muted-foreground">
                   Keine Ausrüstungsgegenstände gefunden
