@@ -533,11 +533,13 @@ export default function AusruestungPage() {
         onClose={() => setShowNavSidebar(false)}
       />
 
-      {/* Main Content Area - Flex-Layout: dynamische Höhe bis zum unteren Rand */}
+      {/* Main Content Area - Flex-Layout: dynamische Höhe bis zum unteren Rand.
+          h-dvh auf allen Bildschirmgrößen, damit der interne Tabellen-Scroll-Container greift
+          und Sticky-Header funktionieren (statt Page-Scroll). */}
       <div className={cn(
         "flex-1 flex flex-col min-h-0 min-w-0 transition-all duration-300",
         "lg:ml-[280px]",
-        "max-md:h-dvh max-md:min-h-dvh"
+        "h-dvh min-h-dvh"
       )}>
         <div className="flex flex-col flex-1 min-h-0 min-w-0 container mx-auto p-4 md:p-6">
           {/* Header - Sticky */}
