@@ -250,6 +250,8 @@ export const EquipmentTable = React.memo(({
   const ITEM_HEIGHT = 52
 
   const parentRef = useRef<HTMLDivElement>(null)
+  const columnHeaderRef = useRef<HTMLDivElement>(null)
+  const [columnHeaderHeight, setColumnHeaderHeight] = useState(44)
 
   const virtualizer = useVirtualizer({
     count: flatRows.length,
@@ -264,6 +266,21 @@ export const EquipmentTable = React.memo(({
     },
     overscan: 5,
   })
+
+  // Spaltenkopfhöhe messen für korrekte top-Offsets der Sticky-Bänder.
+  // ResizeObserver fängt Layout-Änderungen ab (z. B. Schriftgrößen-Änderungen).
+  useEffect(() => {
+    const el = columnHeaderRef.current
+    if (!el) return
+    const measure = () => {
+      const h = el.getBoundingClientRect().height
+      if (h > 0) setColumnHeaderHeight(h)
+    }
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
 
   // Bei Filteränderung: Nach oben scrollen (verhindert leere/verschobene Zeilen)
   const filterKey = `${filterMainCategory}-${filterCategory}-${filterTransport}-${filterStatus.join(',')}-${filterTag}-${filterStandard}-${searchTerm}`
@@ -284,31 +301,29 @@ export const EquipmentTable = React.memo(({
     return starts
   }, [flatRows])
 
-  // Aktueller Scroll im virtualisierten Container (für Overlay-Positionierung).
-  const scrollOffset = virtualizer.scrollOffset ?? 0
-
-  // Aktive Hauptkategorie/Kategorie + container-Y-Position der jeweiligen Sticky-Banner.
+  // Aktive Hauptkategorie/Kategorie + Push-Offsets aus dem aktuellen Scroll.
   //
-  // Geometrie: Die Sticky-Bänder werden als `position: absolute` Overlays INNERHALB
-  // des Virtualizer-`relative`-Containers gerendert. Dieser Container beginnt im Flow
-  // direkt nach dem (bereits sticky) Spaltenkopf. In Container-Y entspricht:
-  //   - `top: scrollOffset`              -> visuell direkt unter dem Spaltenkopf (Hauptkat)
-  //   - `top: scrollOffset + MAIN_CAT_HEIGHT` -> direkt unter dem Hauptkat-Banner (Kategorie)
+  // Geometrie: Die Sticky-Bänder werden als `position: sticky` direkt nach dem
+  // Spaltenkopf gerendert (ohne Flow-Platz dank `margin-bottom: -height`). Sie
+  // pinnen visuell bei `top: columnHeaderHeight` (Hauptkat) bzw.
+  // `top: columnHeaderHeight + MAIN_CAT_HEIGHT` (Kategorie).
   //
-  // Aktivierungs-Schwellwerte (in Container-Y):
+  // Aktivierungs-Schwellwerte (gleicher Container-Y wie virtualisierte Zeilen):
   //   - Hauptkat aktiv, sobald rowStarts[i] <= scrollOffset
-  //     (echte Hauptkat-Zeile hat die Sticky-Position erreicht)
   //   - Kategorie aktiv, sobald rowStarts[i] <= scrollOffset + MAIN_CAT_HEIGHT
   //
-  // Push-Effekt: Wenn die nächste Hauptkat-/Kategorie-Zeile sich von unten nähert und
-  // in den Bereich des aktuellen Banners eindringt, wird der aktuelle Banner per
-  // negativem `top`-Offset aus der Sicht geschoben.
+  // Push-Effekt: Nähert sich die nächste Haupt-/Kategorie-Zeile dem aktuellen
+  // Banner, schieben wir das Banner per `transform: translateY(pushY)` nach oben
+  // hinter den Spaltenkopf. Im steady state ist `pushY === 0`, sodass keine
+  // React-getriebene Position-Änderung pro Scroll-Frame nötig ist – das Browser-
+  // sticky übernimmt → kein Zittern.
   const stickyState = useMemo<{
-    main: { name: string; top: number } | null
-    category: { name: string; count: number; top: number } | null
+    main: { name: string; pushY: number } | null
+    category: { name: string; count: number; pushY: number } | null
   }>(() => {
     if (flatRows.length === 0) return { main: null, category: null }
 
+    const scrollOffset = virtualizer.scrollOffset ?? 0
     const mainBannerY = scrollOffset
     const categoryBannerY = scrollOffset + MAIN_CAT_HEIGHT
 
@@ -362,13 +377,12 @@ export const EquipmentTable = React.memo(({
       }
     }
 
-    let categoryData: { name: string; count: number; top: number } | null = null
+    let categoryData: { name: string; count: number; pushY: number } | null = null
     if (activeCategoryIdx !== -1) {
       const activeCategoryRow = flatRows[activeCategoryIdx]
       if (activeCategoryRow && activeCategoryRow.type === 'category') {
-        // Push-Boundary: nächste Kategorie im selben Main, sonst nächste Main.
-        // (Die nächste Main-Row passiert ebenfalls die Kategorie-Sticky-Position
-        //  und drückt den Kategorie-Banner mit hinaus.)
+        // Push-Boundary: nächste Kategorie im selben Main, sonst nächste Main
+        // (next Main-Row passiert ebenfalls die Kategorie-Sticky-Position).
         let pushBoundary: number | null = null
         if (nextCategoryIdx !== -1) {
           pushBoundary = rowStarts[nextCategoryIdx] ?? null
@@ -386,16 +400,16 @@ export const EquipmentTable = React.memo(({
         categoryData = {
           name: activeCategoryRow.name,
           count: activeCategoryRow.count,
-          top: categoryBannerY + categoryPushY,
+          pushY: categoryPushY,
         }
       }
     }
 
     return {
-      main: { name: activeMainRow.name, top: mainBannerY + mainPushY },
+      main: { name: activeMainRow.name, pushY: mainPushY },
       category: categoryData,
     }
-  }, [flatRows, rowStarts, scrollOffset])
+  }, [flatRows, rowStarts, virtualizer.scrollOffset])
 
   // Feste Spaltenbreiten: was, transport, gewicht, anzahl, status, abreise, gepacktFuer, details, tags, links, actions
   // Auf dem Smartphone etwas breitere Tags-Spalte und genügend Platz für Links
@@ -632,6 +646,7 @@ export const EquipmentTable = React.memo(({
             >
               {/* Tabellenkopf – bleibt beim vertikalen Scrollen sichtbar (im selben Scroll-Container) */}
               <div
+                ref={columnHeaderRef}
                 className="grid gap-px bg-border border-b bg-gray-50 sticky top-0 z-20"
                 style={{ gridTemplateColumns: gridCols }}
               >
@@ -652,21 +667,27 @@ export const EquipmentTable = React.memo(({
                   Keine Ausrüstungsgegenstände gefunden
                 </div>
               ) : (
-                <div
-                  className="relative w-full"
-                  style={{ height: `${virtualizer.getTotalSize()}px` }}
-                >
-                  {/* Sticky-Overlays: Hauptkategorie + Kategorie. Absolut positioniert mit
-                      manuell berechnetem `top` aus dem Scroll-Offset. So nehmen sie keinen
-                      Platz im Flow weg (verhindert das doppelte Rendering der ersten
-                      Hauptkat/Kategorie) und werden vom Spaltenkopf (z:20) korrekt überdeckt
-                      beim Push-Effekt. */}
+                <>
+                  {/* Sticky-Bänder Hauptkategorie + Kategorie als native CSS-Sticky.
+                      `margin-bottom: -<height>` neutralisiert den Flow-Platz, sodass die
+                      virtualisierten Zeilen direkt nach dem Spaltenkopf beginnen (kein
+                      doppeltes Rendering). Der Browser-Compositor übernimmt die Pin-Position
+                      → kein Zittern beim Scrollen. Nur für den Push-Effekt (wenn die nächste
+                      Hauptkat/Kategorie das aktuelle Banner verdrängt) wird per
+                      `transform: translateY(pushY)` nach oben hinter den Spaltenkopf (z:20)
+                      geschoben – im steady state ist `pushY === 0`. */}
                   {stickyState.main && (
                     <div
-                      className="absolute left-0 right-0 z-[19] flex items-center bg-[rgb(45,79,30)] text-white font-bold text-base px-4 pointer-events-none"
+                      className="sticky z-[19] flex items-center bg-[rgb(45,79,30)] text-white font-bold text-base px-4 pointer-events-none"
                       style={{
-                        top: stickyState.main.top,
+                        top: columnHeaderHeight,
                         height: MAIN_CAT_HEIGHT,
+                        marginBottom: -MAIN_CAT_HEIGHT,
+                        transform:
+                          stickyState.main.pushY !== 0
+                            ? `translate3d(0, ${stickyState.main.pushY}px, 0)`
+                            : undefined,
+                        willChange: 'transform',
                       }}
                     >
                       {stickyState.main.name}
@@ -674,15 +695,25 @@ export const EquipmentTable = React.memo(({
                   )}
                   {stickyState.category && (
                     <div
-                      className="absolute left-0 right-0 z-[18] flex items-center bg-muted font-semibold px-4 pointer-events-none"
+                      className="sticky z-[18] flex items-center bg-muted font-semibold px-4 pointer-events-none"
                       style={{
-                        top: stickyState.category.top,
+                        top: columnHeaderHeight + MAIN_CAT_HEIGHT,
                         height: CATEGORY_HEIGHT,
+                        marginBottom: -CATEGORY_HEIGHT,
+                        transform:
+                          stickyState.category.pushY !== 0
+                            ? `translate3d(0, ${stickyState.category.pushY}px, 0)`
+                            : undefined,
+                        willChange: 'transform',
                       }}
                     >
                       {stickyState.category.name} ({stickyState.category.count})
                     </div>
                   )}
+                  <div
+                    className="relative w-full"
+                    style={{ height: `${virtualizer.getTotalSize()}px` }}
+                  >
                   {virtualizer.getVirtualItems().map((virtualRow) => {
                     const row = flatRows[virtualRow.index]
                     if (!row) return null
@@ -850,7 +881,8 @@ export const EquipmentTable = React.memo(({
                       </div>
                     )
                   })}
-                </div>
+                  </div>
+                </>
               )}
             </div>
           </div>
