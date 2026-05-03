@@ -40,6 +40,8 @@ import {
   getCachedTransportVehicles,
   getCachedVacationMitreisende,
   subscribeToOnlineStatus,
+  processSyncQueue,
+  OUTBOX_SYNCED_EVENT_NAME,
 } from '@/lib/offline-sync'
 import {
   cachePackingItems,
@@ -232,7 +234,9 @@ function HomeContent() {
     if (!selectedVacationId) return
     const myVersion = ++fetchPackingVersionRef.current
     try {
-      const res = await fetch(`/api/packing-items?vacationId=${selectedVacationId}`)
+      const res = await fetch(`/api/packing-items?vacationId=${selectedVacationId}`, {
+        cache: 'no-store',
+      })
       const data = (await res.json()) as ApiResponse<PackingItem[]>
       // Nur anwenden wenn keine neuere Abfrage gestartet wurde (Race vermeiden)
       if (myVersion !== fetchPackingVersionRef.current) return
@@ -280,12 +284,27 @@ function HomeContent() {
         return
       }
       if (online && !lastOnline) {
-        if (selectedVacationId) fetchPackingItems()
-        setRefetchTick((t) => t + 1)
+        void (async () => {
+          // Erst Outbox leeren – sonst kann ein gleichzeitiges GET noch den alten
+          // Packlisten-Stand liefern (Race mit Service-Worker/HTTP).
+          await processSyncQueue()
+          await fetchPackingItems()
+          setRefetchTick((t) => t + 1)
+        })()
       }
       lastOnline = online
     })
   }, [selectedVacationId, fetchPackingItems])
+
+  // Nach manueller Outbox-Sync im Banner Packliste ohne veralteten Cache neu laden.
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const onOutboxSynced = () => {
+      void fetchPackingItems()
+    }
+    window.addEventListener(OUTBOX_SYNCED_EVENT_NAME, onOutboxSynced)
+    return () => window.removeEventListener(OUTBOX_SYNCED_EVENT_NAME, onOutboxSynced)
+  }, [fetchPackingItems])
 
   // Fetch Mitreisende for vacation (mit Offline-Cache pro Urlaub)
   useEffect(() => {
@@ -598,7 +617,9 @@ function HomeContent() {
         throw new Error(batchData.error ?? 'Batch-Anfrage fehlgeschlagen')
       }
 
-      const refreshRes = await fetch(`/api/packing-items?vacationId=${selectedVacationId}`)
+      const refreshRes = await fetch(`/api/packing-items?vacationId=${selectedVacationId}`, {
+        cache: 'no-store',
+      })
       const data = (await refreshRes.json()) as ApiResponse<PackingItem[]>
       if (data.success && data.data) {
         setPackingItems(data.data)
@@ -908,7 +929,9 @@ function HomeContent() {
       }
 
       if (selectedVacationId) {
-        const itemsRes = await fetch(`/api/packing-items?vacationId=${selectedVacationId}`)
+        const itemsRes = await fetch(`/api/packing-items?vacationId=${selectedVacationId}`, {
+          cache: 'no-store',
+        })
         const itemsData = (await itemsRes.json()) as ApiResponse<PackingItem[]>
         if (itemsData.success && itemsData.data) {
           setPackingItems(itemsData.data)
@@ -995,7 +1018,9 @@ function HomeContent() {
         }
       }
       if (selectedVacationId) {
-        const itemsRes = await fetch(`/api/packing-items?vacationId=${selectedVacationId}`)
+        const itemsRes = await fetch(`/api/packing-items?vacationId=${selectedVacationId}`, {
+          cache: 'no-store',
+        })
         const itemsData = (await itemsRes.json()) as ApiResponse<PackingItem[]>
         if (itemsData.success && itemsData.data) {
           setPackingItems(itemsData.data)
@@ -1035,7 +1060,9 @@ function HomeContent() {
       }
 
       if (selectedVacationId) {
-        const itemsRes = await fetch(`/api/packing-items?vacationId=${selectedVacationId}`)
+        const itemsRes = await fetch(`/api/packing-items?vacationId=${selectedVacationId}`, {
+          cache: 'no-store',
+        })
         const itemsData = (await itemsRes.json()) as ApiResponse<PackingItem[]>
         if (itemsData.success && itemsData.data) {
           setPackingItems(itemsData.data)
@@ -1204,7 +1231,9 @@ function HomeContent() {
         await Promise.all(promises)
       }
 
-      const itemsRes = await fetch(`/api/packing-items?vacationId=${selectedVacationId}`)
+      const itemsRes = await fetch(`/api/packing-items?vacationId=${selectedVacationId}`, {
+        cache: 'no-store',
+      })
       const itemsData = (await itemsRes.json()) as ApiResponse<PackingItem[]>
       if (itemsData.success && itemsData.data) {
         setPackingItems(itemsData.data)
@@ -1691,7 +1720,9 @@ function HomeContent() {
           setShowAddSingleItemDialog(false)
           setShowAddItemDialog(false)
           if (selectedVacationId) {
-            const res = await fetch(`/api/packing-items?vacationId=${selectedVacationId}`)
+            const res = await fetch(`/api/packing-items?vacationId=${selectedVacationId}`, {
+        cache: 'no-store',
+      })
             const data = (await res.json()) as ApiResponse<PackingItem[]>
             if (data.success && data.data) setPackingItems(data.data)
           }

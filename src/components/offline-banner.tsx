@@ -9,6 +9,7 @@ import {
   deleteSyncQueueEntry,
   processSyncQueue,
   subscribeToOnlineStatus,
+  OUTBOX_SYNCED_EVENT_NAME,
 } from '@/lib/offline-sync'
 import type { SyncQueueEntry } from '@/lib/offline-db'
 import { cn } from '@/lib/utils'
@@ -71,6 +72,9 @@ export function OfflineBanner() {
     setResultMsg(null)
     try {
       const r = await processSyncQueue()
+      if (typeof window !== 'undefined' && r.ok > 0) {
+        window.dispatchEvent(new CustomEvent(OUTBOX_SYNCED_EVENT_NAME))
+      }
       if (r.ok > 0 && r.failed === 0) {
         setResultMsg(`${r.ok} Änderung${r.ok === 1 ? '' : 'en'} synchronisiert.`)
       } else if (r.failed > 0) {

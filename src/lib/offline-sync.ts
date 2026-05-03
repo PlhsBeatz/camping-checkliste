@@ -356,46 +356,72 @@ export async function deleteSyncQueueEntry(id: number): Promise<void> {
   await offlineDb.syncQueue.delete(id)
 }
 
+/** Nach erfolgreicher Outbox-Sync: Hauptseite kann Packliste ohne veralteten SW-GET-Cache laden. */
+export const OUTBOX_SYNCED_EVENT_NAME = 'camping:outbox-synced' as const
+
 /**
  * Sync-Queue abarbeiten (bei Reconnect / manuell). Bricht bei einem Netzwerkfehler ab,
  * damit nachfolgende Einträge nicht in falscher Reihenfolge ankommen. Beim nächsten
  * Online-Event wird erneut versucht.
+ *
+ * Parallel mehrfache Aufrufe erhalten dasselbe Promise (Mutex), damit keine doppelten
+ * Requests dieselben Outbox-Einträge gleichzeitig verarbeiten.
  */
-export async function processSyncQueue(): Promise<{ ok: number; failed: number; remaining: number }> {
-  const entries = await offlineDb.syncQueue.orderBy('timestamp').toArray()
-  let ok = 0
-  let failed = 0
+let processSyncQueueInFlight: Promise<{
+  ok: number
+  failed: number
+  remaining: number
+}> | null = null
 
-  for (const e of entries) {
-    try {
-      const result = await sendQueueEntry(e)
-      if (result === 'ok') {
-        if (e.id != null) await offlineDb.syncQueue.delete(e.id)
-        ok++
-      } else if (result === 'drop') {
-        if (e.id != null) await offlineDb.syncQueue.delete(e.id)
-        failed++
-      } else {
-        failed++
-        // Bei Netzwerkfehler abbrechen, damit Reihenfolge erhalten bleibt
-        await offlineDb.syncQueue.update(e.id!, {
-          attempts: (e.attempts ?? 0) + 1,
-          lastError: 'network',
-        })
-        break
-      }
-    } catch (err) {
-      failed++
-      await offlineDb.syncQueue.update(e.id!, {
-        attempts: (e.attempts ?? 0) + 1,
-        lastError: err instanceof Error ? err.message : String(err),
-      })
-      break
-    }
+export async function processSyncQueue(): Promise<{
+  ok: number
+  failed: number
+  remaining: number
+}> {
+  if (processSyncQueueInFlight !== null) {
+    return processSyncQueueInFlight
   }
+  processSyncQueueInFlight = (async () => {
+    try {
+      const entries = await offlineDb.syncQueue.orderBy('timestamp').toArray()
+      let ok = 0
+      let failed = 0
 
-  const remaining = await offlineDb.syncQueue.count()
-  return { ok, failed, remaining }
+      for (const e of entries) {
+        try {
+          const result = await sendQueueEntry(e)
+          if (result === 'ok') {
+            if (e.id != null) await offlineDb.syncQueue.delete(e.id)
+            ok++
+          } else if (result === 'drop') {
+            if (e.id != null) await offlineDb.syncQueue.delete(e.id)
+            failed++
+          } else {
+            failed++
+            // Bei Netzwerkfehler abbrechen, damit Reihenfolge erhalten bleibt
+            await offlineDb.syncQueue.update(e.id!, {
+              attempts: (e.attempts ?? 0) + 1,
+              lastError: 'network',
+            })
+            break
+          }
+        } catch (err) {
+          failed++
+          await offlineDb.syncQueue.update(e.id!, {
+            attempts: (e.attempts ?? 0) + 1,
+            lastError: err instanceof Error ? err.message : String(err),
+          })
+          break
+        }
+      }
+
+      const remaining = await offlineDb.syncQueue.count()
+      return { ok, failed, remaining }
+    } finally {
+      processSyncQueueInFlight = null
+    }
+  })()
+  return processSyncQueueInFlight
 }
 
 /**
@@ -415,6 +441,7 @@ async function sendQueueEntry(e: SyncQueueEntry): Promise<'ok' | 'drop' | 'retry
   try {
     const res = await fetch(url, {
       method,
+      cache: 'no-store',
       headers: body !== undefined ? { 'Content-Type': 'application/json' } : undefined,
       body: body !== undefined ? JSON.stringify(body) : undefined,
     })
@@ -458,11 +485,11 @@ function resolveRoute(e: SyncQueueEntry): ResolvedRoute | null {
     }
     case 'packing-items-toggle-mitreisender': {
       // payload = { packingItemId, mitreisenderId, gepackt }
-      return { method: 'POST', url: '/api/packing-items/toggle-mitreisender', body: e.payload }
+      return { method: 'PUT', url: '/api/packing-items/toggle-mitreisender', body: e.payload }
     }
     case 'packing-items-set-mitreisender-anzahl': {
       return {
-        method: 'POST',
+        method: 'PUT',
         url: '/api/packing-items/set-mitreisender-anzahl',
         body: e.payload,
       }
