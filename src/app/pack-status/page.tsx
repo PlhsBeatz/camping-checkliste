@@ -16,8 +16,11 @@ import type {
   PackStatusEntryOhneGewicht,
   PackStatusProgressHauptkategorie,
 } from '@/lib/db'
-import { getCachedVacations } from '@/lib/offline-sync'
-import { cacheVacations } from '@/lib/offline-db'
+import { getCachedVacations, getCachedPackStatus } from '@/lib/offline-sync'
+import { cacheVacations, cachePackStatus } from '@/lib/offline-db'
+import { useReconnectRefetch } from '@/hooks/use-reconnect-refetch'
+import { showOfflineToast, showOfflineErrorToast, isOffline } from '@/lib/offline-toast'
+import { PullToRefreshWrapper } from '@/components/pull-to-refresh-wrapper'
 
 const findNextVacation = (vacations: Vacation[]): Vacation | null => {
   if (vacations.length === 0) return null
@@ -118,14 +121,34 @@ function PackStatusContent() {
       const data = (await res.json()) as ApiResponse<PackStatusData>
       if (data.success && data.data) {
         setPackStatus(data.data)
+        // In IndexedDB spiegeln, damit der Status auch offline verfügbar ist.
+        try {
+          await cachePackStatus(selectedVacationId, data.data)
+        } catch (cacheErr) {
+          console.warn('cachePackStatus failed:', cacheErr)
+        }
       } else {
         setPackStatus(null)
         setError(data.error ?? 'Pack-Status konnte nicht geladen werden.')
       }
     } catch (e) {
       console.error('Failed to fetch pack status:', e)
-      setPackStatus(null)
-      setError('Netzwerkfehler beim Laden.')
+      // Offline-Fallback: zuletzt erfolgreich geladenen Snapshot anzeigen.
+      if (isOffline()) {
+        const cached = await getCachedPackStatus(selectedVacationId)
+        if (cached) {
+          setPackStatus(cached)
+          setError(null)
+          showOfflineToast({ description: 'Pack-Status aus dem lokalen Cache.' })
+        } else {
+          setPackStatus(null)
+          setError('Offline und kein zwischengespeicherter Pack-Status für diesen Urlaub.')
+          showOfflineErrorToast('Pack-Status für diesen Urlaub ist offline noch nicht verfügbar.')
+        }
+      } else {
+        setPackStatus(null)
+        setError('Netzwerkfehler beim Laden.')
+      }
     } finally {
       setIsLoading(false)
     }
@@ -135,6 +158,9 @@ function PackStatusContent() {
     fetchPackStatus()
   }, [fetchPackStatus])
 
+  // Bei Reconnect: Pack-Status erneut vom Server holen
+  useReconnectRefetch(fetchPackStatus)
+
   const currentVacation = vacations.find((v) => v.id === selectedVacationId)
 
   return (
@@ -142,6 +168,7 @@ function PackStatusContent() {
       <NavigationSidebar isOpen={showNavSidebar} onClose={() => setShowNavSidebar(false)} />
 
       <div className="flex-1 transition-all duration-300 min-w-0 lg:ml-[280px]">
+        <PullToRefreshWrapper onRefresh={fetchPackStatus} disabled={showNavSidebar}>
         <div className="container mx-auto p-4 md:p-6 space-y-6">
           {/* Header - Sticky, gleiche Größe wie andere Seiten */}
           <div className="sticky top-0 z-10 flex items-center justify-between bg-white shadow pb-4 -mx-4 px-4 -mt-4 pt-4 md:-mx-6 md:px-6 md:-mt-6 md:pt-6 md:pb-4">
@@ -253,6 +280,7 @@ function PackStatusContent() {
             </div>
           )}
         </div>
+        </PullToRefreshWrapper>
       </div>
     </div>
   )

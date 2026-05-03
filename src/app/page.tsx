@@ -30,6 +30,7 @@ import { USER_COLORS, DEFAULT_USER_COLOR_BG } from '@/lib/user-colors'
 import { useSearchParams } from 'next/navigation'
 import { useAuth } from '@/components/auth-provider'
 import { usePackingSync } from '@/hooks/use-packing-sync'
+import { useOptimisticMutation } from '@/hooks/use-optimistic-mutation'
 import {
   getCachedPackingItems,
   getCachedVacations,
@@ -37,6 +38,7 @@ import {
   getCachedCategories,
   getCachedMainCategories,
   getCachedTransportVehicles,
+  getCachedVacationMitreisende,
   subscribeToOnlineStatus,
 } from '@/lib/offline-sync'
 import {
@@ -46,6 +48,7 @@ import {
   cacheCategories,
   cacheMainCategories,
   cacheTransportVehicles,
+  cacheVacationMitreisende,
 } from '@/lib/offline-db'
 
 const PACKABLE_STATUSES: readonly string[] = ['Normal', 'Immer gepackt']
@@ -83,6 +86,7 @@ interface CategoryWithMain extends Category {
 
 function HomeContent() {
   const { user, canSelectOtherProfiles, canAccessConfig, gepacktRequiresParentApproval, canEditPauschalEntries } = useAuth()
+  const { mutate } = useOptimisticMutation()
   // Data state
   const [vacations, setVacations] = useState<Vacation[]>([])
   const [packingItems, setPackingItems] = useState<PackingItem[]>([])
@@ -261,16 +265,29 @@ function HomeContent() {
   }, [fetchPackingItems])
   usePackingSync(selectedVacationId, handlePackingSyncUpdate)
 
-  // Bei Reconnect: Packliste neu laden
+  // Refetch-Tick: bumpen wir bei Reconnect, alle Stammdaten-Effekte hängen daran.
+  const [refetchTick, setRefetchTick] = useState(0)
+
+  // Bei Reconnect: Packliste neu laden + Bump-Tick → Stammdaten-Refetch in den anderen useEffects
   useEffect(() => {
+    let initial = true
+    let lastOnline =
+      typeof navigator !== 'undefined' ? navigator.onLine : true
     return subscribeToOnlineStatus((online) => {
-      if (online && selectedVacationId) {
-        fetchPackingItems()
+      if (initial) {
+        initial = false
+        lastOnline = online
+        return
       }
+      if (online && !lastOnline) {
+        if (selectedVacationId) fetchPackingItems()
+        setRefetchTick((t) => t + 1)
+      }
+      lastOnline = online
     })
   }, [selectedVacationId, fetchPackingItems])
 
-  // Fetch Mitreisende for vacation
+  // Fetch Mitreisende for vacation (mit Offline-Cache pro Urlaub)
   useEffect(() => {
     if (!selectedVacationId) return
 
@@ -280,9 +297,14 @@ function HomeContent() {
         const data = (await res.json()) as ApiResponse<Mitreisender[]>
         if (data.success && data.data) {
           setVacationMitreisende(data.data)
+          await cacheVacationMitreisende(selectedVacationId, data.data)
         }
       } catch (error) {
         console.error('Failed to fetch vacation mitreisende:', error)
+        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+          const cached = await getCachedVacationMitreisende(selectedVacationId)
+          if (cached.length > 0) setVacationMitreisende(cached)
+        }
       }
     }
     fetchVacationMitreisende()
@@ -344,7 +366,7 @@ function HomeContent() {
       }
     }
     fetchEquipmentItems()
-  }, [])
+  }, [refetchTick])
 
   // Fetch Categories
   useEffect(() => {
@@ -365,7 +387,7 @@ function HomeContent() {
       }
     }
     fetchCategories()
-  }, [])
+  }, [refetchTick])
 
   // Fetch Main Categories
   useEffect(() => {
@@ -386,7 +408,7 @@ function HomeContent() {
       }
     }
     fetchMainCategories()
-  }, [])
+  }, [refetchTick])
 
   // Fetch Transport Vehicles
   useEffect(() => {
@@ -407,7 +429,7 @@ function HomeContent() {
       }
     }
     fetchTransportVehicles()
-  }, [])
+  }, [refetchTick])
 
   // Get available equipment (not on packing list, or on list but without selected person)
   const availableEquipment = useMemo(() => {
@@ -603,15 +625,15 @@ function HomeContent() {
       )
     )
     try {
-      const res = await fetch('/api/packing-items', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: itemId, gepackt }),
+      const result = await mutate({
+        table: 'packing-items',
+        action: 'put',
+        key: itemId,
+        payload: { gepackt },
       })
-      const data = (await res.json()) as ApiResponse<boolean>
-      if (!data.success) {
+      if (!result.ok && !result.queued) {
         setPackingItems(prevItems)
-        alert('Fehler beim Aktualisieren')
+        alert(result.error ?? 'Fehler beim Aktualisieren')
       }
     } catch (error) {
       console.error('Failed to set packed:', error)
@@ -644,15 +666,17 @@ function HomeContent() {
     )
 
     try {
-      const res = await fetch('/api/packing-items', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: itemId, gepackt: newPackedState }),
+      // Outbox: bei Offline / 5xx wird der Eintrag in syncQueue gelegt und beim Reconnect
+      // automatisch nachgeschickt. UI bleibt optimistisch.
+      const result = await mutate({
+        table: 'packing-items',
+        action: 'put',
+        key: itemId,
+        payload: { gepackt: newPackedState },
       })
-      const data = (await res.json()) as ApiResponse<boolean> & { error?: string }
-      if (!res.ok || !data.success) {
+      if (!result.ok && !result.queued) {
         setPackingItems(prevItems)
-        alert(data.error ?? 'Fehler beim Aktualisieren')
+        alert(result.error ?? 'Fehler beim Aktualisieren')
       }
     } catch (error) {
       console.error('Failed to toggle packed:', error)
@@ -698,17 +722,17 @@ function HomeContent() {
     )
 
     try {
-      const res = await fetch('/api/packing-items/toggle-mitreisender', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      const result = await mutate({
+        table: 'packing-items-toggle-mitreisender',
+        action: 'put',
+        key: `${itemId}|${mitreisenderId}`,
+        payload: {
           packingItemId: itemId,
           mitreisenderId,
-          gepackt: newStatus
-        }),
+          gepackt: newStatus,
+        },
       })
-      const data = (await res.json()) as ApiResponse<boolean>
-      if (!data.success) {
+      if (!result.ok && !result.queued) {
         setPackingItems(prevItems)
       }
     } catch (error) {

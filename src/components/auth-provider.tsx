@@ -8,6 +8,8 @@ import {
   useCallback,
   type ReactNode
 } from 'react'
+import { getCachedAuthUser } from '@/lib/offline-sync'
+import { cacheAuthUser, clearAuthUser } from '@/lib/offline-db'
 
 export interface AuthUser {
   id: string
@@ -22,6 +24,8 @@ export interface AuthUser {
 interface AuthContextValue {
   user: AuthUser | null
   loading: boolean
+  /** Wird true gesetzt, wenn `user` aus dem Offline-Cache stammt und nicht frisch vom Server. */
+  fromCache: boolean
   logout: () => Promise<void>
   refetch: () => Promise<void>
   canAccessConfig: boolean
@@ -37,18 +41,54 @@ const AuthContext = createContext<AuthContextValue | null>(null)
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null)
   const [loading, setLoading] = useState(true)
+  const [fromCache, setFromCache] = useState(false)
 
   const fetchUser = useCallback(async () => {
+    let cacheLoaded = false
+    // 1) Optimistisch aus IndexedDB-Cache laden, damit die App offline sofort
+    //    den letzten bekannten User hat.
+    try {
+      const cached = await getCachedAuthUser()
+      if (cached) {
+        setUser(cached)
+        setFromCache(true)
+        cacheLoaded = true
+      }
+    } catch {
+      // egal, Server ist Quelle der Wahrheit
+    }
+
+    // 2) Im Hintergrund vom Server holen.
     try {
       const res = await fetch('/api/auth/me')
       const data = (await res.json()) as { success?: boolean; user?: AuthUser }
       if (res.ok && data.success && data.user) {
         setUser(data.user)
-      } else {
+        setFromCache(false)
+        // 3) Cache aktualisieren.
+        try {
+          await cacheAuthUser(data.user)
+        } catch (err) {
+          console.warn('Auth-Cache schreiben fehlgeschlagen:', err)
+        }
+      } else if (res.ok) {
+        // Server sagt explizit "nicht eingeloggt" → Cache leeren.
         setUser(null)
+        setFromCache(false)
+        try {
+          await clearAuthUser()
+        } catch {
+          /* ignore */
+        }
       }
+      // Bei !res.ok behalten wir den Cache-User, da das auf einen Server-Fehler hindeuten kann.
     } catch {
-      setUser(null)
+      // Netzwerkfehler → wenn wir einen Cache-User haben, behalten wir ihn.
+      // Ohne Cache: bleibt user=null.
+      if (!cacheLoaded) {
+        setUser(null)
+        setFromCache(false)
+      }
     } finally {
       setLoading(false)
     }
@@ -59,8 +99,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [fetchUser])
 
   const logout = useCallback(async () => {
-    await fetch('/api/auth/logout', { method: 'POST' })
+    // Best-effort Logout: auch wenn der Server-Call fehlschlägt, lokal ausloggen.
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' })
+    } catch {
+      /* ignore – Cookie kann offline nicht serverseitig gelöscht werden */
+    }
+    try {
+      await clearAuthUser()
+    } catch {
+      /* ignore */
+    }
     setUser(null)
+    setFromCache(false)
     window.location.href = '/login'
   }, [])
 
@@ -74,6 +125,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       value={{
         user,
         loading,
+        fromCache,
         logout,
         refetch: fetchUser,
         canAccessConfig,

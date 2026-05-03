@@ -21,8 +21,9 @@ import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
 import { campingplatzListThumbnailSrc } from '@/lib/campingplatz-photo-url'
 import { useRouter } from 'next/navigation'
-import { getCachedVacations } from '@/lib/offline-sync'
-import { cacheVacations } from '@/lib/offline-db'
+import { getCachedVacations, getCachedCampingplaetze } from '@/lib/offline-sync'
+import { cacheVacations, cacheCampingplaetze } from '@/lib/offline-db'
+import { useReconnectRefetch } from '@/hooks/use-reconnect-refetch'
 import { format, isSameMonth, isSameYear } from 'date-fns'
 import { de } from 'date-fns/locale'
 import { Calendar as CalendarIcon } from 'lucide-react'
@@ -212,6 +213,10 @@ export default function UrlaubePage() {
     }
   }, [showNavSidebar])
 
+  // Refetch-Tick: bei Reconnect bumpen → die nachfolgenden useEffects mit Cache-Anbindung neu auslösen.
+  const [refetchTick, setRefetchTick] = useState(0)
+  useReconnectRefetch(() => setRefetchTick((t) => t + 1))
+
   // Fetch Vacations
   useEffect(() => {
     const fetchVacations = async () => {
@@ -231,7 +236,7 @@ export default function UrlaubePage() {
       }
     }
     fetchVacations()
-  }, [])
+  }, [refetchTick])
 
   // Campingplätze für alle Urlaube laden (lazy)
   useEffect(() => {
@@ -241,13 +246,22 @@ export default function UrlaubePage() {
         const dataAll = (await resAll.json()) as ApiResponse<Campingplatz[]>
         if (dataAll.success && dataAll.data) {
           setAllCampingplaetze(dataAll.data)
+          try {
+            await cacheCampingplaetze(dataAll.data)
+          } catch (e) {
+            console.warn('cacheCampingplaetze failed:', e)
+          }
         }
       } catch (error) {
         console.error('Failed to fetch campingplaetze:', error)
+        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+          const cached = await getCachedCampingplaetze()
+          if (cached.length > 0) setAllCampingplaetze(cached)
+        }
       }
     }
     void loadCamping()
-  }, [])
+  }, [refetchTick])
 
   useEffect(() => {
     const loadPerVacation = async () => {

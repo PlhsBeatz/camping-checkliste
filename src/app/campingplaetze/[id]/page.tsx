@@ -46,6 +46,19 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { CampingplatzEditModal } from '@/components/campingplatz-edit-modal'
 import { CampingplatzOverviewMap } from '@/components/campingplatz-overview-map'
+import {
+  getCachedCampingplatz,
+  getCachedCampingplatzFotos,
+  getCachedRoute,
+  getCachedHomeLocation,
+} from '@/lib/offline-sync'
+import {
+  cacheCampingplatz,
+  cacheCampingplatzFotos,
+  cacheRoute,
+  cacheHomeLocation,
+} from '@/lib/offline-db'
+import { useReconnectRefetch } from '@/hooks/use-reconnect-refetch'
 
 function CampingplatzDetailEditModalGate({
   detailId,
@@ -244,6 +257,18 @@ export default function CampingplatzDetailPage() {
         fotos: CampingplatzFoto[]
       }>
       if (!data.success || !data.data) {
+        // Antwort vom Server ohne Erfolg → ggf. trotzdem Cache anbieten
+        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+          const [cp, ft] = await Promise.all([
+            getCachedCampingplatz(id),
+            getCachedCampingplatzFotos(id),
+          ])
+          if (cp) {
+            setCampingplatz(cp)
+            setFotos(ft)
+            return
+          }
+        }
         setLoadError(data.error ?? 'Nicht gefunden')
         setCampingplatz(null)
         setFotos([])
@@ -251,7 +276,25 @@ export default function CampingplatzDetailPage() {
       }
       setCampingplatz(data.data.campingplatz)
       setFotos(data.data.fotos)
+      try {
+        await cacheCampingplatz(data.data.campingplatz)
+        await cacheCampingplatzFotos(id, data.data.fotos)
+      } catch (e) {
+        console.warn('Cache write failed:', e)
+      }
     } catch {
+      // Offline-Fallback
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        const [cp, ft] = await Promise.all([
+          getCachedCampingplatz(id),
+          getCachedCampingplatzFotos(id),
+        ])
+        if (cp) {
+          setCampingplatz(cp)
+          setFotos(ft)
+          return
+        }
+      }
       setLoadError('Laden fehlgeschlagen')
       setCampingplatz(null)
       setFotos([])
@@ -266,18 +309,24 @@ export default function CampingplatzDetailPage() {
     void load()
   }, [load])
 
+  // Bei Reconnect: Detaildaten erneut vom Server holen
+  useReconnectRefetch(load)
+
   useEffect(() => {
     if (!campingplatz?.id || campingplatz.lat == null || campingplatz.lng == null) {
       setRouteInfo(null)
       return
     }
+    if (!user?.id) return
+    const userId = user.id
+    const cpId = campingplatz.id
     let cancelled = false
     void (async () => {
       try {
         const res = await fetch('/api/routes/campingplatz', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ campingplatzId: campingplatz.id }),
+          body: JSON.stringify({ campingplatzId: cpId }),
         })
         const data = (await res.json()) as {
           success?: boolean
@@ -288,15 +337,38 @@ export default function CampingplatzDetailPage() {
             distanceKm: data.data.distanceKm,
             durationMinutes: data.data.durationMinutes,
           })
+          // Routen-Snapshot pro user|campingplatz cachen
+          try {
+            await cacheRoute(userId, {
+              user_id: userId,
+              campingplatz_id: cpId,
+              distance_km: data.data.distanceKm,
+              duration_min: data.data.durationMinutes,
+              provider: 'google',
+              updated_at: new Date().toISOString(),
+            })
+          } catch (cacheErr) {
+            console.warn('cacheRoute failed:', cacheErr)
+          }
         }
       } catch {
-        if (!cancelled) setRouteInfo(null)
+        if (cancelled) return
+        // Offline → letzten bekannten Routen-Wert anzeigen
+        const cached = await getCachedRoute(userId, cpId)
+        if (cached) {
+          setRouteInfo({
+            distanceKm: cached.distance_km,
+            durationMinutes: cached.duration_min,
+          })
+        } else {
+          setRouteInfo(null)
+        }
       }
     })()
     return () => {
       cancelled = true
     }
-  }, [campingplatz?.id, campingplatz?.lat, campingplatz?.lng])
+  }, [campingplatz?.id, campingplatz?.lat, campingplatz?.lng, user?.id])
 
   useEffect(() => {
     if (showNavSidebar) {
@@ -325,17 +397,39 @@ export default function CampingplatzDetailPage() {
       try {
         const res = await fetch('/api/profile/home-location')
         const data = (await res.json()) as ApiResponse<{
+          heimat_adresse: string | null
           heimat_lat: number | null
           heimat_lng: number | null
         }>
-        if (data.success && data.data && data.data.heimat_lat != null && data.data.heimat_lng != null) {
-          coords = { lat: data.data.heimat_lat, lng: data.data.heimat_lng }
-          setHomeCoords(coords)
+        if (data.success && data.data) {
+          // In IndexedDB spiegeln (auch wenn Lat/Lng fehlen, damit Adresse offline da ist)
+          try {
+            await cacheHomeLocation({
+              heimat_adresse: data.data.heimat_adresse ?? null,
+              heimat_lat: data.data.heimat_lat ?? null,
+              heimat_lng: data.data.heimat_lng ?? null,
+            })
+          } catch (cacheErr) {
+            console.warn('cacheHomeLocation failed:', cacheErr)
+          }
+          if (data.data.heimat_lat != null && data.data.heimat_lng != null) {
+            coords = { lat: data.data.heimat_lat, lng: data.data.heimat_lng }
+            setHomeCoords(coords)
+          } else {
+            coords = null
+          }
         } else {
           coords = null
         }
       } catch {
-        coords = null
+        // Offline-Fallback
+        const cached = await getCachedHomeLocation()
+        if (cached?.heimat_lat != null && cached.heimat_lng != null) {
+          coords = { lat: cached.heimat_lat, lng: cached.heimat_lng }
+          setHomeCoords(coords)
+        } else {
+          coords = null
+        }
       } finally {
         setHomeCoordsLoaded(true)
       }

@@ -30,6 +30,7 @@ import {
   getCachedMainCategories,
   getCachedTransportVehicles,
   getCachedTags,
+  getCachedTagKategorien,
   getCachedMitreisende,
 } from '@/lib/offline-sync'
 import {
@@ -38,8 +39,10 @@ import {
   cacheMainCategories,
   cacheTransportVehicles,
   cacheTags,
+  cacheTagKategorien,
   cacheMitreisende,
 } from '@/lib/offline-db'
+import { useReconnectRefetch } from '@/hooks/use-reconnect-refetch'
 
 interface CategoryWithMain extends Category {
   hauptkategorie_titel: string
@@ -111,6 +114,9 @@ export default function AusruestungPage() {
   const [mitreisende, setMitreisende] = useState<{ id: string; name: string }[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
+  // Bump-Counter, der bei Reconnect alle useEffects (mit Cache-Befüllung) neu auslöst.
+  const [refetchTick, setRefetchTick] = useState(0)
+  useReconnectRefetch(() => setRefetchTick((t) => t + 1))
   
   // Dialog states
   const [showAddDialog, setShowAddDialog] = useState(false)
@@ -189,7 +195,7 @@ export default function AusruestungPage() {
       }
     }
     fetchEquipmentItems()
-  }, [])
+  }, [refetchTick])
   // Fetch Categories
   useEffect(() => {
     const fetchCategories = async () => {
@@ -209,7 +215,7 @@ export default function AusruestungPage() {
       }
     }
     fetchCategories()
-  }, [])
+  }, [refetchTick])
 
   // Fetch Main Categories
   useEffect(() => {
@@ -230,7 +236,7 @@ export default function AusruestungPage() {
       }
     }
     fetchMainCategories()
-  }, [])
+  }, [refetchTick])
 
   // Fetch Transport Vehicles
   useEffect(() => {
@@ -251,7 +257,7 @@ export default function AusruestungPage() {
       }
     }
     fetchTransportVehicles()
-  }, [])
+  }, [refetchTick])
 
   // Tags und Tag-Kategorien (Reihenfolge für Dialoge)
   useEffect(() => {
@@ -266,17 +272,22 @@ export default function AusruestungPage() {
         }
         if (katJson.success && katJson.data) {
           setTagKategorien(katJson.data)
+          await cacheTagKategorien(katJson.data)
         }
       } catch (error) {
         console.error('Failed to fetch tags:', error)
         if (typeof navigator !== 'undefined' && !navigator.onLine) {
-          const cached = await getCachedTags()
-          if (cached.length > 0) setTags(cached)
+          const [cachedTags, cachedKat] = await Promise.all([
+            getCachedTags(),
+            getCachedTagKategorien(),
+          ])
+          if (cachedTags.length > 0) setTags(cachedTags)
+          if (cachedKat.length > 0) setTagKategorien(cachedKat)
         }
       }
     }
     fetchTagsAndKategorien()
-  }, [])
+  }, [refetchTick])
 
   const tagGroupsForEquipment = useMemo((): TagGroupForEquipment[] => {
     const sortedKats = [...tagKategorien].sort(
@@ -311,7 +322,7 @@ export default function AusruestungPage() {
       }
     }
     fetchMitreisende()
-  }, [])
+  }, [refetchTick])
 
   const resetForm = () => {
     setFormData({

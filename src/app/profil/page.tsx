@@ -11,6 +11,9 @@ import { useState, useEffect } from 'react'
 import { cn } from '@/lib/utils'
 import type { ApiResponse } from '@/lib/api-types'
 import { HomeAddressAutocomplete } from '@/components/home-address-autocomplete'
+import { getCachedHomeLocation } from '@/lib/offline-sync'
+import { cacheHomeLocation } from '@/lib/offline-db'
+import { useReconnectRefetch } from '@/hooks/use-reconnect-refetch'
 
 export default function ProfilPage() {
   const { user, loading } = useAuth()
@@ -28,34 +31,56 @@ export default function ProfilPage() {
     if (!loading && !user) router.replace('/login')
   }, [loading, user, router])
 
-  useEffect(() => {
-    const loadHomeLocation = async () => {
-      if (!user) return
-      setHomeLoading(true)
-      setHomeError(null)
-      try {
-        const res = await fetch('/api/profile/home-location')
-        const data = (await res.json()) as ApiResponse<{
-          heimat_adresse: string | null
-          heimat_lat: number | null
-          heimat_lng: number | null
-        }>
-        if (data.success && data.data) {
-          setHomeAddress(data.data.heimat_adresse ?? '')
-          setHomeLat(data.data.heimat_lat)
-          setHomeLng(data.data.heimat_lng)
+  const loadHomeLocation = async () => {
+    if (!user) return
+    setHomeLoading(true)
+    setHomeError(null)
+    try {
+      const res = await fetch('/api/profile/home-location')
+      const data = (await res.json()) as ApiResponse<{
+        heimat_adresse: string | null
+        heimat_lat: number | null
+        heimat_lng: number | null
+      }>
+      if (data.success && data.data) {
+        setHomeAddress(data.data.heimat_adresse ?? '')
+        setHomeLat(data.data.heimat_lat)
+        setHomeLng(data.data.heimat_lng)
+        try {
+          await cacheHomeLocation({
+            heimat_adresse: data.data.heimat_adresse ?? null,
+            heimat_lat: data.data.heimat_lat,
+            heimat_lng: data.data.heimat_lng,
+          })
+        } catch (cacheErr) {
+          console.warn('cacheHomeLocation failed:', cacheErr)
         }
-      } catch (error) {
-        console.error('Failed to load home location:', error)
-        setHomeError('Heimatadresse konnte nicht geladen werden.')
-      } finally {
-        setHomeLoading(false)
       }
+    } catch (error) {
+      console.error('Failed to load home location:', error)
+      // Offline-Fallback: zuletzt bekannte Heimatadresse anzeigen
+      const cached = await getCachedHomeLocation()
+      if (cached) {
+        setHomeAddress(cached.heimat_adresse ?? '')
+        setHomeLat(cached.heimat_lat)
+        setHomeLng(cached.heimat_lng)
+      } else {
+        setHomeError('Heimatadresse konnte nicht geladen werden.')
+      }
+    } finally {
+      setHomeLoading(false)
     }
+  }
+
+  useEffect(() => {
     if (!loading) {
       void loadHomeLocation()
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, user])
+
+  // Bei Reconnect: Heimatadresse erneut vom Server holen
+  useReconnectRefetch(loadHomeLocation)
 
   const handleSaveHomeLocation = async () => {
     setHomeSaving(true)

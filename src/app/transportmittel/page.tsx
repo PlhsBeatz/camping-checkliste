@@ -13,6 +13,7 @@ import type { ApiResponse } from '@/lib/api-types'
 import { cn } from '@/lib/utils'
 import { getCachedTransportVehicles } from '@/lib/offline-sync'
 import { cacheTransportVehicles } from '@/lib/offline-db'
+import { useReconnectRefetch } from '@/hooks/use-reconnect-refetch'
 
 export default function TransportmittelPage() {
   const { canAccessConfig, loading } = useAuth()
@@ -74,6 +75,8 @@ export default function TransportmittelPage() {
       }
     }
   }
+
+  useReconnectRefetch(handleRefresh)
 
   return (
     <div className="min-h-screen flex">

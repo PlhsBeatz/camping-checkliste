@@ -17,11 +17,32 @@ function loadDevVars() {
 
 const devVars = loadDevVars();
 
+// Häufig genutzte Top-Level-Routen, die wir aktiv precachen wollen, damit die installierte
+// PWA auch beim ersten Cold-Start offline brauchbar ist (HTML-Shell aus dem Precache,
+// die eigentlichen Daten kommen aus IndexedDB).
+const swRevision = Date.now().toString();
+const additionalPrecacheEntries = [
+  '/~offline',
+  '/',
+  '/pack-status',
+  '/urlaube',
+  '/ausruestung',
+  '/kategorien',
+  '/tags',
+  '/mitreisende',
+  '/transportmittel',
+  '/campingplaetze',
+  '/profil',
+  '/tools/sonnen-ausrichtung',
+  '/tools/checklisten',
+  '/manifest.json',
+].map((url) => ({ url, revision: swRevision }));
+
 const withSerwist = withSerwistInit({
   swSrc: 'src/app/sw.ts',
   swDest: 'public/sw.js',
   register: false,
-  additionalPrecacheEntries: [{ url: '/~offline', revision: Date.now().toString() }],
+  additionalPrecacheEntries,
 });
 
 /** @type {import('next').NextConfig} */

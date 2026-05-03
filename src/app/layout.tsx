@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from 'next/font/google'
 import { PwaUpdatePrompt } from '@/components/pwa-update-prompt'
 import { AuthProvider } from '@/components/auth-provider'
 import { MustChangePasswordGuard } from '@/components/must-change-password-guard'
+import { OfflineBanner } from '@/components/offline-banner'
 import './globals.css'
 
 const geistSans = Geist({
@@ -58,6 +59,7 @@ export default function RootLayout({
       </head>
       <body className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased bg-background text-foreground overflow-x-clip`}>
         <AuthProvider>
+          <OfflineBanner />
           <MustChangePasswordGuard>
             <div className="w-full max-w-full overflow-x-clip">
               {children}

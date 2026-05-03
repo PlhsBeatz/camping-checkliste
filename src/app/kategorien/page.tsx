@@ -16,6 +16,7 @@ import {
   getCachedMainCategories,
   getCachedTransportVehicles,
 } from '@/lib/offline-sync'
+import { useReconnectRefetch } from '@/hooks/use-reconnect-refetch'
 import {
   cacheCategories,
   cacheMainCategories,
@@ -160,6 +161,9 @@ export default function KategorienPage() {
       }
     }
   }
+
+  // Bei Reconnect: alle Daten erneut laden (vom Server, sonst Fallback auf Cache)
+  useReconnectRefetch(handleRefresh)
 
   const canCreateSubcategory = mainCategories.length > 0
 

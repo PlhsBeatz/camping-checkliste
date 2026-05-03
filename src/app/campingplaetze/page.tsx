@@ -12,6 +12,9 @@ import { cn } from '@/lib/utils'
 import { CampingplaetzeTable } from '@/components/campingplaetze-table'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { CampingplatzEditModal } from '@/components/campingplatz-edit-modal'
+import { getCachedCampingplaetze } from '@/lib/offline-sync'
+import { cacheCampingplaetze, cacheCampingplatz } from '@/lib/offline-db'
+import { useReconnectRefetch } from '@/hooks/use-reconnect-refetch'
 
 function CampingplaetzePageContent() {
   const router = useRouter()
@@ -39,22 +42,36 @@ function CampingplaetzePageContent() {
     }
   }, [showNavSidebar])
 
-  useEffect(() => {
-    const load = async () => {
-      try {
-        const res = await fetch('/api/campingplaetze')
-        const data = (await res.json()) as ApiResponse<Campingplatz[]>
-        if (data.success && data.data) {
-          setItems(data.data)
+  const load = async () => {
+    try {
+      const res = await fetch('/api/campingplaetze')
+      const data = (await res.json()) as ApiResponse<Campingplatz[]>
+      if (data.success && data.data) {
+        setItems(data.data)
+        try {
+          await cacheCampingplaetze(data.data)
+        } catch (e) {
+          console.warn('cacheCampingplaetze failed:', e)
         }
-      } catch (error) {
-        console.error('Failed to fetch campingplaetze:', error)
-      } finally {
-        setIsLoading(false)
       }
+    } catch (error) {
+      console.error('Failed to fetch campingplaetze:', error)
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        const cached = await getCachedCampingplaetze()
+        if (cached.length > 0) setItems(cached)
+      }
+    } finally {
+      setIsLoading(false)
     }
+  }
+
+  useEffect(() => {
     void load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Bei Reconnect: Liste erneut laden
+  useReconnectRefetch(load)
 
   const bearbeitenId = searchParams.get('bearbeiten')
 
@@ -68,6 +85,11 @@ function CampingplaetzePageContent() {
           const o = prev.filter((c) => c.id !== id)
           return [...o, cp].sort((a, b) => a.name.localeCompare(b.name))
         })
+        try {
+          await cacheCampingplatz(cp)
+        } catch (e) {
+          console.warn('cacheCampingplatz failed:', e)
+        }
       }
     } catch {
       /* ignore */
