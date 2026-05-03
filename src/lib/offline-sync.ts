@@ -13,6 +13,8 @@ import {
   cacheMitreisende,
   cacheTransportVehicles,
   cachePackingItems,
+  cacheChecklisten,
+  cacheLastPosition,
   type SyncQueueEntry,
 } from './offline-db'
 import type {
@@ -24,6 +26,7 @@ import type {
   Mitreisender,
   TransportVehicle,
   PackingItem,
+  ChecklisteMitStruktur,
 } from './db'
 
 /** Prüft, ob die App online ist */
@@ -116,6 +119,21 @@ export async function getCachedPackingItems(
   return rows.map(stripMeta)
 }
 
+/** Aus IndexedDB lesen: Checklisten (inkl. Kategorien & Einträgen) */
+export async function getCachedChecklisten(): Promise<ChecklisteMitStruktur[]> {
+  const rows = await offlineDb.checklisten.toArray()
+  return rows
+    .map(stripMeta)
+    .sort((a, b) => a.reihenfolge - b.reihenfolge || a.titel.localeCompare(b.titel))
+}
+
+/** Aus IndexedDB lesen: zuletzt bekannte GPS-Position */
+export async function getCachedLastPosition(): Promise<{ lat: number; lng: number } | null> {
+  const row = await offlineDb.lastPosition.get('last')
+  if (!row) return null
+  return { lat: row.lat, lng: row.lng }
+}
+
 function stripMeta<T extends object>(row: T): Omit<T, '_cachedAt' | '_updatedAt' | '_vacationId'> {
   const { _cachedAt, _updatedAt, _vacationId, ...rest } = row as T &
     { _cachedAt?: unknown; _updatedAt?: unknown; _vacationId?: unknown }
@@ -132,6 +150,8 @@ export const cacheFns = {
   mitreisende: cacheMitreisende,
   transportVehicles: cacheTransportVehicles,
   packingItems: cachePackingItems,
+  checklisten: cacheChecklisten,
+  lastPosition: cacheLastPosition,
 }
 
 /** Sync-Queue: Eintrag hinzufügen (bei Offline-Mutation) */

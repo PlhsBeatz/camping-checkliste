@@ -11,6 +11,8 @@ import {
   normalizeHeadingDeg,
   type DeviceOrientationEventWithWebkit,
 } from '@/lib/device-compass-heading'
+import { getCachedLastPosition } from '@/lib/offline-sync'
+import { cacheLastPosition } from '@/lib/offline-db'
 
 /** Kürzeste Winkeldifferenz (robust gegen 0°/360°-Sprünge, kein JS-%-Bug) */
 function shortestAngleDiff(from: number, to: number): number {
@@ -54,15 +56,34 @@ export default function SonnenAusrichtungPage() {
 
   useEffect(() => {
     if (typeof window === 'undefined') return
+
+    // Offline-Fallback: zuletzt bekannte Position aus IndexedDB laden, damit der
+    // Kompass auch ohne aktives GPS (z. B. offline / GPS noch nicht bereit) sinnvolle
+    // Werte zeigt. Ein späterer GPS-Fix überschreibt diesen Wert wieder.
+    let cancelled = false
+    getCachedLastPosition()
+      .then((cached) => {
+        if (cancelled || !cached) return
+        setPosition((prev) => prev ?? cached)
+      })
+      .catch(() => {
+        // Cache-Fehler ignorieren, GPS bleibt der primäre Pfad
+      })
+
     if (!navigator.geolocation) {
       setGpsError('GPS wird von diesem Browser nicht unterstützt.')
       setIsLoadingGps(false)
-      return
+      return () => {
+        cancelled = true
+      }
     }
     const watchId = navigator.geolocation.watchPosition(
       (pos) => {
-        setPosition({ lat: pos.coords.latitude, lng: pos.coords.longitude })
+        const next = { lat: pos.coords.latitude, lng: pos.coords.longitude }
+        setPosition(next)
         setGpsError(null)
+        // Position für Offline-Nutzung persistieren (best effort)
+        cacheLastPosition(next.lat, next.lng).catch(() => {})
       },
       (err) => {
         if (err.code === 1) {
@@ -76,7 +97,10 @@ export default function SonnenAusrichtungPage() {
       { enableHighAccuracy: true, maximumAge: 60000 }
     )
     setIsLoadingGps(false)
-    return () => navigator.geolocation?.clearWatch(watchId)
+    return () => {
+      cancelled = true
+      navigator.geolocation?.clearWatch(watchId)
+    }
   }, [])
 
   useEffect(() => {

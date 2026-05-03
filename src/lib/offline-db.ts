@@ -14,6 +14,7 @@ import type {
   Mitreisender,
   TransportVehicle,
   PackingItem,
+  ChecklisteMitStruktur,
 } from './db'
 
 export interface CachedVacation extends Vacation {
@@ -57,6 +58,24 @@ export interface CachedPackingItem extends PackingItem {
   _updatedAt: number
 }
 
+/**
+ * Tools/Checklisten werden als verschachtelter Baum vom Server geliefert.
+ * Wir cachen pro Checkliste einen Eintrag (key = id), inklusive Kategorien und Einträgen.
+ */
+export interface CachedChecklist extends ChecklisteMitStruktur {
+  _cachedAt: number
+  _updatedAt: number
+}
+
+/** Cache für die letzte bekannte GPS-Position (Tools/Sonnen-Ausrichtung) */
+export interface CachedLastPosition {
+  /** Stabiler Schlüssel, aktuell immer 'last' (eine Position pro Gerät) */
+  id: string
+  lat: number
+  lng: number
+  _cachedAt: number
+}
+
 /** Einzelne Änderung in der Offline-Queue (Last-Write-Wins) */
 export interface SyncQueueEntry {
   id?: number
@@ -76,6 +95,8 @@ export class OfflineDB extends Dexie {
   mitreisende!: EntityTable<CachedMitreisender, 'id'>
   transportVehicles!: EntityTable<CachedTransportVehicle, 'id'>
   packingItems!: EntityTable<CachedPackingItem, 'id'>
+  checklisten!: EntityTable<CachedChecklist, 'id'>
+  lastPosition!: EntityTable<CachedLastPosition, 'id'>
   syncQueue!: EntityTable<SyncQueueEntry, 'id'>
 
   constructor() {
@@ -89,6 +110,20 @@ export class OfflineDB extends Dexie {
       mitreisende: 'id, _cachedAt, _updatedAt',
       transportVehicles: 'id, _cachedAt, _updatedAt',
       packingItems: 'id, packliste_id, _vacationId, _cachedAt, _updatedAt',
+      syncQueue: '++id, table, timestamp',
+    })
+    // Version 2: Tabellen für die neuen Tools (Checklisten + zuletzt bekannte Position)
+    this.version(2).stores({
+      vacations: 'id, _cachedAt, _updatedAt',
+      equipment: 'id, _cachedAt, _updatedAt',
+      categories: 'id, _cachedAt, _updatedAt',
+      mainCategories: 'id, _cachedAt, _updatedAt',
+      tags: 'id, _cachedAt, _updatedAt',
+      mitreisende: 'id, _cachedAt, _updatedAt',
+      transportVehicles: 'id, _cachedAt, _updatedAt',
+      packingItems: 'id, packliste_id, _vacationId, _cachedAt, _updatedAt',
+      checklisten: 'id, reihenfolge, _cachedAt, _updatedAt',
+      lastPosition: 'id, _cachedAt',
       syncQueue: '++id, table, timestamp',
     })
   }
@@ -156,4 +191,28 @@ export async function cachePackingItems(
     withMeta({ ...v, _vacationId: vacationId })
   ) as CachedPackingItem[]
   await offlineDb.packingItems.bulkPut(withMetaItems)
+}
+
+/**
+ * Komplette Checklisten-Liste cachen.
+ * Wir ersetzen den Cache vollständig, damit gelöschte Listen nicht im Cache "weiterleben".
+ */
+export async function cacheChecklisten(
+  items: ChecklisteMitStruktur[]
+): Promise<void> {
+  const withMetaItems = items.map((v) => withMeta(v)) as CachedChecklist[]
+  await offlineDb.checklisten.clear()
+  if (withMetaItems.length > 0) {
+    await offlineDb.checklisten.bulkPut(withMetaItems)
+  }
+}
+
+/** Zuletzt bekannte GPS-Position speichern (Tools/Sonnen-Ausrichtung) */
+export async function cacheLastPosition(lat: number, lng: number): Promise<void> {
+  await offlineDb.lastPosition.put({
+    id: 'last',
+    lat,
+    lng,
+    _cachedAt: now(),
+  })
 }
