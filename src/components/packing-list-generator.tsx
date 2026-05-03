@@ -1,17 +1,23 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { ResponsiveModal } from '@/components/ui/responsive-modal'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Sparkles, Star, Tag as TagIcon } from 'lucide-react'
-import { Tag, EquipmentItem } from '@/lib/db'
+import { Sparkles, Star } from 'lucide-react'
+import { Tag, TagKategorie, EquipmentItem } from '@/lib/db'
 import type { ApiResponse } from '@/lib/api-types'
 import { DEFAULT_USER_COLOR_BG } from '@/lib/user-colors'
-import { getCachedTags } from '@/lib/offline-sync'
-import { cacheTags } from '@/lib/offline-db'
+import { getCachedTags, getCachedTagKategorien } from '@/lib/offline-sync'
+import { cacheTags, cacheTagKategorien } from '@/lib/offline-db'
+
+/** Wie auf der Ausrüstungsseite (Chip-Checkboxen) */
+const EQUIPMENT_CHIP_CHECKBOX_CLASS =
+  'h-3 w-3 shrink-0 border-[rgb(45,79,30)] data-[state=checked]:bg-[rgb(45,79,30)] data-[state=checked]:text-white data-[state=checked]:border-[rgb(45,79,30)] [&_svg]:h-2.5 [&_svg]:w-2.5'
+
+type TagGroupForPicker = { kat: TagKategorie; tags: Tag[] }
 
 interface PackingListGeneratorProps {
   open: boolean
@@ -27,6 +33,7 @@ export function PackingListGenerator({
   onGenerate 
 }: PackingListGeneratorProps) {
   const [tags, setTags] = useState<Tag[]>([])
+  const [tagKategorien, setTagKategorien] = useState<TagKategorie[]>([])
   const [selectedTags, setSelectedTags] = useState<string[]>([])
   const [includeStandard, setIncludeStandard] = useState(true)
   const [previewItems, setPreviewItems] = useState<EquipmentItem[]>([])
@@ -47,20 +54,43 @@ export function PackingListGenerator({
 
   const fetchTags = async () => {
     try {
-      const res = await fetch('/api/tags')
-      const data = (await res.json()) as ApiResponse<Tag[]>
-      if (data.success && data.data) {
-        setTags(data.data)
-        await cacheTags(data.data)
+      const [tagsRes, katRes] = await Promise.all([fetch('/api/tags'), fetch('/api/tag-kategorien')])
+      const tagsJson = (await tagsRes.json()) as ApiResponse<Tag[]>
+      const katJson = (await katRes.json()) as ApiResponse<TagKategorie[]>
+      if (tagsJson.success && tagsJson.data) {
+        setTags(tagsJson.data)
+        await cacheTags(tagsJson.data)
+      }
+      if (katJson.success && katJson.data) {
+        setTagKategorien(katJson.data)
+        await cacheTagKategorien(katJson.data)
       }
     } catch (error) {
       console.error('Failed to fetch tags:', error)
       if (typeof navigator !== 'undefined' && !navigator.onLine) {
-        const cached = await getCachedTags()
-        if (cached.length > 0) setTags(cached)
+        const [cachedTags, cachedKat] = await Promise.all([
+          getCachedTags(),
+          getCachedTagKategorien(),
+        ])
+        if (cachedTags.length > 0) setTags(cachedTags)
+        if (cachedKat.length > 0) setTagKategorien(cachedKat)
       }
     }
   }
+
+  const tagGroupsForPicker = useMemo((): TagGroupForPicker[] => {
+    const sortedKats = [...tagKategorien].sort(
+      (a, b) => a.reihenfolge - b.reihenfolge || a.titel.localeCompare(b.titel)
+    )
+    return sortedKats
+      .map((kat) => ({
+        kat,
+        tags: tags
+          .filter((t) => t.tag_kategorie_id === kat.id)
+          .sort((a, b) => a.reihenfolge - b.reihenfolge || a.titel.localeCompare(b.titel)),
+      }))
+      .filter((g) => g.tags.length > 0)
+  }, [tagKategorien, tags])
 
   const fetchPreview = async () => {
     if (!includeStandard && selectedTags.length === 0) {
@@ -85,11 +115,9 @@ export function PackingListGenerator({
     }
   }
 
-  const handleToggleTag = (tagId: string) => {
-    setSelectedTags(prev => 
-      prev.includes(tagId) 
-        ? prev.filter(id => id !== tagId)
-        : [...prev, tagId]
+  const handleToggleTag = (tagId: string, checked: boolean) => {
+    setSelectedTags((prev) =>
+      checked ? (prev.includes(tagId) ? prev : [...prev, tagId]) : prev.filter((id) => id !== tagId)
     )
   }
 
@@ -172,34 +200,32 @@ export function PackingListGenerator({
                 <p className="text-sm text-muted-foreground text-center py-4">
                   Noch keine Tags vorhanden. Erstellen Sie zuerst Tags im Tab &quot;Tags&quot;.
                 </p>
+              ) : tagGroupsForPicker.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-4">
+                  Noch keine Tags angelegt.
+                </p>
               ) : (
-                <div className="grid gap-2 md:grid-cols-2">
-                  {tags.map((tag) => (
-                    <div
-                      key={tag.id}
-                      className="flex items-center space-x-2 p-2 rounded-lg hover:bg-muted/50"
-                    >
-                      <Checkbox
-                        id={`tag-${tag.id}`}
-                        checked={selectedTags.includes(tag.id)}
-                        onCheckedChange={() => handleToggleTag(tag.id)}
-                      />
-                      <Label 
-                        htmlFor={`tag-${tag.id}`} 
-                        className="flex items-center gap-2 cursor-pointer flex-1"
-                      >
-                        <div
-                          className="h-6 w-6 rounded-full flex items-center justify-center flex-shrink-0"
-                          style={{ backgroundColor: tag.farbe || DEFAULT_USER_COLOR_BG }}
-                        >
-                          {tag.icon ? (
-                            <span className="text-white text-xs">{tag.icon}</span>
-                          ) : (
-                            <TagIcon className="h-3 w-3 text-white" />
-                          )}
-                        </div>
-                        <span className="text-sm">{tag.titel}</span>
-                      </Label>
+                <div className="space-y-4">
+                  {tagGroupsForPicker.map(({ kat, tags: catTags }) => (
+                    <div key={kat.id} className="space-y-2">
+                      <Label className="text-sm font-medium">{kat.titel}</Label>
+                      <div className="flex flex-wrap gap-2">
+                        {catTags.map((tag) => (
+                          <label
+                            key={tag.id}
+                            htmlFor={`pack-gen-tag-${tag.id}`}
+                            className="flex items-center gap-1.5 text-xs bg-background px-2 py-1 rounded cursor-pointer hover:bg-muted/80 border border-border/60"
+                          >
+                            <Checkbox
+                              id={`pack-gen-tag-${tag.id}`}
+                              checked={selectedTags.includes(tag.id)}
+                              onCheckedChange={(c) => handleToggleTag(tag.id, !!c)}
+                              className={EQUIPMENT_CHIP_CHECKBOX_CLASS}
+                            />
+                            <span>{tag.titel}</span>
+                          </label>
+                        ))}
+                      </div>
                     </div>
                   ))}
                 </div>
