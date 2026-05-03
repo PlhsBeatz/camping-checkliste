@@ -48,7 +48,13 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useToast } from '@/hooks/use-toast'
-import { getCachedChecklisten } from '@/lib/offline-sync'
+import { useOptimisticMutation } from '@/hooks/use-optimistic-mutation'
+import { useReconnectRefetch } from '@/hooks/use-reconnect-refetch'
+import {
+  fetchAndCache,
+  getCachedChecklisten,
+  OUTBOX_SYNCED_EVENT_NAME,
+} from '@/lib/offline-sync'
 import { cacheChecklisten } from '@/lib/offline-db'
 
 /** Checkbox wie in der Packliste (Pauschal / normales Abhaken) */
@@ -146,23 +152,22 @@ function parseDropId(s: string) {
   return s.startsWith(P_DROP) ? s.slice(P_DROP.length) : null
 }
 
-/**
- * Lädt Checklisten online und persistiert sie in IndexedDB,
- * damit die Seite auch offline weiterhin sinnvolle Daten zeigen kann.
- */
-async function fetchChecklisten(): Promise<ChecklisteMitStruktur[]> {
-  const res = await fetch('/api/checklisten')
-  const data = (await res.json()) as { success?: boolean; data?: ChecklisteMitStruktur[]; error?: string }
-  if (!res.ok || !data.success || !data.data) {
-    throw new Error(data.error || 'Laden fehlgeschlagen')
-  }
-  // Erfolgreiche Antwort in den Offline-Cache spiegeln (best effort)
-  try {
-    await cacheChecklisten(data.data)
-  } catch (err) {
-    console.warn('Checklisten konnten nicht in IndexedDB gecached werden:', err)
-  }
-  return data.data
+function mapToggleErledigt(
+  lists: ChecklisteMitStruktur[],
+  checklistId: string,
+  entryId: string,
+  erledigt: boolean
+): ChecklisteMitStruktur[] {
+  return lists.map((c) => {
+    if (c.id !== checklistId) return c
+    return {
+      ...c,
+      kategorien: c.kategorien.map((k) => ({
+        ...k,
+        eintraege: k.eintraege.map((e) => (e.id === entryId ? { ...e, erledigt } : e)),
+      })),
+    }
+  })
 }
 
 function SortableChecklistCard({
@@ -402,6 +407,7 @@ export function ChecklistenTool({ onHeaderContextChange, headerTrailingRef }: Ch
 
   const { canAccessConfig } = useAuth()
   const { toast } = useToast()
+  const { mutate } = useOptimisticMutation()
   const [loading, setLoading] = useState(true)
   const [data, setData] = useState<ChecklisteMitStruktur[]>([])
   const [editMode, setEditMode] = useState(false)
@@ -433,30 +439,48 @@ export function ChecklistenTool({ onHeaderContextChange, headerTrailingRef }: Ch
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const lists = await fetchChecklisten()
-      setData(lists)
-    } catch (e) {
-      // Offline-Fallback: zuletzt erfolgreich geladene Checklisten aus IndexedDB anzeigen
-      const offline = typeof navigator !== 'undefined' && !navigator.onLine
+      const { data, fromCache } = await fetchAndCache<ChecklisteMitStruktur[]>(
+        '/api/checklisten',
+        cacheChecklisten,
+        getCachedChecklisten,
+        { cache: 'no-store' }
+      )
+      if (data !== null) {
+        setData(data)
+        if (fromCache) {
+          toast({
+            title:
+              typeof navigator !== 'undefined' && !navigator.onLine
+                ? 'Offline-Modus'
+                : 'Eingeschränkte Verbindung',
+            description: 'Checklisten werden aus dem lokalen Cache angezeigt.',
+          })
+        }
+      } else {
+        setData([])
+        toast({
+          title: 'Checklisten konnten nicht geladen werden.',
+          variant: 'destructive',
+        })
+      }
+    } catch (err) {
+      console.warn('Checklisten laden fehlgeschlagen:', err)
       try {
         const cached = await getCachedChecklisten()
         if (cached.length > 0) {
           setData(cached)
-          if (offline) {
-            toast({
-              title: 'Offline-Modus',
-              description: 'Checklisten werden aus dem lokalen Cache angezeigt.',
-            })
-            return
-          }
+          toast({
+            title: 'Offline-Modus',
+            description: 'Checklisten werden aus dem lokalen Cache angezeigt.',
+          })
+        } else {
+          setData([])
+          toast({ title: 'Fehler beim Laden', variant: 'destructive' })
         }
-      } catch (cacheErr) {
-        console.warn('Cache-Lesen fehlgeschlagen:', cacheErr)
+      } catch {
+        setData([])
+        toast({ title: 'Fehler beim Laden', variant: 'destructive' })
       }
-      toast({
-        title: e instanceof Error ? e.message : 'Fehler beim Laden',
-        variant: 'destructive',
-      })
     } finally {
       setLoading(false)
     }
@@ -464,6 +488,19 @@ export function ChecklistenTool({ onHeaderContextChange, headerTrailingRef }: Ch
 
   useEffect(() => {
     load()
+  }, [load])
+
+  useReconnectRefetch(() => {
+    void load()
+  })
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const onSynced = () => {
+      void load()
+    }
+    window.addEventListener(OUTBOX_SYNCED_EVENT_NAME, onSynced)
+    return () => window.removeEventListener(OUTBOX_SYNCED_EVENT_NAME, onSynced)
   }, [load])
 
   useEffect(() => {
@@ -674,32 +711,28 @@ export function ChecklistenTool({ onHeaderContextChange, headerTrailingRef }: Ch
     await persistEntryOrder(next)
   }
 
-  const toggleErledigt = async (checklistId: string, entryId: string, erledigt: boolean) => {
-    const res = await fetch(`/api/checklisten/${checklistId}/eintraege/${entryId}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ erledigt }),
-    })
-    const j = (await res.json()) as { success?: boolean; error?: string }
-    if (!res.ok || !j.success) {
-      toast({ title: j.error || 'Speichern fehlgeschlagen', variant: 'destructive' })
-      return
-    }
-    setData(prev =>
-      prev.map(c => {
-        if (c.id !== checklistId) return c
-        return {
-          ...c,
-          kategorien: c.kategorien.map(k => ({
-            ...k,
-            eintraege: k.eintraege.map(e =>
-              e.id === entryId ? { ...e, erledigt } : e
-            ),
-          })),
-        }
+  const toggleErledigt = useCallback(
+    async (checklistId: string, entryId: string, erledigt: boolean) => {
+      setData((prev) => mapToggleErledigt(prev, checklistId, entryId, erledigt))
+      const r = await mutate({
+        table: 'checklisten-eintrag-erledigt',
+        action: 'patch',
+        key: `${checklistId}|${entryId}`,
+        payload: { erledigt },
+        context: { checklistId, eintragId: entryId },
       })
-    )
-  }
+      if (!r.ok && !r.queued) {
+        await load()
+        toast({ title: r.error ?? 'Speichern fehlgeschlagen', variant: 'destructive' })
+        return
+      }
+      setData((prev) => {
+        void cacheChecklisten(prev).catch(() => {})
+        return prev
+      })
+    },
+    [mutate, load, toast]
+  )
 
   const createList = async () => {
     const t = newListTitel.trim()

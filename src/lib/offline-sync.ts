@@ -127,6 +127,47 @@ export async function fetchAndCache<T>(
 }
 
 // ---------------------------------------------------------------------------
+// Hintergrund: Checklisten für Offline vorwärmen
+// ---------------------------------------------------------------------------
+
+let checklistenWarmInFlight: Promise<void> | null = null
+
+/**
+ * Lädt `/api/checklisten` still und schreibt in IndexedDB (ohne Fallback-Lesen).
+ * Mehrere parallele Aufrufe teilen einen Lauf (Dedupe).
+ */
+export function prefetchChecklistenWarmCache(): Promise<void> {
+  if (checklistenWarmInFlight !== null) return checklistenWarmInFlight
+  checklistenWarmInFlight = (async () => {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) return
+    await fetchAndCache<ChecklisteMitStruktur[]>(
+      '/api/checklisten',
+      cacheChecklisten,
+      undefined,
+      { cache: 'no-store' }
+    )
+  })().finally(() => {
+    checklistenWarmInFlight = null
+  })
+  return checklistenWarmInFlight
+}
+
+/**
+ * Startet den Checklisten-Prefetch verzögert (Idle-Zeit), damit Start und Auth nicht blockieren.
+ */
+export function scheduleChecklistenPrefetch(): void {
+  if (typeof window === 'undefined') return
+  const run = () => {
+    void prefetchChecklistenWarmCache()
+  }
+  if (typeof window.requestIdleCallback === 'function') {
+    window.requestIdleCallback(run, { timeout: 12_000 })
+  } else {
+    window.setTimeout(run, 2_500)
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Read-Pfade (getCached*)
 // ---------------------------------------------------------------------------
 

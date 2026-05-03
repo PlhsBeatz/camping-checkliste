@@ -8,7 +8,7 @@ import {
   useCallback,
   type ReactNode
 } from 'react'
-import { getCachedAuthUser } from '@/lib/offline-sync'
+import { getCachedAuthUser, scheduleChecklistenPrefetch, subscribeToOnlineStatus } from '@/lib/offline-sync'
 import { cacheAuthUser, clearAuthUser } from '@/lib/offline-db'
 
 export interface AuthUser {
@@ -71,6 +71,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } catch (err) {
           console.warn('Auth-Cache schreiben fehlgeschlagen:', err)
         }
+        scheduleChecklistenPrefetch()
       } else if (res.ok) {
         // Server sagt explizit "nicht eingeloggt" → Cache leeren.
         setUser(null)
@@ -97,6 +98,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     fetchUser()
   }, [fetchUser])
+
+  // Nach Netzwerk-Wiederherstellung Tools-Checklisten erneut in den Offline-Cache legen (best effort).
+  useEffect(() => {
+    let init = true
+    let lastOnline = typeof navigator !== 'undefined' ? navigator.onLine : true
+    return subscribeToOnlineStatus((online) => {
+      if (init) {
+        init = false
+        lastOnline = online
+        return
+      }
+      if (online && !lastOnline) {
+        scheduleChecklistenPrefetch()
+      }
+      lastOnline = online
+    })
+  }, [])
 
   const logout = useCallback(async () => {
     // Best-effort Logout: auch wenn der Server-Call fehlschlägt, lokal ausloggen.

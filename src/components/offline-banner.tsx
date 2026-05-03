@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { CloudOff, RefreshCw, AlertCircle, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -44,6 +44,9 @@ export function OfflineBanner() {
     }
   }, [showDetails])
 
+  const refreshRef = useRef(refresh)
+  refreshRef.current = refresh
+
   useEffect(() => {
     void refresh()
     return subscribeToOnlineStatus((online) => {
@@ -51,6 +54,38 @@ export function OfflineBanner() {
       void refresh()
     })
   }, [refresh])
+
+  /** Sobald wieder online und Outbox nicht leer: automatisch synchronisieren (wie erwartete „wird synchronisiert“). */
+  useEffect(() => {
+    if (!isOnline || queueCount <= 0) return
+    let cancelled = false
+    void (async () => {
+      setIsProcessing(true)
+      setResultMsg(null)
+      try {
+        const r = await processSyncQueue()
+        if (cancelled) return
+        if (typeof window !== 'undefined' && r.ok > 0) {
+          window.dispatchEvent(new CustomEvent(OUTBOX_SYNCED_EVENT_NAME))
+        }
+        if (r.ok > 0 && r.failed === 0) {
+          setResultMsg(`${r.ok} Änderung${r.ok === 1 ? '' : 'en'} synchronisiert.`)
+        } else if (r.failed > 0 && r.remaining > 0) {
+          setResultMsg(
+            `${r.ok > 0 ? `${r.ok} synchronisiert, ` : ''}Teilweise fehlgeschlagen – „Erneut versuchen“ nutzen.`
+          )
+        } else if (r.remaining === 0 && r.ok === 0 && r.failed === 0) {
+          setResultMsg(null)
+        }
+      } finally {
+        setIsProcessing(false)
+        if (!cancelled) await refreshRef.current()
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [isOnline, queueCount])
 
   // Bei jedem Öffnen der Detail-Ansicht Liste neu laden
   useEffect(() => {
@@ -126,7 +161,9 @@ export function OfflineBanner() {
           )}
           {isOnline && queueCount > 0 && (
             <span className="font-medium text-blue-900">
-              {queueCount} ausstehende Änderung{queueCount === 1 ? '' : 'en'} werden synchronisiert…
+              {isProcessing
+                ? `Synchronisiere ${queueCount} ausstehende Änderung${queueCount === 1 ? '' : 'en'}…`
+                : `${queueCount} ausstehende Änderung${queueCount === 1 ? '' : 'en'}. Bei Problemen bitte „Erneut versuchen“ verwenden.`}
             </span>
           )}
           {resultMsg && (
