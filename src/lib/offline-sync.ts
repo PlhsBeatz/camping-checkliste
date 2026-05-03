@@ -44,6 +44,19 @@ import type {
   PackStatusData,
 } from './db'
 
+/** Wie `getPackingItems` in `db.ts` nach dem Merge (Hauptkat → Kategorie → Titel). */
+function sortPackingItemsForDisplay(items: PackingItem[]): PackingItem[] {
+  return [...items].sort((a, b) => {
+    const hkA = a.orderHk ?? 999
+    const hkB = b.orderHk ?? 999
+    if (hkA !== hkB) return hkA - hkB
+    const kA = a.orderK ?? 999
+    const kB = b.orderK ?? 999
+    if (kA !== kB) return kA - kB
+    return a.was.localeCompare(b.was, 'de')
+  })
+}
+
 // ---------------------------------------------------------------------------
 // Netzwerk-Status
 // ---------------------------------------------------------------------------
@@ -179,7 +192,8 @@ export async function getCachedPackingItems(
     .where('_vacationId')
     .equals(vacationId)
     .toArray()
-  return rows.map(stripMeta)
+  const list = rows.map(stripMeta) as PackingItem[]
+  return sortPackingItemsForDisplay(list)
 }
 
 /** Aus IndexedDB lesen: Checklisten (inkl. Kategorien & Einträgen) */
