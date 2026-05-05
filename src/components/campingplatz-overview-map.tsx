@@ -97,6 +97,7 @@ export function CampingplatzOverviewMap({
           </DialogDescription>
           {interactiveOpen ? (
             <div className="relative min-h-0 flex-1 overflow-hidden rounded-lg border border-border bg-muted">
+              <iframe
                 title={title ? `Lage: ${title}` : 'Interaktive Lagekarte'}
                 src={embedSrc}
                 className="absolute inset-0 h-full w-full border-0 [color-scheme:light] contrast-[0.93] saturate-[0.72]"
