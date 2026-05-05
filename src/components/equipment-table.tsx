@@ -33,6 +33,11 @@ interface EquipmentTableProps {
   tags: Tag[]
   onEdit: (item: EquipmentItem) => void
   onDelete: (id: string) => void
+  /** Sichtbare Haupt-/Unterkategorie (Sticky-Banner) für Dropdown-Scroll beim neuen Eintrag */
+  onVisibleSectionChange?: (ctx: {
+    mainTitle: string | null
+    categoryId: string | null
+  }) => void
   /** Nur lesen – keine Bearbeitung/Löschung (z.B. für Kinder/Gäste) */
   readOnly?: boolean
   /** Dynamische Höhe bis zum unteren Bildschirmrand */
@@ -47,6 +52,7 @@ export const EquipmentTable = React.memo(({
   tags,
   onEdit,
   onDelete,
+  onVisibleSectionChange,
   readOnly = false,
   dynamicHeight = false,
 }: EquipmentTableProps) => {
@@ -221,7 +227,7 @@ export const EquipmentTable = React.memo(({
   const flatRows = useMemo(() => {
     const rows: Array<
       | { type: 'main-category'; id: string; name: string }
-      | { type: 'category'; id: string; name: string; count: number }
+      | { type: 'category'; id: string; categoryId: string; name: string; count: number }
       | { type: 'item'; id: string; item: EquipmentItem }
     > = []
     for (const mainGroup of groupedItems) {
@@ -233,8 +239,9 @@ export const EquipmentTable = React.memo(({
         rows.push({
           type: 'category',
           id: `group-${mainId}-${group.categoryId}`,
+          categoryId: group.categoryId,
           name: group.categoryName,
-          count: group.items?.length ?? 0
+          count: group.items?.length ?? 0,
         })
         for (const item of group.items ?? []) {
           rows.push({ type: 'item', id: item.id, item })
@@ -319,7 +326,7 @@ export const EquipmentTable = React.memo(({
   // sticky übernimmt → kein Zittern.
   const stickyState = useMemo<{
     main: { name: string; pushY: number } | null
-    category: { name: string; count: number; pushY: number } | null
+    category: { categoryId: string; name: string; count: number; pushY: number } | null
   }>(() => {
     if (flatRows.length === 0) return { main: null, category: null }
 
@@ -377,7 +384,7 @@ export const EquipmentTable = React.memo(({
       }
     }
 
-    let categoryData: { name: string; count: number; pushY: number } | null = null
+    let categoryData: { categoryId: string; name: string; count: number; pushY: number } | null = null
     if (activeCategoryIdx !== -1) {
       const activeCategoryRow = flatRows[activeCategoryIdx]
       if (activeCategoryRow && activeCategoryRow.type === 'category') {
@@ -398,6 +405,7 @@ export const EquipmentTable = React.memo(({
           }
         }
         categoryData = {
+          categoryId: activeCategoryRow.categoryId,
           name: activeCategoryRow.name,
           count: activeCategoryRow.count,
           pushY: categoryPushY,
@@ -410,6 +418,14 @@ export const EquipmentTable = React.memo(({
       category: categoryData,
     }
   }, [flatRows, rowStarts, virtualizer.scrollOffset])
+
+  useEffect(() => {
+    if (!onVisibleSectionChange) return
+    onVisibleSectionChange({
+      mainTitle: stickyState.main?.name ?? null,
+      categoryId: stickyState.category?.categoryId ?? null,
+    })
+  }, [stickyState.main?.name, stickyState.category?.categoryId, onVisibleSectionChange])
 
   // Feste Spaltenbreiten: was, transport, gewicht, anzahl, status, abreise, gepacktFuer, details, tags, links, actions
   // Auf dem Smartphone etwas breitere Tags-Spalte und genügend Platz für Links

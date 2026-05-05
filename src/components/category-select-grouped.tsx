@@ -1,13 +1,18 @@
 'use client'
 
-import { useMemo } from 'react'
-import { SelectGroup, SelectItem, SelectLabel } from '@/components/ui/select'
+import { useMemo, useLayoutEffect, useRef, useState } from 'react'
+import { SelectContent, SelectGroup, SelectItem, SelectLabel, Select, SelectTrigger, SelectValue } from '@/components/ui/select'
 import type { Category, MainCategory } from '@/lib/db'
 
 export type CategoryWithMainTitle = Pick<Category, 'id' | 'titel' | 'hauptkategorie_id'> & {
   hauptkategorie_titel: string
   reihenfolge?: number
 }
+
+/** Scroll-Ziel für gruppierte Kategorie-Dropdowns (Packliste / Ausrüstung). */
+export type CategorySelectScrollTarget =
+  | { kind: 'mainHeading'; mainTitle: string }
+  | { kind: 'categoryRow'; categoryId: string }
 
 function groupCategories(
   categories: CategoryWithMainTitle[],
@@ -42,6 +47,70 @@ function groupCategories(
   return result
 }
 
+function findHeading(viewport: HTMLElement, mainTitle: string): HTMLElement | null {
+  for (const el of viewport.querySelectorAll('[data-category-select-main]')) {
+    if (el.getAttribute('data-category-select-main') === mainTitle) return el as HTMLElement
+  }
+  return null
+}
+
+/** Oberkante von `el` mit Padding unterhalb der Viewport-Oberkante ausrichten (Hauptkategorie-Titel bleibt lesbar). */
+function alignTop(viewport: HTMLElement, el: HTMLElement, pad: number) {
+  const vr = viewport.getBoundingClientRect()
+  const er = el.getBoundingClientRect()
+  const delta = er.top - vr.top - pad
+  if (Math.abs(delta) < 0.5) return
+  viewport.scrollTop += delta
+}
+
+/** Sicherstellen, dass `el` vollständig im Viewport liegt (ohne Animation). */
+function ensureVisible(viewport: HTMLElement, el: HTMLElement, pad: number) {
+  let er = el.getBoundingClientRect()
+  const vr = viewport.getBoundingClientRect()
+  if (er.bottom > vr.bottom - pad) {
+    viewport.scrollTop += er.bottom - vr.bottom + pad
+  }
+  er = el.getBoundingClientRect()
+  if (er.top < vr.top + pad) {
+    viewport.scrollTop += er.top - vr.top - pad
+  }
+}
+
+/**
+ * Scrollt den geöffneten Dropdown-Inhalt synchron (ohne smooth).
+ * `contentEl` = Radix Select Content (enthält Viewport als Kind).
+ */
+export function applyCategorySelectScroll(contentEl: HTMLElement, target: CategorySelectScrollTarget) {
+  const viewport = contentEl.querySelector('[data-radix-select-viewport]') as HTMLElement | null
+  if (!viewport) return
+
+  const pad = 8
+
+  if (target.kind === 'mainHeading') {
+    const heading = findHeading(viewport, target.mainTitle)
+    if (!heading) return
+    alignTop(viewport, heading, pad)
+    return
+  }
+
+  const item = viewport.querySelector(
+    `[data-category-select-id="${CSS.escape(target.categoryId)}"]`,
+  ) as HTMLElement | null
+  if (!item) return
+
+  const group = item.closest('[role="group"]')
+  const heading = group?.querySelector('[data-category-select-main]') as HTMLElement | null
+
+  if (heading) alignTop(viewport, heading, pad)
+  ensureVisible(viewport, item, pad)
+
+  if (heading) {
+    const vr = viewport.getBoundingClientRect()
+    const hr = heading.getBoundingClientRect()
+    if (hr.top < vr.top + pad - 1) alignTop(viewport, heading, pad)
+  }
+}
+
 interface CategorySelectGroupedItemsProps {
   categories: CategoryWithMainTitle[]
   mainCategories: MainCategory[]
@@ -65,7 +134,7 @@ export function CategorySelectGroupedItems({
             {g.mainTitle}
           </SelectLabel>
           {g.items.map((c) => (
-            <SelectItem key={c.id} value={c.id}>
+            <SelectItem key={c.id} value={c.id} data-category-select-id={c.id}>
               {c.titel}
             </SelectItem>
           ))}
@@ -75,21 +144,45 @@ export function CategorySelectGroupedItems({
   )
 }
 
-/** Scrollt die Radix-Select-Viewport zur Hauptkategorie-Überschrift (Titelerwartung wie in der Packliste). */
-export function scrollCategorySelectToMainTitle(mainTitle: string): void {
-  let heading: Element | null = null
-  for (const el of document.querySelectorAll('[data-category-select-main]')) {
-    if (el.getAttribute('data-category-select-main') === mainTitle) {
-      heading = el
-      break
-    }
-  }
-  if (!heading || !(heading instanceof HTMLElement)) return
+interface CategoryGroupedSelectFieldProps {
+  value: string
+  onValueChange: (value: string) => void
+  categories: CategoryWithMainTitle[]
+  mainCategories: MainCategory[]
+  scrollTarget?: CategorySelectScrollTarget | null
+  triggerId?: string
+  placeholder?: string
+}
 
-  const viewport = heading.closest('[data-radix-select-viewport]') as HTMLElement | null
-  if (!viewport) return
+/**
+ * Gruppiertes Kategorie-Dropdown mit kontrolliertem `open`, damit die Scroll-Position
+ * per useLayoutEffect vor dem ersten Paint gesetzt werden kann (kein sichtbares Scrollen).
+ */
+export function CategoryGroupedSelectField({
+  value,
+  onValueChange,
+  categories,
+  mainCategories,
+  scrollTarget = null,
+  triggerId,
+  placeholder = 'Kategorie wählen',
+}: CategoryGroupedSelectFieldProps) {
+  const [open, setOpen] = useState(false)
+  const contentRef = useRef<HTMLDivElement>(null)
 
-  const top =
-    heading.getBoundingClientRect().top - viewport.getBoundingClientRect().top + viewport.scrollTop
-  viewport.scrollTo({ top: Math.max(0, top - 6), behavior: 'auto' })
+  useLayoutEffect(() => {
+    if (!open || !scrollTarget || !contentRef.current) return
+    applyCategorySelectScroll(contentRef.current, scrollTarget)
+  }, [open, scrollTarget])
+
+  return (
+    <Select open={open} onOpenChange={setOpen} value={value} onValueChange={onValueChange}>
+      <SelectTrigger id={triggerId}>
+        <SelectValue placeholder={placeholder} />
+      </SelectTrigger>
+      <SelectContent ref={contentRef}>
+        <CategorySelectGroupedItems categories={categories} mainCategories={mainCategories} />
+      </SelectContent>
+    </Select>
+  )
 }

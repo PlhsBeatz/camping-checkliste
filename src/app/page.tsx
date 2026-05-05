@@ -1720,7 +1720,9 @@ function HomeContent() {
         vacationMitreisende={vacationMitreisende}
         selectedPackProfile={selectedPackProfile}
         mainCategories={mainCategories}
-        scrollToHauptkategorieTitel={addSingleItemScrollMain}
+        categorySelectScrollTarget={
+          addSingleItemScrollMain ? { kind: 'mainHeading', mainTitle: addSingleItemScrollMain } : null
+        }
         categories={categories}
         transportVehicles={transportVehicles}
         onSuccess={async () => {

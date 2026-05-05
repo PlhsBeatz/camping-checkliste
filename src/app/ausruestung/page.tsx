@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button'
 import { NavigationSidebar } from '@/components/navigation-sidebar'
 import { EquipmentTable } from '@/components/equipment-table'
 import { Plus, Menu, Star } from 'lucide-react'
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { EquipmentItem, Category, MainCategory, TransportVehicle, Tag, TagKategorie, Mitreisender } from '@/lib/db'
 import type { ApiResponse } from '@/lib/api-types'
 import { ResponsiveModal } from '@/components/ui/responsive-modal'
@@ -20,7 +20,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { CategorySelectGroupedItems } from '@/components/category-select-grouped'
+import {
+  CategorySelectGroupedItems,
+  CategoryGroupedSelectField,
+  type CategorySelectScrollTarget,
+} from '@/components/category-select-grouped'
 import { Checkbox } from '@/components/ui/checkbox'
 import { cn, parseWeightInput } from '@/lib/utils'
 import { MengenRegelEditor } from '@/components/mengen-regel-editor'
@@ -124,6 +128,15 @@ export default function AusruestungPage() {
   const [showEditDialog, setShowEditDialog] = useState(false)
   const [editingItem, setEditingItem] = useState<EquipmentItem | null>(null)
   const [deleteEquipmentId, setDeleteEquipmentId] = useState<string | null>(null)
+  const equipmentVisibleSectionRef = useRef<{ mainTitle: string | null; categoryId: string | null }>({
+    mainTitle: null,
+    categoryId: null,
+  })
+  const handleEquipmentVisibleSection = useCallback((ctx: { mainTitle: string | null; categoryId: string | null }) => {
+    equipmentVisibleSectionRef.current = ctx
+  }, [])
+  const [addEquipmentCategoryScrollTarget, setAddEquipmentCategoryScrollTarget] =
+    useState<CategorySelectScrollTarget | null>(null)
   
   // Form state
   const [formData, setFormData] = useState({
@@ -347,6 +360,11 @@ export default function AusruestungPage() {
 
   const handleAddEquipment = () => {
     resetForm()
+    const { categoryId, mainTitle } = equipmentVisibleSectionRef.current
+    let target: CategorySelectScrollTarget | null = null
+    if (categoryId) target = { kind: 'categoryRow', categoryId }
+    else if (mainTitle) target = { kind: 'mainHeading', mainTitle }
+    setAddEquipmentCategoryScrollTarget(target)
     setShowAddDialog(true)
   }
 
@@ -591,6 +609,7 @@ export default function AusruestungPage() {
                   tags={tags}
                   onEdit={handleEditEquipment}
                   onDelete={handleDeleteEquipment}
+                  onVisibleSectionChange={handleEquipmentVisibleSection}
                   readOnly={!canEditEquipment}
                   dynamicHeight
                 />
@@ -615,7 +634,10 @@ export default function AusruestungPage() {
       {/* Add Equipment Dialog – Padding wie Packliste (px-6) */}
       <ResponsiveModal
         open={showAddDialog}
-        onOpenChange={setShowAddDialog}
+        onOpenChange={(open) => {
+          setShowAddDialog(open)
+          if (!open) setAddEquipmentCategoryScrollTarget(null)
+        }}
         title="Neuen Gegenstand hinzufügen"
         description="Fügen Sie einen neuen Ausrüstungsgegenstand hinzu"
         contentClassName="max-w-2xl max-h-[90vh] overflow-y-auto"
@@ -634,14 +656,13 @@ export default function AusruestungPage() {
 
             <div>
               <Label htmlFor="kategorie">Kategorie *</Label>
-              <Select value={formData.kategorie_id} onValueChange={(value) => setFormData({ ...formData, kategorie_id: value })}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Kategorie wählen" />
-                </SelectTrigger>
-                <SelectContent>
-                  <CategorySelectGroupedItems categories={categories} mainCategories={mainCategories} />
-                </SelectContent>
-              </Select>
+              <CategoryGroupedSelectField
+                value={formData.kategorie_id}
+                onValueChange={(value) => setFormData({ ...formData, kategorie_id: value })}
+                categories={categories}
+                mainCategories={mainCategories}
+                scrollTarget={addEquipmentCategoryScrollTarget}
+              />
             </div>
 
             <div className="grid grid-cols-2 gap-4">

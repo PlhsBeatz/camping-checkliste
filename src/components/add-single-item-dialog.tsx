@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { ResponsiveModal } from '@/components/ui/responsive-modal'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -16,8 +16,8 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import {
-  CategorySelectGroupedItems,
-  scrollCategorySelectToMainTitle,
+  CategoryGroupedSelectField,
+  type CategorySelectScrollTarget,
 } from '@/components/category-select-grouped'
 import { parseWeightInput } from '@/lib/utils'
 import type { ApiResponse } from '@/lib/api-types'
@@ -41,8 +41,8 @@ interface AddSingleItemDialogProps {
   vacationMitreisende: Array<{ id: string; name: string }>
   selectedPackProfile: string | null
   mainCategories: MainCategory[]
-  /** Beim Öffnen der Kategorie-Liste hierhin scrollen (Hauptkategorie-Titel, wie in der Packliste). */
-  scrollToHauptkategorieTitel?: string | null
+  /** Beim Aufklappen der Kategorie-Liste positionieren (Packliste: aktueller Hauptkategorie-Tab). */
+  categorySelectScrollTarget?: CategorySelectScrollTarget | null
   categories: CategoryWithMain[]
   transportVehicles: Array<{ id: string; name: string }>
   tags?: Array<{ id: string; titel: string }>
@@ -78,23 +78,13 @@ export function AddSingleItemDialog({
   vacationMitreisende,
   selectedPackProfile,
   mainCategories,
-  scrollToHauptkategorieTitel = null,
+  categorySelectScrollTarget = null,
   categories,
   transportVehicles,
   tags: tagsProp = [],
   mitreisende: mitreisendeProp = [],
   onSuccess,
 }: AddSingleItemDialogProps) {
-  const handleKategorieOpenChange = useCallback(
-    (isOpen: boolean) => {
-      if (!isOpen || !scrollToHauptkategorieTitel) return
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => scrollCategorySelectToMainTitle(scrollToHauptkategorieTitel))
-      })
-    },
-    [scrollToHauptkategorieTitel],
-  )
-
   const [form, setForm] = useState(defaultForm)
   const [isSaving, setIsSaving] = useState(false)
   const [tags, setTags] = useState<Array<{ id: string; titel: string }>>(tagsProp)
@@ -280,18 +270,14 @@ export function AddSingleItemDialog({
           </div>
           <div>
             <Label htmlFor="add-kategorie">Kategorie *</Label>
-            <Select
+            <CategoryGroupedSelectField
+              triggerId="add-kategorie"
               value={form.kategorie_id}
               onValueChange={(v) => setForm((p) => ({ ...p, kategorie_id: v }))}
-              onOpenChange={handleKategorieOpenChange}
-            >
-              <SelectTrigger id="add-kategorie">
-                <SelectValue placeholder="Kategorie wählen" />
-              </SelectTrigger>
-              <SelectContent>
-                <CategorySelectGroupedItems categories={categories} mainCategories={mainCategories} />
-              </SelectContent>
-            </Select>
+              categories={categories}
+              mainCategories={mainCategories}
+              scrollTarget={categorySelectScrollTarget}
+            />
           </div>
         </div>
 
