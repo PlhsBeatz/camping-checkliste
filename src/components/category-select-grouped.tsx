@@ -158,8 +158,8 @@ interface CategoryGroupedSelectFieldProps {
 }
 
 /**
- * Gruppiertes Kategorie-Dropdown mit kontrolliertem `open`, damit die Scroll-Position
- * per useLayoutEffect vor dem ersten Paint gesetzt werden kann (kein sichtbares Scrollen).
+ * Gruppiertes Kategorie-Dropdown mit kontrolliertem `open` und einmaligem Initial-Scroll
+ * beim Aufklappen (nach Radix focus/Position); kein erneutes Scrollen bei Parent-Rerenders.
  */
 export function CategoryGroupedSelectField({
   value,
@@ -172,6 +172,8 @@ export function CategoryGroupedSelectField({
 }: CategoryGroupedSelectFieldProps) {
   const [open, setOpen] = useState(false)
   const contentRef = useRef<HTMLDivElement>(null)
+  /** Nur false→true: sonst feuert der Effect bei jedem Parent-Rerender mit neuem scrollTarget-Objekt erneut und überschreibt manuelles Scrollen. */
+  const wasOpenRef = useRef(false)
 
   /**
    * Radix Select ruft beim Öffnen in einem Effect `focusSelectedItem` auf und setzt bei leerem
@@ -179,13 +181,21 @@ export function CategoryGroupedSelectField({
    * Daher erst in `useEffect` (+ kurze rAF-Serie als Absicherung für `isPositioned` / Collection).
    */
   useEffect(() => {
-    if (!open || !scrollTarget) return
+    if (!open) {
+      wasOpenRef.current = false
+      return
+    }
+
+    const justOpened = !wasOpenRef.current
+    wasOpenRef.current = true
+
+    if (!justOpened || !scrollTarget) return
 
     let cancelled = false
     let rafId = 0
     let appliedFrames = 0
     /** Mehrere Anwendungen, falls Radix in einem späteren Frame erneut `scrollTop` setzt */
-    const maxApply = 12
+    const maxApply = 10
     let totalTicks = 0
     const maxTicks = 90
 
