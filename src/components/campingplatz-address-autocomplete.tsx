@@ -30,9 +30,10 @@ type NewPlace = {
     name?: string
     authorAttributions?: Array<{ displayName?: string } | string>
   }>
-  /** Klassisches Website-Feld der JS Places API */
+  /** Offizielles Feld der neuen Place-Klasse (Maps JS API) */
+  websiteURI?: string
+  /** Legacy / REST-bezogene Schreibweisen (Abwärtskompatibilität) */
   website?: string
-  /** Bei neueren Versionen ggf. zusätzlich verfügbar */
   websiteUri?: string
   fetchFields?: (opts: { fields: string[] }) => Promise<void>
 }
@@ -96,6 +97,15 @@ function deriveOrt(comps: PlaceAddressComponent[] | undefined): string | null {
     pickComponent(comps, 'sublocality') ??
     pickComponent(comps, 'sublocality_level_1')
   )
+}
+
+function pickPlaceWebsite(place: NewPlace): string | null {
+  const candidates = [place.websiteURI, place.websiteUri, place.website]
+  for (const c of candidates) {
+    const s = c != null ? String(c).trim() : ''
+    if (s) return s
+  }
+  return null
 }
 
 type PlacePrediction = {
@@ -333,9 +343,15 @@ export function CampingplatzAddressAutocomplete(props: CampingplatzAddressAutoco
       try {
         const place = await prediction.toPlace()
         await place.fetchFields?.({
-          // Website-URL wird, sofern verfügbar, ebenfalls auf dem Place-Objekt bereitgestellt.
-          // Wir belassen das Fields-Set auf den stabilen Kernfeldern, damit keine Fehler durch unbekannte Felder entstehen.
-          fields: ['displayName', 'formattedAddress', 'location', 'addressComponents', 'photos'],
+          // `websiteURI` ist der gültige Feldname der neuen Place-Klasse (nicht `website` / `websiteUri`).
+          fields: [
+            'displayName',
+            'formattedAddress',
+            'location',
+            'addressComponents',
+            'photos',
+            'websiteURI',
+          ],
         })
         const addr = (place.formattedAddress ?? value) as string
         const loc = place.location
@@ -352,18 +368,7 @@ export function CampingplatzAddressAutocomplete(props: CampingplatzAddressAutoco
         // Im Feld immer den Namen anzeigen (nicht die Adresse): zuerst displayName, dann Text aus der Vorschlagsliste, sonst Adresse
         const displayValue = placeName ?? addr
 
-        // Website-URL optional nachladen; zuerst klassisches `website`, ggf. zusätzlich `websiteUri`.
-        let website: string | null = null
-        try {
-          await place.fetchFields?.({ fields: ['website'] })
-          website = (place as NewPlace).website ?? null
-          if (!website) {
-            await place.fetchFields?.({ fields: ['websiteUri'] })
-            website = (place as NewPlace).websiteUri ?? null
-          }
-        } catch {
-          website = null
-        }
+        const website = pickPlaceWebsite(place)
         onChange(displayValue)
         onResolve({
           address: addr,
