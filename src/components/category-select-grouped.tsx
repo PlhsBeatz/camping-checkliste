@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useLayoutEffect, useRef, useState } from 'react'
+import { useMemo, useEffect, useRef, useState } from 'react'
 import { SelectContent, SelectGroup, SelectItem, SelectLabel, Select, SelectTrigger, SelectValue } from '@/components/ui/select'
 import type { Category, MainCategory } from '@/lib/db'
 
@@ -80,23 +80,24 @@ function ensureVisible(viewport: HTMLElement, el: HTMLElement, pad: number) {
  * Scrollt den geöffneten Dropdown-Inhalt synchron (ohne smooth).
  * `contentEl` = Radix Select Content (enthält Viewport als Kind).
  */
-export function applyCategorySelectScroll(contentEl: HTMLElement, target: CategorySelectScrollTarget) {
+/** false = Ziel noch nicht im DOM (z. B. Collection noch nicht registriert) oder kein Scroll nötig. */
+export function applyCategorySelectScroll(contentEl: HTMLElement, target: CategorySelectScrollTarget): boolean {
   const viewport = contentEl.querySelector('[data-radix-select-viewport]') as HTMLElement | null
-  if (!viewport) return
+  if (!viewport) return false
 
   const pad = 8
 
   if (target.kind === 'mainHeading') {
     const heading = findHeading(viewport, target.mainTitle)
-    if (!heading) return
+    if (!heading) return false
     alignTop(viewport, heading, pad)
-    return
+    return true
   }
 
   const item = viewport.querySelector(
     `[data-category-select-id="${CSS.escape(target.categoryId)}"]`,
   ) as HTMLElement | null
-  if (!item) return
+  if (!item) return false
 
   const group = item.closest('[role="group"]')
   const heading = group?.querySelector('[data-category-select-main]') as HTMLElement | null
@@ -109,6 +110,8 @@ export function applyCategorySelectScroll(contentEl: HTMLElement, target: Catego
     const hr = heading.getBoundingClientRect()
     if (hr.top < vr.top + pad - 1) alignTop(viewport, heading, pad)
   }
+
+  return true
 }
 
 interface CategorySelectGroupedItemsProps {
@@ -170,9 +173,42 @@ export function CategoryGroupedSelectField({
   const [open, setOpen] = useState(false)
   const contentRef = useRef<HTMLDivElement>(null)
 
-  useLayoutEffect(() => {
-    if (!open || !scrollTarget || !contentRef.current) return
-    applyCategorySelectScroll(contentRef.current, scrollTarget)
+  /**
+   * Radix Select ruft beim Öffnen in einem Effect `focusSelectedItem` auf und setzt bei leerem
+   * Value `viewport.scrollTop = 0`. Das läuft nach `useLayoutEffect` und verwirft unser Scrollen.
+   * Daher erst in `useEffect` (+ kurze rAF-Serie als Absicherung für `isPositioned` / Collection).
+   */
+  useEffect(() => {
+    if (!open || !scrollTarget) return
+
+    let cancelled = false
+    let rafId = 0
+    let appliedFrames = 0
+    /** Mehrere Anwendungen, falls Radix in einem späteren Frame erneut `scrollTop` setzt */
+    const maxApply = 12
+    let totalTicks = 0
+    const maxTicks = 90
+
+    const tick = () => {
+      totalTicks++
+      if (cancelled || appliedFrames >= maxApply || totalTicks > maxTicks) return
+
+      const node = contentRef.current
+      if (node) {
+        applyCategorySelectScroll(node, scrollTarget)
+        appliedFrames++
+      }
+
+      if (!cancelled && appliedFrames < maxApply && totalTicks < maxTicks) {
+        rafId = requestAnimationFrame(tick)
+      }
+    }
+
+    rafId = requestAnimationFrame(tick)
+    return () => {
+      cancelled = true
+      cancelAnimationFrame(rafId)
+    }
   }, [open, scrollTarget])
 
   return (
