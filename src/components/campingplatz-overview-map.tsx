@@ -20,14 +20,6 @@ function buildOsmEmbedSrc(lat: number, lng: number) {
   return `https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent(bbox)}&layer=mapnik&marker=${lat},${lng}`
 }
 
-/** Regionale Übersicht, angelehnt an die frühere Embed-Ansicht */
-function buildStaticPreviewSrc(lat: number, lng: number) {
-  const zoom = 6
-  const w = 1024
-  const h = 512
-  return `https://staticmap.openstreetmap.de/staticmap.php?center=${lat},${lng}&zoom=${zoom}&size=${w}x${h}&markers=${lat},${lng},red-pushpin`
-}
-
 export function CampingplatzOverviewMap({
   lat,
   lng,
@@ -38,10 +30,8 @@ export function CampingplatzOverviewMap({
   title?: string
 }) {
   const [interactiveOpen, setInteractiveOpen] = useState(false)
-  const [previewFailed, setPreviewFailed] = useState(false)
 
   const embedSrc = useMemo(() => buildOsmEmbedSrc(lat, lng), [lat, lng])
-  const staticSrc = useMemo(() => buildStaticPreviewSrc(lat, lng), [lat, lng])
   const osmLink = `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lng}#map=7/${lat}/${lng}`
   const previewLabel = title ? `Interaktive Karte zu „${title}“ öffnen` : 'Interaktive Karte öffnen'
 
@@ -53,54 +43,50 @@ export function CampingplatzOverviewMap({
           'md:left-auto md:w-full md:translate-x-0'
         )}
       >
-        <button
-          type="button"
-          onClick={() => setInteractiveOpen(true)}
+        <div
           className={cn(
-            'group relative block w-full overflow-hidden border border-border bg-muted text-left shadow-sm outline-none',
-            'aspect-[2/1] max-md:rounded-none md:rounded-xl',
-            'transition-opacity hover:opacity-[0.97] focus-visible:ring-2 focus-visible:ring-[rgb(45,79,30)]/35 focus-visible:ring-offset-2'
+            'relative block w-full overflow-hidden border border-border bg-muted shadow-sm',
+            'aspect-[2/1] max-md:rounded-none md:rounded-xl'
           )}
-          aria-label={previewLabel}
         >
-          {!previewFailed ? (
-            // eslint-disable-next-line @next/next/no-img-element -- externes OSM-Staticmap ohne Next/Image-Domain-Setup
-            <img
-              src={staticSrc}
-              alt=""
-              loading="lazy"
-              decoding="async"
-              className="pointer-events-none h-full w-full object-cover [color-scheme:light] contrast-[0.93] saturate-[0.72]"
-              onError={() => setPreviewFailed(true)}
-            />
-          ) : (
-            <div
-              className="flex h-full min-h-[140px] flex-col items-center justify-center gap-2 bg-muted px-4 text-center"
+          {/* Gleiche OSM-Embed-URL wie im Dialog; pointer-events-none = keine Bedienung, bis zur Overlay-Schaltfläche */}
+          <iframe
+            title="Kartenvorschau"
+            src={embedSrc}
+            tabIndex={-1}
+            aria-hidden="true"
+            loading="lazy"
+            referrerPolicy="no-referrer-when-downgrade"
+            className="pointer-events-none absolute inset-0 z-0 h-full w-full border-0 [color-scheme:light] contrast-[0.93] saturate-[0.72]"
+          />
+          <button
+            type="button"
+            onClick={() => setInteractiveOpen(true)}
+            className={cn(
+              'absolute inset-0 z-10 cursor-pointer border-0 bg-transparent p-0 text-left outline-none',
+              'transition-opacity hover:bg-black/[0.03] focus-visible:ring-2 focus-visible:ring-[rgb(45,79,30)]/35 focus-visible:ring-offset-2 focus-visible:ring-offset-background'
+            )}
+            aria-label={previewLabel}
+          >
+            <span
+              className="pointer-events-none absolute bottom-2 right-2 rounded-md bg-black/55 px-2 py-1 text-[10px] font-medium text-white opacity-95 md:text-xs"
               aria-hidden
             >
-              <span className="text-xs text-muted-foreground">
-                Vorschaukarte nicht geladen. Tippen Sie hier für die interaktive Karte.
-              </span>
-            </div>
-          )}
-          <span
-            className="pointer-events-none absolute bottom-2 right-2 rounded-md bg-black/55 px-2 py-1 text-[10px] font-medium text-white opacity-95 md:text-xs"
-            aria-hidden
-          >
-            Antippen · interaktiv
-          </span>
-        </button>
+              Antippen · interaktiv
+            </span>
+          </button>
+        </div>
       </div>
 
       <p className="text-xs text-muted-foreground leading-snug">
-        Vorschau nicht interaktiv. Zum Zoomen und Verschieben die Karte antippen oder anklicken.
+        Vorschau nicht interaktiv (Verschieben/Zoomen geht nicht). Zum Bearbeiten der Karte antippen oder anklicken.
       </p>
 
       <Dialog open={interactiveOpen} onOpenChange={setInteractiveOpen}>
         <DialogContent
           className={cn(
-            'flex max-h-[min(90dvh,760px)] w-[min(96vw,920px)] max-w-none flex-col gap-3 p-4 sm:p-5',
-            'max-md:h-[min(92dvh,760px)]'
+            // Feste Höhe nötig: Sonst kollabiert flex-1 beim Kartenbereich (iframe nur absolute → ~0px).
+            'flex h-[min(90dvh,760px)] min-h-0 w-[min(96vw,920px)] max-w-none flex-col gap-3 overflow-hidden p-4 sm:p-5'
           )}
         >
           <DialogTitle className="pr-8 text-base font-semibold text-[rgb(45,79,30)]">
@@ -111,7 +97,6 @@ export function CampingplatzOverviewMap({
           </DialogDescription>
           {interactiveOpen ? (
             <div className="relative min-h-0 flex-1 overflow-hidden rounded-lg border border-border bg-muted">
-              <iframe
                 title={title ? `Lage: ${title}` : 'Interaktive Lagekarte'}
                 src={embedSrc}
                 className="absolute inset-0 h-full w-full border-0 [color-scheme:light] contrast-[0.93] saturate-[0.72]"
