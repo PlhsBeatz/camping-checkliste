@@ -745,8 +745,7 @@ export default function CampingplatzDetailPage() {
                           Lage
                         </h3>
                         <p className="text-xs text-muted-foreground leading-snug">
-                          Grober Überblick: Land und angrenzende Regionen, nur die wichtigsten
-                          Orientierungslinien – nicht für die genaue Navigation gedacht.
+                          Nur zur Orientierung (Länder, Küsten, größere Orte), nicht für die genaue Navigation gedacht.
                         </p>
                         <CampingplatzOverviewMap
                           lat={campingplatz.lat}
