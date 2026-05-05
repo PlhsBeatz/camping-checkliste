@@ -69,6 +69,10 @@ const nextConfig = {
       },
     ];
   },
+  async rewrites() {
+    // Viele Browser laden standardmäßig /favicon.ico; die echte Marke liegt als SVG vor.
+    return [{ source: '/favicon.ico', destination: '/icon.svg' }];
+  },
 };
 
 export default withSerwist(nextConfig);

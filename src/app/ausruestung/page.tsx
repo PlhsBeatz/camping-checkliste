@@ -20,6 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { CategorySelectGroupedItems } from '@/components/category-select-grouped'
 import { Checkbox } from '@/components/ui/checkbox'
 import { cn, parseWeightInput } from '@/lib/utils'
 import { MengenRegelEditor } from '@/components/mengen-regel-editor'
@@ -638,11 +639,7 @@ export default function AusruestungPage() {
                   <SelectValue placeholder="Kategorie wählen" />
                 </SelectTrigger>
                 <SelectContent>
-                  {categories.map(cat => (
-                    <SelectItem key={cat.id} value={cat.id}>
-                      {cat.hauptkategorie_titel} - {cat.titel}
-                    </SelectItem>
-                  ))}
+                  <CategorySelectGroupedItems categories={categories} mainCategories={mainCategories} />
                 </SelectContent>
               </Select>
             </div>
@@ -905,11 +902,7 @@ export default function AusruestungPage() {
                   <SelectValue placeholder="Kategorie wählen" />
                 </SelectTrigger>
                 <SelectContent>
-                  {categories.map(cat => (
-                    <SelectItem key={cat.id} value={cat.id}>
-                      {cat.hauptkategorie_titel} - {cat.titel}
-                    </SelectItem>
-                  ))}
+                  <CategorySelectGroupedItems categories={categories} mainCategories={mainCategories} />
                 </SelectContent>
               </Select>
             </div>

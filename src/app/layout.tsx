@@ -23,7 +23,7 @@ export const metadata: Metadata = {
   keywords: ['camping', 'packliste', 'offline', 'pwa'],
   authors: [{ name: 'Camping App Team' }],
   icons: {
-    icon: [{ url: '/icon?id=32', sizes: '32x32', type: 'image/png' }],
+    icon: [{ url: '/icon.svg', type: 'image/svg+xml' }],
     apple: '/apple-icon',
   },
   openGraph: {

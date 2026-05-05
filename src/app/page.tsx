@@ -132,6 +132,8 @@ function HomeContent() {
   const addDialogScrollRef = useRef<HTMLDivElement>(null)
   const [showAddSingleItemDialog, setShowAddSingleItemDialog] = useState(false)
   const [addSingleItemInitialName, setAddSingleItemInitialName] = useState('')
+  /** Hauptkategorie-Titel (Packliste) beim Öffnen „Neu“ – für Kategorie-Dropdown-Scroll. */
+  const [addSingleItemScrollMain, setAddSingleItemScrollMain] = useState<string | null>(null)
 
   const handleScrollContextChange = useCallback((ctx: { mainCategory: string; category: string } | null) => {
     addDialogScrollContextRef.current = ctx
@@ -1572,6 +1574,7 @@ function HomeContent() {
               size="sm"
               onClick={() => {
                 setAddSingleItemInitialName(searchTerm)
+                setAddSingleItemScrollMain(addDialogScrollContextRef.current?.mainCategory ?? null)
                 setShowAddSingleItemDialog(true)
               }}
             >
@@ -1609,6 +1612,7 @@ function HomeContent() {
                     className="bg-[rgb(45,79,30)] hover:bg-[rgb(45,79,30)]/90"
                     onClick={() => {
                       setAddSingleItemInitialName(searchTerm)
+                      setAddSingleItemScrollMain(addDialogScrollContextRef.current?.mainCategory ?? null)
                       setShowAddSingleItemDialog(true)
                     }}
                   >
@@ -1707,17 +1711,23 @@ function HomeContent() {
       {/* Neu anlegen (temporär oder in Ausrüstung) */}
       <AddSingleItemDialog
         open={showAddSingleItemDialog}
-        onOpenChange={setShowAddSingleItemDialog}
+        onOpenChange={(open) => {
+          setShowAddSingleItemDialog(open)
+          if (!open) setAddSingleItemScrollMain(null)
+        }}
         initialName={addSingleItemInitialName}
         vacationId={selectedVacationId || ''}
         vacationMitreisende={vacationMitreisende}
         selectedPackProfile={selectedPackProfile}
+        mainCategories={mainCategories}
+        scrollToHauptkategorieTitel={addSingleItemScrollMain}
         categories={categories}
         transportVehicles={transportVehicles}
         onSuccess={async () => {
           // Nach dem Hinzufügen (insbesondere temporär) beide Dialoge schließen:
           // den „Neu“-Dialog und die ursprüngliche Auswahl-Liste.
           setShowAddSingleItemDialog(false)
+          setAddSingleItemScrollMain(null)
           setShowAddItemDialog(false)
           if (selectedVacationId) {
             const res = await fetch(`/api/packing-items?vacationId=${selectedVacationId}`, {
