@@ -1,12 +1,15 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
 
+/** ~30 % näher als zuvor: Bounding-Box auf ca. 70 % der früheren Ausdehnung */
+const ZOOM_IN_FACTOR = 0.7
+
 function buildOsmEmbedSrc(lat: number, lng: number) {
-  const dLat = 3.4
-  const dLon = 5.2
+  const dLat = 3.4 * ZOOM_IN_FACTOR
+  const dLon = 5.2 * ZOOM_IN_FACTOR
   let minLat = lat - dLat
   let maxLat = lat + dLat
   let minLng = lng - dLon
@@ -20,6 +23,36 @@ function buildOsmEmbedSrc(lat: number, lng: number) {
   return `https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent(bbox)}&layer=mapnik&marker=${lat},${lng}`
 }
 
+const HISTORY_MAP_OVERLAY = 'campingplatzLageKarte'
+
+function useMobileMapHistorySync(open: boolean, setOpen: (open: boolean) => void) {
+  const closedByPopStateRef = useRef(false)
+
+  useEffect(() => {
+    if (!open) return
+
+    const mobile =
+      typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches
+    if (!mobile) return
+
+    window.history.pushState({ [HISTORY_MAP_OVERLAY]: true }, '')
+
+    const onPopState = () => {
+      closedByPopStateRef.current = true
+      setOpen(false)
+    }
+    window.addEventListener('popstate', onPopState)
+
+    return () => {
+      window.removeEventListener('popstate', onPopState)
+      if (!closedByPopStateRef.current) {
+        window.history.back()
+      }
+      closedByPopStateRef.current = false
+    }
+  }, [open, setOpen])
+}
+
 export function CampingplatzOverviewMap({
   lat,
   lng,
@@ -31,12 +64,13 @@ export function CampingplatzOverviewMap({
 }) {
   const [interactiveOpen, setInteractiveOpen] = useState(false)
 
+  useMobileMapHistorySync(interactiveOpen, setInteractiveOpen)
+
   const embedSrc = useMemo(() => buildOsmEmbedSrc(lat, lng), [lat, lng])
-  const osmLink = `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lng}#map=7/${lat}/${lng}`
   const previewLabel = title ? `Interaktive Karte zu „${title}“ öffnen` : 'Interaktive Karte öffnen'
 
   return (
-    <div className="space-y-2">
+    <>
       <div
         className={cn(
           'max-md:relative max-md:left-1/2 max-md:w-screen max-md:max-w-none max-md:-translate-x-1/2',
@@ -78,10 +112,6 @@ export function CampingplatzOverviewMap({
         </div>
       </div>
 
-      <p className="text-xs text-muted-foreground leading-snug">
-        Vorschau nicht interaktiv (Verschieben/Zoomen geht nicht). Zum Bearbeiten der Karte antippen oder anklicken.
-      </p>
-
       <Dialog open={interactiveOpen} onOpenChange={setInteractiveOpen}>
         <DialogContent
           className={cn(
@@ -108,15 +138,6 @@ export function CampingplatzOverviewMap({
           ) : null}
         </DialogContent>
       </Dialog>
-
-      <a
-        href={osmLink}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="inline-block text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
-      >
-        Größere Karte auf OpenStreetMap
-      </a>
-    </div>
+    </>
   )
 }

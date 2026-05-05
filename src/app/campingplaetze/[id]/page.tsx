@@ -744,9 +744,6 @@ export default function CampingplatzDetailPage() {
                           <MapPin className="h-4 w-4 shrink-0 text-[rgb(45,79,30)]" aria-hidden />
                           Lage
                         </h3>
-                        <p className="text-xs text-muted-foreground leading-snug">
-                          Nur zur Orientierung (Länder, Küsten, größere Orte), nicht für die genaue Navigation gedacht.
-                        </p>
                         <CampingplatzOverviewMap
                           lat={campingplatz.lat}
                           lng={campingplatz.lng}
