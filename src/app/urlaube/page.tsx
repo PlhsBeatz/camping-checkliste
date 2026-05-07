@@ -11,7 +11,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { useState, useEffect, useRef, useMemo } from 'react'
+import { Suspense, useState, useEffect, useRef, useMemo } from 'react'
 import { Vacation, Mitreisender, Campingplatz } from '@/lib/db'
 import type { ApiResponse } from '@/lib/api-types'
 import { ResponsiveModal } from '@/components/ui/responsive-modal'
@@ -156,7 +156,7 @@ function SortableSelectedCampingRow({ campingplatz }: { campingplatz: Campingpla
   )
 }
 
-export default function UrlaubePage() {
+function UrlaubePageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const filterCampingplatzId = searchParams.get('campingplatz')
@@ -1445,5 +1445,19 @@ export default function UrlaubePage() {
       </div>
 
     </div>
+  )
+}
+
+export default function UrlaubePage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-[50vh] flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
+          Laden…
+        </div>
+      }
+    >
+      <UrlaubePageContent />
+    </Suspense>
   )
 }
