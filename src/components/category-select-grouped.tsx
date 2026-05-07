@@ -1,7 +1,15 @@
 'use client'
 
 import { useMemo, useEffect, useRef, useState } from 'react'
-import { SelectContent, SelectGroup, SelectItem, SelectLabel, Select, SelectTrigger, SelectValue } from '@/components/ui/select'
+import {
+  SelectContentPlain,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  Select,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import type { Category, MainCategory } from '@/lib/db'
 
 export type CategoryWithMainTitle = Pick<Category, 'id' | 'titel' | 'hauptkategorie_id'> & {
@@ -79,8 +87,8 @@ function ensureVisible(viewport: HTMLElement, el: HTMLElement, pad: number) {
 /**
  * Scrollt den geöffneten Dropdown-Inhalt synchron (ohne smooth).
  * `contentEl` = Radix Select Content (enthält Viewport als Kind).
+ * @returns false, wenn das Ziel noch nicht im DOM ist (z. B. Collection noch nicht registriert).
  */
-/** false = Ziel noch nicht im DOM (z. B. Collection noch nicht registriert) oder kein Scroll nötig. */
 export function applyCategorySelectScroll(contentEl: HTMLElement, target: CategorySelectScrollTarget): boolean {
   const viewport = contentEl.querySelector('[data-radix-select-viewport]') as HTMLElement | null
   if (!viewport) return false
@@ -172,13 +180,16 @@ export function CategoryGroupedSelectField({
 }: CategoryGroupedSelectFieldProps) {
   const [open, setOpen] = useState(false)
   const contentRef = useRef<HTMLDivElement>(null)
-  /** Nur false→true: sonst feuert der Effect bei jedem Parent-Rerender mit neuem scrollTarget-Objekt erneut und überschreibt manuelles Scrollen. */
+  /** Scroll-Ziel ohne Effect-Deps (Parent übergibt oft jedes Render ein neues Objekt). */
+  const scrollTargetRef = useRef(scrollTarget ?? null)
+  scrollTargetRef.current = scrollTarget ?? null
+
+  /** Nur false→true: verhindert erneuten Initial-Scroll bei Re-Renders während Dropdown offen. */
   const wasOpenRef = useRef(false)
 
   /**
-   * Radix Select ruft beim Öffnen in einem Effect `focusSelectedItem` auf und setzt bei leerem
-   * Value `viewport.scrollTop = 0`. Das läuft nach `useLayoutEffect` und verwirft unser Scrollen.
-   * Daher erst in `useEffect` (+ kurze rAF-Serie als Absicherung für `isPositioned` / Collection).
+   * Radix Select ruft beim Öffnen `focusSelectedItem` auf (`scrollTop = 0` bei leerem Value).
+   * Nach dem Positionieren per rAF wiederherstellen – nur einmal beim Aufklappen (siehe wasOpenRef).
    */
   useEffect(() => {
     if (!open) {
@@ -186,15 +197,15 @@ export function CategoryGroupedSelectField({
       return
     }
 
+    const target = scrollTargetRef.current
     const justOpened = !wasOpenRef.current
     wasOpenRef.current = true
 
-    if (!justOpened || !scrollTarget) return
+    if (!justOpened || !target) return
 
     let cancelled = false
     let rafId = 0
     let appliedFrames = 0
-    /** Mehrere Anwendungen, falls Radix in einem späteren Frame erneut `scrollTop` setzt */
     const maxApply = 10
     let totalTicks = 0
     const maxTicks = 90
@@ -205,7 +216,7 @@ export function CategoryGroupedSelectField({
 
       const node = contentRef.current
       if (node) {
-        applyCategorySelectScroll(node, scrollTarget)
+        applyCategorySelectScroll(node, target)
         appliedFrames++
       }
 
@@ -219,16 +230,16 @@ export function CategoryGroupedSelectField({
       cancelled = true
       cancelAnimationFrame(rafId)
     }
-  }, [open, scrollTarget])
+  }, [open])
 
   return (
     <Select open={open} onOpenChange={setOpen} value={value} onValueChange={onValueChange}>
       <SelectTrigger id={triggerId}>
         <SelectValue placeholder={placeholder} />
       </SelectTrigger>
-      <SelectContent ref={contentRef}>
+      <SelectContentPlain ref={contentRef}>
         <CategorySelectGroupedItems categories={categories} mainCategories={mainCategories} />
-      </SelectContent>
+      </SelectContentPlain>
     </Select>
   )
 }
