@@ -80,7 +80,7 @@ export function CampingplatzOverviewMap({
         <div
           className={cn(
             'relative block w-full overflow-hidden border border-border bg-muted shadow-sm',
-            'aspect-[2/1] max-md:rounded-none md:rounded-xl'
+            'aspect-[2/1] max-md:rounded-none md:aspect-[3/1] md:rounded-xl'
           )}
         >
           {/* Gleiche OSM-Embed-URL wie im Dialog; pointer-events-none = keine Bedienung, bis zur Overlay-Schaltfläche */}

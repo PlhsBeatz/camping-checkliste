@@ -53,6 +53,12 @@ export function NavigationSidebar({ isOpen, onClose }: NavigationSidebarProps) {
       label: 'AUSRÜSTUNG',
       href: '/ausruestung',
       active: pathname.startsWith('/ausruestung')
+    },
+    {
+      icon: 'park',
+      label: 'CAMPINGPLÄTZE',
+      href: '/campingplaetze',
+      active: pathname.startsWith('/campingplaetze')
     }
   ]
 
@@ -66,7 +72,6 @@ export function NavigationSidebar({ isOpen, onClose }: NavigationSidebarProps) {
     { label: 'TAGS & LABELS', href: '/tags' },
     { label: 'MITREISENDE', href: '/mitreisende' },
     { label: 'TRANSPORTMITTEL', href: '/transportmittel' },
-    { label: 'CAMPINGPLÄTZE', href: '/campingplaetze' }
   ]
 
   return (
@@ -188,12 +193,12 @@ export function NavigationSidebar({ isOpen, onClose }: NavigationSidebarProps) {
                       onClose()
                     }}
                     className={cn(
-                      "block px-4 py-2 text-xs tracking-wide rounded-lg transition-colors",
+                      'block px-4 py-2 text-xs tracking-wide rounded-lg transition-colors',
                       item.disabled
-                        ? "text-gray-400 cursor-not-allowed"
-                        : pathname === item.href
-                        ? "text-[rgb(45,79,30)] font-medium bg-[rgb(250,250,249)]"
-                        : "text-gray-600 hover:bg-[rgb(250,250,249)] hover:text-gray-900"
+                        ? 'text-gray-400 cursor-not-allowed'
+                        : pathname === item.href || pathname.startsWith(`${item.href}/`)
+                          ? 'text-[rgb(45,79,30)] font-medium bg-[rgb(250,250,249)]'
+                          : 'text-gray-600 hover:bg-[rgb(250,250,249)] hover:text-gray-900'
                     )}
                   >
                     {item.label}
