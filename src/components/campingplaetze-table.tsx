@@ -20,6 +20,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Search, Filter, MoreVertical, Pencil, Trash2, Route, Globe2, PlayCircle } from 'lucide-react'
 import Image from 'next/image'
+import Link from 'next/link'
 import { cn } from '@/lib/utils'
 import { campingplatzListThumbnailSrc } from '@/lib/campingplatz-photo-url'
 import { countryFlagEmojiForLandName } from '@/lib/country-flag-emoji'
@@ -395,8 +396,18 @@ export function CampingplaetzeTable({
                               )
                             })()}
                             <div className="space-y-1 min-w-0 flex-1">
-                            <div className="flex items-center gap-2">
-                              <span className="font-semibold text-sm">{item.name}</span>
+                            <div className="flex min-w-0 flex-wrap items-center gap-2">
+                              <span className="min-w-0 truncate font-semibold text-sm">{item.name}</span>
+                              {(item.urlaube_zuordnungen ?? 0) > 0 && (
+                                <Link
+                                  href={`/urlaube?campingplatz=${encodeURIComponent(item.id)}`}
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-orange-500 px-1.5 text-[10px] font-semibold leading-none text-white tabular-nums hover:bg-orange-600"
+                                  aria-label={`${item.urlaube_zuordnungen} Urlaube anzeigen`}
+                                >
+                                  {item.urlaube_zuordnungen}
+                                </Link>
+                              )}
                               {(item.webseite || item.video_link) && (
                                 <div className="flex items-center gap-1 text-muted-foreground">
                                   {item.webseite && (
@@ -433,11 +444,6 @@ export function CampingplaetzeTable({
                             <div className="text-xs text-gray-600">
                               {item.ort}, {item.land}
                               {item.bundesland && ` (${item.bundesland})`}
-                            </div>
-                            <div className="text-[11px] text-muted-foreground tabular-nums">
-                              {(item.urlaube_zuordnungen ?? 0) === 1
-                                ? '1 Urlaub'
-                                : `${item.urlaube_zuordnungen ?? 0} Urlaube`}
                             </div>
                             {route && (
                               <div className="flex items-center gap-1 text-xs text-gray-600 mt-0.5">

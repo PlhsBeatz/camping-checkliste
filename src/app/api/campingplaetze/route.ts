@@ -13,6 +13,7 @@ import {
   createCampingplatzFoto,
   getCampingPhotosR2,
   deleteRoutesForCampingplatz,
+  getUrlaubCountForCampingplatz,
   CampingplatzTyp,
 } from '@/lib/db'
 import { requireAuth, requireAdmin } from '@/lib/api-auth'
@@ -110,7 +111,9 @@ export async function POST(request: NextRequest) {
     }
 
     const withJoin = await getCampingplatzById(db, campingplatz.id)
-    return NextResponse.json({ success: true, data: withJoin ?? campingplatz }, { status: 201 })
+    const cp = withJoin ?? campingplatz
+    const urlaube_zuordnungen = await getUrlaubCountForCampingplatz(db, cp.id)
+    return NextResponse.json({ success: true, data: { ...cp, urlaube_zuordnungen } }, { status: 201 })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error)
     return NextResponse.json({ success: false, error: message }, { status: 500 })
@@ -198,7 +201,9 @@ export async function PUT(request: NextRequest) {
     }
 
     const withJoin = await getCampingplatzById(db, updated.id)
-    return NextResponse.json({ success: true, data: withJoin ?? updated })
+    const cp = withJoin ?? updated
+    const urlaube_zuordnungen = await getUrlaubCountForCampingplatz(db, cp.id)
+    return NextResponse.json({ success: true, data: { ...cp, urlaube_zuordnungen } })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error)
     return NextResponse.json({ success: false, error: message }, { status: 500 })

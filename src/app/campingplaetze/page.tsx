@@ -268,7 +268,13 @@ function CampingplaetzePageContent() {
         onSaved={(saved) => {
           setItems((prev) => {
             const others = prev.filter((c) => c.id !== saved.id)
-            return [...others, saved].sort((a, b) => a.name.localeCompare(b.name))
+            const prevMatch = prev.find((c) => c.id === saved.id)
+            const merged: Campingplatz = {
+              ...saved,
+              urlaube_zuordnungen:
+                saved.urlaube_zuordnungen ?? prevMatch?.urlaube_zuordnungen ?? 0,
+            }
+            return [...others, merged].sort((a, b) => a.name.localeCompare(b.name))
           })
         }}
         onRefreshCampingplatz={refreshCampingplatzInList}

@@ -640,35 +640,38 @@ export default function CampingplatzDetailPage() {
                     </span>
                   )}
 
-                  {routeInfo && (
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Route className="h-4 w-4 text-[rgb(45,79,30)]" />
-                      <span>
-                        {Math.round(routeInfo.distanceKm)} km
-                        {(() => {
-                          const hours = Math.floor(routeInfo.durationMinutes / 60)
-                          const minutes = Math.round(routeInfo.durationMinutes % 60)
-                          const parts: string[] = []
-                          if (hours > 0) parts.push(`${hours} h`)
-                          if (minutes > 0 || hours === 0) parts.push(`${minutes} min`)
-                          return ` · ${parts.join(' ')}`
-                        })()}{' '}
-                        von der Heimatadresse
-                      </span>
+                  {(routeInfo != null || (campingplatz.urlaube_zuordnungen ?? 0) > 0) && (
+                    <div className="flex w-full items-center justify-between gap-3 text-sm">
+                      <div className="flex min-w-0 flex-1 items-center gap-2 text-muted-foreground">
+                        {routeInfo && (
+                          <>
+                            <Route className="h-4 w-4 shrink-0 text-[rgb(45,79,30)]" aria-hidden />
+                            <span>
+                              {Math.round(routeInfo.distanceKm)} km
+                              {(() => {
+                                const hours = Math.floor(routeInfo.durationMinutes / 60)
+                                const minutes = Math.round(routeInfo.durationMinutes % 60)
+                                const parts: string[] = []
+                                if (hours > 0) parts.push(`${hours} h`)
+                                if (minutes > 0 || hours === 0) parts.push(`${minutes} min`)
+                                return ` · ${parts.join(' ')}`
+                              })()}{' '}
+                              von der Heimatadresse
+                            </span>
+                          </>
+                        )}
+                      </div>
+                      {(campingplatz.urlaube_zuordnungen ?? 0) > 0 && (
+                        <Link
+                          href={`/urlaube?campingplatz=${encodeURIComponent(campingplatz.id)}`}
+                          className="inline-flex h-7 min-w-7 shrink-0 items-center justify-center rounded-full bg-orange-500 px-2 text-xs font-semibold tabular-nums text-white hover:bg-orange-600"
+                          aria-label={`${campingplatz.urlaube_zuordnungen} Urlaube anzeigen`}
+                        >
+                          {campingplatz.urlaube_zuordnungen}
+                        </Link>
+                      )}
                     </div>
                   )}
-
-                  <div className="text-sm">
-                    <Link
-                      href={`/urlaube?campingplatz=${encodeURIComponent(campingplatz.id)}`}
-                      className="text-[rgb(45,79,30)] underline underline-offset-2 hover:opacity-90"
-                    >
-                      {(campingplatz.urlaube_zuordnungen ?? 0) === 1
-                        ? '1 Urlaub'
-                        : `${campingplatz.urlaube_zuordnungen ?? 0} Urlaube`}
-                    </Link>
-                    <span className="text-muted-foreground"> · in Urlaubsplanungen</span>
-                  </div>
 
                   <section className="space-y-2">
                     <h2 className="text-sm font-semibold text-[rgb(45,79,30)]">Fotos</h2>

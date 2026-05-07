@@ -3185,10 +3185,11 @@ export async function getUrlaubCountByCampingplatzIds(
     const placeholders = ids.map(() => '?').join(',')
     const result = await db
       .prepare(
-        `SELECT campingplatz_id AS id, COUNT(DISTINCT urlaub_id) AS c
-         FROM urlaub_campingplaetze
-         WHERE campingplatz_id IN (${placeholders})
-         GROUP BY campingplatz_id`
+        `SELECT uc.campingplatz_id AS id, COUNT(DISTINCT uc.urlaub_id) AS c
+         FROM urlaub_campingplaetze uc
+         INNER JOIN urlaube u ON u.id = uc.urlaub_id
+         WHERE uc.campingplatz_id IN (${placeholders})
+         GROUP BY uc.campingplatz_id`
       )
       .bind(...ids)
       .all<{ id: string; c: number }>()
@@ -3210,7 +3211,10 @@ export async function getUrlaubCountForCampingplatz(
   try {
     const row = await db
       .prepare(
-        `SELECT COUNT(DISTINCT urlaub_id) AS c FROM urlaub_campingplaetze WHERE campingplatz_id = ?`
+        `SELECT COUNT(DISTINCT uc.urlaub_id) AS c
+         FROM urlaub_campingplaetze uc
+         INNER JOIN urlaube u ON u.id = uc.urlaub_id
+         WHERE uc.campingplatz_id = ?`
       )
       .bind(campingplatzId)
       .first<{ c: number }>()
