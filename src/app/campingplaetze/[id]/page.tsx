@@ -658,6 +658,18 @@ export default function CampingplatzDetailPage() {
                     </div>
                   )}
 
+                  <div className="text-sm">
+                    <Link
+                      href={`/urlaube?campingplatz=${encodeURIComponent(campingplatz.id)}`}
+                      className="text-[rgb(45,79,30)] underline underline-offset-2 hover:opacity-90"
+                    >
+                      {(campingplatz.urlaube_zuordnungen ?? 0) === 1
+                        ? '1 Urlaub'
+                        : `${campingplatz.urlaube_zuordnungen ?? 0} Urlaube`}
+                    </Link>
+                    <span className="text-muted-foreground"> · in Urlaubsplanungen</span>
+                  </div>
+
                   <section className="space-y-2">
                     <h2 className="text-sm font-semibold text-[rgb(45,79,30)]">Fotos</h2>
                     {fotos.length === 0 && !campingplatz.video_link ? (

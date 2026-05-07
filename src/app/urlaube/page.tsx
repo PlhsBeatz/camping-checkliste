@@ -11,7 +11,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { Vacation, Mitreisender, Campingplatz } from '@/lib/db'
 import type { ApiResponse } from '@/lib/api-types'
 import { ResponsiveModal } from '@/components/ui/responsive-modal'
@@ -20,7 +20,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
 import { campingplatzListThumbnailSrc } from '@/lib/campingplatz-photo-url'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { getCachedVacations, getCachedCampingplaetze } from '@/lib/offline-sync'
 import { cacheVacations, cacheCampingplaetze } from '@/lib/offline-db'
 import { useReconnectRefetch } from '@/hooks/use-reconnect-refetch'
@@ -158,6 +158,8 @@ function SortableSelectedCampingRow({ campingplatz }: { campingplatz: Campingpla
 
 export default function UrlaubePage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const filterCampingplatzId = searchParams.get('campingplatz')
   const isSmallViewport = useIsSmallViewport()
   const [showNavSidebar, setShowNavSidebar] = useState(false)
   const [vacations, setVacations] = useState<Vacation[]>([])
@@ -274,9 +276,11 @@ export default function UrlaubePage() {
           const data = (await res.json()) as ApiResponse<Campingplatz[]>
           if (data.success && data.data) {
             map[v.id] = data.data
+          } else {
+            map[v.id] = []
           }
         } catch {
-          // ignorieren
+          map[v.id] = []
         }
       }
       setVacationCampingplaetze(map)
@@ -331,21 +335,38 @@ export default function UrlaubePage() {
     }
   }, [vacationCampingplaetze, routeInfo])
 
-  // Sortieren nach Startdatum (chronologisch), vergangene ausblenden (Enddatum > 7 Tage zurück)
-  const displayedVacations = (() => {
+  const campingAssignmentsReady =
+    vacations.length === 0 ||
+    vacations.every((v) => vacationCampingplaetze[v.id] !== undefined)
+
+  // Sortieren nach Startdatum; optional nur Urlaube mit gewähltem Campingplatz (alle Zeiträume)
+  const displayedVacations = useMemo(() => {
+    const sorted = [...vacations].sort(
+      (a, b) => new Date(a.startdatum).getTime() - new Date(b.startdatum).getTime()
+    )
+
+    if (filterCampingplatzId) {
+      return sorted.filter((v) =>
+        (vacationCampingplaetze[v.id] ?? []).some((c) => c.id === filterCampingplatzId)
+      )
+    }
+
     const today = new Date()
     today.setHours(0, 0, 0, 0)
     const cutoffDate = new Date(today)
     cutoffDate.setDate(cutoffDate.getDate() - 7)
 
-    return [...vacations]
-      .filter(v => {
-        const endDate = new Date(v.enddatum)
-        endDate.setHours(0, 0, 0, 0)
-        return endDate >= cutoffDate
-      })
-      .sort((a, b) => new Date(a.startdatum).getTime() - new Date(b.startdatum).getTime())
-  })()
+    return sorted.filter((v) => {
+      const endDate = new Date(v.enddatum)
+      endDate.setHours(0, 0, 0, 0)
+      return endDate >= cutoffDate
+    })
+  }, [vacations, vacationCampingplaetze, filterCampingplatzId])
+
+  const filterCampingplatzName = useMemo(() => {
+    if (!filterCampingplatzId) return null
+    return allCampingplaetze.find((c) => c.id === filterCampingplatzId)?.name ?? null
+  }, [filterCampingplatzId, allCampingplaetze])
 
   const handleCreateVacation = async () => {
     if (!newVacationForm.titel || !newVacationForm.startdatum || !newVacationForm.enddatum) {
@@ -1169,11 +1190,39 @@ export default function UrlaubePage() {
 
           {/* Vacations List */}
           <div className="grid gap-4 min-w-0">
-            {displayedVacations.length === 0 ? (
+            {filterCampingplatzId && (
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2 text-sm">
+                <span className="min-w-0 text-muted-foreground">
+                  Urlaube mit{' '}
+                  <span className="font-medium text-foreground">
+                    {filterCampingplatzName ?? 'diesem Campingplatz'}
+                  </span>
+                </span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="shrink-0 bg-white"
+                  onClick={() => router.replace('/urlaube')}
+                >
+                  Alle Urlaube
+                </Button>
+              </div>
+            )}
+
+            {filterCampingplatzId && !campingAssignmentsReady ? (
+              <Card>
+                <CardContent className="py-8 text-center text-sm text-muted-foreground">
+                  Campingzuordnungen werden geladen…
+                </CardContent>
+              </Card>
+            ) : displayedVacations.length === 0 ? (
               <Card>
                 <CardContent className="pt-6">
-                  <p className="text-muted-foreground text-center">
-                    Keine Urlaube vorhanden. Erstellen Sie einen neuen Urlaub!
+                  <p className="text-center text-muted-foreground">
+                    {filterCampingplatzId
+                      ? 'Keine Urlaube mit diesem Campingplatz.'
+                      : 'Keine Urlaube vorhanden. Erstellen Sie einen neuen Urlaub!'}
                   </p>
                 </CardContent>
               </Card>

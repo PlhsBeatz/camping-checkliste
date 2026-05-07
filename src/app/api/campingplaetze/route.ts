@@ -3,6 +3,7 @@ import {
   CloudflareEnv,
   getDB,
   getCampingplaetze,
+  getUrlaubCountByCampingplatzIds,
   createCampingplatz,
   updateCampingplatz,
   deleteCampingplatz,
@@ -26,7 +27,13 @@ export async function GET(request: NextRequest) {
     const db = getDB(env)
 
     const campingplaetze = await getCampingplaetze(db, { includeArchived })
-    return NextResponse.json({ success: true, data: campingplaetze })
+    const ids = campingplaetze.map((c) => c.id)
+    const counts = await getUrlaubCountByCampingplatzIds(db, ids)
+    const data = campingplaetze.map((c) => ({
+      ...c,
+      urlaube_zuordnungen: counts[c.id] ?? 0,
+    }))
+    return NextResponse.json({ success: true, data })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error)
     return NextResponse.json({ success: false, error: message }, { status: 500 })

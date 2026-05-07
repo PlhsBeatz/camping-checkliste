@@ -209,6 +209,8 @@ export interface Campingplatz {
   cover_foto_id?: string | null
   cover_r2_object_key?: string | null
   cover_google_photo_name?: string | null
+  /** Anzahl Urlaube mit diesem Campingplatz (API; Junction urlaub_campingplaetze) */
+  urlaube_zuordnungen?: number
 }
 
 export interface CampingplatzRouteCacheEntry {
@@ -3170,6 +3172,52 @@ export async function getCampingplaetze(
   } catch (error) {
     console.error('Error fetching campingplaetze:', error)
     return []
+  }
+}
+
+/** Anzahl Urlaube je Campingplatz (DISTINCT urlaub_id), inkl. beliebiger Zuordnungen */
+export async function getUrlaubCountByCampingplatzIds(
+  db: D1Database,
+  ids: string[]
+): Promise<Record<string, number>> {
+  if (ids.length === 0) return {}
+  try {
+    const placeholders = ids.map(() => '?').join(',')
+    const result = await db
+      .prepare(
+        `SELECT campingplatz_id AS id, COUNT(DISTINCT urlaub_id) AS c
+         FROM urlaub_campingplaetze
+         WHERE campingplatz_id IN (${placeholders})
+         GROUP BY campingplatz_id`
+      )
+      .bind(...ids)
+      .all<{ id: string; c: number }>()
+    const map: Record<string, number> = {}
+    for (const row of result.results || []) {
+      map[row.id] = row.c
+    }
+    return map
+  } catch (error) {
+    console.error('Error counting urlaube per campingplatz:', error)
+    return {}
+  }
+}
+
+export async function getUrlaubCountForCampingplatz(
+  db: D1Database,
+  campingplatzId: string
+): Promise<number> {
+  try {
+    const row = await db
+      .prepare(
+        `SELECT COUNT(DISTINCT urlaub_id) AS c FROM urlaub_campingplaetze WHERE campingplatz_id = ?`
+      )
+      .bind(campingplatzId)
+      .first<{ c: number }>()
+    return row?.c ?? 0
+  } catch (error) {
+    console.error('Error counting urlaube for campingplatz:', error)
+    return 0
   }
 }
 

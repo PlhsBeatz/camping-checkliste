@@ -434,6 +434,11 @@ export function CampingplaetzeTable({
                               {item.ort}, {item.land}
                               {item.bundesland && ` (${item.bundesland})`}
                             </div>
+                            <div className="text-[11px] text-muted-foreground tabular-nums">
+                              {(item.urlaube_zuordnungen ?? 0) === 1
+                                ? '1 Urlaub'
+                                : `${item.urlaube_zuordnungen ?? 0} Urlaube`}
+                            </div>
                             {route && (
                               <div className="flex items-center gap-1 text-xs text-gray-600 mt-0.5">
                                 <Route className="h-3.5 w-3.5 text-[rgb(45,79,30)]" />

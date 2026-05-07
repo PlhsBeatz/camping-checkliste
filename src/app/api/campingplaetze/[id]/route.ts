@@ -4,6 +4,7 @@ import {
   getDB,
   getCampingplatzById,
   getCampingplatzFotos,
+  getUrlaubCountForCampingplatz,
 } from '@/lib/db'
 import { requireAuth } from '@/lib/api-auth'
 
@@ -28,7 +29,14 @@ export async function GET(
     }
 
     const fotos = await getCampingplatzFotos(db, id)
-    return NextResponse.json({ success: true, data: { campingplatz, fotos } })
+    const urlaube_zuordnungen = await getUrlaubCountForCampingplatz(db, id)
+    return NextResponse.json({
+      success: true,
+      data: {
+        campingplatz: { ...campingplatz, urlaube_zuordnungen },
+        fotos,
+      },
+    })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error)
     return NextResponse.json({ success: false, error: message }, { status: 500 })
