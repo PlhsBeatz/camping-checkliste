@@ -27,6 +27,15 @@ import {
 import { Suspense, useState, useEffect, useRef, useMemo } from 'react'
 import { Vacation, Mitreisender, Campingplatz } from '@/lib/db'
 import type { ApiResponse } from '@/lib/api-types'
+
+/** Maximale gleichzeitige Routen-API-Anfragen (Campingplatz → Entfernung/Dauer). */
+const ROUTE_INFO_FETCH_CONCURRENCY = 6
+
+type CampingplatzRouteInfo = {
+  distanceKm: number
+  durationMinutes: number
+  provider: string
+}
 import { ResponsiveModal } from '@/components/ui/responsive-modal'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Input } from '@/components/ui/input'
@@ -175,11 +184,6 @@ function UrlaubePageContent() {
     filterCampingplatzId ? 'archiv' : 'aktuell'
   )
   const isSmallViewport = useIsSmallViewport()
-
-  // Beim Filtern nach Campingplatz alle Zuordnungen wie früher zeigen (Archiv); bei Client-Navigation zum gleichen Muster
-  useEffect(() => {
-    if (filterCampingplatzId) setVacationsViewMode('archiv')
-  }, [filterCampingplatzId])
   const [showNavSidebar, setShowNavSidebar] = useState(false)
   const [vacations, setVacations] = useState<Vacation[]>([])
   const [isLoading, setIsLoading] = useState(false)
@@ -194,9 +198,9 @@ function UrlaubePageContent() {
   const [allCampingplaetze, setAllCampingplaetze] = useState<Campingplatz[]>([])
   const [campingSelectionIds, setCampingSelectionIds] = useState<string[]>([])
   const [campingSearchOpen, setCampingSearchOpen] = useState(false)
-  const [routeInfo, setRouteInfo] = useState<
-    Record<string, { distanceKm: number; durationMinutes: number; provider: string }>
-  >({})
+  const [routeInfo, setRouteInfo] = useState<Record<string, CampingplatzRouteInfo>>({})
+  const routeInfoRef = useRef(routeInfo)
+  routeInfoRef.current = routeInfo
   const [homeCoords, setHomeCoords] = useState<{ lat: number; lng: number } | null>(null)
   const [homeCoordsLoaded, setHomeCoordsLoaded] = useState(false)
   
@@ -327,13 +331,17 @@ function UrlaubePageContent() {
 
     const loadRoutes = async () => {
       const seen = new Set<string>()
-      const allCampingForVacations = Object.values(vacationCampingplaetze).flat()
-      for (const cp of allCampingForVacations) {
-        if (aborted) break
+      const pending: Campingplatz[] = []
+      for (const cp of Object.values(vacationCampingplaetze).flat()) {
         if (!cp.lat || !cp.lng) continue
         if (seen.has(cp.id)) continue
         seen.add(cp.id)
-        if (routeInfo[cp.id]) continue
+        if (routeInfoRef.current[cp.id]) continue
+        pending.push(cp)
+      }
+
+      const fetchOne = async (cp: Campingplatz) => {
+        if (aborted) return
         try {
           const res = await fetch('/api/routes/campingplatz', {
             method: 'POST',
@@ -341,20 +349,28 @@ function UrlaubePageContent() {
             body: JSON.stringify({ campingplatzId: cp.id }),
             signal: controller.signal,
           })
-          if (!res.ok) continue
+          if (!res.ok || aborted) return
           const data = (await res.json()) as {
             success?: boolean
-            data?: { distanceKm: number; durationMinutes: number; provider: string }
+            data?: CampingplatzRouteInfo
           }
-          if (data.success && data.data && !aborted) {
-            setRouteInfo((prev) => ({
-              ...prev,
-              [cp.id]: data.data!,
-            }))
-          }
+          if (!data.success || !data.data) return
+          setRouteInfo((prev) =>
+            prev[cp.id]
+              ? prev
+              : {
+                  ...prev,
+                  [cp.id]: data.data!,
+                }
+          )
         } catch {
           if (aborted) return
         }
+      }
+
+      for (let i = 0; i < pending.length; i += ROUTE_INFO_FETCH_CONCURRENCY) {
+        if (aborted) break
+        await Promise.all(pending.slice(i, i + ROUTE_INFO_FETCH_CONCURRENCY).map((cp) => fetchOne(cp)))
       }
     }
 
@@ -363,7 +379,7 @@ function UrlaubePageContent() {
       aborted = true
       controller.abort()
     }
-  }, [vacationCampingplaetze, routeInfo])
+  }, [vacationCampingplaetze])
 
   const campingAssignmentsReady =
     vacations.length === 0 ||
@@ -1532,6 +1548,12 @@ function UrlaubePageContent() {
   )
 }
 
+/** Remount wenn sich die Suchparameter ändern, damit clientseitiges Navigieren /urlaube ↔ ?campingplatz= nie veralteten View-Modus übernimmt. */
+function UrlaubePageGate() {
+  const searchParams = useSearchParams()
+  return <UrlaubePageContent key={searchParams.toString()} />
+}
+
 export default function UrlaubePage() {
   return (
     <Suspense
@@ -1541,7 +1563,7 @@ export default function UrlaubePage() {
         </div>
       }
     >
-      <UrlaubePageContent />
+      <UrlaubePageGate />
     </Suspense>
   )
 }

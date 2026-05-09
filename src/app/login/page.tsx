@@ -19,11 +19,20 @@ const schema = z.object({
 
 type FormData = z.infer<typeof schema>
 
+/** Nur interne Navigation (open-redirect-Schutz); Query-Strings bleiben erhalten. */
+function resolveLoginCallback(candidate: string | null): string {
+  const fallback = '/'
+  if (!candidate) return fallback
+  const trimmed = candidate.trim()
+  if (!trimmed.startsWith('/') || trimmed.startsWith('//')) return fallback
+  return trimmed
+}
+
 function LoginForm() {
   const router = useRouter()
   const { refetch } = useAuth()
   const searchParams = useSearchParams()
-  const callbackUrl = searchParams.get('callbackUrl') ?? '/'
+  const callbackUrl = resolveLoginCallback(searchParams.get('callbackUrl'))
   const [error, setError] = useState<string | null>(null)
 
   const {
