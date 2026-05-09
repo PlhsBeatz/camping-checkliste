@@ -1,6 +1,9 @@
 import { ImageResponse } from 'next/og'
 import { CampingAppIcon } from '@/components/camping-app-icon'
 
+/** Edge vermeidet einen Windows-Buildfehler (Invalid URL in @vercel/og bei Node-Prerender). */
+export const runtime = 'edge'
+
 export const size = { width: 180, height: 180 }
 export const contentType = 'image/png'
 

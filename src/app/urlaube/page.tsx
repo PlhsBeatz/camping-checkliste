@@ -9,6 +9,9 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Suspense, useState, useEffect, useRef, useMemo } from 'react'
@@ -160,7 +163,15 @@ function UrlaubePageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const filterCampingplatzId = searchParams.get('campingplatz')
+  const [vacationsViewMode, setVacationsViewMode] = useState<'aktuell' | 'archiv'>(() =>
+    filterCampingplatzId ? 'archiv' : 'aktuell'
+  )
   const isSmallViewport = useIsSmallViewport()
+
+  // Beim Filtern nach Campingplatz alle Zuordnungen wie früher zeigen (Archiv); bei Client-Navigation zum gleichen Muster
+  useEffect(() => {
+    if (filterCampingplatzId) setVacationsViewMode('archiv')
+  }, [filterCampingplatzId])
   const [showNavSidebar, setShowNavSidebar] = useState(false)
   const [vacations, setVacations] = useState<Vacation[]>([])
   const [isLoading, setIsLoading] = useState(false)
@@ -339,14 +350,12 @@ function UrlaubePageContent() {
     vacations.length === 0 ||
     vacations.every((v) => vacationCampingplaetze[v.id] !== undefined)
 
-  // Sortieren nach Startdatum; optional nur Urlaube mit gewähltem Campingplatz (alle Zeiträume)
+  // Sortierung: Hauptliste „Aktuell“ aufsteigend nach Start; Archiv und Campingplatz-Filtern immer absteigend.
   const displayedVacations = useMemo(() => {
-    const sorted = [...vacations].sort(
-      (a, b) => new Date(a.startdatum).getTime() - new Date(b.startdatum).getTime()
-    )
+    let list = [...vacations]
 
     if (filterCampingplatzId) {
-      return sorted.filter((v) =>
+      list = list.filter((v) =>
         (vacationCampingplaetze[v.id] ?? []).some((c) => c.id === filterCampingplatzId)
       )
     }
@@ -356,12 +365,27 @@ function UrlaubePageContent() {
     const cutoffDate = new Date(today)
     cutoffDate.setDate(cutoffDate.getDate() - 7)
 
-    return sorted.filter((v) => {
-      const endDate = new Date(v.enddatum)
-      endDate.setHours(0, 0, 0, 0)
-      return endDate >= cutoffDate
-    })
-  }, [vacations, vacationCampingplaetze, filterCampingplatzId])
+    if (vacationsViewMode === 'aktuell') {
+      list = list.filter((v) => {
+        const endDate = new Date(v.enddatum)
+        endDate.setHours(0, 0, 0, 0)
+        return endDate >= cutoffDate
+      })
+    }
+
+    const byStartAsc = (a: Vacation, b: Vacation) =>
+      new Date(a.startdatum).getTime() - new Date(b.startdatum).getTime()
+    const byStartDesc = (a: Vacation, b: Vacation) =>
+      new Date(b.startdatum).getTime() - new Date(a.startdatum).getTime()
+
+    if (filterCampingplatzId || vacationsViewMode === 'archiv') {
+      list.sort(byStartDesc)
+    } else {
+      list.sort(byStartAsc)
+    }
+
+    return list
+  }, [vacations, vacationCampingplaetze, filterCampingplatzId, vacationsViewMode])
 
   const filterCampingplatzName = useMemo(() => {
     if (!filterCampingplatzId) return null
@@ -638,24 +662,60 @@ function UrlaubePageContent() {
       <div className={cn('flex-1 transition-all duration-300 min-w-0', 'lg:ml-[280px]')}>
         <div className="container mx-auto p-4 md:p-6 space-y-6 max-w-full">
           {/* Header - Sticky */}
-          <div className="sticky top-0 z-10 flex items-center justify-between bg-white shadow pb-4 -mx-4 px-4 -mt-4 pt-4 md:-mx-6 md:px-6 md:-mt-6 md:pt-6 md:pb-4">
-            <div className="flex items-center gap-4">
+          <div className="sticky top-0 z-10 flex items-center justify-between gap-2 bg-white shadow pb-4 -mx-4 px-4 -mt-4 pt-4 md:-mx-6 md:px-6 md:-mt-6 md:pt-6 md:pb-4">
+            <div className="flex items-center gap-4 min-w-0">
               {/* Mobile Menu Toggle */}
               <Button
                 variant="outline"
                 size="icon"
                 onClick={() => setShowNavSidebar(true)}
-                className="lg:hidden"
+                className="lg:hidden shrink-0"
               >
                 <Menu className="h-5 w-5" />
               </Button>
               
-              <div>
+              <div className="min-w-0">
                 <h1 className="text-lg sm:text-xl font-bold tracking-tight text-[rgb(45,79,30)]">
                   Meine Urlaube
                 </h1>
+                <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                  {vacationsViewMode === 'aktuell'
+                    ? filterCampingplatzId
+                      ? 'Zukünftige und bis zu 7 Tage zurück (neuestes Datum zuerst)'
+                      : 'Zukünftige und bis zu 7 Tage zurückliegende Reisen'
+                    : filterCampingplatzId
+                      ? 'Alle Zuordnungen zu diesem Platz (neuestes Datum zuerst)'
+                      : 'Alle Urlaube (neuestes Datum zuerst)'}
+                </p>
               </div>
             </div>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="shrink-0"
+                  aria-label="Anzeige der Urlaubsliste"
+                >
+                  <MoreVertical className="h-5 w-5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuLabel className="font-normal text-xs text-muted-foreground">
+                  Anzeige
+                </DropdownMenuLabel>
+                <DropdownMenuRadioGroup
+                  value={vacationsViewMode}
+                  onValueChange={(v) => setVacationsViewMode(v as 'aktuell' | 'archiv')}
+                >
+                  <DropdownMenuRadioItem value="aktuell">
+                    Aktuelle Ansicht
+                  </DropdownMenuRadioItem>
+                  <DropdownMenuRadioItem value="archiv">Urlaubsarchiv</DropdownMenuRadioItem>
+                </DropdownMenuRadioGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
 
           {/* Dialog für Neuer Urlaub - Drawer auf Mobile */}
