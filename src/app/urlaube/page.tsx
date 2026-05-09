@@ -4,14 +4,24 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { NavigationSidebar } from '@/components/navigation-sidebar'
 import { MitreisendeManager } from '@/components/mitreisende-manager'
-import { Plus, Menu, MoreVertical, Pencil, Trash2, GripVertical, Route, Settings } from 'lucide-react'
+import {
+  Archive,
+  Plus,
+  Menu,
+  MoreVertical,
+  Pencil,
+  Trash2,
+  GripVertical,
+  Route,
+  Settings,
+  Calendar as CalendarIcon,
+  ChevronLeft,
+  ChevronRight,
+} from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Suspense, useState, useEffect, useRef, useMemo } from 'react'
@@ -29,10 +39,8 @@ import { cacheVacations, cacheCampingplaetze } from '@/lib/offline-db'
 import { useReconnectRefetch } from '@/hooks/use-reconnect-refetch'
 import { format, isSameMonth, isSameYear } from 'date-fns'
 import { de } from 'date-fns/locale'
-import { Calendar as CalendarIcon } from 'lucide-react'
 import type { DateRange } from 'react-day-picker'
 import { useNavigation, type CaptionProps } from 'react-day-picker'
-import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { Calendar } from '@/components/ui/calendar'
 import { buttonVariants } from '@/components/ui/button'
 import {
@@ -662,7 +670,7 @@ function UrlaubePageContent() {
       <div className={cn('flex-1 transition-all duration-300 min-w-0', 'lg:ml-[280px]')}>
         <div className="container mx-auto p-4 md:p-6 space-y-6 max-w-full">
           {/* Header - Sticky */}
-          <div className="sticky top-0 z-10 flex items-center justify-between gap-2 bg-white shadow pb-4 -mx-4 px-4 -mt-4 pt-4 md:-mx-6 md:px-6 md:-mt-6 md:pt-6 md:pb-4">
+          <div className="sticky top-0 z-10 flex items-center justify-between gap-3 bg-white shadow pb-4 -mx-4 px-4 -mt-4 pt-4 md:-mx-6 md:px-6 md:-mt-6 md:pt-6 md:pb-4">
             <div className="flex items-center gap-4 min-w-0">
               {/* Mobile Menu Toggle */}
               <Button
@@ -693,27 +701,32 @@ function UrlaubePageContent() {
               <DropdownMenuTrigger asChild>
                 <Button
                   type="button"
-                  variant="outline"
+                  variant="ghost"
                   size="icon"
-                  className="shrink-0"
-                  aria-label="Anzeige der Urlaubsliste"
+                  className="h-9 w-9 shrink-0 rounded-full border-0 bg-transparent text-foreground shadow-none hover:bg-neutral-100 focus-visible:ring-2 focus-visible:ring-[rgb(45,79,30)]/30"
+                  aria-label="Weitere Aktionen"
                 >
                   <MoreVertical className="h-5 w-5" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuLabel className="font-normal text-xs text-muted-foreground">
-                  Anzeige
-                </DropdownMenuLabel>
-                <DropdownMenuRadioGroup
-                  value={vacationsViewMode}
-                  onValueChange={(v) => setVacationsViewMode(v as 'aktuell' | 'archiv')}
-                >
-                  <DropdownMenuRadioItem value="aktuell">
-                    Aktuelle Ansicht
-                  </DropdownMenuRadioItem>
-                  <DropdownMenuRadioItem value="archiv">Urlaubsarchiv</DropdownMenuRadioItem>
-                </DropdownMenuRadioGroup>
+              <DropdownMenuContent align="end" className="min-w-[10rem]">
+                {vacationsViewMode === 'archiv' ? (
+                  <DropdownMenuItem
+                    className="cursor-pointer gap-2"
+                    onSelect={() => setVacationsViewMode('aktuell')}
+                  >
+                    <CalendarIcon className="h-4 w-4 shrink-0" />
+                    Nächste Urlaube
+                  </DropdownMenuItem>
+                ) : (
+                  <DropdownMenuItem
+                    className="cursor-pointer gap-2"
+                    onSelect={() => setVacationsViewMode('archiv')}
+                  >
+                    <Archive className="h-4 w-4 shrink-0" />
+                    Urlaubsarchiv
+                  </DropdownMenuItem>
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
