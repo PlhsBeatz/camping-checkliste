@@ -3696,6 +3696,50 @@ export async function getCampingplaetzeForVacation(
   }
 }
 
+/** Alle Campingplätze für mehrere Urlaube in wenigen Datenbank-Runden (eine Query pro Chunk). */
+export async function getCampingplaetzeForVacationsBatch(
+  db: D1Database,
+  vacationIds: string[]
+): Promise<Record<string, Campingplatz[]>> {
+  const out: Record<string, Campingplatz[]> = {}
+  for (const id of vacationIds) {
+    out[id] = []
+  }
+  if (vacationIds.length === 0) return out
+
+  const CHUNK = 400
+
+  try {
+    for (let i = 0; i < vacationIds.length; i += CHUNK) {
+      const chunk = vacationIds.slice(i, i + CHUNK)
+      const placeholders = chunk.map(() => '?').join(',')
+      const sql = `SELECT uc.urlaub_id AS urlaub_id, c.*, cf.id AS cover_foto_id, cf.r2_object_key AS cover_r2_object_key,
+         cf.google_photo_name AS cover_google_photo_name
+         FROM urlaub_campingplaetze uc
+         JOIN campingplaetze c ON uc.campingplatz_id = c.id
+         LEFT JOIN campingplatz_fotos cf ON cf.campingplatz_id = c.id AND cf.is_cover = 1
+         WHERE uc.urlaub_id IN (${placeholders})
+         ORDER BY uc.urlaub_id, COALESCE(uc.sort_index, 999999), c.land, c.bundesland, c.ort, c.name`
+      const result = await db
+        .prepare(sql)
+        .bind(...chunk)
+        .all<Record<string, unknown>>()
+      const rows = result.results || []
+      for (const row of rows) {
+        const uid = String(row.urlaub_id ?? '')
+        if (!uid || out[uid] === undefined) continue
+        const cpRow = { ...row }
+        delete cpRow.urlaub_id
+        out[uid].push(mapCampingplatzRow(cpRow))
+      }
+    }
+    return out
+  } catch (error) {
+    console.error('Error batch-fetching campingplaetze for vacations:', error)
+    return out
+  }
+}
+
 export async function setCampingplaetzeForVacation(
   db: D1Database,
   vacationId: string,

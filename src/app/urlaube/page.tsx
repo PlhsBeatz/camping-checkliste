@@ -285,28 +285,39 @@ function UrlaubePageContent() {
   }, [refetchTick])
 
   useEffect(() => {
-    const loadPerVacation = async () => {
-      const map: Record<string, Campingplatz[]> = {}
-      for (const v of vacations) {
-        try {
-          const res = await fetch(
-            `/api/vacations/campingplaetze?urlaubId=${encodeURIComponent(v.id)}`
-          )
-          const data = (await res.json()) as ApiResponse<Campingplatz[]>
-          if (data.success && data.data) {
-            map[v.id] = data.data
-          } else {
-            map[v.id] = []
-          }
-        } catch {
-          map[v.id] = []
-        }
+    const controller = new AbortController()
+    const loadAllAssignments = async () => {
+      if (vacations.length === 0) {
+        setVacationCampingplaetze({})
+        return
       }
-      setVacationCampingplaetze(map)
+      try {
+        const res = await fetch('/api/vacations/campingplaetze', {
+          signal: controller.signal,
+        })
+        const payload = (await res.json()) as ApiResponse<Record<string, Campingplatz[]>>
+        if (!payload.success || !payload.data) {
+          const empty: Record<string, Campingplatz[]> = {}
+          for (const v of vacations) empty[v.id] = []
+          setVacationCampingplaetze(empty)
+          return
+        }
+        const fromApi = payload.data
+        const map: Record<string, Campingplatz[]> = {}
+        for (const v of vacations) {
+          map[v.id] = fromApi[v.id] ?? []
+        }
+        setVacationCampingplaetze(map)
+      } catch (error) {
+        if (error instanceof Error && error.name === 'AbortError') return
+        console.error('Failed to fetch vacation camping assignments:', error)
+        const empty: Record<string, Campingplatz[]> = {}
+        for (const v of vacations) empty[v.id] = []
+        setVacationCampingplaetze(empty)
+      }
     }
-    if (vacations.length > 0) {
-      void loadPerVacation()
-    }
+    void loadAllAssignments()
+    return () => controller.abort()
   }, [vacations])
 
   // Routeninfo (Entfernung / Fahrzeit) für alle in Urlaube eingebundenen Campingplätze lazy laden
