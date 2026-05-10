@@ -25,6 +25,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { CategoryGroupedSelectField } from '@/components/category-select-grouped'
 import { cn, formatWeight, getInitials } from '@/lib/utils'
 import { USER_COLORS, DEFAULT_USER_COLOR_BG } from '@/lib/user-colors'
 import { useSearchParams } from 'next/navigation'
@@ -165,7 +166,8 @@ function HomeContent() {
     anzahl: '1',
     bemerkung: '',
     transportId: '',
-    was: ''
+    was: '',
+    kategorieId: ''
   })
 
   // Get URL parameters
@@ -884,7 +886,8 @@ function HomeContent() {
       anzahl: String(anzahl ?? item.anzahl),
       bemerkung: item.bemerkung || '',
       transportId: transportForForm,
-      was: item.is_temporaer ? item.was : ''
+      was: item.is_temporaer ? item.was : '',
+      kategorieId: item.is_temporaer && item.kategorie_id ? item.kategorie_id : ''
     })
     setShowEditItemDialog(true)
   }
@@ -920,12 +923,18 @@ function HomeContent() {
             alert('Bitte eine Bezeichnung eingeben.')
             return
           }
+          const kid = packingItemForm.kategorieId.trim()
+          if (!kid) {
+            alert('Bitte eine Kategorie wählen.')
+            return
+          }
           const resWas = await fetch('/api/packing-items', {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               id: editingPackingItemId,
               was: newWas,
+              kategorieId: kid,
             }),
           })
           const dataWas = (await resWas.json()) as ApiResponse<boolean>
@@ -947,7 +956,13 @@ function HomeContent() {
             alert('Bitte eine Bezeichnung eingeben.')
             return
           }
+          const kid = packingItemForm.kategorieId.trim()
+          if (!kid) {
+            alert('Bitte eine Kategorie wählen.')
+            return
+          }
           editPayload.was = newWas
+          editPayload.kategorieId = kid
         }
         const res = await fetch('/api/packing-items', {
           method: 'PUT',
@@ -1464,11 +1479,11 @@ function HomeContent() {
             description={
               editingForMitreisenderId &&
               packingItems.find((p) => p.id === editingPackingItemId)?.is_temporaer
-                ? 'Bezeichnung sowie für diesen Mitreisenden Anzahl und Transport'
+                ? 'Bezeichnung, Kategorie sowie für diesen Mitreisenden Anzahl und Transport'
                 : editingForMitreisenderId
                   ? 'Änderung gilt nur für diesen Mitreisenden'
                   : packingItems.find((p) => p.id === editingPackingItemId)?.is_temporaer
-                    ? 'Bezeichnung, Anzahl und Bemerkung anpassen'
+                    ? 'Bezeichnung, Kategorie, Anzahl und Bemerkung anpassen'
                     : 'Anzahl und Bemerkung anpassen'
             }
           >
@@ -1477,15 +1492,27 @@ function HomeContent() {
                 const editItem = packingItems.find((p) => p.id === editingPackingItemId)
                 if (!editItem?.is_temporaer) return null
                 return (
-                  <div>
-                    <Label htmlFor="edit-was">Bezeichnung</Label>
-                    <Input
-                      id="edit-was"
-                      value={packingItemForm.was}
-                      onChange={(e) => setPackingItemForm({ ...packingItemForm, was: e.target.value })}
-                      placeholder="Name des Gegenstands"
-                    />
-                  </div>
+                  <>
+                    <div>
+                      <Label htmlFor="edit-was">Bezeichnung</Label>
+                      <Input
+                        id="edit-was"
+                        value={packingItemForm.was}
+                        onChange={(e) => setPackingItemForm({ ...packingItemForm, was: e.target.value })}
+                        placeholder="Name des Gegenstands"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="edit-kategorie">Kategorie</Label>
+                      <CategoryGroupedSelectField
+                        triggerId="edit-kategorie"
+                        value={packingItemForm.kategorieId}
+                        onValueChange={(v) => setPackingItemForm({ ...packingItemForm, kategorieId: v })}
+                        categories={categories}
+                        mainCategories={mainCategories}
+                      />
+                    </div>
+                  </>
                 )
               })()}
               <div>

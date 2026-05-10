@@ -134,8 +134,9 @@ export async function PUT(request: NextRequest) {
       transport_id?: string | null
       /** Umbenennen nur bei temporären Packlisteneinträgen */
       was?: string
+      kategorieId?: string
     }
-    const { id, gepackt, anzahl, bemerkung, transport_id, was } = body
+    const { id, gepackt, anzahl, bemerkung, transport_id, was, kategorieId } = body
 
     if (!id) {
       return NextResponse.json({ error: 'id is required' }, { status: 400 })
@@ -157,12 +158,31 @@ export async function PUT(request: NextRequest) {
       bemerkung?: string | null
       transport_id?: string | null
       was?: string | null
+      kategorie_id?: string | null
     } = {
       anzahl,
       bemerkung,
       transport_id: transport_id ?? undefined,
     }
 
+    if (kategorieId !== undefined) {
+      const isTempKat = await isTemporaryPackingEintrag(db, id)
+      if (!isTempKat) {
+        return NextResponse.json(
+          { error: 'Kategorie kann nur bei temporären Einträgen geändert werden' },
+          { status: 400 }
+        )
+      }
+      const kid = typeof kategorieId === 'string' ? kategorieId.trim() : ''
+      if (!kid) {
+        return NextResponse.json({ error: 'Kategorie ist erforderlich' }, { status: 400 })
+      }
+      const katRow = await db.prepare('SELECT 1 as ok FROM kategorien WHERE id = ? LIMIT 1').bind(kid).first()
+      if (!katRow) {
+        return NextResponse.json({ error: 'Ungültige Kategorie' }, { status: 400 })
+      }
+      updates.kategorie_id = kid
+    }
     if (was !== undefined) {
       const isTemp = await isTemporaryPackingEintrag(db, id)
       if (!isTemp) {

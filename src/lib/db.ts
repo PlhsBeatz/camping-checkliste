@@ -49,6 +49,8 @@ export interface PackingItem {
   created_at: string
   /** Nur für diese Packliste, nicht in der Ausrüstung gespeichert */
   is_temporaer?: boolean
+  /** Nur bei temporären Einträgen: bearbeitbare Kategorie-ID */
+  kategorie_id?: string
   /** Intern für Sortierung (hauptkategorie/kategorie Reihenfolge) */
   orderHk?: number
   orderK?: number
@@ -758,7 +760,7 @@ export async function getPackingItems(db: D1Database, vacationId: string): Promi
       }
 
       const tempQuery = `
-        SELECT pet.id, pet.packliste_id, pet.was, pet.anzahl, pet.gepackt, pet.gepackt_vorgemerkt, pet.gepackt_vorgemerkt_durch, pet.bemerkung, pet.transport_id,
+        SELECT pet.id, pet.packliste_id, pet.was, pet.kategorie_id, pet.anzahl, pet.gepackt, pet.gepackt_vorgemerkt, pet.gepackt_vorgemerkt_durch, pet.bemerkung, pet.transport_id,
                k.titel as kategorie, hk.titel as hauptkategorie, hk.reihenfolge as hk_reihenfolge, k.reihenfolge as k_reihenfolge,
                t.name as transport_name, pet.created_at
         FROM packlisten_eintraege_temporaer pet
@@ -787,6 +789,7 @@ export async function getPackingItems(db: D1Database, vacationId: string): Promi
           mitreisenden_typ: tempMit.length > 0 ? 'ausgewaehlte' : 'pauschal',
           mitreisende: tempMit,
           was: String(row.was),
+          kategorie_id: row.kategorie_id != null ? String(row.kategorie_id) : undefined,
           kategorie: String(row.kategorie),
           hauptkategorie: String(row.hauptkategorie),
           created_at: String(row.created_at || ''),
@@ -853,6 +856,8 @@ export async function updatePackingItem(
     transport_id?: string | null
     /** Nur für `packlisten_eintraege_temporaer` (Freitext-Bezeichnung). */
     was?: string | null
+    /** Nur für temporäre Einträge. */
+    kategorie_id?: string | null
   }
 ): Promise<boolean> {
   try {
@@ -921,6 +926,10 @@ export async function updatePackingItem(
     if (updates.was !== undefined) {
       tempFields.push('was = ?')
       tempValues.push(updates.was?.trim() ?? '')
+    }
+    if (updates.kategorie_id !== undefined) {
+      tempFields.push('kategorie_id = ?')
+      tempValues.push(updates.kategorie_id || null)
     }
     if (tempFields.length === 0) return true
     tempValues.push(id)
