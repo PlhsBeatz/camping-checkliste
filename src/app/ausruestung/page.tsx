@@ -573,7 +573,7 @@ export default function AusruestungPage() {
       )}>
         <div className="flex flex-col flex-1 min-h-0 min-w-0 container mx-auto p-4 md:p-6 max-w-full">
           {/* Header - Sticky */}
-          <div className="sticky top-0 z-[30] flex-shrink-0 flex items-center justify-between bg-scroll-pattern shadow pb-4 -mx-4 px-4 -mt-4 pt-4 md:-mx-6 md:px-6 md:-mt-6 md:pt-6">
+          <div className="sticky top-0 z-[30] flex-shrink-0 flex items-center justify-between bg-white shadow pb-4 -mx-4 px-4 -mt-4 pt-4 md:-mx-6 md:px-6 md:-mt-6 md:pt-6">
             <div className="flex items-center gap-4">
               {/* Mobile Menu Toggle */}
               <Button
