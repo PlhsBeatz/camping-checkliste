@@ -634,17 +634,17 @@ export function CampingplaetzeTable({
 
         {showFilters && (
           <div className="space-y-4 pt-2">
-            <div className="rounded-lg border border-sky-200/90 bg-sky-50 px-3 py-3 dark:border-sky-800/60 dark:bg-sky-950/35">
+            <div className="rounded-lg border border-[rgb(45,79,30)]/30 bg-[rgb(45,79,30)]/10 px-3 py-3 dark:border-[rgb(45,79,30)]/45 dark:bg-[rgb(45,79,30)]/20">
               <Label
                 htmlFor="cp-sort-mode"
-                className="text-xs font-semibold text-sky-900 dark:text-sky-100"
+                className="text-xs font-semibold text-[rgb(45,79,30)] dark:text-[rgb(180,200,165)]"
               >
                 Sortierung
               </Label>
               <Select value={sortMode} onValueChange={(v) => setSortMode(v as SortMode)}>
                 <SelectTrigger
                   id="cp-sort-mode"
-                  className="mt-1.5 w-full sm:max-w-md bg-white/90 dark:bg-slate-950/50"
+                  className="mt-1.5 w-full sm:max-w-md border-[rgb(45,79,30)]/20 bg-white/95 dark:border-[rgb(45,79,30)]/35 dark:bg-slate-950/60"
                 >
                   <SelectValue placeholder="Sortierung wählen" />
                 </SelectTrigger>
