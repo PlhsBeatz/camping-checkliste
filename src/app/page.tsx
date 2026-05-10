@@ -914,6 +914,26 @@ function HomeContent() {
           alert('Fehler beim Aktualisieren: ' + (data.error ?? 'Unbekannt'))
           return
         }
+        if (item.is_temporaer) {
+          const newWas = packingItemForm.was.trim()
+          if (!newWas) {
+            alert('Bitte eine Bezeichnung eingeben.')
+            return
+          }
+          const resWas = await fetch('/api/packing-items', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              id: editingPackingItemId,
+              was: newWas,
+            }),
+          })
+          const dataWas = (await resWas.json()) as ApiResponse<boolean>
+          if (!dataWas.success) {
+            alert('Fehler beim Aktualisieren der Bezeichnung: ' + (dataWas.error ?? 'Unbekannt'))
+            return
+          }
+        }
       } else {
         const editPayload: Record<string, unknown> = {
           id: editingPackingItemId,
@@ -1433,19 +1453,29 @@ function HomeContent() {
           <ResponsiveModal
             open={showEditItemDialog}
             onOpenChange={setShowEditItemDialog}
-            title={editingForMitreisenderId ? 'Anzahl für Mitreisenden anpassen' : 'Packlisten-Eintrag bearbeiten'}
+            title={
+              editingForMitreisenderId &&
+              packingItems.find((p) => p.id === editingPackingItemId)?.is_temporaer
+                ? 'Packlisten-Eintrag bearbeiten'
+                : editingForMitreisenderId
+                  ? 'Anzahl für Mitreisenden anpassen'
+                  : 'Packlisten-Eintrag bearbeiten'
+            }
             description={
-              editingForMitreisenderId
-                ? 'Änderung gilt nur für diesen Mitreisenden'
-                : packingItems.find((p) => p.id === editingPackingItemId)?.is_temporaer
-                  ? 'Bezeichnung, Anzahl und Bemerkung anpassen'
-                  : 'Anzahl und Bemerkung anpassen'
+              editingForMitreisenderId &&
+              packingItems.find((p) => p.id === editingPackingItemId)?.is_temporaer
+                ? 'Bezeichnung sowie für diesen Mitreisenden Anzahl und Transport'
+                : editingForMitreisenderId
+                  ? 'Änderung gilt nur für diesen Mitreisenden'
+                  : packingItems.find((p) => p.id === editingPackingItemId)?.is_temporaer
+                    ? 'Bezeichnung, Anzahl und Bemerkung anpassen'
+                    : 'Anzahl und Bemerkung anpassen'
             }
           >
             <div className="space-y-4">
               {(() => {
                 const editItem = packingItems.find((p) => p.id === editingPackingItemId)
-                if (!editItem?.is_temporaer || editingForMitreisenderId) return null
+                if (!editItem?.is_temporaer) return null
                 return (
                   <div>
                     <Label htmlFor="edit-was">Bezeichnung</Label>
