@@ -81,7 +81,7 @@ export default function EinladungPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[rgb(250,250,249)]">
+      <div className="min-h-screen flex items-center justify-center bg-scroll-pattern">
         <p className="text-gray-600">Lade Einladung…</p>
       </div>
     )
@@ -89,7 +89,7 @@ export default function EinladungPage() {
 
   if (error && !invitation) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-[rgb(250,250,249)] p-4 gap-4">
+      <div className="min-h-screen flex flex-col items-center justify-center bg-scroll-pattern p-4 gap-4">
         <p className="text-red-600 text-center">{error}</p>
         <Button asChild variant="outline">
           <a href="/login">Zur Anmeldung</a>
@@ -99,7 +99,7 @@ export default function EinladungPage() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-[rgb(250,250,249)] p-4">
+    <div className="min-h-screen flex flex-col items-center justify-center bg-scroll-pattern p-4">
       <div className="w-full max-w-sm space-y-8">
         <div className="flex flex-col items-center gap-3">
           <AppLogo size="default" variant="centered" />

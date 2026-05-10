@@ -57,7 +57,7 @@ export default function RootLayout({
           rel="stylesheet"
         />
       </head>
-      <body className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased bg-background text-foreground overflow-x-clip`}>
+      <body className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased text-foreground overflow-x-clip`}>
         <AuthProvider>
           <OfflineBanner />
           <MustChangePasswordGuard>

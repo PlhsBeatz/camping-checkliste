@@ -171,7 +171,7 @@ function PackStatusContent() {
         <PullToRefreshWrapper onRefresh={fetchPackStatus} disabled={showNavSidebar}>
         <div className="container mx-auto p-4 md:p-6 space-y-6 max-w-full">
           {/* Header - Sticky, gleiche Größe wie andere Seiten */}
-          <div className="sticky top-0 z-10 flex items-center justify-between bg-white shadow pb-4 -mx-4 px-4 -mt-4 pt-4 md:-mx-6 md:px-6 md:-mt-6 md:pt-6 md:pb-4">
+          <div className="sticky top-0 z-10 flex items-center justify-between bg-scroll-pattern shadow pb-4 -mx-4 px-4 -mt-4 pt-4 md:-mx-6 md:px-6 md:-mt-6 md:pt-6 md:pb-4">
             <div className="flex items-center gap-4">
             <Button
               variant="outline"
@@ -453,7 +453,7 @@ export default function PackStatusPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen bg-[rgb(250,250,249)] flex items-center justify-center">
+        <div className="min-h-screen bg-scroll-pattern flex items-center justify-center">
           <div className="text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[rgb(45,79,30)] mx-auto mb-4" />
             <p className="text-muted-foreground">Lädt…</p>

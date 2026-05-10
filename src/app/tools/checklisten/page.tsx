@@ -57,9 +57,9 @@ export default function ChecklistenPage() {
       <NavigationSidebar isOpen={showNavSidebar} onClose={() => setShowNavSidebar(false)} />
 
       <div className={cn('flex-1 min-w-0 transition-all duration-300', 'lg:ml-[280px]')}>
-        <div className="container mx-auto p-4 md:p-6 space-y-6 max-w-full">
+        <div className="container mx-auto p-4 md:p-6 max-w-full flex flex-col gap-0">
           {/* Header - Sticky (wie Kategorien / Mitreisende) + Fortschritt */}
-          <div className="sticky top-0 z-10 bg-white shadow pb-4 -mx-4 px-4 -mt-4 pt-4 md:-mx-6 md:px-6 md:-mt-6 md:pt-6">
+          <div className="sticky top-0 z-10 bg-scroll-pattern shadow pb-4 -mx-4 px-4 -mt-4 pt-4 md:-mx-6 md:px-6 md:-mt-6 md:pt-6">
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-4 min-w-0 flex-1">
                 <Button
@@ -84,7 +84,7 @@ export default function ChecklistenPage() {
               <div ref={headerTrailingRef} className="flex shrink-0 items-center justify-end min-h-9" />
             </div>
             {headerContext.progress && headerContext.progress.total > 0 ? (
-              <div className="mt-3 space-y-2 bg-white px-1">
+              <div className="mt-3 space-y-2 px-1">
                 <div className="flex items-center gap-2">
                   <div className="flex-1 min-w-0 h-2.5 bg-gray-200 rounded-full overflow-hidden">
                     <div

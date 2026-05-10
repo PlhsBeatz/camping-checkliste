@@ -12,7 +12,8 @@
     /* Accent Orange: rgb(230, 126, 34) = #e67e22 = hsl(28, 80%, 52%) */
     /* Background: Beige/Cream = hsl(40, 40%, 97%) */
     
-    --background: 40 40% 97%;
+    /* Bühle mit body: rgb(244, 241, 234) + Punktmuster (vgl. .bg-scroll-pattern) */
+    --background: 42 31% 94%;
     --foreground: 103 45% 15%;
     
     --card: 0 0% 100%;

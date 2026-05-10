@@ -1308,7 +1308,7 @@ function HomeContent() {
           {currentVacation && (
             <div className="flex-1 min-h-0 flex flex-col min-w-0">
               {/* Header - fix oben, scrollt nicht (Flex-Layout: Header+Progress+Tabs bleiben sichtbar) */}
-              <div className="flex-shrink-0 z-20 bg-white min-w-0">
+              <div className="flex-shrink-0 z-20 bg-scroll-pattern min-w-0">
                 <div className="py-3 px-4 flex items-center justify-between gap-3 min-w-0 w-full">
                   <div className="flex items-center gap-3 min-w-0 flex-1">
                     {/* Mobile Menu Toggle - einheitlich mit Rahmen wie auf Urlaube */}
@@ -1750,7 +1750,7 @@ function HomeContent() {
 export default function Home() {
   return (
     <Suspense fallback={
-      <div className="min-h-screen bg-[rgb(250,250,249)] flex items-center justify-center">
+      <div className="min-h-screen bg-scroll-pattern flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[rgb(45,79,30)] mx-auto mb-4"></div>
           <p className="text-muted-foreground">Lädt...</p>

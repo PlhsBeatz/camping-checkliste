@@ -259,7 +259,7 @@ function SortableEditorCategoryBlock({
   const [menuOpen, setMenuOpen] = useState(false)
   return (
     <div ref={setNodeRef} style={style} className="rounded-lg border bg-white overflow-hidden">
-      <div className="flex items-center gap-2 p-3 border-b bg-[rgb(250,250,249)]">
+      <div className="flex items-center gap-2 p-3 border-b bg-muted/50">
         <button
           type="button"
           {...attributes}
@@ -935,7 +935,7 @@ export function ChecklistenTool({ onHeaderContextChange, headerTrailingRef }: Ch
 
         {editMode && canAccessConfig ? (
           <>
-            <div className="-mx-4 sm:-mx-6 px-4 sm:px-6 py-3 bg-scroll-pattern rounded-lg flex flex-wrap items-center justify-between gap-2">
+            <div className="-mx-4 sm:-mx-6 px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-2">
               <Button
                 variant="outline"
                 size="sm"
@@ -1043,7 +1043,7 @@ export function ChecklistenTool({ onHeaderContextChange, headerTrailingRef }: Ch
             </DndContext>
           </>
         ) : (
-          <div className="-mx-4 sm:-mx-6 px-4 sm:px-6 py-4 bg-scroll-pattern rounded-lg space-y-4">
+          <div className="-mx-4 sm:-mx-6 px-4 sm:px-6 py-4 space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <Button
                 variant="outline"
@@ -1154,7 +1154,7 @@ export function ChecklistenTool({ onHeaderContextChange, headerTrailingRef }: Ch
 
   // Übersicht
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 pt-4 md:pt-6">
       {canAccessConfig ? (
         <DndContext
           sensors={sensors}

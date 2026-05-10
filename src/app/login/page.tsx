@@ -61,7 +61,7 @@ function LoginForm() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-[rgb(250,250,249)] p-4">
+    <div className="min-h-screen flex flex-col items-center justify-center bg-scroll-pattern p-4">
       <div className="w-full max-w-sm space-y-8">
         <AppLogo size="default" variant="centered" subtitle="Anmelden" />
 
@@ -117,7 +117,7 @@ function LoginForm() {
 export default function LoginPage() {
   return (
     <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center bg-[rgb(250,250,249)]">
+      <div className="min-h-screen flex items-center justify-center bg-scroll-pattern">
         <p className="text-gray-600">Wird geladen…</p>
       </div>
     }>
