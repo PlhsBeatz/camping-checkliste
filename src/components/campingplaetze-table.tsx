@@ -321,21 +321,19 @@ export function CampingplaetzeTable({
   const flatSorted = useMemo(() => {
     const list = filtered.slice()
     if (sortMode === 'name') {
-      list.sort((a, b) => cmpTopThen(a, b, (x, y) => x.name.localeCompare(y.name)))
+      list.sort((a, b) => a.name.localeCompare(b.name))
       return list
     }
     if (sortMode === 'distance') {
-      list.sort((a, b) =>
-        cmpTopThen(a, b, (x, y) => {
-          const dx = mergedDistances[x.id]?.distanceKm
-          const dy = mergedDistances[y.id]?.distanceKm
-          if (dx == null && dy == null) return x.name.localeCompare(y.name)
-          if (dx == null) return 1
-          if (dy == null) return -1
-          if (dx !== dy) return dx - dy
-          return x.name.localeCompare(y.name)
-        })
-      )
+      list.sort((a, b) => {
+        const dx = mergedDistances[a.id]?.distanceKm
+        const dy = mergedDistances[b.id]?.distanceKm
+        if (dx == null && dy == null) return a.name.localeCompare(b.name)
+        if (dx == null) return 1
+        if (dy == null) return -1
+        if (dx !== dy) return dx - dy
+        return a.name.localeCompare(b.name)
+      })
       return list
     }
     return []
@@ -628,34 +626,35 @@ export function CampingplaetzeTable({
             size="icon"
             className="shrink-0"
             onClick={() => setShowFilters((s) => !s)}
-            aria-label="Filterkriterien ein- oder ausblenden"
+            aria-label="Filter, Sortierung und Kriterien ein- oder ausblenden"
           >
             <Filter className="h-4 w-4" />
           </Button>
         </div>
 
-        <div className="rounded-lg border border-[rgb(45,79,30)]/20 bg-white/90 px-3 py-3 shadow-sm">
-          <Label htmlFor="cp-sort-mode" className="text-xs font-semibold text-[rgb(45,79,30)]">
-            Sortierung
-          </Label>
-          <Select value={sortMode} onValueChange={(v) => setSortMode(v as SortMode)}>
-            <SelectTrigger id="cp-sort-mode" className="mt-1.5 w-full sm:max-w-md">
-              <SelectValue placeholder="Sortierung wählen" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="region">Region (Land/Bundesland)</SelectItem>
-              <SelectItem value="distance">Entfernung (von Zuhause)</SelectItem>
-              <SelectItem value="name">Name A–Z</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
         {showFilters && (
-          <div className="space-y-3 rounded-lg border border-dashed border-muted-foreground/25 bg-muted/20 px-3 py-4">
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Filterkriterien
-            </p>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="space-y-4 rounded-lg border border-dashed border-muted-foreground/25 bg-muted/20 px-3 py-4">
+            <div className="rounded-lg border border-[rgb(45,79,30)]/20 bg-white/90 px-3 py-3 shadow-sm">
+              <Label htmlFor="cp-sort-mode" className="text-xs font-semibold text-[rgb(45,79,30)]">
+                Sortierung
+              </Label>
+              <Select value={sortMode} onValueChange={(v) => setSortMode(v as SortMode)}>
+                <SelectTrigger id="cp-sort-mode" className="mt-1.5 w-full sm:max-w-md">
+                  <SelectValue placeholder="Sortierung wählen" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="region">Region (Land/Bundesland)</SelectItem>
+                  <SelectItem value="distance">Entfernung (von Zuhause)</SelectItem>
+                  <SelectItem value="name">Name A–Z</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-3 border-t border-muted-foreground/20 pt-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Filterkriterien
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <div>
               <Label>Bundesland</Label>
               <Select value={filterBundesland} onValueChange={setFilterBundesland}>
@@ -769,6 +768,7 @@ export function CampingplaetzeTable({
               </Select>
             </div>
           </div>
+            </div>
           </div>
         )}
 
