@@ -358,11 +358,6 @@ const PackingItem: React.FC<PackingItemProps> = ({
           
           <div className="flex-grow min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              {isTemporaer && (
-                <span className="flex-shrink-0 text-muted-foreground" title="Nur für diese Packliste">
-                  <Clock className="h-3.5 w-3.5" aria-hidden />
-                </span>
-              )}
               <label
                 htmlFor={`item-${id}`}
                 className={cn(
@@ -387,6 +382,15 @@ const PackingItem: React.FC<PackingItemProps> = ({
                   return anzahlZuZeigen > 1 ? `(${anzahlZuZeigen}x)` : ''
                 })()}
               </label>
+              {isTemporaer && (
+                <span
+                  className="flex-shrink-0 text-muted-foreground"
+                  title="Nur für diese Packliste"
+                  aria-label="Nur für diese Packliste"
+                >
+                  <Clock className="h-3.5 w-3.5" aria-hidden />
+                </span>
+              )}
             </div>
             
             {details && <p className="text-xs text-muted-foreground mt-1.5">{details}</p>}
