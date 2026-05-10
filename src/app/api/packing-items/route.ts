@@ -11,6 +11,7 @@ import {
   getVacationIdFromPackingItem,
   getMitreisendeForVacation,
   getPackingItemPauschalVorgemerkt,
+  isTemporaryPackingEintrag,
   CloudflareEnv,
 } from '@/lib/db'
 import { notifyPackingSyncChange } from '@/lib/packing-sync'
@@ -131,8 +132,10 @@ export async function PUT(request: NextRequest) {
       anzahl?: number
       bemerkung?: string | null
       transport_id?: string | null
+      /** Umbenennen nur bei temporären Packlisteneinträgen */
+      was?: string
     }
-    const { id, gepackt, anzahl, bemerkung, transport_id } = body
+    const { id, gepackt, anzahl, bemerkung, transport_id, was } = body
 
     if (!id) {
       return NextResponse.json({ error: 'id is required' }, { status: 400 })
@@ -146,10 +149,33 @@ export async function PUT(request: NextRequest) {
       }
     }
 
-    const updates: { gepackt?: boolean; gepackt_vorgemerkt?: boolean; gepackt_vorgemerkt_durch?: string | null; anzahl?: number; bemerkung?: string | null; transport_id?: string | null } = {
+    const updates: {
+      gepackt?: boolean
+      gepackt_vorgemerkt?: boolean
+      gepackt_vorgemerkt_durch?: string | null
+      anzahl?: number
+      bemerkung?: string | null
+      transport_id?: string | null
+      was?: string | null
+    } = {
       anzahl,
       bemerkung,
       transport_id: transport_id ?? undefined,
+    }
+
+    if (was !== undefined) {
+      const isTemp = await isTemporaryPackingEintrag(db, id)
+      if (!isTemp) {
+        return NextResponse.json(
+          { error: 'Bezeichnung kann nur bei temporären Einträgen geändert werden' },
+          { status: 400 }
+        )
+      }
+      const trimmed = typeof was === 'string' ? was.trim() : ''
+      if (!trimmed) {
+        return NextResponse.json({ error: 'Bezeichnung darf nicht leer sein' }, { status: 400 })
+      }
+      updates.was = trimmed
     }
     if (gepackt !== undefined) {
       if (gepacktRequiresParentApproval(auth.userContext)) {

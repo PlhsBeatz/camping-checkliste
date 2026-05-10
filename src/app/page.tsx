@@ -164,7 +164,8 @@ function HomeContent() {
     gegenstandId: '',
     anzahl: '1',
     bemerkung: '',
-    transportId: ''
+    transportId: '',
+    was: ''
   })
 
   // Get URL parameters
@@ -882,7 +883,8 @@ function HomeContent() {
       gegenstandId: item.gegenstand_id,
       anzahl: String(anzahl ?? item.anzahl),
       bemerkung: item.bemerkung || '',
-      transportId: transportForForm
+      transportId: transportForForm,
+      was: item.is_temporaer ? item.was : ''
     })
     setShowEditItemDialog(true)
   }
@@ -913,15 +915,24 @@ function HomeContent() {
           return
         }
       } else {
+        const editPayload: Record<string, unknown> = {
+          id: editingPackingItemId,
+          anzahl: parseInt(packingItemForm.anzahl) || 1,
+          bemerkung: packingItemForm.bemerkung || null,
+          transport_id: packingItemForm.transportId || null,
+        }
+        if (item?.is_temporaer) {
+          const newWas = packingItemForm.was.trim()
+          if (!newWas) {
+            alert('Bitte eine Bezeichnung eingeben.')
+            return
+          }
+          editPayload.was = newWas
+        }
         const res = await fetch('/api/packing-items', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            id: editingPackingItemId,
-            anzahl: parseInt(packingItemForm.anzahl) || 1,
-            bemerkung: packingItemForm.bemerkung || null,
-            transport_id: packingItemForm.transportId || null,
-          }),
+          body: JSON.stringify(editPayload),
         })
         const data = (await res.json()) as ApiResponse<boolean>
         if (!data.success) {
@@ -1423,9 +1434,30 @@ function HomeContent() {
             open={showEditItemDialog}
             onOpenChange={setShowEditItemDialog}
             title={editingForMitreisenderId ? 'Anzahl für Mitreisenden anpassen' : 'Packlisten-Eintrag bearbeiten'}
-            description={editingForMitreisenderId ? 'Änderung gilt nur für diesen Mitreisenden' : 'Anzahl und Bemerkung anpassen'}
+            description={
+              editingForMitreisenderId
+                ? 'Änderung gilt nur für diesen Mitreisenden'
+                : packingItems.find((p) => p.id === editingPackingItemId)?.is_temporaer
+                  ? 'Bezeichnung, Anzahl und Bemerkung anpassen'
+                  : 'Anzahl und Bemerkung anpassen'
+            }
           >
             <div className="space-y-4">
+              {(() => {
+                const editItem = packingItems.find((p) => p.id === editingPackingItemId)
+                if (!editItem?.is_temporaer || editingForMitreisenderId) return null
+                return (
+                  <div>
+                    <Label htmlFor="edit-was">Bezeichnung</Label>
+                    <Input
+                      id="edit-was"
+                      value={packingItemForm.was}
+                      onChange={(e) => setPackingItemForm({ ...packingItemForm, was: e.target.value })}
+                      placeholder="Name des Gegenstands"
+                    />
+                  </div>
+                )
+              })()}
               <div>
                 <Label htmlFor="edit-anzahl">Anzahl</Label>
                 <Input

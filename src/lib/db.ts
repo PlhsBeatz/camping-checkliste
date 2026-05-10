@@ -851,6 +851,8 @@ export async function updatePackingItem(
     anzahl?: number
     bemerkung?: string | null
     transport_id?: string | null
+    /** Nur für `packlisten_eintraege_temporaer` (Freitext-Bezeichnung). */
+    was?: string | null
   }
 ): Promise<boolean> {
   try {
@@ -882,14 +884,14 @@ export async function updatePackingItem(
       values.push(updates.transport_id || null)
     }
 
-    if (fields.length === 0) return true
+    if (fields.length > 0) {
+      values.push(id)
+      const query = `UPDATE packlisten_eintraege SET ${fields.join(', ')}, updated_at = datetime('now') WHERE id = ?`
+      const r = await db.prepare(query).bind(...values).run()
+      if (r.meta.changes > 0) return true
+    }
 
-    values.push(id)
-    const query = `UPDATE packlisten_eintraege SET ${fields.join(', ')}, updated_at = datetime('now') WHERE id = ?`
-    const r = await db.prepare(query).bind(...values).run()
-    if (r.meta.changes > 0) return true
-
-    // Temporärer Eintrag: gleiche Felder (gepackt, gepackt_vorgemerkt, anzahl, bemerkung, transport_id)
+    // Temporärer Eintrag: gleiche Felder (gepackt, gepackt_vorgemerkt, anzahl, bemerkung, transport_id) plus was
     const tempFields: string[] = []
     const tempValues: (string | number | null)[] = []
     if (updates.gepackt !== undefined) {
@@ -915,6 +917,10 @@ export async function updatePackingItem(
     if (updates.transport_id !== undefined) {
       tempFields.push('transport_id = ?')
       tempValues.push(updates.transport_id || null)
+    }
+    if (updates.was !== undefined) {
+      tempFields.push('was = ?')
+      tempValues.push(updates.was?.trim() ?? '')
     }
     if (tempFields.length === 0) return true
     tempValues.push(id)
@@ -2245,7 +2251,7 @@ export async function setStandardMitreisendeForEquipment(
 }
 
 /** True, wenn der Packlisten-Eintrag in packlisten_eintraege_temporaer liegt (Mitreisende dann in *_mitreisende_temporaer). */
-async function isTemporaryPackingEintrag(db: D1Database, packlistenEintragId: string): Promise<boolean> {
+export async function isTemporaryPackingEintrag(db: D1Database, packlistenEintragId: string): Promise<boolean> {
   const row = await db
     .prepare('SELECT 1 FROM packlisten_eintraege_temporaer WHERE id = ? LIMIT 1')
     .bind(packlistenEintragId)

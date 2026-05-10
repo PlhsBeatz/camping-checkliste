@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Textarea } from '@/components/ui/textarea'
 import { WeightInput } from '@/components/ui/weight-input'
 import {
@@ -86,6 +87,11 @@ export function AddSingleItemDialog({
   onSuccess,
 }: AddSingleItemDialogProps) {
   const [form, setForm] = useState(defaultForm)
+  /** Nur ohne „In Ausrüstung speichern“, Packprofil einer Person */
+  const [tempProfilModus, setTempProfilModus] = useState<'nur_person' | 'pauschal'>('nur_person')
+  /** Nur ohne Ausrüstung, Packprofil Zentral / Alle */
+  const [tempZentralModus, setTempZentralModus] = useState<'pauschal' | 'personen'>('pauschal')
+  const [tempZentralPersonenIds, setTempZentralPersonenIds] = useState<string[]>([])
   const [isSaving, setIsSaving] = useState(false)
   const [tags, setTags] = useState<Array<{ id: string; titel: string }>>(tagsProp)
   const [mitreisende, setMitreisende] = useState<Array<{ id: string; name: string }>>(mitreisendeProp)
@@ -122,8 +128,11 @@ export function AddSingleItemDialog({
         anzahl: prev.anzahl,
         kategorie_id: prev.kategorie_id || '',
       }))
+      setTempProfilModus('nur_person')
+      setTempZentralModus('pauschal')
+      setTempZentralPersonenIds(vacationMitreisende.map((m) => m.id))
     }
-  }, [open, initialName])
+  }, [open, initialName, vacationMitreisende])
 
   const hasPauschaleForCategory = (kategorieId: string) => {
     const c = categories.find((x) => x.id === kategorieId)
@@ -209,6 +218,21 @@ export function AddSingleItemDialog({
           return
         }
       } else {
+        let mitreisendeForTemp: string[] | undefined
+        if (selectedPackProfile) {
+          mitreisendeForTemp = tempProfilModus === 'nur_person' ? [selectedPackProfile] : undefined
+        } else if (tempZentralModus === 'pauschal') {
+          mitreisendeForTemp = undefined
+        } else {
+          const allowed = new Set(vacationMitreisende.map((m) => m.id))
+          const ids = tempZentralPersonenIds.filter((id) => allowed.has(id))
+          if (ids.length === 0) {
+            alert('Bitte mindestens eine Person auswählen.')
+            setIsSaving(false)
+            return
+          }
+          mitreisendeForTemp = ids
+        }
         const res = await fetch('/api/packing-items', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -219,7 +243,7 @@ export function AddSingleItemDialog({
             kategorieId: form.kategorie_id,
             anzahl,
             transportId: form.transport_id === 'none' ? null : form.transport_id,
-            mitreisende: selectedPackProfile ? [selectedPackProfile] : undefined,
+            mitreisende: mitreisendeForTemp,
           }),
         })
         const data = (await res.json()) as ApiResponse<unknown>
@@ -280,6 +304,78 @@ export function AddSingleItemDialog({
             />
           </div>
         </div>
+
+        {!form.saveToEquipment && (
+          <div className="space-y-3 rounded-md border border-border bg-muted/30 p-3">
+            <p className="text-sm font-medium text-foreground">Auf der Packliste</p>
+            {selectedPackProfile ? (
+              <RadioGroup
+                value={tempProfilModus}
+                onValueChange={(v) => setTempProfilModus(v as 'nur_person' | 'pauschal')}
+                className="gap-3"
+              >
+                <div className="flex items-start gap-2">
+                  <RadioGroupItem value="nur_person" id="tmp-nur-person" className="mt-0.5" />
+                  <Label htmlFor="tmp-nur-person" className="cursor-pointer font-normal leading-snug">
+                    Nur für{' '}
+                    {vacationMitreisende.find((m) => m.id === selectedPackProfile)?.name ??
+                      'dieses Packprofil'}
+                  </Label>
+                </div>
+                <div className="flex items-start gap-2">
+                  <RadioGroupItem value="pauschal" id="tmp-profil-pauschal" className="mt-0.5" />
+                  <Label htmlFor="tmp-profil-pauschal" className="cursor-pointer font-normal leading-snug">
+                    Pauschal
+                  </Label>
+                </div>
+              </RadioGroup>
+            ) : (
+              <>
+                <RadioGroup
+                  value={tempZentralModus}
+                  onValueChange={(v) => setTempZentralModus(v as 'pauschal' | 'personen')}
+                  className="gap-3"
+                >
+                  <div className="flex items-start gap-2">
+                    <RadioGroupItem value="pauschal" id="tmp-zentral-pauschal" className="mt-0.5" />
+                    <Label htmlFor="tmp-zentral-pauschal" className="cursor-pointer font-normal leading-snug">
+                      Pauschal
+                    </Label>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <RadioGroupItem value="personen" id="tmp-zentral-personen" className="mt-0.5" />
+                    <Label htmlFor="tmp-zentral-personen" className="cursor-pointer font-normal leading-snug">
+                      Für folgende Personen
+                    </Label>
+                  </div>
+                </RadioGroup>
+                {tempZentralModus === 'personen' && (
+                  <div className="space-y-2 pl-1">
+                    {vacationMitreisende.length === 0 ? (
+                      <p className="text-xs text-muted-foreground">Keine Personen für diesen Urlaub hinterlegt.</p>
+                    ) : (
+                      vacationMitreisende.map((m) => (
+                        <label key={m.id} className="flex cursor-pointer items-center gap-2 text-sm">
+                          <Checkbox
+                            checked={tempZentralPersonenIds.includes(m.id)}
+                            onCheckedChange={(c) => {
+                              if (c === true) {
+                                setTempZentralPersonenIds((prev) => [...new Set([...prev, m.id])])
+                              } else {
+                                setTempZentralPersonenIds((prev) => prev.filter((id) => id !== m.id))
+                              }
+                            }}
+                          />
+                          <span>{m.name}</span>
+                        </label>
+                      ))
+                    )}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
 
         {form.saveToEquipment && (
           <>
