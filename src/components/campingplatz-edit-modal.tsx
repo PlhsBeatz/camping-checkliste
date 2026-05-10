@@ -20,6 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Checkbox } from '@/components/ui/checkbox'
 
 interface CampingplatzFormState {
   id?: string
@@ -36,6 +37,8 @@ interface CampingplatzFormState {
   photo_name: string | null
   pros: string[]
   cons: string[]
+  aufwunschliste: boolean
+  top_favorit: boolean
 }
 
 /** UI: Fotos pro Rasterseite (Google liefert max. 10 pro Place-Details-Antwort, ohne Pagination). */
@@ -56,6 +59,8 @@ function createEmptyForm(): CampingplatzFormState {
     photo_name: null,
     pros: [''],
     cons: [''],
+    aufwunschliste: true,
+    top_favorit: false,
   }
 }
 
@@ -114,6 +119,9 @@ export function CampingplatzEditModal({
         photo_name: initialCampingplatz.photo_name ?? null,
         pros: initialCampingplatz.pros.length ? initialCampingplatz.pros : [''],
         cons: initialCampingplatz.cons.length ? initialCampingplatz.cons : [''],
+        aufwunschliste:
+          (initialCampingplatz as { aufwunschliste?: boolean }).aufwunschliste !== false,
+        top_favorit: !!(initialCampingplatz as { top_favorit?: boolean }).top_favorit,
       })
     } else {
       setEditId(null)
@@ -339,6 +347,8 @@ export function CampingplatzEditModal({
         photo_name?: string | null
         pros: string[]
         cons: string[]
+        aufwunschliste: boolean
+        top_favorit: boolean
       } = {
         id: editId ?? undefined,
         name: form.name.trim(),
@@ -353,6 +363,8 @@ export function CampingplatzEditModal({
         lng: form.lng,
         pros: form.pros.map((p) => p.trim()).filter((p) => p.length > 0),
         cons: form.cons.map((p) => p.trim()).filter((p) => p.length > 0),
+        aufwunschliste: form.aufwunschliste,
+        top_favorit: form.top_favorit,
       }
       if (editId) {
         if (savedFotos.length > 0) payload.photo_name = coverGoogle
@@ -559,6 +571,45 @@ export function CampingplatzEditModal({
                 <SelectItem value="Stellplatz">Stellplatz</SelectItem>
               </SelectContent>
             </Select>
+          </div>
+
+          <div className="flex flex-col gap-3 rounded-lg border bg-muted/20 p-3">
+            <div className="flex items-start gap-3">
+              <Checkbox
+                id="cp-wunsch"
+                checked={form.aufwunschliste}
+                onCheckedChange={(c) =>
+                  setForm((prev) => ({ ...prev, aufwunschliste: c === true }))
+                }
+              />
+              <div className="space-y-0.5">
+                <Label htmlFor="cp-wunsch" className="cursor-pointer font-medium">
+                  Auf Wunschliste
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Ausgeschlossene Plätze bleiben aktiv (z. B. für die Historie), erscheinen aber nicht
+                  mehr als geplantes Wunschziel.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-start gap-3">
+              <Checkbox
+                id="cp-top"
+                checked={form.top_favorit}
+                onCheckedChange={(c) =>
+                  setForm((prev) => ({ ...prev, top_favorit: c === true }))
+                }
+              />
+              <div className="space-y-0.5">
+                <Label htmlFor="cp-top" className="cursor-pointer font-medium inline-flex items-center gap-1">
+                  <Star className="h-3.5 w-3.5 fill-amber-500 text-amber-500" />
+                  Top-Favorit
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Besonders empfehlenswerte Plätze – in der Liste hervorgehoben.
+                </p>
+              </div>
+            </div>
           </div>
 
           <div className="space-y-4">

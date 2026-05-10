@@ -14,6 +14,8 @@ import {
   getCampingPhotosR2,
   deleteRoutesForCampingplatz,
   getUrlaubCountForCampingplatz,
+  getUserById,
+  getRoutesForUserAndCampingplatzIds,
   CampingplatzTyp,
 } from '@/lib/db'
 import { requireAuth, requireAdmin } from '@/lib/api-auth'
@@ -30,10 +32,31 @@ export async function GET(request: NextRequest) {
     const campingplaetze = await getCampingplaetze(db, { includeArchived })
     const ids = campingplaetze.map((c) => c.id)
     const counts = await getUrlaubCountByCampingplatzIds(db, ids)
-    const data = campingplaetze.map((c) => ({
-      ...c,
-      urlaube_zuordnungen: counts[c.id] ?? 0,
-    }))
+
+    const user = await getUserById(db, auth.userContext.userId)
+    const routesByCp =
+      user?.heimat_lat != null &&
+      user?.heimat_lng != null &&
+      ids.length > 0
+        ? await getRoutesForUserAndCampingplatzIds(db, auth.userContext.userId, ids)
+        : new Map()
+
+    const data = campingplaetze.map((c) => {
+      const cached = routesByCp.get(c.id)
+      const route_from_home =
+        cached != null
+          ? {
+              distanceKm: cached.distance_km,
+              durationMinutes: cached.duration_min,
+              provider: cached.provider,
+            }
+          : undefined
+      return {
+        ...c,
+        urlaube_zuordnungen: counts[c.id] ?? 0,
+        ...(route_from_home ? { route_from_home } : {}),
+      }
+    })
     return NextResponse.json({ success: true, data })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error)
@@ -65,6 +88,8 @@ export async function POST(request: NextRequest) {
       lat?: number | null
       lng?: number | null
       photo_name?: string | null
+      aufwunschliste?: boolean
+      top_favorit?: boolean
     }
 
     if (!body.name || !body.land || !body.ort || !body.platz_typ) {
@@ -88,6 +113,8 @@ export async function POST(request: NextRequest) {
       lat: body.lat ?? null,
       lng: body.lng ?? null,
       photo_name: body.photo_name ?? null,
+      aufwunschliste: body.aufwunschliste,
+      top_favorit: body.top_favorit,
     })
 
     if (!campingplatz) {
@@ -146,6 +173,8 @@ export async function PUT(request: NextRequest) {
       lng?: number | null
       photo_name?: string | null
       is_archived?: boolean
+      aufwunschliste?: boolean
+      top_favorit?: boolean
     }
 
     if (!body.id) {
@@ -168,6 +197,8 @@ export async function PUT(request: NextRequest) {
       lng: body.lng ?? null,
       photo_name: body.photo_name ?? null,
       is_archived: body.is_archived,
+      aufwunschliste: body.aufwunschliste,
+      top_favorit: body.top_favorit,
     })
 
     if (!updated) {

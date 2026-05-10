@@ -203,6 +203,10 @@ export interface Campingplatz {
   /** Google Places Photo Resource-Name (z. B. places/ChIJ.../photos/...) */
   photo_name?: string | null
   is_archived: boolean
+  /** Auf Wunschliste (aktive Plätze); unabhängig vom Archiv */
+  aufwunschliste: boolean
+  /** Top-Lieblingsplatz */
+  top_favorit: boolean
   created_at: string
   updated_at?: string
   /** Aus JOIN campingplatz_fotos (is_cover = 1) */
@@ -211,6 +215,12 @@ export interface Campingplatz {
   cover_google_photo_name?: string | null
   /** Anzahl Urlaube mit diesem Campingplatz (API; Junction urlaub_campingplaetze) */
   urlaube_zuordnungen?: number
+  /** Nur Listen-GET: gecachte Fahrt von der Nutzer-Heimat */
+  route_from_home?: {
+    distanceKm: number
+    durationMinutes: number
+    provider: 'google' | 'haversine'
+  } | null
 }
 
 export interface CampingplatzRouteCacheEntry {
@@ -352,6 +362,11 @@ function mapCampingplatzRow(row: Record<string, unknown>): Campingplatz {
     lng: row.lng != null ? Number(row.lng) : null,
     photo_name: row.photo_name != null ? String(row.photo_name) : null,
     is_archived: !!(row.is_archived ?? 0),
+    aufwunschliste:
+      row.aufwunschliste === undefined || row.aufwunschliste === null
+        ? true
+        : !!(row.aufwunschliste ?? 0),
+    top_favorit: !!(row.top_favorit ?? 0),
     created_at: String(row.created_at || ''),
     updated_at: row.updated_at != null ? String(row.updated_at) : undefined,
     cover_foto_id:
@@ -3511,15 +3526,19 @@ export async function createCampingplatz(
     lat?: number | null
     lng?: number | null
     photo_name?: string | null
+    aufwunschliste?: boolean
+    top_favorit?: boolean
   }
 ): Promise<Campingplatz | null> {
   try {
     const id = crypto.randomUUID()
+    const auf = data.aufwunschliste !== false ? 1 : 0
+    const top = data.top_favorit ? 1 : 0
     await db
       .prepare(
         `INSERT INTO campingplaetze 
-         (id, name, land, bundesland, ort, webseite, video_link, platz_typ, pros, cons, adresse, lat, lng, photo_name) 
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+         (id, name, land, bundesland, ort, webseite, video_link, platz_typ, pros, cons, adresse, lat, lng, photo_name, aufwunschliste, top_favorit) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .bind(
         id,
@@ -3535,7 +3554,9 @@ export async function createCampingplatz(
         data.adresse ?? null,
         data.lat ?? null,
         data.lng ?? null,
-        data.photo_name ?? null
+        data.photo_name ?? null,
+        auf,
+        top
       )
       .run()
     return getCampingplatzById(db, id)
@@ -3563,6 +3584,8 @@ export async function updateCampingplatz(
     lng: number | null
     photo_name: string | null
     is_archived: boolean
+    aufwunschliste: boolean
+    top_favorit: boolean
   }>
 ): Promise<Campingplatz | null> {
   try {
@@ -3624,6 +3647,14 @@ export async function updateCampingplatz(
     if (updates.is_archived !== undefined) {
       fields.push('is_archived = ?')
       values.push(updates.is_archived ? 1 : 0)
+    }
+    if (updates.aufwunschliste !== undefined) {
+      fields.push('aufwunschliste = ?')
+      values.push(updates.aufwunschliste ? 1 : 0)
+    }
+    if (updates.top_favorit !== undefined) {
+      fields.push('top_favorit = ?')
+      values.push(updates.top_favorit ? 1 : 0)
     }
 
     if (fields.length === 0) {
@@ -3783,6 +3814,37 @@ export async function getRouteForUserAndCampingplatz(
   } catch (error) {
     console.error('Error fetching route cache entry:', error)
     return null
+  }
+}
+
+const ROUTE_CACHE_IN_CHUNK = 80
+
+/** Alle Routen-Einträge für einen User und die gegebenen Campingplatz-IDs (D1 IN-Limit beachten). */
+export async function getRoutesForUserAndCampingplatzIds(
+  db: D1Database,
+  userId: string,
+  campingplatzIds: string[]
+): Promise<Map<string, CampingplatzRouteCacheEntry>> {
+  const out = new Map<string, CampingplatzRouteCacheEntry>()
+  if (campingplatzIds.length === 0) return out
+  try {
+    for (let i = 0; i < campingplatzIds.length; i += ROUTE_CACHE_IN_CHUNK) {
+      const chunk = campingplatzIds.slice(i, i + ROUTE_CACHE_IN_CHUNK)
+      const placeholders = chunk.map(() => '?').join(',')
+      const result = await db
+        .prepare(
+          `SELECT * FROM campingplatz_routen_cache WHERE user_id = ? AND campingplatz_id IN (${placeholders})`
+        )
+        .bind(userId, ...chunk)
+        .all<CampingplatzRouteCacheEntry>()
+      for (const row of result.results || []) {
+        out.set(row.campingplatz_id, row)
+      }
+    }
+    return out
+  } catch (error) {
+    console.error('Error bulk-fetching route cache:', error)
+    return out
   }
 }
 

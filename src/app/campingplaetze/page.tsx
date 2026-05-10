@@ -82,7 +82,12 @@ function CampingplaetzePageContent() {
         const cp = d.data.campingplatz
         setItems((prev) => {
           const o = prev.filter((c) => c.id !== id)
-          return [...o, cp].sort((a, b) => a.name.localeCompare(b.name))
+          const prevCp = prev.find((c) => c.id === id)
+          const merged: Campingplatz = {
+            ...cp,
+            route_from_home: cp.route_from_home ?? prevCp?.route_from_home,
+          }
+          return [...o, merged].sort((a, b) => a.name.localeCompare(b.name))
         })
         try {
           await cacheCampingplatz(cp)
@@ -273,6 +278,7 @@ function CampingplaetzePageContent() {
               ...saved,
               urlaube_zuordnungen:
                 saved.urlaube_zuordnungen ?? prevMatch?.urlaube_zuordnungen ?? 0,
+              route_from_home: saved.route_from_home ?? prevMatch?.route_from_home,
             }
             return [...others, merged].sort((a, b) => a.name.localeCompare(b.name))
           })
@@ -286,7 +292,7 @@ function CampingplaetzePageContent() {
           if (!open) setDeleteTarget(null)
         }}
         title="Campingplatz löschen"
-        description="Möchten Sie diesen Campingplatz wirklich löschen? Falls er Urlaubsreisen zugeordnet ist, werden Sie ggf. zum Archivieren aufgefordert."
+        description="Möchten Sie diesen Campingplatz wirklich löschen? Existiert der Platz nicht mehr (dauerhaft geschlossen), sollten Sie ihn nach Abgleich mit den Urlaubsreisen archivieren statt zu löschen. Ist er noch Urlaubsreisen zugeordnet, werden Sie zum Archivieren aufgefordert."
         onConfirm={executeDelete}
         isLoading={isLoading}
       />
@@ -296,8 +302,8 @@ function CampingplaetzePageContent() {
         onOpenChange={(open) => {
           if (!open) setArchivePrompt(null)
         }}
-        title="Campingplatz archivieren"
-        description="Dieser Campingplatz ist bereits Urlaubsreisen zugeordnet. Statt ihn zu löschen, kann er archiviert werden und bleibt in bestehenden Urlaubsreisen sichtbar. Möchten Sie ihn archivieren?"
+        title="Ins Archiv verschieben"
+        description="Dieser Campingplatz ist bereits Urlaubsreisen zugeordnet und kann nicht endgültig gelöscht werden. Im Archiv bleibt er in der Historie erhalten (z. B. wenn der Platz nicht mehr existiert). Bestehende Urlaubs-Zuordnungen bleiben sichtbar."
         onConfirm={executeArchive}
         isLoading={isLoading}
       />
