@@ -46,6 +46,8 @@
     
     --border: 103 15% 85%;
     --input: 103 15% 85%;
+    /* Formularfelder: gleiche Tonfamilie wie --background, deutlich heller, nicht reines Weiß */
+    --field: 42 18% 97.5%;
     --ring: 103 45% 21%;
     
     /* Sidebar = Dark Green */
@@ -95,6 +97,7 @@
     
     --border: 103 30% 25%;
     --input: 103 30% 25%;
+    --field: 103 18% 20%;
     --ring: 160 84% 39%;
     
     --sidebar-background: 103 45% 18%;
@@ -157,7 +160,7 @@ gmp-place-autocomplete {
   height: 40px;
   border-radius: var(--radius);
   border: 1px solid hsl(var(--input));
-  background-color: hsl(var(--background));
+  background-color: hsl(var(--field));
   color: hsl(var(--foreground));
   font-size: 0.875rem;
   box-shadow: none;
