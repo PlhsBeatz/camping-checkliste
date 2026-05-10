@@ -611,7 +611,7 @@ export function CampingplaetzeTable({
             })}
           </div>
         )}
-        <div className="flex flex-col sm:flex-row gap-2">
+        <div className="flex flex-row gap-2 items-center">
           <div className="flex-1 relative min-w-0">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
@@ -633,13 +633,19 @@ export function CampingplaetzeTable({
         </div>
 
         {showFilters && (
-          <div className="space-y-4 rounded-lg border border-dashed border-muted-foreground/25 bg-muted/20 px-3 py-4">
-            <div className="rounded-lg border border-[rgb(45,79,30)]/20 bg-white/90 px-3 py-3 shadow-sm">
-              <Label htmlFor="cp-sort-mode" className="text-xs font-semibold text-[rgb(45,79,30)]">
+          <div className="space-y-4 pt-2">
+            <div className="rounded-lg border border-sky-200/90 bg-sky-50 px-3 py-3 dark:border-sky-800/60 dark:bg-sky-950/35">
+              <Label
+                htmlFor="cp-sort-mode"
+                className="text-xs font-semibold text-sky-900 dark:text-sky-100"
+              >
                 Sortierung
               </Label>
               <Select value={sortMode} onValueChange={(v) => setSortMode(v as SortMode)}>
-                <SelectTrigger id="cp-sort-mode" className="mt-1.5 w-full sm:max-w-md">
+                <SelectTrigger
+                  id="cp-sort-mode"
+                  className="mt-1.5 w-full sm:max-w-md bg-white/90 dark:bg-slate-950/50"
+                >
                   <SelectValue placeholder="Sortierung wählen" />
                 </SelectTrigger>
                 <SelectContent>
@@ -650,7 +656,7 @@ export function CampingplaetzeTable({
               </Select>
             </div>
 
-            <div className="space-y-3 border-t border-muted-foreground/20 pt-4">
+            <div className="space-y-3 border-t border-gray-200 pt-4 dark:border-gray-700">
               <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 Filterkriterien
               </p>
@@ -767,7 +773,7 @@ export function CampingplaetzeTable({
                 </SelectContent>
               </Select>
             </div>
-          </div>
+              </div>
             </div>
           </div>
         )}
