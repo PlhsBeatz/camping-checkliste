@@ -133,7 +133,7 @@ export default function ProfilPage() {
   }
 
   return (
-    <div className="min-h-screen flex">
+    <div className="min-h-screen flex max-w-full overflow-x-clip">
       <NavigationSidebar isOpen={showNavSidebar} onClose={() => setShowNavSidebar(false)} />
       <div className={cn('flex-1 transition-all duration-300 min-w-0 overflow-x-hidden', 'lg:ml-[280px]')}>
         <div className="container mx-auto p-4 md:p-6 space-y-6 max-w-full">

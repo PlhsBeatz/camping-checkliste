@@ -169,7 +169,7 @@ function PackStatusContent() {
 
       <div className="flex-1 transition-all duration-300 min-w-0 lg:ml-[280px]">
         <PullToRefreshWrapper onRefresh={fetchPackStatus} disabled={showNavSidebar}>
-        <div className="container mx-auto p-4 md:p-6 space-y-6">
+        <div className="container mx-auto p-4 md:p-6 space-y-6 max-w-full">
           {/* Header - Sticky, gleiche Größe wie andere Seiten */}
           <div className="sticky top-0 z-10 flex items-center justify-between bg-white shadow pb-4 -mx-4 px-4 -mt-4 pt-4 md:-mx-6 md:px-6 md:-mt-6 md:pt-6 md:pb-4">
             <div className="flex items-center gap-4">
