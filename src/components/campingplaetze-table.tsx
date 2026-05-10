@@ -103,7 +103,7 @@ export function CampingplaetzeTable({
   const [filterTyp, setFilterTyp] = useState<string>('all')
   const [filterArchiv, setFilterArchiv] = useState<string>(showArchived ? 'all' : 'active')
   const [sortMode, setSortMode] = useState<SortMode>(prefs0?.sortMode ?? 'region')
-  const [filterWunsch, setFilterWunsch] = useState<FilterWunsch>(prefs0?.filterWunsch ?? 'all')
+  const [filterWunsch, setFilterWunsch] = useState<FilterWunsch>(prefs0?.filterWunsch ?? 'wish')
   const [filterBesucht, setFilterBesucht] = useState<FilterBesucht>(prefs0?.filterBesucht ?? 'all')
   const [filterCoords, setFilterCoords] = useState<FilterCoords>(prefs0?.filterCoords ?? 'all')
   const [maxFahrzeitMin, setMaxFahrzeitMin] = useState<number | null>(
@@ -348,7 +348,7 @@ export function CampingplaetzeTable({
     filterBundesland !== 'all' ||
     filterTyp !== 'all' ||
     filterArchiv !== filterArchivDefault ||
-    filterWunsch !== 'all' ||
+    filterWunsch !== 'wish' ||
     filterBesucht !== 'all' ||
     filterCoords !== 'all' ||
     maxFahrzeitMin != null ||
@@ -360,7 +360,7 @@ export function CampingplaetzeTable({
     setFilterBundesland('all')
     setFilterTyp('all')
     setFilterArchiv(showArchived ? 'all' : 'active')
-    setFilterWunsch('all')
+    setFilterWunsch('wish')
     setFilterBesucht('all')
     setFilterCoords('all')
     setMaxFahrzeitMin(null)
@@ -623,30 +623,39 @@ export function CampingplaetzeTable({
               className="pl-10"
             />
           </div>
-          <div className="flex gap-2 shrink-0">
-            <Select value={sortMode} onValueChange={(v) => setSortMode(v as SortMode)}>
-              <SelectTrigger className="w-[200px]">
-                <SelectValue placeholder="Sortierung" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="region">Region (Land/Bundesland)</SelectItem>
-                <SelectItem value="distance">Entfernung (von Zuhause)</SelectItem>
-                <SelectItem value="name">Name A–Z</SelectItem>
-              </SelectContent>
-            </Select>
-            <Button
-              variant={showFilters ? 'default' : 'outline'}
-              size="icon"
-              onClick={() => setShowFilters((s) => !s)}
-              aria-label="Weitere Filter"
-            >
-              <Filter className="h-4 w-4" />
-            </Button>
-          </div>
+          <Button
+            variant={showFilters ? 'default' : 'outline'}
+            size="icon"
+            className="shrink-0"
+            onClick={() => setShowFilters((s) => !s)}
+            aria-label="Filterkriterien ein- oder ausblenden"
+          >
+            <Filter className="h-4 w-4" />
+          </Button>
+        </div>
+
+        <div className="rounded-lg border border-[rgb(45,79,30)]/20 bg-white/90 px-3 py-3 shadow-sm">
+          <Label htmlFor="cp-sort-mode" className="text-xs font-semibold text-[rgb(45,79,30)]">
+            Sortierung
+          </Label>
+          <Select value={sortMode} onValueChange={(v) => setSortMode(v as SortMode)}>
+            <SelectTrigger id="cp-sort-mode" className="mt-1.5 w-full sm:max-w-md">
+              <SelectValue placeholder="Sortierung wählen" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="region">Region (Land/Bundesland)</SelectItem>
+              <SelectItem value="distance">Entfernung (von Zuhause)</SelectItem>
+              <SelectItem value="name">Name A–Z</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
 
         {showFilters && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="space-y-3 rounded-lg border border-dashed border-muted-foreground/25 bg-muted/20 px-3 py-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Filterkriterien
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <div>
               <Label>Bundesland</Label>
               <Select value={filterBundesland} onValueChange={setFilterBundesland}>
@@ -759,6 +768,7 @@ export function CampingplaetzeTable({
                 </SelectContent>
               </Select>
             </div>
+          </div>
           </div>
         )}
 

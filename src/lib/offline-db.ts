@@ -376,17 +376,33 @@ export async function cachePackStatus(
   })
 }
 
+/**
+ * Stellt `aufwunschliste` und `top_favorit` für IndexedDB sicher (API + alte Cache-Zeilen).
+ * `route_from_home` bleibt unverändert mitgeschrieben, sofern von der Liste geliefert.
+ */
+export function normalizeCampingplatzForOfflineCache(cp: Campingplatz): Campingplatz {
+  return {
+    ...cp,
+    aufwunschliste: (cp as { aufwunschliste?: boolean }).aufwunschliste !== false,
+    top_favorit: !!(cp as { top_favorit?: boolean }).top_favorit,
+  }
+}
+
 export async function cacheCampingplaetze(
   items: Campingplatz[]
 ): Promise<void> {
-  const withMetaItems = items.map((v) => withMeta(v)) as CachedCampingplatz[]
+  const withMetaItems = items
+    .map((v) => withMeta(normalizeCampingplatzForOfflineCache(v)))
+    .map((v) => v as CachedCampingplatz)
   await snapshotReplace(offlineDb.campingplaetze, withMetaItems)
 }
 
 export async function cacheCampingplatz(
   item: Campingplatz
 ): Promise<void> {
-  await offlineDb.campingplaetze.put(withMeta(item) as CachedCampingplatz)
+  await offlineDb.campingplaetze.put(
+    withMeta(normalizeCampingplatzForOfflineCache(item)) as CachedCampingplatz
+  )
 }
 
 /** Fotos für genau einen Campingplatz spiegeln */

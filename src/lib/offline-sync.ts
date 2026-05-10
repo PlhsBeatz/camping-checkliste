@@ -26,6 +26,7 @@ import {
   cacheHomeLocation,
   cacheAuthUser,
   type SyncQueueEntry,
+  normalizeCampingplatzForOfflineCache,
 } from './offline-db'
 import type {
   Vacation,
@@ -261,12 +262,14 @@ export async function getCachedPackStatus(
 
 export async function getCachedCampingplaetze(): Promise<Campingplatz[]> {
   const rows = await offlineDb.campingplaetze.toArray()
-  return rows.map(stripMeta)
+  return rows.map((row) => normalizeCampingplatzForOfflineCache(stripMeta(row) as Campingplatz))
 }
 
 export async function getCachedCampingplatz(id: string): Promise<Campingplatz | null> {
   const row = await offlineDb.campingplaetze.get(id)
-  return row ? stripMeta(row) : null
+  return row
+    ? normalizeCampingplatzForOfflineCache(stripMeta(row) as Campingplatz)
+    : null
 }
 
 export async function getCachedCampingplatzFotos(
