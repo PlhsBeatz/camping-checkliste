@@ -7,6 +7,8 @@ function parsePresets(v: unknown): BackupPreset[] | undefined {
   if (!Array.isArray(v)) return undefined
   const allowed: BackupPreset[] = [
     'referenceCore',
+    'equipment',
+    'referenceStammdaten',
     'vacations',
     'places',
     'toolsChecklists',

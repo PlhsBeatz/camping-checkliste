@@ -450,7 +450,10 @@ export async function buildBackupBundle(
 
   const isFullExport = !options.presets?.length
   const hasReferencePreset =
-    isFullExport || Boolean(options.presets?.includes('referenceCore'))
+    isFullExport ||
+    Boolean(options.presets?.includes('referenceCore')) ||
+    Boolean(options.presets?.includes('equipment')) ||
+    Boolean(options.presets?.includes('referenceStammdaten'))
   const hasVacationsPreset =
     isFullExport || Boolean(options.presets?.includes('vacations'))
   const filterVacOnly = hasVacationsPreset && vacuumIds.length > 0

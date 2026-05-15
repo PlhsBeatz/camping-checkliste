@@ -1,7 +1,14 @@
 /** JSON-Backup-Bundle (Admin). Bei inkompatiblem Umschlag formatVersion erhöhen. */
 export const BACKUP_FORMAT_VERSION = 1 as const
 
-export type BackupPreset = 'referenceCore' | 'vacations' | 'places' | 'toolsChecklists' | 'auth'
+export type BackupPreset =
+  | 'referenceCore'
+  | 'equipment'
+  | 'referenceStammdaten'
+  | 'vacations'
+  | 'places'
+  | 'toolsChecklists'
+  | 'auth'
 
 export interface BackupMeta {
   /** Aktuelle Exportversion; ältere Importdateien können kleinere Werte haben. */

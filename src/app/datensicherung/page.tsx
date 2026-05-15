@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { NavigationSidebar } from '@/components/navigation-sidebar'
-import { Menu, Download, Upload, AlertTriangle } from 'lucide-react'
+import { Menu, Download, Upload, AlertTriangle, ChevronDown } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { cn } from '@/lib/utils'
 import type { BackupPreset } from '@/lib/data-backup'
@@ -13,29 +13,63 @@ import type { Vacation } from '@/lib/db'
 import type { ApiResponse } from '@/lib/api-types'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 
-const PRESET_META: { id: BackupPreset; label: string; hint: string }[] = [
-  { id: 'referenceCore', label: 'Referenz (Kategorien, Tags, Ausrüstung, …)', hint: 'Struktur ohne Urlaubs-Packlisten' },
-  { id: 'vacations', label: 'Urlaube & dynamische Packliste', hint: 'urlaube, packlisten, zeilen, Mitverknüpfungen' },
-  { id: 'places', label: 'Campingplätze & Fotos-Metadaten', hint: 'keine R2-Binarys' },
-  { id: 'toolsChecklists', label: 'Tools-Checklisten', hint: 'separate Checklisten' },
+/** Presets in der UI (ohne Legacy referenceCore und ohne separates auth-Preset) */
+type UiPresetKey = Exclude<BackupPreset, 'referenceCore' | 'auth'>
+
+const PRESET_META: { id: UiPresetKey; label: string; hint: string }[] = [
+  {
+    id: 'equipment',
+    label: 'Ausrüstung',
+    hint:
+      'Ausrüstungsgegenstände mit externen Links, Tag-Zuordnungen sowie fest zugeordneten Mitreisenden je Gegenstand.',
+  },
+  {
+    id: 'referenceStammdaten',
+    label: 'Packliste-Stamm & Organisation',
+    hint:
+      'Hauptkategorien und Kategorien der Packliste, Transportmittel inkl. manueller Festgewichte „Fest eingebaut“, Tag-Kategorien und Tags (Labels), Mitreisende-Stammdaten, Packlisten-Vorlagen mit Vorlagen-Einträgen.',
+  },
+  {
+    id: 'vacations',
+    label: 'Urlaube & dynamische Packliste',
+    hint:
+      'Urlaubs-Stammdaten; Zuordnung von Mitreisenden und Campingplätzen zum Urlaub; eine Packliste pro Urlaub mit allen Einträgen (über Ausrüstung oder temporär); Zuordnung Mitreisende je Eintrag (wer/wie viele/welches Transportmittel).',
+  },
+  {
+    id: 'places',
+    label: 'Campingplätze',
+    hint:
+      'Campingplatz-Stammdaten, Zuordnung Urlaub↔Campingplatz und Fotometadaten (keine Bilddateien aus R2).',
+  },
+  {
+    id: 'toolsChecklists',
+    label: 'Tools / Checklisten',
+    hint: 'Die zusätzlichen Checklisten unter „Tools“ mit Kategorien und Einträgen.',
+  },
 ]
+
+function emptyUiPresetState(): Record<UiPresetKey, boolean> {
+  return {
+    equipment: false,
+    referenceStammdaten: false,
+    vacations: false,
+    places: false,
+    toolsChecklists: false,
+  }
+}
 
 export default function DatensicherungPage() {
   const { canAccessConfig, loading } = useAuth()
   const router = useRouter()
   const [showNavSidebar, setShowNavSidebar] = useState(false)
   const [vacations, setVacations] = useState<Vacation[]>([])
-  const [presetState, setPresetState] = useState<Record<BackupPreset, boolean>>({
-    referenceCore: false,
-    vacations: false,
-    places: false,
-    toolsChecklists: false,
-    auth: false,
-  })
+  const [presetState, setPresetState] = useState<Record<UiPresetKey, boolean>>(emptyUiPresetState)
   /* auth-Preset nur per API; UI nutzt includeAuth */
   const [fullExport, setFullExport] = useState(true)
   const [selectedVacationIds, setSelectedVacationIds] = useState<Set<string>>(new Set())
+  const [vacationPickerOpen, setVacationPickerOpen] = useState(false)
   const [autoClosure, setAutoClosure] = useState(true)
   const [includeAuth, setIncludeAuth] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -75,9 +109,8 @@ export default function DatensicherungPage() {
 
   const selectedPresets = useMemo((): BackupPreset[] | undefined => {
     if (fullExport) return undefined
-    const keys = Object.keys(presetState) as BackupPreset[]
-    const p = keys.filter((k) => presetState[k])
-    return p.length ? p : undefined
+    const keys = (Object.keys(presetState) as UiPresetKey[]).filter((k) => presetState[k])
+    return keys.length ? keys : undefined
   }, [fullExport, presetState])
 
   const toggleVac = (id: string) => {
@@ -211,7 +244,7 @@ export default function DatensicherungPage() {
       <div
         className={cn('flex-1 min-w-0 transition-all duration-300', 'lg:ml-[280px]')}
       >
-        <div className="container mx-auto p-4 md:p-6 space-y-6 max-w-3xl">
+        <div className="container mx-auto p-4 md:p-6 space-y-6 max-w-full">
           <div className="sticky top-0 z-10 flex items-center justify-between bg-white shadow pb-4 -mx-4 px-4 -mt-4 pt-4 md:-mx-6 md:px-6 md:-mt-6 md:pt-6 gap-3">
             <div className="flex items-center gap-3 min-w-0">
               <Button
@@ -232,18 +265,21 @@ export default function DatensicherungPage() {
           <Card>
             <CardHeader>
               <CardTitle>Export</CardTitle>
-              <CardDescription>
-                JSON-Backup mit <code className="text-xs">meta.formatVersion</code>. Ohne D1-Binding
-                (reines <code className="text-xs">pnpm dev</code>) schlägt der Export fehl — nutze die
-                Produktiv-/Preview-Umgebung.
-              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="flex items-start gap-2">
                 <Checkbox
                   id="full"
                   checked={fullExport}
-                  onCheckedChange={(c) => setFullExport(c === true)}
+                  onCheckedChange={(c) => {
+                    const on = c === true
+                    setFullExport(on)
+                    if (on) {
+                      setPresetState(emptyUiPresetState())
+                      setSelectedVacationIds(new Set())
+                      setVacationPickerOpen(false)
+                    }
+                  }}
                 />
                 <div>
                   <Label htmlFor="full" className="font-medium">
@@ -297,29 +333,51 @@ export default function DatensicherungPage() {
               </div>
 
               <div className="space-y-2">
-                <p className="text-sm font-medium">Optional: nur bestimmte Urlaube</p>
-                <p className="text-xs text-muted-foreground">
-                  Wenn mindestens ein Urlaub gewählt ist, werden Packlisten-Daten darauf beschränkt. Ohne
-                  „Referenzkern“ und mit Auto-Closure werden passende Ausrüstung/Kategorien mit exportiert.
-                </p>
-                <div className="max-h-40 overflow-y-auto border rounded-md p-2 space-y-2 text-sm">
-                  {vacations.length === 0 ? (
-                    <span className="text-muted-foreground">Keine Urlaube geladen.</span>
-                  ) : (
-                    vacations.map((v) => (
-                      <div key={v.id} className="flex items-center gap-2">
-                        <Checkbox
-                          id={`v-${v.id}`}
-                          checked={selectedVacationIds.has(v.id)}
-                          onCheckedChange={() => toggleVac(v.id)}
-                        />
-                        <Label htmlFor={`v-${v.id}`} className="cursor-pointer font-normal">
-                          {v.titel}
-                        </Label>
-                      </div>
-                    ))
-                  )}
-                </div>
+                <Collapsible open={vacationPickerOpen} onOpenChange={setVacationPickerOpen}>
+                  <CollapsibleTrigger
+                    className={cn(
+                      'flex w-full items-center justify-between gap-2 rounded-md border border-input bg-background px-3 py-2.5 text-left text-sm font-medium',
+                      'hover:bg-secondary hover:text-secondary-foreground',
+                      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2'
+                    )}
+                  >
+                    <span>
+                      Bestimmte Urlaube einschränken
+                      {selectedVacationIds.size > 0 ? ` (${selectedVacationIds.size} gewählt)` : ''}
+                    </span>
+                    <ChevronDown
+                      className={cn(
+                        'h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200',
+                        vacationPickerOpen && 'rotate-180'
+                      )}
+                    />
+                  </CollapsibleTrigger>
+                  <CollapsibleContent className="space-y-2 pt-3">
+                    <p className="text-xs text-muted-foreground">
+                      Wenn mindestens ein Urlaub gewählt ist, werden die Urlaubs- und Packlisten-Daten im Export
+                      darauf begrenzt. Ohne aktiviertes „Packliste-Stamm &amp; Organisation“ oder „Ausrüstung“
+                      ergänzt die Option „Auto-Closure“ die dafür nötigen Referenzzeilen automatisch.
+                    </p>
+                    <div className="max-h-40 overflow-y-auto border rounded-md p-2 space-y-2 text-sm">
+                      {vacations.length === 0 ? (
+                        <span className="text-muted-foreground">Keine Urlaube geladen.</span>
+                      ) : (
+                        vacations.map((v) => (
+                          <div key={v.id} className="flex items-center gap-2">
+                            <Checkbox
+                              id={`v-${v.id}`}
+                              checked={selectedVacationIds.has(v.id)}
+                              onCheckedChange={() => toggleVac(v.id)}
+                            />
+                            <Label htmlFor={`v-${v.id}`} className="cursor-pointer font-normal">
+                              {v.titel}
+                            </Label>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </CollapsibleContent>
+                </Collapsible>
               </div>
 
               <div className="flex items-start gap-2">
@@ -334,7 +392,9 @@ export default function DatensicherungPage() {
                     Auto-Closure (referenzierte Ausrüstung &amp; Struktur)
                   </Label>
                   <p className="text-xs text-muted-foreground">
-                    Für Teil-Exports ohne Referenzkern bei ausgewählten Urlauben.
+                    Wenn Sie nur einzelne Urlaube exportieren und weder „Packliste-Stamm &amp; Organisation“
+                    noch „Ausrüstung“ anhaken, werden fehlende referenzierte Tabellen automatisch ergänzt
+                    (damit der Import konsistent bleibt).
                   </p>
                 </div>
               </div>

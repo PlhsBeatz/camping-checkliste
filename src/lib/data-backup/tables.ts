@@ -34,6 +34,7 @@ export const BACKUP_TABLE_ORDER: string[] = [
   'checklisten_eintraege',
 ]
 
+/** Legacy-API: gleiche Tabellen wie equipment ∪ referenceStammdaten */
 const REFERENCE_CORE = new Set([
   'hauptkategorien',
   'kategorien',
@@ -50,9 +51,31 @@ const REFERENCE_CORE = new Set([
   'vorlagen_eintraege',
 ])
 
+/** Nur Ausrüstungs-Inventar und direkte Verknüpfungen */
+const EQUIPMENT_REF = new Set([
+  'ausruestungsgegenstaende',
+  'ausruestungsgegenstaende_links',
+  'ausruestungsgegenstaende_standard_mitreisende',
+  'ausruestungsgegenstaende_tags',
+])
+
+/** Pack-/Organisations-Stamm ohne Ausrüstungs-Inventar */
+const REFERENCE_STAMMDATEN = new Set([
+  'hauptkategorien',
+  'kategorien',
+  'transportmittel',
+  'transportmittel_festgewicht_manuell',
+  'tag_kategorien',
+  'tags',
+  'mitreisende',
+  'packlisten_vorlagen',
+  'vorlagen_eintraege',
+])
+
 const VACATIONS = new Set([
   'urlaube',
   'urlaub_mitreisende',
+  'urlaub_campingplaetze',
   'packlisten',
   'packlisten_eintraege',
   'packlisten_eintrag_mitreisende',
@@ -113,6 +136,10 @@ export function tablesForPreset(p: BackupPreset): Set<string> {
   switch (p) {
     case 'referenceCore':
       return REFERENCE_CORE
+    case 'equipment':
+      return EQUIPMENT_REF
+    case 'referenceStammdaten':
+      return REFERENCE_STAMMDATEN
     case 'vacations':
       return VACATIONS
     case 'places':
