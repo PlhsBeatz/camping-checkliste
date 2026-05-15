@@ -326,8 +326,15 @@ export default function DatensicherungPage() {
                     Authentifizierung exportieren (Passwort-Hashes, Einladungs-Tokens)
                   </Label>
                   <p className="text-sm text-muted-foreground">
-                    Datei wie ein Geheimnis behandeln. Ohne diese Option bleiben die Auth-Tabellen im Export
-                    leer.
+                    Datei wie ein Geheimnis behandeln. Ohne diese Option bleiben im Komplettexport die
+                    Tabellen <code className="text-xs">users</code> u. a.{' '}
+                    <strong className="font-medium text-foreground">absichtlich leer</strong>, auch wenn in
+                    der Cloud mehrere Konten existieren – die JSON enthält dann keine Login-Datensätze.
+                    Nur mit Login haben Personen eine Zeile unter <code className="text-xs">users</code>;
+                    übrige Familienmitglieder stehen nur unter <code className="text-xs">mitreisende</code>.
+                    Mit Häkchen werden <strong className="font-medium text-foreground">alle</strong> Konten
+                    aus genau der Datenbank exportiert, die auch diese App gerade nutzt (nicht: andere
+                    Umgebung / anderes <code className="text-xs">wrangler</code>-Projekt).
                   </p>
                 </div>
               </div>
@@ -410,9 +417,11 @@ export default function DatensicherungPage() {
             <CardHeader>
               <CardTitle>Import</CardTitle>
               <CardDescription>
-                <code className="text-xs">mergeById</code> per <code className="text-xs">INSERT OR REPLACE</code>.
-                Bestehende Zeilen mit gleichem Primärschlüssel werden überschrieben; andere Zeilen werden nicht
-                gelöscht.
+                <code className="text-xs">mergeById</code> per UPSERT (<code className="text-xs">
+                  INSERT … ON CONFLICT DO UPDATE
+                </code>
+                ). Bestehende Zeilen mit gleichem Primärschlüssel werden zusammengeführt; es werden keine
+                Zeilen automatisch gelöscht.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">

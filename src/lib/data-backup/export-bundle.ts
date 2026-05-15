@@ -514,9 +514,21 @@ export async function buildBackupBundle(
   for (const t of tables) if (data[t] === undefined) data[t] = []
 
   if (!includeAuth && isFullExport) {
+    let usersRemoved = 0
     tables.forEach((t) => {
-      if (AUTH_TABLES.has(t)) data[t] = []
+      if (!AUTH_TABLES.has(t)) return
+      if (t === 'users') usersRemoved = (data[t] as unknown[] | undefined)?.length ?? 0
+      data[t] = []
     })
+    if (usersRemoved > 0) {
+      warnings.push(
+        `Komplettexport ohne „Authentifizierung exportieren“: ${usersRemoved} Benutzerzeile(n) und andere Auth-Daten wurden aus der JSON-Datei entfernt (Passwort-Hashes/Einladungen). In data.users ist die Liste daher leer, obwohl Konten in der Datenbank existieren. Mitreisende können weiterhin ein gesetztes user_id haben; diese UUID erscheint dann nur unter mitreisende, nicht unter users.`
+      )
+    } else {
+      warnings.push(
+        'Komplettexport ohne „Authentifizierung exportieren“: die Auth-Tabellen (u. a. users, einladungen) bleiben in der Datei leer.'
+      )
+    }
   }
 
   const bundle: BackupBundle = {

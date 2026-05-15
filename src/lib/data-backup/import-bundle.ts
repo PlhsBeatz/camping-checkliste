@@ -1,5 +1,5 @@
 /**
- * Backup-Bundle in D1 importieren (Admin, mergeById = INSERT OR REPLACE).
+ * Backup-Bundle in D1 importieren (mergeById = UPSERT: ON CONFLICT … DO UPDATE, kein INSERT OR REPLACE bei RESTRICT-Ketten).
  */
 import type { D1Database } from '@cloudflare/workers-types'
 
@@ -65,6 +65,14 @@ const pragmaCache = new WeakMap<
   Map<string, Set<string>>
 >()
 
+async function tableExists(db: D1Database, table: string): Promise<boolean> {
+  const row = await db
+    .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?")
+    .bind(table)
+    .first<{ name: string }>()
+  return Boolean(row?.name)
+}
+
 async function getColumnSet(db: D1Database, table: string): Promise<Set<string> | null> {
   let m = pragmaCache.get(db)
   if (!m) {
@@ -83,6 +91,59 @@ async function getColumnSet(db: D1Database, table: string): Promise<Set<string> 
   }
 }
 
+/**
+ * Composite-PKs (nicht unter `id`); Reihenfolge muss SQLite ON CONFLICT(…) entsprechen.
+ * Wichtig: Kein INSERT OR REPLACE auf Eltern-Zeilen — SQLite würde zuerst DELETE ausführen;
+ * Kinder mit ON DELETE RESTRICT blockieren dann (wie bei hauptkategorien → kategorien).
+ */
+const COMPOSITE_PRIMARY_KEY: Record<string, readonly string[]> = {
+  urlaub_mitreisende: ['urlaub_id', 'mitreisender_id'],
+  urlaub_campingplaetze: ['urlaub_id', 'campingplatz_id'],
+  campingplatz_routen_cache: ['user_id', 'campingplatz_id'],
+  mitreisende_berechtigungen: ['mitreisender_id', 'berechtigung'],
+  ausruestungsgegenstaende_standard_mitreisende: ['gegenstand_id', 'mitreisender_id'],
+  ausruestungsgegenstaende_tags: ['gegenstand_id', 'tag_id'],
+  vorlagen_eintraege: ['vorlage_id', 'gegenstand_id'],
+  packlisten_eintrag_mitreisende: ['packlisten_eintrag_id', 'mitreisender_id'],
+  packlisten_eintrag_mitreisende_temporaer: ['packlisten_eintrag_id', 'mitreisender_id'],
+}
+
+/**
+ * Merge ohne impliziten DELETE: INSERT … ON CONFLICT DO UPDATE (= UPSERT).
+ * INSERT OR REPLACE würde bei bestehendem PK löschen → RESTRICT-Kinder verweigern FK.
+ */
+function buildMergeUpsertSql(table: string, cols: string[]): string | null {
+  const pkParts = COMPOSITE_PRIMARY_KEY[table]
+  if (pkParts) {
+    const missing = pkParts.filter((c) => !cols.includes(c))
+    if (missing.length > 0) return null
+    const conflict = pkParts.join(', ')
+    const updates = cols.filter((c) => !pkParts.includes(c))
+    const qm = cols.map(() => '?').join(', ')
+    const insertPart = `INSERT INTO ${table} (${cols.join(', ')}) VALUES (${qm})`
+    if (updates.length === 0) {
+      return `${insertPart} ON CONFLICT(${conflict}) DO NOTHING`
+    }
+    const setClause = updates.map((c) => `${c} = excluded.${c}`).join(', ')
+    return `${insertPart} ON CONFLICT(${conflict}) DO UPDATE SET ${setClause}`
+  }
+
+  if (cols.includes('id')) {
+    const updates = cols.filter((c) => c !== 'id')
+    const qm = cols.map(() => '?').join(', ')
+    const insertPart = `INSERT INTO ${table} (${cols.join(', ')}) VALUES (${qm})`
+    if (updates.length === 0) {
+      return `${insertPart} ON CONFLICT(id) DO NOTHING`
+    }
+    const setClause = updates.map((c) => `${c} = excluded.${c}`).join(', ')
+    return `${insertPart} ON CONFLICT(id) DO UPDATE SET ${setClause}`
+  }
+
+  /** Extrem selten für unsere Stammdaten-Tabellen; REPLACE riskiert weiter FK-Probleme. */
+  const qm = cols.map(() => '?').join(', ')
+  return `INSERT OR REPLACE INTO ${table} (${cols.join(', ')}) VALUES (${qm})`
+}
+
 function filterRowForTable(
   table: string,
   row: Record<string, unknown>,
@@ -95,6 +156,39 @@ function filterRowForTable(
     out[k] = val
   }
   return out
+}
+
+/**
+ * Kanonische Zuordnung: `users.mitreisender_id` gilt als Quelle;
+ * nach Import liegt `mitreisende` oft ohne/zu früh ohne gültiges `user_id`
+ * vor (Merge-Reihenfolge oder Export ohne vollständige Mitreisenden-Zeilen).
+ */
+async function reconcileMitreisendeUserIds(db: D1Database): Promise<void> {
+  await db
+    .prepare(
+      `
+      UPDATE mitreisende
+      SET user_id = (
+        SELECT u.id FROM users u WHERE u.mitreisender_id = mitreisende.id LIMIT 1
+      ),
+      updated_at = datetime('now')
+      WHERE EXISTS (
+        SELECT 1 FROM users u WHERE u.mitreisender_id = mitreisende.id
+      )
+    `
+    )
+    .run()
+  await db
+    .prepare(
+      `
+      UPDATE mitreisende
+      SET user_id = NULL,
+      updated_at = datetime('now')
+      WHERE user_id IS NOT NULL
+        AND NOT EXISTS (SELECT 1 FROM users WHERE users.id = mitreisende.user_id)
+    `
+    )
+    .run()
 }
 
 export async function importBackupBundle(
@@ -155,8 +249,15 @@ export async function importBackupBundle(
       const cols = Object.keys(row)
       if (cols.length === 0) continue
       const vals = cols.map((c) => row[c])
-      const qm = cols.map(() => '?').join(', ')
-      const sql = `INSERT OR REPLACE INTO ${table} (${cols.join(', ')}) VALUES (${qm})`
+
+      const sql = buildMergeUpsertSql(table, cols)
+      if (sql === null) {
+        const need = COMPOSITE_PRIMARY_KEY[table]?.join(', ') ?? '?'
+        errors.push(
+          `${table}: Exportzeile ohne vollständigen Composite-Schlüssel (${need}); id=${String(rawRow.id ?? '–')}`
+        )
+        continue
+      }
       try {
         if (!opts.dryRun) await db.prepare(sql).bind(...vals).run()
         count++
@@ -165,6 +266,18 @@ export async function importBackupBundle(
       }
     }
     tablesWritten[table] = count
+  }
+
+  if (!opts.dryRun) {
+    try {
+      const hasMitreisande = Boolean((await tableExists(db, 'mitreisende')) && (await getColumnSet(db, 'mitreisende'))?.has('user_id'))
+      const hasUsers = Boolean((await tableExists(db, 'users')) && (await getColumnSet(db, 'users'))?.has('mitreisender_id'))
+      if (hasMitreisande && hasUsers) {
+        await reconcileMitreisendeUserIds(db)
+      }
+    } catch (e) {
+      warnings.push(`mitreisende.user_id konnte nicht nachgezogen werden: ${e instanceof Error ? e.message : String(e)}`)
+    }
   }
 
   /** Tabellen im Bundle aber leer / nicht in order */

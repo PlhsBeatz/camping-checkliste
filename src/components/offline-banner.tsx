@@ -22,9 +22,8 @@ import { cn } from '@/lib/utils'
  * - Zeigt eine ausklappbare Detailansicht der Outbox mit "Verwerfen"-Knöpfen.
  */
 export function OfflineBanner() {
-  const [isOnline, setIsOnline] = useState(
-    typeof navigator !== 'undefined' ? navigator.onLine : true
-  )
+  /** Immer mit `true` starten: Server und erster Client-Pass müssen übereinstimmen (Hydration). Echter Status folgt in `useEffect` via `subscribeToOnlineStatus`. */
+  const [isOnline, setIsOnline] = useState(true)
   const [queueCount, setQueueCount] = useState(0)
   const [showDetails, setShowDetails] = useState(false)
   const [entries, setEntries] = useState<SyncQueueEntry[]>([])
