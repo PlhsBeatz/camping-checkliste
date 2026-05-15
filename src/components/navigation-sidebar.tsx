@@ -29,6 +29,18 @@ export function NavigationSidebar({ isOpen, onClose }: NavigationSidebarProps) {
     if (pathname.startsWith('/tools')) setToolsExpanded(true)
   }, [pathname])
 
+  useEffect(() => {
+    if (
+      pathname.startsWith('/kategorien') ||
+      pathname.startsWith('/tags') ||
+      pathname.startsWith('/mitreisende') ||
+      pathname.startsWith('/transportmittel') ||
+      pathname.startsWith('/datensicherung')
+    ) {
+      setConfigExpanded(true)
+    }
+  }, [pathname])
+
   const menuItems = [
     {
       icon: 'checklist',
@@ -72,6 +84,7 @@ export function NavigationSidebar({ isOpen, onClose }: NavigationSidebarProps) {
     { label: 'TAGS & LABELS', href: '/tags' },
     { label: 'MITREISENDE', href: '/mitreisende' },
     { label: 'TRANSPORTMITTEL', href: '/transportmittel' },
+    { label: 'DATENSICHERUNG', href: '/datensicherung' },
   ]
 
   return (
