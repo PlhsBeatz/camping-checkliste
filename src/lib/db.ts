@@ -604,6 +604,28 @@ export async function deleteVacation(db: D1Database, id: string): Promise<boolea
   }
 }
 
+const d1TableColumnsCache = new WeakMap<D1Database, Map<string, Set<string>>>()
+
+/** PRAGMA-Spaltenliste (gecached), z. B. wenn ältere lokale D1 ohne Migrations-Säule `anzahl` in `packlisten_eintrag_mitreisende`. */
+async function getD1TableColumnNames(db: D1Database, table: string): Promise<Set<string>> {
+  let m = d1TableColumnsCache.get(db)
+  if (!m) {
+    m = new Map()
+    d1TableColumnsCache.set(db, m)
+  }
+  const hit = m.get(table)
+  if (hit) return hit
+  try {
+    const r = await db.prepare(`PRAGMA table_info(${table})`).all<{ name: string }>()
+    const set = new Set((r.results ?? []).map((x) => x.name).filter(Boolean))
+    m.set(table, set)
+    return set
+  } catch {
+    m.set(table, new Set())
+    return new Set()
+  }
+}
+
 /**
  * Abrufen aller Packartikel für eine Urlaubsreise
  * Batch-Loading für Mitreisende via Subquery (nur 1 Parameter – D1-Limit 100)
@@ -638,15 +660,21 @@ export async function getPackingItems(db: D1Database, vacationId: string): Promi
       LEFT JOIN hauptkategorien hk ON k.hauptkategorie_id = hk.id
       LEFT JOIN transportmittel t ON pe.transport_id = t.id
       WHERE p.urlaub_id = ?
-        AND (ag.id IS NULL OR ag.status NOT IN ('Ausgemustert', 'Fest Installiert'))
+        AND (
+          ag.id IS NULL
+          OR TRIM(COALESCE(ag.status, 'Normal')) NOT IN ('Ausgemustert', 'Fest Installiert')
+        )
       ORDER BY COALESCE(hk.reihenfolge, 9999), COALESCE(k.reihenfolge, 9999), was
     `
     const result = await db.prepare(query).bind(vacationId).all<Record<string, unknown>>()
     const rows = result.results || []
 
+    const pemCols = await getD1TableColumnNames(db, 'packlisten_eintrag_mitreisende')
+    const pemAnzahlSelect = pemCols.has('anzahl') ? 'pem.anzahl' : 'CAST(NULL AS INTEGER) AS anzahl'
+
     // Batch: alle Mitreisende für diese Urlaubs-Packliste in einer Query (Subquery, kein IN mit vielen IDs)
     const mitQuery = `
-      SELECT pem.packlisten_eintrag_id, pem.mitreisender_id, m.name as mitreisender_name, pem.gepackt, pem.gepackt_vorgemerkt, pem.anzahl, pem.transport_id as pem_transport_id, t.name as pem_transport_name
+      SELECT pem.packlisten_eintrag_id, pem.mitreisender_id, m.name as mitreisender_name, pem.gepackt, pem.gepackt_vorgemerkt, ${pemAnzahlSelect}, pem.transport_id as pem_transport_id, t.name as pem_transport_name
       FROM packlisten_eintrag_mitreisende pem
       JOIN mitreisende m ON pem.mitreisender_id = m.id
       LEFT JOIN transportmittel t ON pem.transport_id = t.id
@@ -723,9 +751,11 @@ export async function getPackingItems(db: D1Database, vacationId: string): Promi
     const packlisteIdResult = await db.prepare('SELECT id FROM packlisten WHERE urlaub_id = ?').bind(vacationId).first<{ id: string }>()
     const packlisteId = packlisteIdResult?.id
     if (packlisteId) {
+      const pemTempCols = await getD1TableColumnNames(db, 'packlisten_eintrag_mitreisende_temporaer')
+      const pemTempAnzahlSelect = pemTempCols.has('anzahl') ? 'pem.anzahl' : 'CAST(NULL AS INTEGER) AS anzahl'
       // Mitreisende für temporäre Einträge laden (separate Tabelle)
       const tempMitQuery = `
-        SELECT pem.packlisten_eintrag_id, pem.mitreisender_id, m.name as mitreisender_name, pem.gepackt, pem.gepackt_vorgemerkt, pem.anzahl, pem.transport_id as pem_transport_id, t.name as pem_transport_name
+        SELECT pem.packlisten_eintrag_id, pem.mitreisender_id, m.name as mitreisender_name, pem.gepackt, pem.gepackt_vorgemerkt, ${pemTempAnzahlSelect}, pem.transport_id as pem_transport_id, t.name as pem_transport_name
         FROM packlisten_eintrag_mitreisende_temporaer pem
         JOIN mitreisende m ON pem.mitreisender_id = m.id
         LEFT JOIN transportmittel t ON pem.transport_id = t.id
@@ -826,7 +856,7 @@ export async function getPackingItems(db: D1Database, vacationId: string): Promi
 
     return items
   } catch (error) {
-    console.error('Error fetching packing items:', error)
+    console.error('getPackingItems failed for vacationId=', vacationId, error)
     return []
   }
 }
