@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { NavigationSidebar } from '@/components/navigation-sidebar'
-import { Menu, KeyRound } from 'lucide-react'
+import { Menu, KeyRound, LogOut } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { cn } from '@/lib/utils'
 import type { ApiResponse } from '@/lib/api-types'
@@ -16,7 +16,7 @@ import { cacheHomeLocation } from '@/lib/offline-db'
 import { useReconnectRefetch } from '@/hooks/use-reconnect-refetch'
 
 export default function ProfilPage() {
-  const { user, loading } = useAuth()
+  const { user, loading, logout } = useAuth()
   const router = useRouter()
   const [showNavSidebar, setShowNavSidebar] = useState(false)
   const [homeAddress, setHomeAddress] = useState('')
@@ -226,6 +226,27 @@ export default function ProfilPage() {
                 className="w-full sm:w-auto"
               >
                 {homeSaving ? 'Speichert…' : 'Heimatadresse speichern'}
+              </Button>
+            </CardContent>
+          </Card>
+
+          <Card className="min-w-0 overflow-hidden border-gray-200">
+            <CardHeader>
+              <CardTitle>Sitzung</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-sm text-gray-600">
+                Hier können Sie sich von diesem Gerät abmelden. Offline zwischengespeicherte Daten bleiben auf dem Gerät,
+                bis Sie die App-Daten löschen.
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full sm:w-auto border-gray-300 text-gray-800 hover:bg-gray-50"
+                onClick={() => logout()}
+              >
+                <LogOut className="h-4 w-4 mr-2" />
+                Abmelden
               </Button>
             </CardContent>
           </Card>

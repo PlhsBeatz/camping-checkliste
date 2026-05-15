@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { ChevronDown, ChevronRight, LogOut } from 'lucide-react'
+import { ChevronDown, ChevronRight } from 'lucide-react'
 import { AppLogo } from '@/components/app-logo'
 import { useAuth } from '@/components/auth-provider'
 import { cn } from '@/lib/utils'
@@ -16,7 +16,7 @@ interface NavigationSidebarProps {
 
 export function NavigationSidebar({ isOpen, onClose }: NavigationSidebarProps) {
   const pathname = usePathname()
-  const { canAccessConfig, logout } = useAuth()
+  const { canAccessConfig } = useAuth()
   const [configExpanded, setConfigExpanded] = useState(false)
   const [toolsExpanded, setToolsExpanded] = useState(false)
   const [isOnline, setIsOnline] = useState(true)
@@ -223,8 +223,8 @@ export function NavigationSidebar({ isOpen, onClose }: NavigationSidebarProps) {
           )}
         </nav>
 
-        {/* Mein Profil & Logout */}
-        <div className="px-3 py-2 space-y-1">
+        {/* Mein Profil */}
+        <div className="px-3 py-2">
           <Link
             href="/profil"
             onClick={() => onClose()}
@@ -238,13 +238,6 @@ export function NavigationSidebar({ isOpen, onClose }: NavigationSidebarProps) {
             <span className="material-icons text-xl">person</span>
             <span className="text-xs tracking-wide">MEIN PROFIL</span>
           </Link>
-          <button
-            onClick={() => logout()}
-            className="flex items-center gap-3 w-full px-4 py-3 text-sm font-medium text-gray-700 hover:bg-[rgb(250,250,249)] rounded-lg transition-colors"
-          >
-            <LogOut className="w-5 h-5" />
-            <span className="text-xs tracking-wide">ABMELDEN</span>
-          </button>
         </div>
 
         {/* Status Indicator */}
