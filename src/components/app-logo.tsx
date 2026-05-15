@@ -41,9 +41,14 @@ export function AppLogo({
     </div>
   )
 
+  const titleColor =
+    variant === 'centered' ? 'text-[rgb(45,79,30)]' : 'text-white'
+
   const textBlock = (
     <div className={variant === 'centered' ? 'text-center' : ''}>
-      <h1 className={`${isCompact ? 'text-xl' : 'text-2xl'} font-bold text-white leading-tight`}>
+      <h1
+        className={`${isCompact ? 'text-xl' : 'text-2xl'} font-bold ${titleColor} leading-tight`}
+      >
         CampCheck
       </h1>
       {bottomText && (
