@@ -168,7 +168,7 @@ export default function ProfilPage() {
                 <p className="text-sm text-gray-500">Rolle</p>
                 <p className="font-medium capitalize">{user.role}</p>
               </div>
-              <Button asChild variant="outline" className="w-full sm:w-auto">
+              <Button asChild variant="outline" className="w-full sm:w-auto hover:bg-secondary hover:text-secondary-foreground">
                 <Link href="/profil/passwort-aendern" className="flex items-center gap-2">
                   <KeyRound className="h-4 w-4" />
                   Passwort ändern
@@ -242,7 +242,7 @@ export default function ProfilPage() {
               <Button
                 type="button"
                 variant="outline"
-                className="w-full sm:w-auto border-gray-300 text-gray-800 hover:bg-gray-50"
+                className="w-full sm:w-auto hover:bg-secondary hover:text-secondary-foreground"
                 onClick={() => logout()}
               >
                 <LogOut className="h-4 w-4 mr-2" />
