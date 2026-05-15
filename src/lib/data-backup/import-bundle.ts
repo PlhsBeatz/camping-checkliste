@@ -108,6 +108,91 @@ const COMPOSITE_PRIMARY_KEY: Record<string, readonly string[]> = {
   packlisten_eintrag_mitreisende_temporaer: ['packlisten_eintrag_id', 'mitreisender_id'],
 }
 
+/** Spalten, die users.id aus dem Backup tragen und bei E-Mail-Merge umgebogen werden müssen */
+const USER_ID_REF_COLUMNS: Record<string, readonly string[]> = {
+  mitreisende: ['user_id'],
+  einladungen: ['erstellt_von'],
+  campingplatz_routen_cache: ['user_id'],
+}
+
+/**
+ * Wenn in der DB bereits ein Konto mit gleicher E-Mail existiert (andere id als im Backup),
+ * darf kein INSERT mit der Backup-id erfolgen — UNIQUE auf users.email würde scheitern.
+ * Map: Backup-user-id → bestehende users.id in der Ziel-DB.
+ */
+async function buildUserIdRemapForEmailCollisions(
+  db: D1Database,
+  userRows: Record<string, unknown>[]
+): Promise<Map<string, string>> {
+  const remap = new Map<string, string>()
+  for (const raw of userRows) {
+    const bid = raw.id
+    const email = raw.email
+    if (typeof bid !== 'string' || typeof email !== 'string' || !email.trim()) continue
+
+    const existing = await db
+      .prepare('SELECT id FROM users WHERE LOWER(TRIM(email)) = LOWER(TRIM(?))')
+      .bind(email.trim())
+      .first<{ id: string }>()
+    if (existing && existing.id !== bid) {
+      remap.set(bid, existing.id)
+    }
+  }
+  return remap
+}
+
+function applyUserIdRemapToRow(
+  table: string,
+  row: Record<string, unknown>,
+  remap: Map<string, string>
+): Record<string, unknown> {
+  const cols = USER_ID_REF_COLUMNS[table]
+  if (!cols || remap.size === 0) return row
+  let changed = false
+  const out: Record<string, unknown> = { ...row }
+  for (const c of cols) {
+    if (!(c in out)) continue
+    const v = out[c]
+    if (typeof v === 'string' && remap.has(v)) {
+      out[c] = remap.get(v)
+      changed = true
+    }
+  }
+  return changed ? out : row
+}
+
+async function upsertUserFromBackup(
+  db: D1Database,
+  rawRow: Record<string, unknown>,
+  allowed: Set<string> | null,
+  userIdRemap: Map<string, string>,
+  dryRun: boolean
+): Promise<void> {
+  const backupId = String(rawRow.id ?? '')
+  if (!backupId) throw new Error('users-Zeile ohne id')
+
+  const data = filterRowForTable('users', rawRow, allowed)
+  const targetId = userIdRemap.get(backupId) ?? backupId
+
+  if (userIdRemap.has(backupId)) {
+    const rest = { ...data }
+    delete rest.id
+    const setCols = Object.keys(rest)
+    if (setCols.length === 0) return
+    const sql = `UPDATE users SET ${setCols.map((c) => `${c} = ?`).join(', ')} WHERE id = ?`
+    const vals = [...setCols.map((c) => rest[c]), targetId]
+    if (!dryRun) await db.prepare(sql).bind(...vals).run()
+    return
+  }
+
+  const cols = Object.keys(data)
+  const sql = buildMergeUpsertSql('users', cols)
+  if (sql === null) {
+    throw new Error('users: UPSERT nicht erzeugbar')
+  }
+  if (!dryRun) await db.prepare(sql).bind(...cols.map((c) => data[c])).run()
+}
+
 /**
  * Merge ohne impliziten DELETE: INSERT … ON CONFLICT DO UPDATE (= UPSERT).
  * INSERT OR REPLACE würde bei bestehendem PK löschen → RESTRICT-Kinder verweigern FK.
@@ -213,6 +298,28 @@ export async function importBackupBundle(
     }
   }
 
+  const userBundleRows = bundle.data['users'] ?? []
+  let userIdRemap = new Map<string, string>()
+  if (userBundleRows.length > 0 && (await tableExists(db, 'users'))) {
+    userIdRemap = await buildUserIdRemapForEmailCollisions(db, userBundleRows)
+    if (userIdRemap.size > 0) {
+      warnings.push(
+        `${userIdRemap.size} Benutzerkonto(n) aus dem Backup haben dieselbe E-Mail wie bereits in der Datenbank — die bestehende Zeile wird mit den Backup-Daten aktualisiert; Verweise im Backup werden auf deren \`id\` umgebogen (verhindert SQLITE_CONSTRAINT UNIQUE auf users.email).`
+      )
+    }
+    const seenEmail = new Map<string, string>()
+    const duplicateEmails: string[] = []
+    for (const r of userBundleRows) {
+      if (typeof r.email !== 'string' || typeof r.id !== 'string' || !r.email.trim()) continue
+      const k = r.email.trim().toLowerCase()
+      if (seenEmail.has(k) && seenEmail.get(k) !== r.id) duplicateEmails.push(r.email.trim())
+      else seenEmail.set(k, r.id)
+    }
+    if (duplicateEmails.length > 0) {
+      warnings.push(`users: dieselbe E-Mail mehrfach im Backup: ${[...new Set(duplicateEmails)].join(', ')}`)
+    }
+  }
+
   const order = BACKUP_TABLE_ORDER.filter((t) => bundle.data[t]?.length)
 
   for (const table of order) {
@@ -236,16 +343,31 @@ export async function importBackupBundle(
           )
           continue
         }
+        try {
+          await upsertUserFromBackup(db, rawRow, allowed, userIdRemap, opts.dryRun)
+          count++
+        } catch (e) {
+          errors.push(
+            `${table} ${String(rawRow.id ?? count)}: ${e instanceof Error ? e.message : String(e)}`
+          )
+        }
+        continue
       }
+
+      const rowSource = applyUserIdRemapToRow(
+        table,
+        rawRow as Record<string, unknown>,
+        userIdRemap
+      )
       if (table === 'einladungen') {
-        const tok = rawRow.token
+        const tok = rowSource.token
         if (tok === undefined || tok === null || String(tok) === '') {
-          warnings.push(`einladungen: Zeile ${String(rawRow.id ?? '?')} ohne token — übersprungen.`)
+          warnings.push(`einladungen: Zeile ${String(rowSource.id ?? '?')} ohne token — übersprungen.`)
           continue
         }
       }
 
-      const row = filterRowForTable(table, rawRow, allowed)
+      const row = filterRowForTable(table, rowSource, allowed)
       const cols = Object.keys(row)
       if (cols.length === 0) continue
       const vals = cols.map((c) => row[c])
@@ -254,7 +376,7 @@ export async function importBackupBundle(
       if (sql === null) {
         const need = COMPOSITE_PRIMARY_KEY[table]?.join(', ') ?? '?'
         errors.push(
-          `${table}: Exportzeile ohne vollständigen Composite-Schlüssel (${need}); id=${String(rawRow.id ?? '–')}`
+          `${table}: Exportzeile ohne vollständigen Composite-Schlüssel (${need}); id=${String(rowSource.id ?? '–')}`
         )
         continue
       }
@@ -262,7 +384,9 @@ export async function importBackupBundle(
         if (!opts.dryRun) await db.prepare(sql).bind(...vals).run()
         count++
       } catch (e) {
-        errors.push(`${table} ${String(rawRow.id ?? count)}: ${e instanceof Error ? e.message : String(e)}`)
+        errors.push(
+          `${table} ${String(rowSource.id ?? rowSource.user_id ?? count)}: ${e instanceof Error ? e.message : String(e)}`
+        )
       }
     }
     tablesWritten[table] = count
