@@ -24,7 +24,7 @@ export async function PUT(
     }
 
     const env = process.env as unknown as CloudflareEnv
-    const db = getDB(env)
+    const db = await getDB(env)
     const success = await updateUserRole(db, id, role as 'admin' | 'kind' | 'gast')
     if (!success) {
       return NextResponse.json({ error: 'Rolle konnte nicht geändert werden' }, { status: 500 })

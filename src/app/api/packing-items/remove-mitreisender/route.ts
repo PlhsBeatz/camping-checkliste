@@ -27,7 +27,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     const env = process.env as unknown as CloudflareEnv
-    const db = getDB(env)
+    const db = await getDB(env)
 
     const vacationId = await getVacationIdFromPackingItem(db, packingItemId)
     if (vacationId) {
@@ -46,7 +46,7 @@ export async function DELETE(request: NextRequest) {
       )
     }
     if (vacationId) {
-      const cfEnv = getCloudflareContext().env as unknown as CloudflareEnv
+      const cfEnv = (await getCloudflareContext({ async: true })).env as unknown as CloudflareEnv
       await notifyPackingSyncChange(cfEnv, vacationId)
     }
 

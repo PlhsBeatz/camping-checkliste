@@ -34,7 +34,7 @@ export async function GET(
     }
 
     const env = process.env as unknown as CloudflareEnv
-    const db = getDB(env)
+    const db = await getDB(env)
     const row = await getFotoRow(db, fotoId)
     if (!row) {
       return NextResponse.json({ error: 'Foto nicht gefunden' }, { status: 404 })
@@ -45,7 +45,7 @@ export async function GET(
       Math.max(1, Math.round(Number(new URL(request.url).searchParams.get('maxWidthPx') || 800)))
     )
 
-    const bucket = getCampingPhotosR2(env)
+    const bucket = await getCampingPhotosR2(env)
     if (row.r2_object_key && bucket) {
       const obj = await bucket.get(row.r2_object_key)
       if (!obj) {

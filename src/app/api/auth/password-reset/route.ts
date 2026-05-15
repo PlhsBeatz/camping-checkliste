@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
     }
 
     const env = process.env as unknown as CloudflareEnv
-    const db = getDB(env)
+    const db = await getDB(env)
     const targetUser = await getUserById(db, userId)
     if (!targetUser) {
       return NextResponse.json(

@@ -4,7 +4,7 @@ import { getDB, initializeDatabase, CloudflareEnv } from '@/lib/db'
 export async function POST() {
   try {
     const env = process.env as unknown as CloudflareEnv
-    const db = getDB(env)
+    const db = await getDB(env)
     await initializeDatabase(db)
     return NextResponse.json({ success: true, message: 'Database initialization check completed.' })
   } catch (error: unknown) {

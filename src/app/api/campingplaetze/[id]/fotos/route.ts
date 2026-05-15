@@ -32,7 +32,7 @@ export async function GET(
     }
 
     const env = process.env as unknown as CloudflareEnv
-    const db = getDB(env)
+    const db = await getDB(env)
     const cp = await getCampingplatzById(db, id)
     if (!cp) {
       return NextResponse.json({ success: false, error: 'Nicht gefunden' }, { status: 404 })
@@ -62,14 +62,14 @@ export async function POST(
     }
 
     const env = process.env as unknown as CloudflareEnv
-    const db = getDB(env)
+    const db = await getDB(env)
     const cp = await getCampingplatzById(db, campingplatzId)
     if (!cp) {
       return NextResponse.json({ success: false, error: 'Nicht gefunden' }, { status: 404 })
     }
 
     const contentType = request.headers.get('content-type') || ''
-    const bucket = getCampingPhotosR2(env)
+    const bucket = await getCampingPhotosR2(env)
     const googleKey = env.GOOGLE_MAPS_API_KEY
 
     if (contentType.includes('multipart/form-data')) {

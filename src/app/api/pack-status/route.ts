@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
     }
 
     const env = process.env as unknown as CloudflareEnv
-    const db = getDB(env)
+    const db = await getDB(env)
     const mitreisende = await getMitreisendeForVacation(db, vacationId)
     if (!canAccessVacation(auth.userContext, mitreisende.map(m => m.id))) {
       return NextResponse.json({ error: 'Keine Berechtigung' }, { status: 403 })

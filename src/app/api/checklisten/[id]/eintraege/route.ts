@@ -25,7 +25,7 @@ export async function POST(
       return NextResponse.json({ error: 'kategorieId und text sind erforderlich' }, { status: 400 })
     }
     const env = process.env as unknown as CloudflareEnv
-    const db = getDB(env)
+    const db = await getDB(env)
     const eid = await createChecklisteEintrag(db, checklistId, kategorieId, text)
     if (!eid) {
       return NextResponse.json({ error: 'Eintrag konnte nicht angelegt werden' }, { status: 400 })

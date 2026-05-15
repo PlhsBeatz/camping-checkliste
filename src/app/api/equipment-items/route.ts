@@ -45,7 +45,7 @@ export async function GET(request: NextRequest) {
     const auth = await requireAuth(request)
     if (auth instanceof NextResponse) return auth
     const env = process.env as unknown as CloudflareEnv
-    const db = getDB(env)
+    const db = await getDB(env)
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
 
@@ -89,7 +89,7 @@ export async function POST(request: NextRequest) {
     const adminErr = requireAdmin(auth.userContext)
     if (adminErr) return adminErr
     const env = process.env as unknown as CloudflareEnv
-    const db = getDB(env)
+    const db = await getDB(env)
     const body = (await request.json()) as PostEquipmentBody
 
     const {
@@ -154,7 +154,7 @@ export async function PUT(request: NextRequest) {
     const adminErr = requireAdmin(auth.userContext)
     if (adminErr) return adminErr
     const env = process.env as unknown as CloudflareEnv
-    const db = getDB(env)
+    const db = await getDB(env)
     const body = (await request.json()) as PutEquipmentBody
 
     const {
@@ -218,7 +218,7 @@ export async function DELETE(request: NextRequest) {
     const adminErr = requireAdmin(auth.userContext)
     if (adminErr) return adminErr
     const env = process.env as unknown as CloudflareEnv
-    const db = getDB(env)
+    const db = await getDB(env)
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
 

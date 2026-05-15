@@ -8,7 +8,7 @@ export async function GET(request: NextRequest) {
     if (auth instanceof NextResponse) return auth
     const { userContext } = auth
     const env = process.env as unknown as CloudflareEnv
-    const db = getDB(env)
+    const db = await getDB(env)
 
     const user = await getUserById(db, userContext.userId)
     if (!user) {
@@ -35,7 +35,7 @@ export async function PUT(request: NextRequest) {
     if (auth instanceof NextResponse) return auth
     const { userContext } = auth
     const env = process.env as unknown as CloudflareEnv
-    const db = getDB(env)
+    const db = await getDB(env)
 
     const body = (await request.json()) as {
       heimat_adresse?: string | null

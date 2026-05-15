@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
     const vacationId = searchParams.get('urlaubId') || searchParams.get('vacationId')
 
     const env = process.env as unknown as CloudflareEnv
-    const db = getDB(env)
+    const db = await getDB(env)
 
     if (!vacationId) {
       const mitreisenderFilter = userContext.role === 'gast' ? userContext.mitreisenderId : undefined
@@ -44,7 +44,7 @@ export async function PUT(request: NextRequest) {
     if (adminErr) return adminErr
 
     const env = process.env as unknown as CloudflareEnv
-    const db = getDB(env)
+    const db = await getDB(env)
 
     const body = (await request.json()) as {
       urlaubId?: string

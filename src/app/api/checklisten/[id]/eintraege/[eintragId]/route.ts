@@ -35,7 +35,7 @@ export async function PUT(
       return NextResponse.json({ error: 'text darf nicht leer sein' }, { status: 400 })
     }
     const env = process.env as unknown as CloudflareEnv
-    const db = getDB(env)
+    const db = await getDB(env)
     const ok = await updateChecklisteEintrag(db, checklistId, eintragId, {
       text,
       kategorie_id,
@@ -70,7 +70,7 @@ export async function PATCH(
       return NextResponse.json({ error: 'erledigt (boolean) erforderlich' }, { status: 400 })
     }
     const env = process.env as unknown as CloudflareEnv
-    const db = getDB(env)
+    const db = await getDB(env)
     const ok = await setChecklisteEintragErledigt(db, checklistId, eintragId, o.erledigt)
     if (!ok) {
       return NextResponse.json({ error: 'Eintrag nicht gefunden' }, { status: 404 })
@@ -93,7 +93,7 @@ export async function DELETE(
     if (adminErr) return adminErr
     const { id: checklistId, eintragId } = await params
     const env = process.env as unknown as CloudflareEnv
-    const db = getDB(env)
+    const db = await getDB(env)
     const ok = await deleteChecklisteEintrag(db, checklistId, eintragId)
     if (!ok) {
       return NextResponse.json({ error: 'Löschen fehlgeschlagen' }, { status: 400 })

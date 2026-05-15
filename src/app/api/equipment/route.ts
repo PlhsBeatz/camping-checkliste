@@ -7,7 +7,7 @@ export async function GET(request: NextRequest) {
     const auth = await requireAuth(request)
     if (auth instanceof NextResponse) return auth
     const env = process.env as unknown as CloudflareEnv
-    const db = getDB(env)
+    const db = await getDB(env)
     const items = await getEquipmentItems(db)
     return NextResponse.json({ success: true, data: items })
   } catch (error: unknown) {
@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
     const adminErr = requireAdmin(auth.userContext)
     if (adminErr) return adminErr
     const env = process.env as unknown as CloudflareEnv
-    const _db = getDB(env)
+    const _db = await getDB(env)
     const _body = (await request.json()) as Record<string, unknown>
 
     // Note: createEquipmentItem is not yet implemented in db.ts

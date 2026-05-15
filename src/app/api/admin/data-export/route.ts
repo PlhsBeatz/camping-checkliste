@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
     }
 
     const env = process.env as unknown as CloudflareEnv
-    const db = getDB(env)
+    const db = await getDB(env)
     const { bundle, warnings } = await buildBackupBundle(db, options)
 
     return NextResponse.json({ success: true, data: bundle, warnings })

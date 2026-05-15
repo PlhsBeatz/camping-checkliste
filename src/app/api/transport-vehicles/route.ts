@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
     const auth = await requireAuth(request)
     if (auth instanceof NextResponse) return auth
     const env = process.env as unknown as CloudflareEnv
-    const db = getDB(env)
+    const db = await getDB(env)
     const vehicles = await getTransportVehiclesWithFestgewicht(db)
 
     return NextResponse.json({
@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
     const adminErr = requireAdmin(auth.userContext)
     if (adminErr) return adminErr
     const env = process.env as unknown as CloudflareEnv
-    const db = getDB(env)
+    const db = await getDB(env)
 
     const body = (await request.json()) as {
       name?: string
@@ -109,7 +109,7 @@ export async function PUT(request: NextRequest) {
     const adminErr = requireAdmin(auth.userContext)
     if (adminErr) return adminErr
     const env = process.env as unknown as CloudflareEnv
-    const db = getDB(env)
+    const db = await getDB(env)
 
     const body = (await request.json()) as {
       id?: string
@@ -177,7 +177,7 @@ export async function DELETE(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
     const env = process.env as unknown as CloudflareEnv
-    const db = getDB(env)
+    const db = await getDB(env)
 
     if (!id) {
       return NextResponse.json({ success: false, error: 'ID ist erforderlich' }, { status: 400 })

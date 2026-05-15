@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
     }
 
     const env = process.env as unknown as CloudflareEnv
-    const db = getDB(env)
+    const db = await getDB(env)
     const mitreisende = await getMitreisendeForVacation(db, vacationId)
     const ids = mitreisende.map(m => m.id)
     if (!canAccessVacation(auth.userContext, ids)) {
@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
     const auth = await requireAuth(request)
     if (auth instanceof NextResponse) return auth
     const env = process.env as unknown as CloudflareEnv
-    const db = getDB(env)
+    const db = await getDB(env)
     const body = (await request.json()) as {
       vacationId?: string
       gegenstandId?: string
@@ -110,7 +110,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to add packing item' }, { status: 400 })
     }
 
-    const cfEnv = getCloudflareContext().env as unknown as CloudflareEnv
+    const cfEnv = (await getCloudflareContext({ async: true })).env as unknown as CloudflareEnv
     await notifyPackingSyncChange(cfEnv, vacationId)
 
     return NextResponse.json({ success: true }, { status: 201 })
@@ -125,7 +125,7 @@ export async function PUT(request: NextRequest) {
     const auth = await requireAuth(request)
     if (auth instanceof NextResponse) return auth
     const env = process.env as unknown as CloudflareEnv
-    const db = getDB(env)
+    const db = await getDB(env)
     const body = (await request.json()) as {
       id?: string
       gepackt?: boolean
@@ -222,7 +222,7 @@ export async function PUT(request: NextRequest) {
     const success = await updatePackingItem(db, id, updates)
 
     if (success && vacationId) {
-      const cfEnv = getCloudflareContext().env as unknown as CloudflareEnv
+      const cfEnv = (await getCloudflareContext({ async: true })).env as unknown as CloudflareEnv
       await notifyPackingSyncChange(cfEnv, vacationId)
     }
 
@@ -238,7 +238,7 @@ export async function DELETE(request: NextRequest) {
     const auth = await requireAuth(request)
     if (auth instanceof NextResponse) return auth
     const env = process.env as unknown as CloudflareEnv
-    const db = getDB(env)
+    const db = await getDB(env)
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
 
@@ -260,7 +260,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     if (vacationId) {
-      const env = getCloudflareContext().env as unknown as CloudflareEnv
+      const env = (await getCloudflareContext({ async: true })).env as unknown as CloudflareEnv
       await notifyPackingSyncChange(env, vacationId)
     }
 

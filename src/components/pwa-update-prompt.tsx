@@ -16,6 +16,15 @@ export function PwaUpdatePrompt() {
   useEffect(() => {
     if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return
 
+    /** Unter `next dev` darf kein SW aktiv sein: alter Prod-/Preview-SW auf localhost cached Navigation &
+     * `_next`-Chunks falsch → „unstyled“ Login und falscher Offline-Zustand. */
+    if (process.env.NODE_ENV === 'development') {
+      void navigator.serviceWorker.getRegistrations().then((regs) =>
+        Promise.all(regs.map((r) => r.unregister())),
+      )
+      return
+    }
+
     const registerSw = async () => {
       try {
         const reg = await navigator.serviceWorker.register('/sw.js', {

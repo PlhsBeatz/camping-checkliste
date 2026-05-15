@@ -9,7 +9,7 @@ export async function GET(request: NextRequest) {
   }
 
   const env = process.env as unknown as CloudflareEnv
-  const db = getDB(env)
+  const db = await getDB(env)
   const invitation = await getInvitationByToken(db, token)
   if (!invitation) {
     return NextResponse.json(
@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
     }
 
     const env = process.env as unknown as CloudflareEnv
-    const db = getDB(env)
+    const db = await getDB(env)
     const invitation = await getInvitationByToken(db, token)
     if (!invitation) {
       return NextResponse.json(

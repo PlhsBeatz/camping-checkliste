@@ -11,7 +11,7 @@ export async function POST(
     if (auth instanceof NextResponse) return auth
     const { id } = await params
     const env = process.env as unknown as CloudflareEnv
-    const db = getDB(env)
+    const db = await getDB(env)
     const ok = await resetChecklisteErledigt(db, id)
     if (!ok) {
       return NextResponse.json({ error: 'Zurücksetzen fehlgeschlagen' }, { status: 500 })

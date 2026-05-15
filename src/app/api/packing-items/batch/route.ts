@@ -11,7 +11,7 @@ export async function POST(request: NextRequest) {
     const auth = await requireAuth(request)
     if (auth instanceof NextResponse) return auth
     const env = process.env as unknown as CloudflareEnv
-    const db = getDB(env)
+    const db = await getDB(env)
     const body = (await request.json()) as {
       vacationId?: string
       items?: Array<{
@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
       results.push({ success: !!id, gegenstandId })
     }
 
-    const cfEnv = getCloudflareContext().env as unknown as CloudflareEnv
+    const cfEnv = (await getCloudflareContext({ async: true })).env as unknown as CloudflareEnv
     await notifyPackingSyncChange(cfEnv, vacationId)
 
     const successCount = results.filter(r => r.success).length

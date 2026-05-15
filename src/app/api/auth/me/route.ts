@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
     }
 
     const env = process.env as unknown as CloudflareEnv
-    const db = getDB(env)
+    const db = await getDB(env)
     const user = await getUserById(db, session.id)
     if (!user) {
       return NextResponse.json({ success: false, user: null }, { status: 401 })

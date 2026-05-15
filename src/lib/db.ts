@@ -307,36 +307,39 @@ export interface CloudflareEnv {
 }
 
 /**
- * Hilfsfunktion zum Abrufen der D1-Datenbank aus dem Kontext
+ * D1 aus OpenNext-/Wrangler-Kontext laden.
+ *
+ * Unter `next dev` steht die Bindung oft erst nach `getCloudflareContext({ async: true })`
+ * zur Verfügung (Wrangler `getPlatformProxy`). Der synchrone Zugriff schlägt dort fehl —
+ * daher immer mit `await getDB(...)` in Route Handlers verwenden.
  */
-export function getDB(env?: CloudflareEnv): D1Database {
-  // Versuche die DB aus dem OpenNext CloudflareContext zu erhalten (empfohlen für OpenNext)
+export async function getDB(env?: CloudflareEnv): Promise<D1Database> {
   try {
-    const { env: cloudflareEnv } = getCloudflareContext();
+    const { env: cloudflareEnv } = await getCloudflareContext({ async: true })
     if (cloudflareEnv?.DB) {
-      return cloudflareEnv.DB as unknown as D1Database;
+      return cloudflareEnv.DB as unknown as D1Database
     }
   } catch {
-    // Falls getCloudflareContext fehlschlägt (z.B. lokal ohne OpenNext), fahre mit env fort
+    /* ohne Worker-Kontext */
   }
 
-  // Fallback auf das übergebene env Objekt
   if (env?.DB) {
-    return env.DB;
+    return env.DB
   }
 
-  // Letzter Versuch: process.env (manchmal von Cloudflare injiziert)
-  const processEnv = process.env as unknown as CloudflareEnv;
+  const processEnv = process.env as unknown as CloudflareEnv
   if (processEnv?.DB) {
-    return processEnv.DB;
+    return processEnv.DB
   }
 
-  throw new Error('D1 Database binding "DB" not found. Bitte stellen Sie sicher, dass die Datenbank im Cloudflare Dashboard korrekt an den Worker gebunden ist.');
+  throw new Error(
+    'D1 Database binding "DB" not found. Bitte stellen Sie sicher, dass die Datenbank im Cloudflare Dashboard korrekt an den Worker gebunden ist.'
+  )
 }
 
-export function getCampingPhotosR2(env?: CloudflareEnv): R2Bucket | null {
+export async function getCampingPhotosR2(env?: CloudflareEnv): Promise<R2Bucket | null> {
   try {
-    const { env: cloudflareEnv } = getCloudflareContext()
+    const { env: cloudflareEnv } = await getCloudflareContext({ async: true })
     const b = (cloudflareEnv as CloudflareEnv | undefined)?.CAMPING_PHOTOS
     if (b) return b as R2Bucket
   } catch {

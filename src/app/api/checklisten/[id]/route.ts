@@ -28,7 +28,7 @@ export async function PUT(
       return NextResponse.json({ error: 'titel darf nicht leer sein' }, { status: 400 })
     }
     const env = process.env as unknown as CloudflareEnv
-    const db = getDB(env)
+    const db = await getDB(env)
     const ok = await updateCheckliste(db, id, { titel, reihenfolge })
     if (!ok) {
       return NextResponse.json({ error: 'Aktualisierung fehlgeschlagen' }, { status: 500 })
@@ -51,7 +51,7 @@ export async function DELETE(
     if (adminErr) return adminErr
     const { id } = await params
     const env = process.env as unknown as CloudflareEnv
-    const db = getDB(env)
+    const db = await getDB(env)
     const ok = await deleteCheckliste(db, id)
     if (!ok) {
       return NextResponse.json({ error: 'Löschen fehlgeschlagen' }, { status: 500 })

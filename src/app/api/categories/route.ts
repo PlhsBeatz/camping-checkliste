@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
     const auth = await requireAuth(request)
     if (auth instanceof NextResponse) return auth
     const env = process.env as unknown as CloudflareEnv
-    const db = getDB(env)
+    const db = await getDB(env)
     const categories = await getCategoriesWithMainCategories(db)
 
     return NextResponse.json({ success: true, data: categories })
@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
     const adminErr = requireAdmin(auth.userContext)
     if (adminErr) return adminErr
     const env = process.env as unknown as CloudflareEnv
-    const db = getDB(env)
+    const db = await getDB(env)
 
     interface PostCategoryBody {
       titel: string
@@ -109,7 +109,7 @@ export async function PUT(request: NextRequest) {
     const adminErr = requireAdmin(auth.userContext)
     if (adminErr) return adminErr
     const env = process.env as unknown as CloudflareEnv
-    const db = getDB(env)
+    const db = await getDB(env)
     const body = (await request.json()) as PutCategoryBody
     const { id, titel, hauptkategorieId, reihenfolge, pauschalgewicht, pauschal_pro_person, pauschal_transport_id } =
       body
@@ -147,7 +147,7 @@ export async function DELETE(request: NextRequest) {
     const adminErr = requireAdmin(auth.userContext)
     if (adminErr) return adminErr
     const env = process.env as unknown as CloudflareEnv
-    const db = getDB(env)
+    const db = await getDB(env)
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
 

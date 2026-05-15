@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const includeArchived = searchParams.get('includeArchived') === 'true'
     const env = process.env as unknown as CloudflareEnv
-    const db = getDB(env)
+    const db = await getDB(env)
 
     const campingplaetze = await getCampingplaetze(db, { includeArchived })
     const ids = campingplaetze.map((c) => c.id)
@@ -72,7 +72,7 @@ export async function POST(request: NextRequest) {
     if (adminErr) return adminErr
 
     const env = process.env as unknown as CloudflareEnv
-    const db = getDB(env)
+    const db = await getDB(env)
 
     const body = (await request.json()) as {
       name?: string
@@ -155,7 +155,7 @@ export async function PUT(request: NextRequest) {
     if (adminErr) return adminErr
 
     const env = process.env as unknown as CloudflareEnv
-    const db = getDB(env)
+    const db = await getDB(env)
 
     const body = (await request.json()) as {
       id?: string
@@ -249,7 +249,7 @@ export async function DELETE(request: NextRequest) {
     if (adminErr) return adminErr
 
     const env = process.env as unknown as CloudflareEnv
-    const db = getDB(env)
+    const db = await getDB(env)
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
     const forceArchive = searchParams.get('forceArchive') === 'true'
@@ -296,7 +296,7 @@ export async function DELETE(request: NextRequest) {
       )
       .bind(id)
       .all<{ r2_object_key: string }>()
-    const bucket = getCampingPhotosR2(env)
+    const bucket = await getCampingPhotosR2(env)
     if (bucket && r2Keys.results?.length) {
       for (const row of r2Keys.results) {
         if (row.r2_object_key) await bucket.delete(row.r2_object_key)

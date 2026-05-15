@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
     const auth = await requireAuth(request)
     if (auth instanceof NextResponse) return auth
     const env = process.env as unknown as CloudflareEnv
-    const db = getDB(env)
+    const db = await getDB(env)
     const data = await getChecklistenFullTree(db)
     return NextResponse.json({ success: true, data })
   } catch (error: unknown) {
@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'titel ist erforderlich' }, { status: 400 })
     }
     const env = process.env as unknown as CloudflareEnv
-    const db = getDB(env)
+    const db = await getDB(env)
     const id = await createCheckliste(db, titel)
     if (!id) {
       return NextResponse.json({ error: 'Checkliste konnte nicht angelegt werden' }, { status: 500 })
@@ -77,7 +77,7 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'orderedIds (string[]) erforderlich' }, { status: 400 })
     }
     const env = process.env as unknown as CloudflareEnv
-    const db = getDB(env)
+    const db = await getDB(env)
     const ok = await reorderChecklisten(db, orderedIds)
     if (!ok) {
       return NextResponse.json({ error: 'Sortierung fehlgeschlagen' }, { status: 500 })

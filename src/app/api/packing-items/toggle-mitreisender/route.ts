@@ -17,7 +17,7 @@ export async function PUT(request: NextRequest) {
     const auth = await requireAuth(request)
     if (auth instanceof NextResponse) return auth
     const env = process.env as unknown as CloudflareEnv
-    const db = getDB(env)
+    const db = await getDB(env)
 
     const body = (await request.json()) as {
       packingItemId?: string
@@ -56,7 +56,7 @@ export async function PUT(request: NextRequest) {
     }
 
     if (vacationId) {
-      const cfEnv = getCloudflareContext().env as unknown as CloudflareEnv
+      const cfEnv = (await getCloudflareContext({ async: true })).env as unknown as CloudflareEnv
       await notifyPackingSyncChange(cfEnv, vacationId)
     }
 

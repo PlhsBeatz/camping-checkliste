@@ -43,7 +43,7 @@ export async function PUT(
       return NextResponse.json({ error: 'Ungültiges updates-Format' }, { status: 400 })
     }
     const env = process.env as unknown as CloudflareEnv
-    const db = getDB(env)
+    const db = await getDB(env)
     const ok = await reorderChecklisteEintraege(db, checklistId, updates)
     if (!ok) {
       return NextResponse.json({ error: 'Sortierung fehlgeschlagen' }, { status: 400 })

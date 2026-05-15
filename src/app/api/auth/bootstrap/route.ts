@@ -10,7 +10,7 @@ import { hashPassword, createToken, COOKIE_NAME, getAuthCookieOptions } from '@/
 export async function POST(request: NextRequest) {
   try {
     const env = process.env as unknown as CloudflareEnv
-    const db = getDB(env)
+    const db = await getDB(env)
     const count = await getUsersCount(db)
     if (count > 0) {
       return NextResponse.json(

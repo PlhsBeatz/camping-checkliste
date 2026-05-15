@@ -25,7 +25,7 @@ export async function DELETE(
     }
 
     const env = process.env as unknown as CloudflareEnv
-    const db = getDB(env)
+    const db = await getDB(env)
     const cp = await getCampingplatzById(db, campingplatzId)
     if (!cp) {
       return NextResponse.json({ success: false, error: 'Nicht gefunden' }, { status: 404 })
@@ -37,7 +37,7 @@ export async function DELETE(
     }
 
     if (r2_object_key) {
-      const bucket = getCampingPhotosR2(env)
+      const bucket = await getCampingPhotosR2(env)
       if (bucket) {
         await bucket.delete(r2_object_key)
       }
@@ -71,7 +71,7 @@ export async function PATCH(
     }
 
     const env = process.env as unknown as CloudflareEnv
-    const db = getDB(env)
+    const db = await getDB(env)
     const cp = await getCampingplatzById(db, campingplatzId)
     if (!cp) {
       return NextResponse.json({ success: false, error: 'Nicht gefunden' }, { status: 404 })

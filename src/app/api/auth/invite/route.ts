@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
     }
 
     const env = process.env as unknown as CloudflareEnv
-    const db = getDB(env)
+    const db = await getDB(env)
     const mitreisender = await db.prepare('SELECT user_id FROM mitreisende WHERE id = ?').bind(mitreisenderId).first<{ user_id: string | null }>()
     if (mitreisender?.user_id) {
       return NextResponse.json(

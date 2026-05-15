@@ -18,7 +18,7 @@ export async function GET(
     }
 
     const env = process.env as unknown as CloudflareEnv
-    const db = getDB(env)
+    const db = await getDB(env)
     const berechtigungen = await getMitreisendeBerechtigungen(db, id)
     return NextResponse.json({ success: true, data: berechtigungen })
   } catch (error) {
@@ -46,7 +46,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     const berechtigungen = Array.isArray(body.berechtigungen) ? body.berechtigungen : []
 
     const env = process.env as unknown as CloudflareEnv
-    const db = getDB(env)
+    const db = await getDB(env)
     const success = await setMitreisendeBerechtigungen(db, id, berechtigungen)
     if (!success) {
       return NextResponse.json({ error: 'Speichern fehlgeschlagen' }, { status: 500 })

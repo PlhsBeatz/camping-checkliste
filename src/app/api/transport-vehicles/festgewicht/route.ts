@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const transportId = searchParams.get('transportId')
     const env = process.env as unknown as CloudflareEnv
-    const db = getDB(env)
+    const db = await getDB(env)
 
     if (!transportId) {
       return NextResponse.json({ success: false, error: 'transportId erforderlich' }, { status: 400 })

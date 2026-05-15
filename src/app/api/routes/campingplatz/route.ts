@@ -9,7 +9,7 @@ export async function POST(request: NextRequest) {
     if (auth instanceof NextResponse) return auth
     const { userContext } = auth
     const env = process.env as unknown as CloudflareEnv
-    const db = getDB(env)
+    const db = await getDB(env)
 
     const body = (await request.json()) as { campingplatzId?: string }
     if (!body.campingplatzId) {

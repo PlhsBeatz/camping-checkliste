@@ -16,7 +16,7 @@ export async function requireAuth(
     return NextResponse.json({ error: 'Nicht angemeldet' }, { status: 401 })
   }
   const env = process.env as unknown as CloudflareEnv
-  const db = getDB(env)
+  const db = await getDB(env)
   const userContext = await buildUserContext(db, session)
   return { session, userContext }
 }

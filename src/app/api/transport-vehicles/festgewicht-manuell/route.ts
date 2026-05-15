@@ -14,7 +14,7 @@ import type { CloudflareEnv } from '@/lib/db'
 export async function POST(request: NextRequest) {
   try {
     const env = process.env as unknown as CloudflareEnv
-    const db = getDB(env)
+    const db = await getDB(env)
     const body = (await request.json()) as { transportId: string; titel: string; gewicht: number }
 
     const { transportId, titel, gewicht } = body
@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const env = process.env as unknown as CloudflareEnv
-    const db = getDB(env)
+    const db = await getDB(env)
     const body = (await request.json()) as { id: string; titel: string; gewicht: number }
 
     const { id, titel, gewicht } = body
@@ -90,7 +90,7 @@ export async function DELETE(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
     const env = process.env as unknown as CloudflareEnv
-    const db = getDB(env)
+    const db = await getDB(env)
 
     if (!id) {
       return NextResponse.json({ success: false, error: 'id erforderlich' }, { status: 400 })

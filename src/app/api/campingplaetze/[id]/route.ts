@@ -22,7 +22,7 @@ export async function GET(
     }
 
     const env = process.env as unknown as CloudflareEnv
-    const db = getDB(env)
+    const db = await getDB(env)
     const campingplatz = await getCampingplatzById(db, id)
     if (!campingplatz) {
       return NextResponse.json({ success: false, error: 'Nicht gefunden' }, { status: 404 })

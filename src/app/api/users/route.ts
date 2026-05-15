@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
     }
 
     const env = process.env as unknown as CloudflareEnv
-    const db = getDB(env)
+    const db = await getDB(env)
     const users = await getUsers(db)
     return NextResponse.json({ success: true, users })
   } catch (error) {

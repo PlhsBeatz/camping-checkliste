@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
     const auth = await requireAuth(request)
     if (auth instanceof NextResponse) return auth
     const env = process.env as unknown as CloudflareEnv
-    const db = getDB(env)
+    const db = await getDB(env)
     const { searchParams } = new URL(request.url)
     
     const tagIds = searchParams.getAll('tagIds')

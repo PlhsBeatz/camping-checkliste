@@ -71,5 +71,9 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)']
+  /**
+   * Gesamtes `/_next/*` ausschließen (nicht nur static/image): Dev/Webpack/HMR und alle Build-Chunks
+   * dürfen nie durch Auth-Middleware laufen — sonst Redirect/HTML statt Asset → kaputtes CSS/JS.
+   */
+  matcher: ['/((?!_next/|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)']
 }
