@@ -610,25 +610,36 @@ export async function deleteVacation(db: D1Database, id: string): Promise<boolea
  */
 export async function getPackingItems(db: D1Database, vacationId: string): Promise<PackingItem[]> {
   try {
+    /**
+     * LEFT JOIN auf Ausrüstung/Kategorien: fehlende `ausruestungsgegenstaende`-Zeilen (z. B. nach
+     * Teilimport) würden mit INNER JOIN die gesamte Packliste „leer“ machen, obwohl
+     * `packlisten_eintraege` Daten hat.
+     */
     const query = `
       SELECT 
         pe.id, pe.packliste_id, pe.gegenstand_id, pe.anzahl, pe.gepackt, pe.gepackt_vorgemerkt, pe.gepackt_vorgemerkt_durch, pe.bemerkung, pe.transport_id,
-        ag.was, ag.einzelgewicht, ag.details, ag.mitreisenden_typ, ag.status AS status, ag.erst_abreisetag_gepackt as erst_abreisetag_gepackt,
-        k.titel as kategorie,
-        hk.titel as hauptkategorie,
-        hk.reihenfolge as hk_reihenfolge,
-        k.reihenfolge as k_reihenfolge,
-        t.name as transport_name,
+        CASE WHEN ag.id IS NULL
+          THEN '(Gegenstand fehlt in Ausrüstung — Zeile ' || pe.id || ', Ausrüstung ' || pe.gegenstand_id || ')'
+          ELSE ag.was END AS was,
+        ag.einzelgewicht AS einzelgewicht, ag.details AS details,
+        COALESCE(ag.mitreisenden_typ, 'pauschal') AS mitreisenden_typ,
+        CASE WHEN ag.id IS NULL THEN 'Normal' ELSE ag.status END AS status,
+        ag.erst_abreisetag_gepackt AS erst_abreisetag_gepackt,
+        COALESCE(k.titel, '—') AS kategorie,
+        COALESCE(hk.titel, '—') AS hauptkategorie,
+        hk.reihenfolge AS hk_reihenfolge,
+        k.reihenfolge AS k_reihenfolge,
+        t.name AS transport_name,
         pe.created_at
       FROM packlisten_eintraege pe
       JOIN packlisten p ON pe.packliste_id = p.id
-      JOIN ausruestungsgegenstaende ag ON pe.gegenstand_id = ag.id
-      JOIN kategorien k ON ag.kategorie_id = k.id
-      JOIN hauptkategorien hk ON k.hauptkategorie_id = hk.id
+      LEFT JOIN ausruestungsgegenstaende ag ON pe.gegenstand_id = ag.id
+      LEFT JOIN kategorien k ON ag.kategorie_id = k.id
+      LEFT JOIN hauptkategorien hk ON k.hauptkategorie_id = hk.id
       LEFT JOIN transportmittel t ON pe.transport_id = t.id
       WHERE p.urlaub_id = ?
-        AND ag.status NOT IN ('Ausgemustert', 'Fest Installiert')
-      ORDER BY hk.reihenfolge, k.reihenfolge, ag.was
+        AND (ag.id IS NULL OR ag.status NOT IN ('Ausgemustert', 'Fest Installiert'))
+      ORDER BY COALESCE(hk.reihenfolge, 9999), COALESCE(k.reihenfolge, 9999), was
     `
     const result = await db.prepare(query).bind(vacationId).all<Record<string, unknown>>()
     const rows = result.results || []
