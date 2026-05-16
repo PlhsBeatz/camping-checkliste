@@ -11,8 +11,9 @@ import {
 import { requireAuth, requireAdmin } from '@/lib/api-auth'
 import {
   buildCampingplatzFotoObjectKey,
-  downloadGooglePlacePhotoToR2,
+  fetchGooglePlacePhotoBytes,
 } from '@/lib/campingplatz-foto-import'
+import { optimizeCampingPhotoToWebp } from '@/lib/camping-photo-optimize'
 
 /** Nach clientseitiger Kompression i. d. R. deutlich kleiner; großzügiges Limit für Roh-Uploads (z. B. Mobilfotos). */
 const UPLOAD_MAX_BYTES = 32 * 1024 * 1024
@@ -99,18 +100,21 @@ export async function POST(
       }
       const setAsCover = form.get('setAsCover') === 'true' || form.get('setAsCover') === '1'
       const buf = new Uint8Array(await file.arrayBuffer())
+      const optimized = await optimizeCampingPhotoToWebp(buf, mime)
+      const outBytes = optimized?.data ?? buf
+      const outMime: string = optimized ? 'image/webp' : mime
       const created = await createCampingplatzFoto(db, {
         campingplatz_id: campingplatzId,
         source: 'upload',
-        content_type: mime,
+        content_type: outMime,
         setAsCover,
       })
       if (!created?.id) {
         return NextResponse.json({ success: false, error: 'Foto konnte nicht angelegt werden' }, { status: 500 })
       }
-      const objectKey = buildCampingplatzFotoObjectKey(campingplatzId, created.id, mime)
-      await bucket.put(objectKey, buf, { httpMetadata: { contentType: mime } })
-      const updated = await updateCampingplatzFotoR2(db, created.id, objectKey, mime)
+      const objectKey = buildCampingplatzFotoObjectKey(campingplatzId, created.id, outMime)
+      await bucket.put(objectKey, outBytes, { httpMetadata: { contentType: outMime } })
+      const updated = await updateCampingplatzFotoR2(db, created.id, objectKey, outMime)
       return NextResponse.json({ success: true, data: updated }, { status: 201 })
     }
 
@@ -141,20 +145,16 @@ export async function POST(
     }
 
     if (importToR2 && bucket && googleKey) {
-      const objectKey = buildCampingplatzFotoObjectKey(campingplatzId, foto.id, 'image/jpeg')
-      const imported = await downloadGooglePlacePhotoToR2({
-        bucket,
-        apiKey: googleKey,
-        googlePhotoName: name,
-        r2ObjectKey: objectKey,
-      })
-      if (imported) {
-        const updated = await updateCampingplatzFotoR2(
-          db,
-          foto.id,
-          objectKey,
-          imported.contentType
-        )
+      const fetched = await fetchGooglePlacePhotoBytes({ apiKey: googleKey, googlePhotoName: name })
+      if (fetched) {
+        const optimized = await optimizeCampingPhotoToWebp(fetched.data, fetched.contentType)
+        const outBytes = optimized?.data ?? fetched.data
+        const outMime: string = optimized ? 'image/webp' : fetched.contentType
+        const objectKey = buildCampingplatzFotoObjectKey(campingplatzId, foto.id, outMime)
+        await bucket.put(objectKey, outBytes, {
+          httpMetadata: { contentType: outMime },
+        })
+        const updated = await updateCampingplatzFotoR2(db, foto.id, objectKey, outMime)
         return NextResponse.json({ success: true, data: updated }, { status: 201 })
       }
     }

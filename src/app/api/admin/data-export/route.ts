@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getDB, getCampingPhotosR2, type CloudflareEnv } from '@/lib/db'
 import { requireAuth, requireAdmin } from '@/lib/api-auth'
 import { buildBackupBundle, type BackupPreset, type ExportOptions } from '@/lib/data-backup'
+import { buildBackupZipBuffer } from '@/lib/data-backup/backup-zip'
 
 function parsePresets(v: unknown): BackupPreset[] | undefined {
   if (!Array.isArray(v)) return undefined
@@ -48,7 +49,23 @@ export async function POST(request: NextRequest) {
     const env = process.env as unknown as CloudflareEnv
     const db = await getDB(env)
     const r2Bucket = await getCampingPhotosR2(env)
-    const { bundle, warnings } = await buildBackupBundle(db, options, { r2Bucket })
+    const { bundle, warnings, r2PhotoFiles } = await buildBackupBundle(db, options, { r2Bucket })
+
+    if (options.includeR2Photos === true && r2PhotoFiles && r2PhotoFiles.length > 0) {
+      const zipBuf = await buildBackupZipBuffer({
+        bundle,
+        warnings,
+        r2Files: r2PhotoFiles.map((f) => ({ key: f.key, data: f.data })),
+      })
+      const filename = `camping-backup-${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.zip`
+      return new NextResponse(new Blob([new Uint8Array(zipBuf)]), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/zip',
+          'Content-Disposition': `attachment; filename="${filename}"`,
+        },
+      })
+    }
 
     return NextResponse.json({ success: true, data: bundle, warnings })
   } catch (error: unknown) {

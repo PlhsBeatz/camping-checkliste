@@ -6,7 +6,7 @@ import type { D1Database, R2Bucket } from '@cloudflare/workers-types'
 import type { BackupBundle, ImportResult, ImportMode } from './types'
 import { BACKUP_FORMAT_VERSION } from './types'
 import { BACKUP_TABLE_ORDER } from './tables'
-import { putR2CampingPhotosFromBackup, parseR2CampingPhotosFromRaw } from './r2-camping-photos'
+import { putR2CampingPhotosFromBackup, parseR2CampingPhotosFromRaw, putBinaryR2ObjectsToBucket, contentTypeFromKey, type R2BinaryFile } from './r2-camping-photos'
 
 function asRecord(v: unknown): Record<string, unknown> | null {
   if (v && typeof v === 'object' && !Array.isArray(v)) return v as Record<string, unknown>
@@ -284,7 +284,7 @@ async function reconcileMitreisendeUserIds(db: D1Database): Promise<void> {
 export async function importBackupBundle(
   db: D1Database,
   bundle: BackupBundle,
-  opts: { dryRun: boolean; mode: ImportMode; r2Bucket?: R2Bucket | null }
+  opts: { dryRun: boolean; mode: ImportMode; r2Bucket?: R2Bucket | null; r2FilesFromZip?: Map<string, Uint8Array> | null }
 ): Promise<ImportResult> {
   const warnings: string[] = []
   const errors: string[] = []
@@ -410,18 +410,39 @@ export async function importBackupBundle(
   }
 
   let r2ObjectsWritten: number | undefined
-  const r2Photos = bundle.r2CampingPhotos
-  if (r2Photos && r2Photos.length > 0) {
+  const zipFiles = opts.r2FilesFromZip
+
+  if (zipFiles && zipFiles.size > 0) {
     const bucket = opts.r2Bucket
     if (!bucket) {
       warnings.push(
-        `Backup enthält ${r2Photos.length} R2-Bilddatei(en), aber CAMPING_PHOTOS ist nicht gebunden — nur D1-Metadaten wurden importiert, keine Binärdaten.`
+        `ZIP enthält ${zipFiles.size} R2-Datei(en), aber CAMPING_PHOTOS ist nicht gebunden — nur D1-Metadaten wurden importiert, keine Binärdaten.`
       )
     } else {
-      const r2Result = await putR2CampingPhotosFromBackup(bucket, r2Photos, opts.dryRun)
+      const files: R2BinaryFile[] = [...zipFiles.entries()].map(([key, data]) => ({
+        key,
+        data,
+        contentType: contentTypeFromKey(key),
+      }))
+      const r2Result = await putBinaryR2ObjectsToBucket(bucket, files, opts.dryRun)
       warnings.push(...r2Result.warnings)
       errors.push(...r2Result.errors)
       r2ObjectsWritten = r2Result.written
+    }
+  } else {
+    const r2Photos = bundle.r2CampingPhotos
+    if (r2Photos && r2Photos.length > 0) {
+      const bucket = opts.r2Bucket
+      if (!bucket) {
+        warnings.push(
+          `Backup enthält ${r2Photos.length} R2-Bilddatei(en) (JSON-legacy), aber CAMPING_PHOTOS ist nicht gebunden — nur D1-Metadaten wurden importiert, keine Binärdaten.`
+        )
+      } else {
+        const r2Result = await putR2CampingPhotosFromBackup(bucket, r2Photos, opts.dryRun)
+        warnings.push(...r2Result.warnings)
+        errors.push(...r2Result.errors)
+        r2ObjectsWritten = r2Result.written
+      }
     }
   }
 

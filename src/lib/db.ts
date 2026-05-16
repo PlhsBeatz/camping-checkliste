@@ -3359,6 +3359,22 @@ export async function getCampingplatzFotoById(
   }
 }
 
+export async function listCampingplatzFotosWithR2Keys(db: D1Database): Promise<CampingplatzFoto[]> {
+  try {
+    const result = await db
+      .prepare(
+        `SELECT * FROM campingplatz_fotos
+         WHERE r2_object_key IS NOT NULL AND length(trim(r2_object_key)) > 0`
+      )
+      .all<Record<string, unknown>>()
+    const rows = result.results || []
+    return rows.map((row) => mapCampingplatzFotoRow(row))
+  } catch (error) {
+    console.error('Error listing campingplatz fotos with R2:', error)
+    return []
+  }
+}
+
 export async function syncCampingplatzPhotoNameFromCover(
   db: D1Database,
   campingplatzId: string

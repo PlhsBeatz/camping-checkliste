@@ -41,7 +41,7 @@ const PRESET_META: { id: UiPresetKey; label: string; hint: string }[] = [
     id: 'places',
     label: 'Campingplätze',
     hint:
-      'Campingplatz-Stammdaten, Zuordnung Urlaub↔Campingplatz und Fotometadaten; Bilddateien nur mit Option „R2-Bilder einbinden“.',
+      'Campingplatz-Stammdaten, Zuordnung Urlaub↔Campingplatz und Fotometadaten; Binärdateien nur mit Option „R2-Bilder im ZIP“. ',
   },
   {
     id: 'toolsChecklists',
@@ -140,13 +140,44 @@ export default function DatensicherungPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       })
+      if (!res.ok) {
+        const errJson = (await res.json()) as { error?: string }
+        setMessage(errJson.error ?? `Export fehlgeschlagen (${res.status})`)
+        return
+      }
+      const ct = res.headers.get('content-type') || ''
+      if (ct.includes('application/zip')) {
+        const ab = await res.arrayBuffer()
+        const blob = new Blob([ab], { type: 'application/zip' })
+        const a = document.createElement('a')
+        a.href = URL.createObjectURL(blob)
+        a.download = `camping-backup-${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.zip`
+        a.click()
+        URL.revokeObjectURL(a.href)
+        let warnHint = ''
+        try {
+          const { unzipSync, strFromU8 } = await import('fflate')
+          const u = unzipSync(new Uint8Array(ab))
+          const rawMeta = u['export-meta.json']
+          if (rawMeta) {
+            const meta = JSON.parse(strFromU8(rawMeta)) as { warnings?: string[] }
+            if (meta.warnings?.length) {
+              warnHint = ` Hinweise: ${meta.warnings.slice(0, 3).join(' — ')}`
+            }
+          }
+        } catch {
+          /* meta optional */
+        }
+        setMessage(`Export OK (ZIP mit Bildern).${warnHint}`)
+        return
+      }
       const json = (await res.json()) as {
         success?: boolean
         data?: unknown
         warnings?: string[]
         error?: string
       }
-      if (!res.ok || !json.success || !json.data) {
+      if (!json.success || !json.data) {
         setMessage(json.error ?? 'Export fehlgeschlagen')
         return
       }
@@ -168,34 +199,21 @@ export default function DatensicherungPage() {
     }
   }, [selectedPresets, selectedVacationIds, autoClosure, includeAuth, includeR2Photos])
 
-  const readFileJson = (file: File): Promise<unknown> =>
-    new Promise((resolve, reject) => {
-      const r = new FileReader()
-      r.onload = () => {
-        try {
-          resolve(JSON.parse(String(r.result)))
-        } catch (err) {
-          reject(err)
-        }
-      }
-      r.onerror = () => reject(r.error)
-      r.readAsText(file, 'utf-8')
-    })
-
   const runImport = async (dryRun: boolean, file: File | null) => {
     setImportReport(null)
     setMessage(null)
     if (!file) {
-      setMessage('Bitte zuerst eine JSON-Datei wählen.')
+      setMessage('Bitte zuerst eine Datei wählen (.json oder .zip).')
       return
     }
     setBusy(true)
     try {
-      const bundle = await readFileJson(file)
+      const fd = new FormData()
+      fd.append('file', file)
+      fd.append('dryRun', dryRun ? 'true' : 'false')
       const res = await fetch('/api/admin/data-import', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ bundle, dryRun }),
+        body: fd,
       })
       const json = (await res.json()) as {
         success?: boolean
@@ -332,13 +350,12 @@ export default function DatensicherungPage() {
                 />
                 <div>
                   <Label htmlFor="inclR2" className="font-medium">
-                    R2-Bilder einbinden (Campingplatz-Fotos)
+                    R2-Bilder im Backup (ZIP mit JSON + Dateien)
                   </Label>
                   <p className="text-sm text-muted-foreground">
-                    Liest die Dateien aus dem Cloudflare-Bucket <code className="text-xs">CAMPING_PHOTOS</code> für alle
-                    im Export enthaltenen <code className="text-xs">campingplatz_fotos</code>-Zeilen und packt sie
-                    Base64-kodiert in die JSON — die Datei kann sehr groß werden und der Download länger dauern.
-                    Beim Import werden die Objekte wieder in R2 geschrieben (nach den D1-Zeilen).
+                    Liest die Dateien aus <code className="text-xs">CAMPING_PHOTOS</code> und packt sie in eine ZIP
+                    zusammen mit <code className="text-xs">backup.json</code>. Ohne diese Option erhalten Sie nur die
+                    reine JSON-Datei. Beim Import werden ZIP und reine JSON automatisch erkannt.
                   </p>
                 </div>
               </div>
@@ -437,8 +454,21 @@ export default function DatensicherungPage() {
 
               <Button onClick={runExport} disabled={busy} className="gap-2">
                 <Download className="h-4 w-4" />
-                {busy ? 'Export…' : 'JSON herunterladen'}
+                {busy ? 'Export…' : includeR2Photos ? 'Backup laden (JSON oder ZIP)' : 'JSON herunterladen'}
               </Button>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Camping-Fotos (Bestand)</CardTitle>
+              <CardDescription>
+                Bereits in R2 gespeicherte Bilder einmalig als WebP mit max. 1600 px und 85&nbsp;% Qualität neu encodieren
+                (kleinere Speicherbelegung). Neue Uploads werden automatisch so gespeichert.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ReoptimizeFotosButton disabled={busy} />
             </CardContent>
           </Card>
 
@@ -486,6 +516,71 @@ export default function DatensicherungPage() {
   )
 }
 
+function ReoptimizeFotosButton({ disabled }: { disabled: boolean }) {
+  const [loading, setLoading] = useState(false)
+  const [report, setReport] = useState<string | null>(null)
+
+  const run = async (dry: boolean) => {
+    if (
+      !dry &&
+      typeof window !== 'undefined' &&
+      !window.confirm(
+        'Alle vorhandenen Camping-Fotos in R2 neu encodieren und ggf. alte Objekte ersetzen?'
+      )
+    ) {
+      return
+    }
+    setLoading(true)
+    setReport(null)
+    try {
+      const res = await fetch('/api/admin/camping-fotos/reoptimize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dryRun: dry }),
+      })
+      const json = (await res.json()) as {
+        success?: boolean
+        data?: {
+          dryRun?: boolean
+          processed?: number
+          skipped?: number
+          total?: number
+          errors?: string[]
+          bytesBefore?: number
+          bytesAfter?: number
+        }
+        error?: string
+      }
+      if (!res.ok) {
+        setReport(json.error ?? `Fehler (${res.status})`)
+        return
+      }
+      const d = json.data
+      setReport(
+        `${d?.dryRun ? '(Probelauf) ' : ''}Bearbeitet: ${d?.processed ?? 0}, übersprungen: ${d?.skipped ?? 0}, Einträge mit R2: ${d?.total ?? 0}. Bytes vorher: ${d?.bytesBefore ?? 0}, danach: ${d?.bytesAfter ?? 0}.${d?.errors?.length ? ` | Hinweise: ${d.errors.slice(0, 6).join('; ')}` : ''}`
+      )
+    } catch (e) {
+      setReport(e instanceof Error ? e.message : String(e))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap gap-2">
+        <Button type="button" variant="outline" disabled={disabled || loading} onClick={() => void run(true)}>
+          Probelauf
+        </Button>
+        <Button type="button" disabled={disabled || loading} onClick={() => void run(false)}>
+          Bestand neu komprimieren
+        </Button>
+      </div>
+      {report && <p className="text-xs text-muted-foreground whitespace-pre-wrap">{report}</p>}
+    </div>
+  )
+}
+
 function ImportFileControls({
   busy,
   onDryRun,
@@ -499,10 +594,10 @@ function ImportFileControls({
   return (
     <div className="flex flex-wrap gap-3 items-center">
       <label className="flex items-center gap-2 cursor-pointer">
-        <span className="text-sm sr-only">Backup-JSON</span>
+        <span className="text-sm sr-only">Backup-Datei</span>
         <input
           type="file"
-          accept="application/json,.json"
+          accept="application/json,.json,application/zip,.zip"
           className="text-sm max-w-[220px]"
           onChange={(e) => setFile(e.target.files?.[0] ?? null)}
         />

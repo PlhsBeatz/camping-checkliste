@@ -20,7 +20,7 @@ export interface BackupMeta {
     vacationIds?: string[]
     autoClosure?: boolean
     includeAuth?: boolean
-    /** Campingplatz-Bilder aus R2 (Base64 im Bundle) */
+    /** Campingplatz-Bilder aus R2 (ZIP-Export mit separaten Dateien) */
     includeR2Photos?: boolean
   }
 }
@@ -38,7 +38,7 @@ export interface R2CampingPhotoEntry {
 export interface BackupBundle {
   meta: BackupMeta
   data: Record<string, BackupTableData>
-  /** Optional: Binärdateien aus dem Bindung „CAMPING_PHOTOS“ (kann die JSON sehr groß machen). */
+  /** Optional: nur noch für ältere JSON-Imports mit eingebettetem Base64. */
   r2CampingPhotos?: R2CampingPhotoEntry[]
 }
 
@@ -48,7 +48,7 @@ export interface ExportOptions {
   autoClosure?: boolean
   /** Inkl. Passwort-Hashes, Einladungs-Tokens, Routen-Cache — höchste Sensibilität */
   includeAuth?: boolean
-  /** Binär-Bilder aus R2 einbetten (nur für referenzierte campingplatz_fotos.r2_object_key) */
+  /** Binär-Bilder: ZIP-Export (backup.json + r2/…) */
   includeR2Photos?: boolean
 }
 

@@ -10,22 +10,18 @@ function extFromContentType(ct: string): string {
   return 'jpg'
 }
 
-export async function downloadGooglePlacePhotoToR2(opts: {
-  bucket: R2Bucket
+/** Bild von Google Places (new) laden — ohne Upload nach R2 (Aufrufer optimiert und speichert). */
+export async function fetchGooglePlacePhotoBytes(opts: {
   apiKey: string
   googlePhotoName: string
-  r2ObjectKey: string
-}): Promise<{ contentType: string } | null> {
+}): Promise<{ data: Uint8Array; contentType: string } | null> {
   const url = buildPlacesPhotoMediaUrl(opts.googlePhotoName, IMPORT_MAX_PX, opts.apiKey)
   const res = await fetch(url, { redirect: 'follow', headers: { Accept: 'image/*' } })
   if (!res.ok) return null
   const buf = new Uint8Array(await res.arrayBuffer())
   if (buf.byteLength === 0) return null
   const contentType = res.headers.get('content-type') || 'image/jpeg'
-  await opts.bucket.put(opts.r2ObjectKey, buf, {
-    httpMetadata: { contentType },
-  })
-  return { contentType }
+  return { data: buf, contentType }
 }
 
 export function buildCampingplatzFotoObjectKey(campingplatzId: string, fotoId: string, contentType: string): string {

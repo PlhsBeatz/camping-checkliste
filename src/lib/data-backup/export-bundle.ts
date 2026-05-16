@@ -4,7 +4,11 @@
 import type { D1Database, R2Bucket } from '@cloudflare/workers-types'
 
 import type { BackupBundle, BackupTableData, ExportOptions } from './types'
-import { collectR2KeysFromCampingplatzFotos, fetchR2CampingPhotosForBackup } from './r2-camping-photos'
+import {
+  collectR2KeysFromCampingplatzFotos,
+  fetchR2CampingPhotoFilesForZip,
+  type R2BinaryFile,
+} from './r2-camping-photos'
 import { BACKUP_FORMAT_VERSION } from './types'
 import {
   AUTH_TABLES,
@@ -437,7 +441,7 @@ export async function buildBackupBundle(
   db: D1Database,
   options: ExportOptions,
   ctx?: { r2Bucket?: R2Bucket | null }
-): Promise<{ bundle: BackupBundle; warnings: string[] }> {
+): Promise<{ bundle: BackupBundle; warnings: string[]; r2PhotoFiles?: R2BinaryFile[] }> {
   const warnings: string[] = []
   const includeAuth = options.includeAuth === true
   const vacuumIds = (options.vacationIds ?? []).filter((id) => typeof id === 'string' && id.length > 0)
@@ -549,34 +553,30 @@ export async function buildBackupBundle(
     data,
   }
 
+  let r2PhotoFiles: R2BinaryFile[] | undefined
   if (options.includeR2Photos === true) {
     const bucket = ctx?.r2Bucket ?? null
     const fotoRows = (data.campingplatz_fotos ?? []) as Record<string, unknown>[]
     const keys = collectR2KeysFromCampingplatzFotos(fotoRows)
     if (!bucket) {
       warnings.push(
-        'R2-Bilder angefordert, aber CAMPING_PHOTOS ist nicht gebunden — nur D1-Metadaten (campingplatz_fotos), keine Binärdateien im JSON.'
+        'R2-Bilder angefordert, aber CAMPING_PHOTOS ist nicht gebunden — nur D1-Metadaten (campingplatz_fotos), keine Dateien im ZIP.'
       )
     } else if (keys.length === 0) {
       warnings.push(
-        'R2-Bilder angefordert, aber keine gültigen r2_object_key in campingplatz_fotos — kein Binärteil.'
+        'R2-Bilder angefordert, aber keine gültigen r2_object_key in campingplatz_fotos — Export ohne Binärteil.'
       )
     } else {
-      const { objects, warnings: r2W } = await fetchR2CampingPhotosForBackup(bucket, keys)
+      const { files, warnings: r2W } = await fetchR2CampingPhotoFilesForZip(bucket, keys)
       warnings.push(...r2W)
-      if (objects.length > 0) {
-        bundle.r2CampingPhotos = objects
-        const approxBytes = Math.round(
-          objects.reduce((s, o) => s + (typeof o.dataBase64 === 'string' ? o.dataBase64.length : 0), 0) *
-            0.75
-        )
+      if (files.length > 0) {
+        r2PhotoFiles = files
+        const approxBytes = files.reduce((s, f) => s + f.data.byteLength, 0)
         const approxMb = (approxBytes / (1024 * 1024)).toFixed(1)
-        warnings.push(
-          `R2: ${objects.length} Bilddatei(en) als Base64 eingebettet (ca. ${approxMb} MiB Rohdaten) — die JSON-Datei kann sehr groß werden.`
-        )
+        warnings.push(`R2: ${files.length} Bilddatei(en) für ZIP gelesen (ca. ${approxMb} MiB Rohdaten).`)
       }
     }
   }
 
-  return { bundle, warnings }
+  return { bundle, warnings, r2PhotoFiles }
 }
