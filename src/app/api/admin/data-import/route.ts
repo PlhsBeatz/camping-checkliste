@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getDB, type CloudflareEnv } from '@/lib/db'
+import { getDB, getCampingPhotosR2, type CloudflareEnv } from '@/lib/db'
 import { requireAuth, requireAdmin } from '@/lib/api-auth'
 import { normalizeImportBundle, importBackupBundle } from '@/lib/data-backup'
 
@@ -34,9 +34,11 @@ export async function POST(request: NextRequest) {
 
     const env = process.env as unknown as CloudflareEnv
     const db = await getDB(env)
+    const r2Bucket = await getCampingPhotosR2(env)
     const result = await importBackupBundle(db, bundle, {
       dryRun,
       mode: 'mergeById',
+      r2Bucket,
     })
     result.warnings.unshift(...normWarnings)
 

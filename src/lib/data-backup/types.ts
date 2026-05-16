@@ -20,14 +20,26 @@ export interface BackupMeta {
     vacationIds?: string[]
     autoClosure?: boolean
     includeAuth?: boolean
+    /** Campingplatz-Bilder aus R2 (Base64 im Bundle) */
+    includeR2Photos?: boolean
   }
 }
 
 export type BackupTableData = Record<string, unknown>[]
 
+/** Ein Campingplatz-Foto in R2; Key entspricht campingplatz_fotos.r2_object_key */
+export interface R2CampingPhotoEntry {
+  key: string
+  contentType: string
+  /** Rohe Bildbytes als Base64 */
+  dataBase64: string
+}
+
 export interface BackupBundle {
   meta: BackupMeta
   data: Record<string, BackupTableData>
+  /** Optional: Binärdateien aus dem Bindung „CAMPING_PHOTOS“ (kann die JSON sehr groß machen). */
+  r2CampingPhotos?: R2CampingPhotoEntry[]
 }
 
 export interface ExportOptions {
@@ -36,6 +48,8 @@ export interface ExportOptions {
   autoClosure?: boolean
   /** Inkl. Passwort-Hashes, Einladungs-Tokens, Routen-Cache — höchste Sensibilität */
   includeAuth?: boolean
+  /** Binär-Bilder aus R2 einbetten (nur für referenzierte campingplatz_fotos.r2_object_key) */
+  includeR2Photos?: boolean
 }
 
 export type ImportMode = 'mergeById'
@@ -47,4 +61,6 @@ export interface ImportResult {
   tablesWritten: Record<string, number>
   warnings: string[]
   errors: string[]
+  /** Geschriebene R2-Objekte (nur wenn Bundle r2CampingPhotos enthielt) */
+  r2ObjectsWritten?: number
 }

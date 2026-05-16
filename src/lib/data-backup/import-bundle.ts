@@ -1,11 +1,12 @@
 /**
  * Backup-Bundle in D1 importieren (mergeById = UPSERT: ON CONFLICT … DO UPDATE, kein INSERT OR REPLACE bei RESTRICT-Ketten).
  */
-import type { D1Database } from '@cloudflare/workers-types'
+import type { D1Database, R2Bucket } from '@cloudflare/workers-types'
 
 import type { BackupBundle, ImportResult, ImportMode } from './types'
 import { BACKUP_FORMAT_VERSION } from './types'
 import { BACKUP_TABLE_ORDER } from './tables'
+import { putR2CampingPhotosFromBackup, parseR2CampingPhotosFromRaw } from './r2-camping-photos'
 
 function asRecord(v: unknown): Record<string, unknown> | null {
   if (v && typeof v === 'object' && !Array.isArray(v)) return v as Record<string, unknown>
@@ -48,6 +49,9 @@ export function normalizeImportBundle(raw: unknown): { bundle: BackupBundle; war
     })
   }
 
+  const r2Parsed = parseR2CampingPhotosFromRaw(obj.r2CampingPhotos)
+  warnings.push(...r2Parsed.warnings)
+
   const bundle: BackupBundle = {
     meta: {
       formatVersion,
@@ -56,6 +60,7 @@ export function normalizeImportBundle(raw: unknown): { bundle: BackupBundle; war
       options: options as BackupBundle['meta']['options'],
     },
     data,
+    r2CampingPhotos: r2Parsed.entries.length > 0 ? r2Parsed.entries : undefined,
   }
   return { bundle, warnings }
 }
@@ -279,7 +284,7 @@ async function reconcileMitreisendeUserIds(db: D1Database): Promise<void> {
 export async function importBackupBundle(
   db: D1Database,
   bundle: BackupBundle,
-  opts: { dryRun: boolean; mode: ImportMode }
+  opts: { dryRun: boolean; mode: ImportMode; r2Bucket?: R2Bucket | null }
 ): Promise<ImportResult> {
   const warnings: string[] = []
   const errors: string[] = []
@@ -404,6 +409,22 @@ export async function importBackupBundle(
     }
   }
 
+  let r2ObjectsWritten: number | undefined
+  const r2Photos = bundle.r2CampingPhotos
+  if (r2Photos && r2Photos.length > 0) {
+    const bucket = opts.r2Bucket
+    if (!bucket) {
+      warnings.push(
+        `Backup enthält ${r2Photos.length} R2-Bilddatei(en), aber CAMPING_PHOTOS ist nicht gebunden — nur D1-Metadaten wurden importiert, keine Binärdaten.`
+      )
+    } else {
+      const r2Result = await putR2CampingPhotosFromBackup(bucket, r2Photos, opts.dryRun)
+      warnings.push(...r2Result.warnings)
+      errors.push(...r2Result.errors)
+      r2ObjectsWritten = r2Result.written
+    }
+  }
+
   /** Tabellen im Bundle aber leer / nicht in order */
   for (const t of Object.keys(bundle.data)) {
     if (!BACKUP_TABLE_ORDER.includes(t)) {
@@ -418,5 +439,6 @@ export async function importBackupBundle(
     tablesWritten,
     warnings,
     errors,
+    r2ObjectsWritten,
   }
 }

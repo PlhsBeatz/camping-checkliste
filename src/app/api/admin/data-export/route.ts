@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getDB, type CloudflareEnv } from '@/lib/db'
+import { getDB, getCampingPhotosR2, type CloudflareEnv } from '@/lib/db'
 import { requireAuth, requireAdmin } from '@/lib/api-auth'
 import { buildBackupBundle, type BackupPreset, type ExportOptions } from '@/lib/data-backup'
 
@@ -42,11 +42,13 @@ export async function POST(request: NextRequest) {
         : undefined,
       autoClosure: body.autoClosure === false ? false : true,
       includeAuth: body.includeAuth === true,
+      includeR2Photos: body.includeR2Photos === true,
     }
 
     const env = process.env as unknown as CloudflareEnv
     const db = await getDB(env)
-    const { bundle, warnings } = await buildBackupBundle(db, options)
+    const r2Bucket = await getCampingPhotosR2(env)
+    const { bundle, warnings } = await buildBackupBundle(db, options, { r2Bucket })
 
     return NextResponse.json({ success: true, data: bundle, warnings })
   } catch (error: unknown) {

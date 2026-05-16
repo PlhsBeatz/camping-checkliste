@@ -41,7 +41,7 @@ const PRESET_META: { id: UiPresetKey; label: string; hint: string }[] = [
     id: 'places',
     label: 'Campingplätze',
     hint:
-      'Campingplatz-Stammdaten, Zuordnung Urlaub↔Campingplatz und Fotometadaten (keine Bilddateien aus R2).',
+      'Campingplatz-Stammdaten, Zuordnung Urlaub↔Campingplatz und Fotometadaten; Bilddateien nur mit Option „R2-Bilder einbinden“.',
   },
   {
     id: 'toolsChecklists',
@@ -72,6 +72,7 @@ export default function DatensicherungPage() {
   const [vacationPickerOpen, setVacationPickerOpen] = useState(false)
   const [autoClosure, setAutoClosure] = useState(true)
   const [includeAuth, setIncludeAuth] = useState(false)
+  const [includeR2Photos, setIncludeR2Photos] = useState(false)
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [importReport, setImportReport] = useState<string | null>(null)
@@ -132,6 +133,7 @@ export default function DatensicherungPage() {
           selectedVacationIds.size > 0 ? [...selectedVacationIds] : undefined,
         autoClosure,
         includeAuth,
+        includeR2Photos,
       }
       const res = await fetch('/api/admin/data-export', {
         method: 'POST',
@@ -164,7 +166,7 @@ export default function DatensicherungPage() {
     } finally {
       setBusy(false)
     }
-  }, [selectedPresets, selectedVacationIds, autoClosure, includeAuth])
+  }, [selectedPresets, selectedVacationIds, autoClosure, includeAuth, includeR2Photos])
 
   const readFileJson = (file: File): Promise<unknown> =>
     new Promise((resolve, reject) => {
@@ -202,6 +204,7 @@ export default function DatensicherungPage() {
           errors?: string[]
           tablesWritten?: Record<string, number>
           dryRun?: boolean
+          r2ObjectsWritten?: number
         }
         error?: string
       }
@@ -210,6 +213,12 @@ export default function DatensicherungPage() {
         return
       }
       const d = json.data
+      const r2Line =
+        dryRun || d?.r2ObjectsWritten === undefined
+          ? ''
+          : d.r2ObjectsWritten > 0
+            ? `R2: ${d.r2ObjectsWritten} Objekt(e) nach CAMPING_PHOTOS geschrieben.`
+            : 'R2: keine Objekte geschrieben (Backup ohne Binärteil oder Fehler — siehe Warnungen).'
       const lines = [
         dryRun ? '(Probelauf — keine Schreibvorgänge)' : 'Import ausgeführt.',
         d?.errors?.length ? `Fehler (${d.errors.length}): ${d.errors.slice(0, 8).join('; ')}` : 'Keine DB-Fehler.',
@@ -220,6 +229,7 @@ export default function DatensicherungPage() {
               .map(([t, n]) => `${t}:${n}`)
               .join(', ')}`
           : '',
+        r2Line,
       ]
       setImportReport(lines.filter(Boolean).join('\n\n'))
       if (!dryRun && json.success) setMessage('Import abgeschlossen.')
@@ -313,6 +323,25 @@ export default function DatensicherungPage() {
                   ))}
                 </div>
               )}
+
+              <div className="flex items-start gap-2">
+                <Checkbox
+                  id="inclR2"
+                  checked={includeR2Photos}
+                  onCheckedChange={(c) => setIncludeR2Photos(c === true)}
+                />
+                <div>
+                  <Label htmlFor="inclR2" className="font-medium">
+                    R2-Bilder einbinden (Campingplatz-Fotos)
+                  </Label>
+                  <p className="text-sm text-muted-foreground">
+                    Liest die Dateien aus dem Cloudflare-Bucket <code className="text-xs">CAMPING_PHOTOS</code> für alle
+                    im Export enthaltenen <code className="text-xs">campingplatz_fotos</code>-Zeilen und packt sie
+                    Base64-kodiert in die JSON — die Datei kann sehr groß werden und der Download länger dauern.
+                    Beim Import werden die Objekte wieder in R2 geschrieben (nach den D1-Zeilen).
+                  </p>
+                </div>
+              </div>
 
               <div className="flex items-start gap-2">
                 <Checkbox
