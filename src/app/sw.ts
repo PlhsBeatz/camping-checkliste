@@ -1,6 +1,6 @@
 import { defaultCache } from '@serwist/next/worker'
 import type { PrecacheEntry, RuntimeCaching, SerwistGlobalConfig } from 'serwist'
-import { ExpirationPlugin, NetworkFirst, Serwist, StaleWhileRevalidate } from 'serwist'
+import { ExpirationPlugin, NetworkFirst, NetworkOnly, Serwist, StaleWhileRevalidate } from 'serwist'
 
 declare global {
   interface WorkerGlobalScope extends SerwistGlobalConfig {
@@ -22,6 +22,13 @@ declare const self: ServiceWorkerGlobalScope
  * - `/manifest.json`: SWR, damit die PWA-Manifest-Daten offline sofort verfügbar sind.
  */
 const customRuntimeCaching: RuntimeCaching[] = [
+  /** Mutationen unter /api/ nie aus dem SW-Daten-Cache bedienen (vermeidet falsche/HTML-Fallbacks). */
+  {
+    matcher: ({ url, request }) =>
+      url.pathname.startsWith('/api/') &&
+      ['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method),
+    handler: new NetworkOnly(),
+  },
   {
     matcher: ({ url }) => url.pathname.startsWith('/icons/'),
     handler: new StaleWhileRevalidate({

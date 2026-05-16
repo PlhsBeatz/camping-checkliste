@@ -463,8 +463,9 @@ export default function DatensicherungPage() {
             <CardHeader>
               <CardTitle>Camping-Fotos (Bestand)</CardTitle>
               <CardDescription>
-                Bereits in R2 gespeicherte Bilder einmalig als WebP mit max. 1600 px und 85&nbsp;% Qualität neu encodieren
-                (kleinere Speicherbelegung). Neue Uploads werden automatisch so gespeichert.
+                Bereits referenzierte Fotos einmalig als WebP mit max. 1600 px und 85&nbsp;% Qualität neu encodieren.
+                Neue Uploads werden automatisch so gespeichert. Der Probelauf zählt nur Datenbank-Einträge (ohne Bilddaten).
+                Die echte Komprimierung läuft in mehreren kleinen Server-Schritten.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -516,16 +517,76 @@ export default function DatensicherungPage() {
   )
 }
 
+async function parseFetchJson(
+  res: Response
+): Promise<{ ok: true; json: Record<string, unknown> } | { ok: false; message: string }> {
+  const ct = res.headers.get('content-type') || ''
+  const text = await res.text()
+  if (!ct.includes('application/json')) {
+    const htmlish = /<!\s*DOCTYPE/i.test(text)
+    return {
+      ok: false,
+      message: htmlish
+        ? `Die Server-Antwort ist HTML (${res.status}), kein JSON — oft Worker-Zeitüberschreitung, Routing oder eine zwischengeschaltete Zwischenspeicherung (z. B. Service Worker). Ein Neuladen ohne Cache kann helfen; nach Deploy die neue Service-Worker-Version abwarten.`
+        : `Unerwartete Antwort (${res.status}), kein JSON: ${text.slice(0, 200)}`,
+    }
+  }
+  try {
+    return { ok: true, json: JSON.parse(text) as Record<string, unknown> }
+  } catch (e) {
+    return {
+      ok: false,
+      message: `Antwort ist kein gültiges JSON: ${e instanceof Error ? e.message : String(e)}`,
+    }
+  }
+}
+
 function ReoptimizeFotosButton({ disabled }: { disabled: boolean }) {
   const [loading, setLoading] = useState(false)
   const [report, setReport] = useState<string | null>(null)
 
-  const run = async (dry: boolean) => {
+  const runDry = async () => {
+    setLoading(true)
+    setReport(null)
+    try {
+      const res = await fetch('/api/admin/camping-fotos/reoptimize', {
+        method: 'POST',
+        credentials: 'same-origin',
+        cache: 'no-store',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dryRun: true }),
+      })
+      const parsed = await parseFetchJson(res)
+      if (!parsed.ok) {
+        setReport(parsed.message)
+        return
+      }
+      const root = parsed.json
+      const err = typeof root.error === 'string' ? root.error : null
+      if (!res.ok) {
+        setReport(err ?? `Fehler (${res.status})`)
+        return
+      }
+      const data = root.data as Record<string, unknown> | undefined
+      const total = typeof data?.total === 'number' ? data.total : 0
+      const batchesNeeded = typeof data?.batchesNeeded === 'number' ? data.batchesNeeded : 0
+      const batchSize = typeof data?.batchSize === 'number' ? data.batchSize : 0
+      const note = typeof data?.note === 'string' ? data.note : ''
+      setReport(
+        `Probelauf: ${total} Einträge mit R2-Schlüssel in der Datenbank. Geschätzt ${batchesNeeded} Server-Schritt(e) à bis zu ${batchSize} Fotos für die echte Komprimierung. ${note}`
+      )
+    } catch (e) {
+      setReport(e instanceof Error ? e.message : String(e))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const runFull = async () => {
     if (
-      !dry &&
       typeof window !== 'undefined' &&
       !window.confirm(
-        'Alle vorhandenen Camping-Fotos in R2 neu encodieren und ggf. alte Objekte ersetzen?'
+        'Alle vorhandenen Camping-Fotos in mehreren Schritten neu encodieren? Überschreibt R2-Objekte und aktualisiert die Datenbank.'
       )
     ) {
       return
@@ -533,31 +594,59 @@ function ReoptimizeFotosButton({ disabled }: { disabled: boolean }) {
     setLoading(true)
     setReport(null)
     try {
-      const res = await fetch('/api/admin/camping-fotos/reoptimize', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ dryRun: dry }),
-      })
-      const json = (await res.json()) as {
-        success?: boolean
-        data?: {
-          dryRun?: boolean
-          processed?: number
-          skipped?: number
-          total?: number
-          errors?: string[]
-          bytesBefore?: number
-          bytesAfter?: number
+      let offset = 0
+      let rounds = 0
+      let processedSum = 0
+      let bytesBeforeSum = 0
+      let bytesAfterSum = 0
+      const errAcc: string[] = []
+
+      while (rounds < 250) {
+        const res = await fetch('/api/admin/camping-fotos/reoptimize', {
+          method: 'POST',
+          credentials: 'same-origin',
+          cache: 'no-store',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ dryRun: false, batchOffset: offset }),
+        })
+        const parsed = await parseFetchJson(res)
+        if (!parsed.ok) {
+          setReport(parsed.message)
+          return
         }
-        error?: string
+        const root = parsed.json
+        if (!res.ok) {
+          setReport(typeof root.error === 'string' ? root.error : `Fehler (${res.status})`)
+          return
+        }
+        const data = root.data as Record<string, unknown> | undefined
+        if (!data) {
+          setReport('Antwort ohne data-Feld.')
+          return
+        }
+        processedSum += typeof data.processedInBatch === 'number' ? data.processedInBatch : 0
+        bytesBeforeSum += typeof data.batchBytesBefore === 'number' ? data.batchBytesBefore : 0
+        bytesAfterSum += typeof data.batchBytesAfter === 'number' ? data.batchBytesAfter : 0
+        if (Array.isArray(data.errors)) {
+          for (const x of data.errors) {
+            if (typeof x === 'string') errAcc.push(x)
+          }
+        }
+        const totalRows = typeof data.total === 'number' ? data.total : 0
+        rounds++
+        setReport(
+          `Komprimierung … Schritt ${rounds}. Bereits erfolgreich optimiert (Summe): ${processedSum}${totalRows ? ` von maximal ${totalRows} Einträgen` : ''}.`
+        )
+        const complete = data.complete === true
+        const nextRaw = data.nextBatchOffset
+        const next =
+          typeof nextRaw === 'number' ? nextRaw : nextRaw === null ? null : undefined
+        if (complete || next == null) break
+        offset = next
       }
-      if (!res.ok) {
-        setReport(json.error ?? `Fehler (${res.status})`)
-        return
-      }
-      const d = json.data
+
       setReport(
-        `${d?.dryRun ? '(Probelauf) ' : ''}Bearbeitet: ${d?.processed ?? 0}, übersprungen: ${d?.skipped ?? 0}, Einträge mit R2: ${d?.total ?? 0}. Bytes vorher: ${d?.bytesBefore ?? 0}, danach: ${d?.bytesAfter ?? 0}.${d?.errors?.length ? ` | Hinweise: ${d.errors.slice(0, 6).join('; ')}` : ''}`
+        `Fertig nach ${rounds} Server-Schritt(en). Insgesamt als optimiert geschrieben (über alle Batches): ${processedSum}. Rohbytes (Summe der verarbeiteten Batches): ${bytesBeforeSum} → WebP-bytes: ${bytesAfterSum}.${errAcc.length ? ` Hinweise: ${errAcc.slice(0, 10).join('; ')}` : ''}`
       )
     } catch (e) {
       setReport(e instanceof Error ? e.message : String(e))
@@ -569,10 +658,10 @@ function ReoptimizeFotosButton({ disabled }: { disabled: boolean }) {
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap gap-2">
-        <Button type="button" variant="outline" disabled={disabled || loading} onClick={() => void run(true)}>
+        <Button type="button" variant="outline" disabled={disabled || loading} onClick={() => void runDry()}>
           Probelauf
         </Button>
-        <Button type="button" disabled={disabled || loading} onClick={() => void run(false)}>
+        <Button type="button" disabled={disabled || loading} onClick={() => void runFull()}>
           Bestand neu komprimieren
         </Button>
       </div>

@@ -10,9 +10,15 @@ import { requireAuth, requireAdmin } from '@/lib/api-auth'
 import { optimizeCampingPhotoToWebp } from '@/lib/camping-photo-optimize'
 import { buildCampingplatzFotoObjectKey } from '@/lib/campingplatz-foto-import'
 
+/** Pro Aufruf verarbeitete Fotos — vermeidet Worker-CPU-/Zeitlimits bei vielen Bildern. */
+const BATCH_SIZE = 12
+
 /**
- * Einmalige Nachoptimierung bestehender R2-Campingfotos (WebP, max. Kante 1600, Qualität 85).
- * POST JSON: { dryRun?: boolean }
+ * Nachoptimierung bestehender R2-Campingfotos (WebP, max. Kante 1600, Qualität 85).
+ *
+ * Probelauf (`dryRun: true`): nur Datenbank — keine R2-Zugriffe (sofort, kein Worker-Timeout).
+ *
+ * Echter Lauf: mehrstufig mit `batchOffset` — Client ruft wiederholt auf, bis `complete: true`.
  */
 export async function POST(request: NextRequest) {
   try {
@@ -21,13 +27,15 @@ export async function POST(request: NextRequest) {
     const adminErr = requireAdmin(auth.userContext)
     if (adminErr) return adminErr
 
-    let dryRun = false
+    let body: { dryRun?: boolean; batchOffset?: number } = {}
     try {
-      const body = (await request.json()) as { dryRun?: boolean }
-      dryRun = body.dryRun === true
+      body = (await request.json()) as { dryRun?: boolean; batchOffset?: number }
     } catch {
-      dryRun = false
+      body = {}
     }
+
+    const dryRun = body.dryRun === true
+    const batchOffset = Math.max(0, Math.floor(Number(body.batchOffset ?? 0)))
 
     const env = process.env as unknown as CloudflareEnv
     const db = await getDB(env)
@@ -37,72 +45,96 @@ export async function POST(request: NextRequest) {
     }
 
     const fotos = await listCampingplatzFotosWithR2Keys(db)
-    let processed = 0
-    let skipped = 0
-    let bytesBefore = 0
-    let bytesAfter = 0
     const errors: string[] = []
 
-    for (const foto of fotos) {
+    /** Schneller Probelauf: keine R2-/WASM-Arbeit — nur Zeilen aus D1 */
+    if (dryRun) {
+      const batchesNeeded = fotos.length === 0 ? 0 : Math.ceil(fotos.length / BATCH_SIZE)
+      return NextResponse.json({
+        success: true,
+        data: {
+          dryRun: true,
+          total: fotos.length,
+          batchSize: BATCH_SIZE,
+          batchesNeeded,
+          note:
+            'Es wurden keine Bilddaten gelesen. Die echte Komprimierung erfolgt über mehrere Server-Anfragen („Bestand neu komprimieren“), um Zeitlimits zu vermeiden.',
+        },
+      })
+    }
+
+    const slice = fotos.slice(batchOffset, batchOffset + BATCH_SIZE)
+    let processedInBatch = 0
+    let skippedInBatch = 0
+    let batchBytesBefore = 0
+    let batchBytesAfter = 0
+
+    for (const foto of slice) {
       const key = foto.r2_object_key
       if (!key) {
-        skipped++
+        skippedInBatch++
         continue
       }
       try {
         const obj = await bucket.get(key)
         if (!obj) {
           errors.push(`R2 fehlt: ${key}`)
-          skipped++
+          skippedInBatch++
           continue
         }
         const buf = new Uint8Array(await obj.arrayBuffer())
-        bytesBefore += buf.byteLength
+        batchBytesBefore += buf.byteLength
         const opt = await optimizeCampingPhotoToWebp(buf, obj.httpMetadata?.contentType)
         if (!opt) {
-          skipped++
+          skippedInBatch++
           continue
         }
-        bytesAfter += opt.data.byteLength
+        batchBytesAfter += opt.data.byteLength
         const newKey = buildCampingplatzFotoObjectKey(foto.campingplatz_id, foto.id, 'image/webp')
-        if (!dryRun) {
-          await bucket.put(newKey, opt.data, { httpMetadata: { contentType: 'image/webp' } })
-          const updated = await updateCampingplatzFotoR2(db, foto.id, newKey, 'image/webp')
-          if (!updated) {
-            errors.push(`DB-Update fehlgeschlagen: ${foto.id}`)
-            try {
-              await bucket.delete(newKey)
-            } catch {
-              /* ignore */
-            }
-            skipped++
-            continue
+
+        await bucket.put(newKey, opt.data, { httpMetadata: { contentType: 'image/webp' } })
+        const updated = await updateCampingplatzFotoR2(db, foto.id, newKey, 'image/webp')
+        if (!updated) {
+          errors.push(`DB-Update fehlgeschlagen: ${foto.id}`)
+          try {
+            await bucket.delete(newKey)
+          } catch {
+            /* ignore */
           }
-          if (newKey !== key) {
-            try {
-              await bucket.delete(key)
-            } catch (e) {
-              errors.push(`Altes R2-Objekt konnte nicht gelöscht werden (${key}): ${e instanceof Error ? e.message : String(e)}`)
-            }
+          skippedInBatch++
+          continue
+        }
+        if (newKey !== key) {
+          try {
+            await bucket.delete(key)
+          } catch (e) {
+            errors.push(`Altes R2-Objekt konnte nicht gelöscht werden (${key}): ${e instanceof Error ? e.message : String(e)}`)
           }
         }
-        processed++
+        processedInBatch++
       } catch (e) {
         errors.push(`${key}: ${e instanceof Error ? e.message : String(e)}`)
-        skipped++
+        skippedInBatch++
       }
     }
+
+    const nextBatchOffset = batchOffset + slice.length
+    const complete = nextBatchOffset >= fotos.length
 
     return NextResponse.json({
       success: true,
       data: {
-        dryRun,
+        dryRun: false,
+        complete,
         total: fotos.length,
-        processed,
-        skipped,
+        batchOffsetStart: batchOffset,
+        batchSize: slice.length,
+        processedInBatch,
+        skippedInBatch,
+        nextBatchOffset: complete ? null : nextBatchOffset,
+        batchBytesBefore,
+        batchBytesAfter,
         errors,
-        bytesBefore,
-        bytesAfter,
       },
     })
   } catch (error: unknown) {
