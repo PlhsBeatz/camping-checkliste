@@ -25,10 +25,7 @@ function isRiffWebp(buf: Uint8Array): boolean {
 }
 
 function detectKind(buf: Uint8Array, mimeHint?: string): 'jpeg' | 'png' | 'webp' | null {
-  const m = (mimeHint || '').toLowerCase()
-  if (m.includes('jpeg') || m.includes('jpg')) return 'jpeg'
-  if (m.includes('png')) return 'png'
-  if (m.includes('webp')) return 'webp'
+  // Magic Bytes haben Vorrang: R2-Metadaten können vom echten Format abweichen (z. B. WebP unter .jpg-Key).
   if (buf.byteLength >= 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return 'jpeg'
   if (
     buf.byteLength >= 8 &&
@@ -39,7 +36,18 @@ function detectKind(buf: Uint8Array, mimeHint?: string): 'jpeg' | 'png' | 'webp'
   )
     return 'png'
   if (isRiffWebp(buf)) return 'webp'
+
+  const m = (mimeHint || '').toLowerCase()
+  if (m.includes('jpeg') || m.includes('jpg')) return 'jpeg'
+  if (m.includes('png')) return 'png'
+  if (m.includes('webp')) return 'webp'
+
   return null
+}
+
+/** Für Admin-/Diagnose‑APIs (z. B. Nachkomprimieren). */
+export function detectCampingPhotoKind(buf: Uint8Array, mimeHint?: string): 'jpeg' | 'png' | 'webp' | null {
+  return detectKind(buf, mimeHint)
 }
 
 /** Schnelle JPEG-SOF-Parse ohne Volldekodierung (hilft beim CPU-Budget unter Workers Free). */

@@ -7,7 +7,11 @@ import {
   updateCampingplatzFotoR2,
 } from '@/lib/db'
 import { requireAuth, requireAdmin } from '@/lib/api-auth'
-import { optimizeCampingPhotoToWebp, peekRasterMegapixels } from '@/lib/camping-photo-optimize'
+import {
+  detectCampingPhotoKind,
+  optimizeCampingPhotoToWebp,
+  peekRasterMegapixels,
+} from '@/lib/camping-photo-optimize'
 import { buildCampingplatzFotoObjectKey } from '@/lib/campingplatz-foto-import'
 
 /**
@@ -150,6 +154,20 @@ export async function POST(request: NextRequest) {
           maxDecodeMegapixels,
         })
         if (!opt) {
+          const fmt = detectCampingPhotoKind(buf, obj.httpMetadata?.contentType)
+          let detail: string
+          if (!fmt) {
+            detail =
+              'Datei konnte nicht als JPEG/PNG/WebP erkannt werden (MIME-Typ oder Inhalt passt nicht).'
+          } else if (fmt === 'jpeg' || fmt === 'png') {
+            const mpLabel =
+              guessedMp != null ? `~${guessedMp.toFixed(2)} MP, ` : 'Megapixelzahl nicht aus Header ermittelbar, '
+            detail = `${fmt.toUpperCase()}, ${mpLabel}unter der Dekodierungsgrenze oder Grenze nicht prüfbar — Dekodierung oder WebP‑Encode ist fehlgeschlagen (beschädigte Daten, unübliches JPEG‑Profil, PNG zu groß/komplex, oder Workers‑Limits).`
+          } else {
+            detail =
+              `${fmt.toUpperCase()} — Dekodierung oder Neu‑Encode fehlgeschlagen (beschädigte Daten oder Codec‑Limits).`
+          }
+          errors.push(`${key}: ${detail}`)
           skippedInBatch++
           continue
         }

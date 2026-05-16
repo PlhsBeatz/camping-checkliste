@@ -662,8 +662,20 @@ function ReoptimizeFotosButton({ disabled }: { disabled: boolean }) {
         })
       }
 
+      const errPreview = 25
+      const errTail =
+        errAcc.length > 0
+          ? ` Hinweise (${errAcc.length}): ${errAcc.slice(0, errPreview).join('; ')}${
+              errAcc.length > errPreview ? ` … und ${errAcc.length - errPreview} weitere.` : ''
+            }`
+          : ''
+      const noneWritten =
+        processedSum === 0 && rounds > 0
+          ? ' Kein Bild wurde erfolgreich nach WebP geschrieben — alle Einträge wurden übersprungen oder sind fehlgeschlagen (Details in den Hinweisen).'
+          : ''
+
       setReport(
-        `Fertig nach ${rounds} Server-Schritt(en). Insgesamt als optimiert geschrieben (über alle Batches): ${processedSum}. Rohbytes (Summe der verarbeiteten Batches): ${bytesBeforeSum} → WebP-bytes: ${bytesAfterSum}.${errAcc.length ? ` Hinweise: ${errAcc.slice(0, 10).join('; ')}` : ''}`
+        `Fertig nach ${rounds} Server-Schritt(en). Insgesamt als optimiert geschrieben (über alle Batches): ${processedSum}.${noneWritten} Rohbytes (Summe der aus R2 gelesenen Daten in allen Batches): ${bytesBeforeSum} → neue WebP-bytes geschrieben: ${bytesAfterSum}.${errTail}`
       )
     } catch (e) {
       setReport(e instanceof Error ? e.message : String(e))
