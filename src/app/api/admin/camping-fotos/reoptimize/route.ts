@@ -10,11 +10,43 @@ import { requireAuth, requireAdmin } from '@/lib/api-auth'
 import { optimizeCampingPhotoToWebp } from '@/lib/camping-photo-optimize'
 import { buildCampingplatzFotoObjectKey } from '@/lib/campingplatz-foto-import'
 
-/** Pro Aufruf verarbeitete Fotos — vermeidet Worker-CPU-/Zeitlimits bei vielen Bildern. */
-const BATCH_SIZE = 12
+/**
+ * Cloudflare Workers Free: ca. 10 ms CPU und max. 50 Subrequests je Aufruf.
+ * Ein Foto (R2 GET/PUT, D1-Updates, ggf. Löschen) verbraucht mehrere Schritte;
+ * zusätzliche WASM-Verarbeitung — daher Standard: **ein** Foto pro Request.
+ */
+function getReoptimizeBatchSize(): number {
+  const raw = process.env.REOPTIMIZE_BATCH_SIZE
+  if (raw != null && raw !== '') {
+    const n = Math.floor(Number(raw))
+    if (Number.isFinite(n) && n >= 1) return Math.min(n, 50)
+  }
+  return 1
+}
+
+/** Etwas leichtere WebP‑Parameter nur für Bulk-Nachlauf (Workers-CPU unter Free Limits). Neue Uploads bleiben 1600 px @ 85 %. */
+function getReoptimizeEncodeOptions(): { maxEdge: number; webpQuality: number } {
+  const defEdge = 1200
+  const defQuality = 78
+  const maxEdgeRaw = process.env.REOPTIMIZE_MAX_EDGE
+  const qRaw = process.env.REOPTIMIZE_WEBP_QUALITY
+  let maxEdge =
+    maxEdgeRaw != null && maxEdgeRaw !== ''
+      ? Math.floor(Number(maxEdgeRaw))
+      : defEdge
+  let webpQuality =
+    qRaw != null && qRaw !== ''
+      ? Math.floor(Number(qRaw))
+      : defQuality
+  if (!Number.isFinite(maxEdge)) maxEdge = defEdge
+  if (!Number.isFinite(webpQuality)) webpQuality = defQuality
+  maxEdge = Math.min(Math.max(maxEdge, 480), 1600)
+  webpQuality = Math.min(Math.max(webpQuality, 50), 95)
+  return { maxEdge, webpQuality }
+}
 
 /**
- * Nachoptimierung bestehender R2-Campingfotos (WebP, max. Kante 1600, Qualität 85).
+ * Nachoptimierung bestehender R2-Campingfotos (Bulk: WebP, Standard max. Kante 1200, Qualität 78 — über Env anpassbar).
  *
  * Probelauf (`dryRun: true`): nur Datenbank — keine R2-Zugriffe (sofort, kein Worker-Timeout).
  *
@@ -47,23 +79,27 @@ export async function POST(request: NextRequest) {
     const fotos = await listCampingplatzFotosWithR2Keys(db)
     const errors: string[] = []
 
+    const batchLimit = getReoptimizeBatchSize()
+    const encodeOpts = getReoptimizeEncodeOptions()
+
     /** Schneller Probelauf: keine R2-/WASM-Arbeit — nur Zeilen aus D1 */
     if (dryRun) {
-      const batchesNeeded = fotos.length === 0 ? 0 : Math.ceil(fotos.length / BATCH_SIZE)
+      const batchesNeeded = fotos.length === 0 ? 0 : Math.ceil(fotos.length / batchLimit)
       return NextResponse.json({
         success: true,
         data: {
           dryRun: true,
           total: fotos.length,
-          batchSize: BATCH_SIZE,
+          batchSize: batchLimit,
           batchesNeeded,
+          reoptimizeEncode: encodeOpts,
           note:
-            'Es wurden keine Bilddaten gelesen. Die echte Komprimierung erfolgt über mehrere Server-Anfragen („Bestand neu komprimieren“), um Zeitlimits zu vermeiden.',
+            'Es wurden keine Bilddaten gelesen. Auf Cloudflare Free ist standardmäßig ein Bild pro Server-Anfrage (über REOPTIMIZE_BATCH_SIZE erhöhbar bei mehr Kontingent). Bulk nutzt zur CPU-Entlastung leichtere WebP‑Parameter als frische Uploads (REOPTIMIZE_MAX_EDGE / REOPTIMIZE_WEBP_QUALITY).',
         },
       })
     }
 
-    const slice = fotos.slice(batchOffset, batchOffset + BATCH_SIZE)
+    const slice = fotos.slice(batchOffset, batchOffset + batchLimit)
     let processedInBatch = 0
     let skippedInBatch = 0
     let batchBytesBefore = 0
@@ -84,7 +120,7 @@ export async function POST(request: NextRequest) {
         }
         const buf = new Uint8Array(await obj.arrayBuffer())
         batchBytesBefore += buf.byteLength
-        const opt = await optimizeCampingPhotoToWebp(buf, obj.httpMetadata?.contentType)
+        const opt = await optimizeCampingPhotoToWebp(buf, obj.httpMetadata?.contentType, encodeOpts)
         if (!opt) {
           skippedInBatch++
           continue
@@ -128,7 +164,9 @@ export async function POST(request: NextRequest) {
         complete,
         total: fotos.length,
         batchOffsetStart: batchOffset,
+        batchSizeConfigured: batchLimit,
         batchSize: slice.length,
+        reoptimizeEncode: encodeOpts,
         processedInBatch,
         skippedInBatch,
         nextBatchOffset: complete ? null : nextBatchOffset,

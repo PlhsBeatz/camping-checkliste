@@ -3,3 +3,10 @@
 
 # Mind. 32 Zeichen – für JWT-Signatur der Auth-Session
 JWT_SECRET=dein-mindestens-32-zeichen-langer-geheimer-schluessel
+
+# --- Optional: Camping-Foto-Nachkomprimierung (Admin /datensicherung) ---
+# Free Tier: Standard 1 Foto je Request (Workers CPU + Subrequests). Auf Paid höher möglich.
+# REOPTIMIZE_BATCH_SIZE=1
+# Leichtere WebP-Parameter nur für Bulk-Nachlauf (Uploads bleiben 1600 px @ 85 %):
+# REOPTIMIZE_MAX_EDGE=1200
+# REOPTIMIZE_WEBP_QUALITY=78

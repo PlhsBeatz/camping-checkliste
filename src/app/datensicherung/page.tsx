@@ -463,9 +463,11 @@ export default function DatensicherungPage() {
             <CardHeader>
               <CardTitle>Camping-Fotos (Bestand)</CardTitle>
               <CardDescription>
-                Bereits referenzierte Fotos einmalig als WebP mit max. 1600 px und 85&nbsp;% Qualität neu encodieren.
-                Neue Uploads werden automatisch so gespeichert. Der Probelauf zählt nur Datenbank-Einträge (ohne Bilddaten).
-                Die echte Komprimierung läuft in mehreren kleinen Server-Schritten.
+                Bereits referenzierte Fotos als WebP neu encodieren (Bulk‑Nachlauf: Standard max.
+                Kante&nbsp;1200&nbsp;px, Qualität&nbsp;78 — schonend für Worker‑Free‑Limits).
+                Neue Uploads bleiben 1600&nbsp;px&nbsp;@&nbsp;85&nbsp;%. Der Probelauf zählt nur Datenbankeinträge
+                (ohne Bilddaten). Auf Cloudflare Free wird pro Server‑Antrag typischerweise ein Bild
+                verarbeitet; der Lauf dauert damit entsprechend länger, bleibt aber in den Kontingenten.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -571,9 +573,14 @@ function ReoptimizeFotosButton({ disabled }: { disabled: boolean }) {
       const total = typeof data?.total === 'number' ? data.total : 0
       const batchesNeeded = typeof data?.batchesNeeded === 'number' ? data.batchesNeeded : 0
       const batchSize = typeof data?.batchSize === 'number' ? data.batchSize : 0
+      const enc = data?.reoptimizeEncode as { maxEdge?: number; webpQuality?: number } | undefined
+      const encTxt =
+        enc && typeof enc.maxEdge === 'number' && typeof enc.webpQuality === 'number'
+          ? ` WebP für den Nachlauf: max. ${enc.maxEdge}px, Qualität ${enc.webpQuality}%.`
+          : ''
       const note = typeof data?.note === 'string' ? data.note : ''
       setReport(
-        `Probelauf: ${total} Einträge mit R2-Schlüssel in der Datenbank. Geschätzt ${batchesNeeded} Server-Schritt(e) à bis zu ${batchSize} Fotos für die echte Komprimierung. ${note}`
+        `Probelauf: ${total} Einträge mit R2-Schlüssel in der Datenbank. Geschätzt ${batchesNeeded} Server-Schritt(e) à bis zu ${batchSize} Foto/Fotos für die echte Komprimierung.${encTxt} ${note}`
       )
     } catch (e) {
       setReport(e instanceof Error ? e.message : String(e))
@@ -643,6 +650,9 @@ function ReoptimizeFotosButton({ disabled }: { disabled: boolean }) {
           typeof nextRaw === 'number' ? nextRaw : nextRaw === null ? null : undefined
         if (complete || next == null) break
         offset = next
+        await new Promise<void>((resolve) => {
+          window.setTimeout(resolve, 150)
+        })
       }
 
       setReport(

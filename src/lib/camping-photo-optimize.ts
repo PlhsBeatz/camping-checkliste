@@ -103,15 +103,19 @@ function makeImageData(rgba: Uint8ClampedArray, width: number, height: number): 
 }
 
 /**
- * Dekodiert gängige Rasterformate zu RGBA, skaliert die lange Kante auf max. 1600 px, kodiert WebP mit Qualität 85.
+ * Dekodiert gängige Rasterformate zu RGBA, skaliert auf maxEdge, kodiert WebP mit quality.
  * @returns `null`, wenn keine sinnvolle Optimierung möglich ist — Aufrufer speichert dann die Originalbytes.
  */
 export async function optimizeCampingPhotoToWebp(
   input: Uint8Array,
-  mimeHint?: string
+  mimeHint?: string,
+  opts?: { maxEdge?: number; webpQuality?: number }
 ): Promise<{ data: Uint8Array } | null> {
   const kind = detectKind(input, mimeHint)
   if (!kind) return null
+
+  const maxEdge = opts?.maxEdge ?? MAX_EDGE
+  const webpQuality = opts?.webpQuality ?? WEBP_QUALITY
 
   let rgba: Uint8ClampedArray
   let sw: number
@@ -146,13 +150,13 @@ export async function optimizeCampingPhotoToWebp(
 
   if (sw < 1 || sh < 1) return null
 
-  const { w: tw, h: th } = containSize(sw, sh, MAX_EDGE)
+  const { w: tw, h: th } = containSize(sw, sh, maxEdge)
   let pixels = rgba
   if (tw !== sw || th !== sh) {
     pixels = bilinearResize(rgba, sw, sh, tw, th)
   }
 
-  const ab = await webpEncode(makeImageData(pixels, tw, th), { quality: WEBP_QUALITY })
+  const ab = await webpEncode(makeImageData(pixels, tw, th), { quality: webpQuality })
   return { data: new Uint8Array(ab) }
 }
 
