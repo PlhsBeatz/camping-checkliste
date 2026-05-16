@@ -22,6 +22,29 @@ function parsePresets(v: unknown): BackupPreset[] | undefined {
   return out.length ? out : undefined
 }
 
+function optionalNonNegativeInt(v: unknown): number | undefined {
+  if (typeof v === 'number' && Number.isFinite(v) && v >= 0 && Math.floor(v) === v) return v
+  if (typeof v === 'string' && v.trim() !== '') {
+    const n = Math.floor(Number(v))
+    if (Number.isFinite(n) && n >= 0) return n
+  }
+  return undefined
+}
+
+/** Optional Batchgröße (R2); moderates Maximum gegen Missbrauch */
+function optionalR2BatchLimit(v: unknown): number | undefined {
+  if (typeof v === 'number' && Number.isFinite(v)) {
+    const n = Math.floor(v)
+    if (n >= 1) return Math.min(n, 500)
+    return undefined
+  }
+  if (typeof v === 'string' && v.trim() !== '') {
+    const n = Math.floor(Number(v))
+    if (Number.isFinite(n) && n >= 1) return Math.min(n, 500)
+  }
+  return undefined
+}
+
 export async function POST(request: NextRequest) {
   try {
     const auth = await requireAuth(request)
@@ -44,20 +67,30 @@ export async function POST(request: NextRequest) {
       autoClosure: body.autoClosure === false ? false : true,
       includeAuth: body.includeAuth === true,
       includeR2Photos: body.includeR2Photos === true,
+      r2PhotoBatchOffset: optionalNonNegativeInt(body.r2PhotoBatchOffset),
+      r2PhotoBatchLimit: optionalR2BatchLimit(body.r2PhotoBatchLimit),
     }
 
     const env = process.env as unknown as CloudflareEnv
     const db = await getDB(env)
     const r2Bucket = await getCampingPhotosR2(env)
-    const { bundle, warnings, r2PhotoFiles } = await buildBackupBundle(db, options, { r2Bucket })
+    const { bundle, warnings, r2PhotoFiles, deliverZipArchive, r2ZipBatch } = await buildBackupBundle(
+      db,
+      options,
+      { r2Bucket }
+    )
 
-    if (options.includeR2Photos === true && r2PhotoFiles && r2PhotoFiles.length > 0) {
+    if (deliverZipArchive === true) {
       const zipBuf = await buildBackupZipBuffer({
         bundle,
         warnings,
-        r2Files: r2PhotoFiles.map((f) => ({ key: f.key, data: f.data })),
+        r2Files: (r2PhotoFiles ?? []).map((f) => ({ key: f.key, data: f.data })),
+        ...(r2ZipBatch ? { r2Batch: r2ZipBatch } : {}),
       })
-      const filename = `camping-backup-${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.zip`
+      const ts = new Date().toISOString().slice(0, 19).replace(/:/g, '-')
+      const teil =
+        r2ZipBatch !== undefined && r2ZipBatch.offset > 0 ? `-teil-${r2ZipBatch.offset}` : ''
+      const filename = `camping-backup-${ts}${teil}.zip`
       return new NextResponse(new Blob([new Uint8Array(zipBuf)]), {
         status: 200,
         headers: {

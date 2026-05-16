@@ -3,6 +3,7 @@
  */
 import type { D1Database, R2Bucket } from '@cloudflare/workers-types'
 
+import type { ZipExportMeta } from './backup-zip'
 import type { BackupBundle, BackupTableData, ExportOptions } from './types'
 import {
   collectR2KeysFromCampingplatzFotos,
@@ -437,11 +438,32 @@ async function filteredVacationTables(
   return out
 }
 
+/** Workers Free: wenige Subrequests pro Aufruf — Standard klein halten (überschreibbar via EXPORT_R2_BATCH_LIMIT). */
+function resolveR2PhotoBatchLimit(requested?: number): number {
+  const raw = typeof process !== 'undefined' ? process.env.EXPORT_R2_BATCH_LIMIT : undefined
+  let cap = 28
+  if (raw != null && raw !== '') {
+    const n = Math.floor(Number(raw))
+    if (Number.isFinite(n)) cap = Math.min(Math.max(n, 1), 500)
+  }
+  if (requested != null) {
+    const n = Math.floor(Number(requested))
+    if (Number.isFinite(n)) return Math.min(Math.max(n, 1), 500)
+  }
+  return cap
+}
+
 export async function buildBackupBundle(
   db: D1Database,
   options: ExportOptions,
   ctx?: { r2Bucket?: R2Bucket | null }
-): Promise<{ bundle: BackupBundle; warnings: string[]; r2PhotoFiles?: R2BinaryFile[] }> {
+): Promise<{
+  bundle: BackupBundle
+  warnings: string[]
+  r2PhotoFiles?: R2BinaryFile[]
+  deliverZipArchive?: boolean
+  r2ZipBatch?: ZipExportMeta['r2Batch']
+}> {
   const warnings: string[] = []
   const includeAuth = options.includeAuth === true
   const vacuumIds = (options.vacationIds ?? []).filter((id) => typeof id === 'string' && id.length > 0)
@@ -553,30 +575,72 @@ export async function buildBackupBundle(
     data,
   }
 
+  let deliverZipArchive = false
   let r2PhotoFiles: R2BinaryFile[] | undefined
+  let r2ZipBatch: ZipExportMeta['r2Batch'] | undefined
+
   if (options.includeR2Photos === true) {
     const bucket = ctx?.r2Bucket ?? null
     const fotoRows = (data.campingplatz_fotos ?? []) as Record<string, unknown>[]
-    const keys = collectR2KeysFromCampingplatzFotos(fotoRows)
+    const keysSorted = [...collectR2KeysFromCampingplatzFotos(fotoRows)].sort((a, b) =>
+      a.localeCompare(b)
+    )
+
     if (!bucket) {
       warnings.push(
         'R2-Bilder angefordert, aber CAMPING_PHOTOS ist nicht gebunden — nur D1-Metadaten (campingplatz_fotos), keine Dateien im ZIP.'
       )
-    } else if (keys.length === 0) {
-      warnings.push(
-        'R2-Bilder angefordert, aber keine gültigen r2_object_key in campingplatz_fotos — Export ohne Binärteil.'
-      )
     } else {
-      const { files, warnings: r2W } = await fetchR2CampingPhotoFilesForZip(bucket, keys)
-      warnings.push(...r2W)
-      if (files.length > 0) {
+      deliverZipArchive = true
+      if (keysSorted.length === 0) {
+        warnings.push(
+          'R2-Bilder angefordert, aber keine gültigen r2_object_key in campingplatz_fotos — ZIP ohne Binärteil.'
+        )
+        r2PhotoFiles = []
+      } else {
+        const batchLimit = resolveR2PhotoBatchLimit(options.r2PhotoBatchLimit)
+        const offset = Math.max(0, Math.floor(Number(options.r2PhotoBatchOffset ?? 0)))
+        const batchKeys = keysSorted.slice(offset, offset + batchLimit)
+        const { files, warnings: r2W } = await fetchR2CampingPhotoFilesForZip(bucket, batchKeys)
+        warnings.push(...r2W)
         r2PhotoFiles = files
-        const approxBytes = files.reduce((s, f) => s + f.data.byteLength, 0)
-        const approxMb = (approxBytes / (1024 * 1024)).toFixed(1)
-        warnings.push(`R2: ${files.length} Bilddatei(en) für ZIP gelesen (ca. ${approxMb} MiB Rohdaten).`)
+
+        const nextOffset = offset + batchKeys.length < keysSorted.length ? offset + batchKeys.length : null
+        r2ZipBatch = {
+          offset,
+          limit: batchLimit,
+          totalKeys: keysSorted.length,
+          includedKeys: files.length,
+          nextOffset,
+        }
+
+        if (bundle.meta.options) {
+          bundle.meta.options = {
+            ...bundle.meta.options,
+            r2PhotoBatchOffset: offset,
+            r2PhotoBatchLimit: batchLimit,
+          }
+        }
+
+        if (batchKeys.length === 0) {
+          warnings.push(
+            `R2-Teilexport: Offset ${offset} liegt außerhalb der sortierten Keys (${keysSorted.length}) — keine weiteren Bilddateien in diesem Teil.`
+          )
+        } else {
+          const approxBytes = files.reduce((s, f) => s + f.data.byteLength, 0)
+          const approxMb = (approxBytes / (1024 * 1024)).toFixed(1)
+          warnings.push(
+            `R2 (Teilexport): ${files.length}/${batchKeys.length} Bilddatei(en) in diesem Teil gelesen (ca. ${approxMb} MiB Rohdaten).`
+          )
+          if (nextOffset !== null) {
+            warnings.push(
+              `R2: Es gibt noch Bilder — nächsten ZIP mit gleichen Exportoptionen und r2PhotoBatchOffset=${nextOffset} laden (Workers Free: begrenzte Subrequests pro Aufruf).`
+            )
+          }
+        }
       }
     }
   }
 
-  return { bundle, warnings, r2PhotoFiles }
+  return { bundle, warnings, deliverZipArchive, r2PhotoFiles, r2ZipBatch }
 }

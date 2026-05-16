@@ -22,6 +22,9 @@ export interface BackupMeta {
     includeAuth?: boolean
     /** Campingplatz-Bilder aus R2 (ZIP-Export mit separaten Dateien) */
     includeR2Photos?: boolean
+    /** Nur bei mehrteiligen R2-ZIPs gesetzt */
+    r2PhotoBatchOffset?: number
+    r2PhotoBatchLimit?: number
   }
 }
 
@@ -50,6 +53,13 @@ export interface ExportOptions {
   includeAuth?: boolean
   /** Binär-Bilder: ZIP-Export (backup.json + r2/…) */
   includeR2Photos?: boolean
+  /**
+   * Workers Free: nur ~50 Subrequests pro Aufruf (u. a. jedes R2.get zählt).
+   * Bilder werden ab diesem Offset geholt; nächste ZIP mit gleichem Export + höherem Offset.
+   */
+  r2PhotoBatchOffset?: number
+  /** Max. R2-Objekte pro Aufruf (Default aus Env oder konservativ niedrig). */
+  r2PhotoBatchLimit?: number
 }
 
 export type ImportMode = 'mergeById'

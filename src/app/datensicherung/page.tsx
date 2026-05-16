@@ -60,6 +60,24 @@ function emptyUiPresetState(): Record<UiPresetKey, boolean> {
   }
 }
 
+async function parseExportFailureResponse(res: Response): Promise<string> {
+  const text = await res.text()
+  const trimmed = text.trimStart()
+  if (trimmed.startsWith('{')) {
+    try {
+      const j = JSON.parse(text) as { error?: string }
+      if (typeof j.error === 'string' && j.error.trim()) return j.error.trim()
+    } catch {
+      /* weiter mit Klartext/HTML */
+    }
+  }
+  if (/^<!DOCTYPE\b/i.test(trimmed) || /^<html\b/i.test(trimmed)) {
+    return `Der Server hat HTML statt JSON geliefert (HTTP ${res.status}). Typisch bei Workers-Grenzen (CPU oder Subrequests). Der Bildexport wird in mehreren ZIP-Teilen aufgeteilt; verkleinern Sie ggf. EXPORT_R2_BATCH_LIMIT oder wiederholen Sie den Export.`
+  }
+  const snippet = text.trim().slice(0, 400)
+  return snippet.length > 0 ? snippet : `Export fehlgeschlagen (${res.status})`
+}
+
 export default function DatensicherungPage() {
   const { canAccessConfig, loading } = useAuth()
   const router = useRouter()
@@ -127,7 +145,7 @@ export default function DatensicherungPage() {
     setMessage(null)
     setBusy(true)
     try {
-      const body = {
+      const baseBody = {
         presets: selectedPresets,
         vacationIds:
           selectedVacationIds.size > 0 ? [...selectedVacationIds] : undefined,
@@ -135,63 +153,106 @@ export default function DatensicherungPage() {
         includeAuth,
         includeR2Photos,
       }
-      const res = await fetch('/api/admin/data-export', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      })
-      if (!res.ok) {
-        const errJson = (await res.json()) as { error?: string }
-        setMessage(errJson.error ?? `Export fehlgeschlagen (${res.status})`)
-        return
-      }
-      const ct = res.headers.get('content-type') || ''
-      if (ct.includes('application/zip')) {
-        const ab = await res.arrayBuffer()
+
+      const triggerZipDownload = (ab: ArrayBuffer, filename: string) => {
         const blob = new Blob([ab], { type: 'application/zip' })
         const a = document.createElement('a')
         a.href = URL.createObjectURL(blob)
-        a.download = `camping-backup-${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.zip`
+        a.download = filename
         a.click()
         URL.revokeObjectURL(a.href)
-        let warnHint = ''
+      }
+
+      if (!includeR2Photos) {
+        const res = await fetch('/api/admin/data-export', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(baseBody),
+        })
+        if (!res.ok) {
+          setMessage(await parseExportFailureResponse(res))
+          return
+        }
+        const json = (await res.json()) as {
+          success?: boolean
+          data?: unknown
+          warnings?: string[]
+          error?: string
+        }
+        if (!json.success || !json.data) {
+          setMessage(json.error ?? 'Export fehlgeschlagen')
+          return
+        }
+        const blob = new Blob([JSON.stringify(json.data, null, 2)], {
+          type: 'application/json;charset=utf-8',
+        })
+        const a = document.createElement('a')
+        a.href = URL.createObjectURL(blob)
+        a.download = `camping-backup-${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.json`
+        a.click()
+        URL.revokeObjectURL(a.href)
+        setMessage(
+          `Export OK.${json.warnings?.length ? ` Hinweise: ${json.warnings.slice(0, 3).join(' — ')}` : ''}`
+        )
+        return
+      }
+
+      const { unzipSync, strFromU8 } = await import('fflate')
+      const runTs = new Date().toISOString().slice(0, 19).replace(/:/g, '-')
+      let offset = 0
+      let parts = 0
+      const collectedWarnings: string[] = []
+
+      while (true) {
+        const res = await fetch('/api/admin/data-export', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...baseBody, r2PhotoBatchOffset: offset }),
+        })
+        if (!res.ok) {
+          setMessage(await parseExportFailureResponse(res))
+          return
+        }
+        const ct = res.headers.get('content-type') || ''
+        if (!ct.includes('application/zip')) {
+          setMessage('Unerwartete Antwort: Es wurde kein ZIP zurückgegeben (trotz R2-Option).')
+          return
+        }
+        const ab = await res.arrayBuffer()
+        const filename =
+          offset > 0 ? `camping-backup-${runTs}-teil-${offset}.zip` : `camping-backup-${runTs}.zip`
+        triggerZipDownload(ab, filename)
+        parts++
+
+        let nextOffset: number | null | undefined
         try {
-          const { unzipSync, strFromU8 } = await import('fflate')
           const u = unzipSync(new Uint8Array(ab))
           const rawMeta = u['export-meta.json']
           if (rawMeta) {
-            const meta = JSON.parse(strFromU8(rawMeta)) as { warnings?: string[] }
-            if (meta.warnings?.length) {
-              warnHint = ` Hinweise: ${meta.warnings.slice(0, 3).join(' — ')}`
+            const meta = JSON.parse(strFromU8(rawMeta)) as {
+              warnings?: string[]
+              r2Batch?: { nextOffset: number | null }
             }
+            if (meta.warnings?.length) collectedWarnings.push(...meta.warnings)
+            nextOffset = meta.r2Batch?.nextOffset
           }
         } catch {
-          /* meta optional */
+          /* ohne Meta keine Folge-Teile */
         }
-        setMessage(`Export OK (ZIP mit Bildern).${warnHint}`)
-        return
+
+        if (nextOffset === undefined || nextOffset === null) break
+        offset = nextOffset
+        if (parts > 400) {
+          setMessage('Export nach vielen ZIP-Teilen abgebrochen (Schutzgrenze). Datenstand prüfen.')
+          return
+        }
       }
-      const json = (await res.json()) as {
-        success?: boolean
-        data?: unknown
-        warnings?: string[]
-        error?: string
-      }
-      if (!json.success || !json.data) {
-        setMessage(json.error ?? 'Export fehlgeschlagen')
-        return
-      }
-      const blob = new Blob([JSON.stringify(json.data, null, 2)], {
-        type: 'application/json;charset=utf-8',
-      })
-      const a = document.createElement('a')
-      a.href = URL.createObjectURL(blob)
-      a.download = `camping-backup-${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.json`
-      a.click()
-      URL.revokeObjectURL(a.href)
-      setMessage(
-        `Export OK.${json.warnings?.length ? ` Hinweise: ${json.warnings.slice(0, 3).join(' — ')}` : ''}`
-      )
+
+      const hint =
+        collectedWarnings.length > 0
+          ? ` Hinweise (Auszug): ${collectedWarnings.slice(0, 4).join(' — ')}`
+          : ''
+      setMessage(`Export OK (${parts} ZIP-Teil(e) mit Bildern).${hint}`)
     } catch (e) {
       setMessage(e instanceof Error ? e.message : String(e))
     } finally {
@@ -353,9 +414,11 @@ export default function DatensicherungPage() {
                     R2-Bilder im Backup (ZIP mit JSON + Dateien)
                   </Label>
                   <p className="text-sm text-muted-foreground">
-                    Liest die Dateien aus <code className="text-xs">CAMPING_PHOTOS</code> und packt sie in eine ZIP
-                    zusammen mit <code className="text-xs">backup.json</code>. Ohne diese Option erhalten Sie nur die
-                    reine JSON-Datei. Beim Import werden ZIP und reine JSON automatisch erkannt.
+                    Liest die Dateien aus <code className="text-xs">CAMPING_PHOTOS</code> und packt sie in eine oder
+                    mehrere ZIPs zusammen mit <code className="text-xs">backup.json</code> (bei vielen Fotos automatisch
+                    geteilt wegen Workers&nbsp;Free: Subrequests/CPU). Ohne diese Option erhalten Sie nur die reine
+                    JSON-Datei. Beim Import werden ZIP und reine JSON automatisch erkannt; mehrere ZIP-Teile nacheinander
+                    importieren und dieselben Optionen verwenden.
                   </p>
                 </div>
               </div>
@@ -454,7 +517,11 @@ export default function DatensicherungPage() {
 
               <Button onClick={runExport} disabled={busy} className="gap-2">
                 <Download className="h-4 w-4" />
-                {busy ? 'Export…' : includeR2Photos ? 'Backup laden (JSON oder ZIP)' : 'JSON herunterladen'}
+                {busy
+                  ? 'Export…'
+                  : includeR2Photos
+                    ? 'ZIP-Backup laden (ggf. mehrere Teile)'
+                    : 'JSON herunterladen'}
               </Button>
             </CardContent>
           </Card>

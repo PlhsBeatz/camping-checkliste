@@ -9,26 +9,39 @@ export const ZIP_R2_PREFIX = 'r2/'
 
 export interface ZipExportMeta {
   warnings: string[]
+  /** Hinweis für mehrteiligen ZIP-Bildexport (Workers Subrequest-/CPU-Grenzen). */
+  r2Batch?: {
+    offset: number
+    limit: number
+    totalKeys: number
+    includedKeys: number
+    /** `null`, wenn alle Bilder dieser Liste im Aufruf enthalten waren */
+    nextOffset: number | null
+  }
 }
 
 export async function buildBackupZipBuffer(opts: {
   bundle: unknown
   warnings: string[]
   r2Files: Array<{ key: string; data: Uint8Array }>
+  r2Batch?: ZipExportMeta['r2Batch']
 }): Promise<Uint8Array> {
   const files: Record<string, Uint8Array> = {}
   const jsonText = JSON.stringify(opts.bundle, null, 2)
   files[ZIP_BACKUP_JSON] = strToU8(jsonText)
-  files[ZIP_EXPORT_META] = strToU8(
-    JSON.stringify({ warnings: opts.warnings } satisfies ZipExportMeta, null, 0)
-  )
+  const metaPayload: ZipExportMeta = {
+    warnings: opts.warnings,
+    ...(opts.r2Batch ? { r2Batch: opts.r2Batch } : {}),
+  }
+  files[ZIP_EXPORT_META] = strToU8(JSON.stringify(metaPayload, null, 0))
   for (const f of opts.r2Files) {
     const path = `${ZIP_R2_PREFIX}${f.key.replace(/\\/g, '/')}`
     files[path] = f.data
   }
 
+  /* Niedrigere Kompression spart Workers-CPU (Free Tier ~50 ms CPU-Zeit). */
   return new Promise((resolve, reject) => {
-    zip(files, { level: 6 }, (err, data) => {
+    zip(files, { level: 1 }, (err, data) => {
       if (err) reject(err)
       else resolve(data)
     })
