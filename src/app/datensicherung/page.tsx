@@ -464,7 +464,9 @@ export default function DatensicherungPage() {
               <CardTitle>Camping-Fotos (Bestand)</CardTitle>
               <CardDescription>
                 Bereits referenzierte Fotos als WebP neu encodieren (Bulk‑Nachlauf: Standard max.
-                Kante&nbsp;1200&nbsp;px, Qualität&nbsp;78 — schonend für Worker‑Free‑Limits).
+                Kante&nbsp;896&nbsp;px, Qualität&nbsp;72 — schonend für Workers Free). Sehr große JPG/PNG
+                (~über&nbsp;5&nbsp;MP Dekodierung) werden übersprungen, wenn das CPU‑Budget sonst reißt;
+                grenze per <code className="text-xs">REOPTIMIZE_MAX_DECODE_MEGAPIXELS</code> änderbar.
                 Neue Uploads bleiben 1600&nbsp;px&nbsp;@&nbsp;85&nbsp;%. Der Probelauf zählt nur Datenbankeinträge
                 (ohne Bilddaten). Auf Cloudflare Free wird pro Server‑Antrag typischerweise ein Bild
                 verarbeitet; der Lauf dauert damit entsprechend länger, bleibt aber in den Kontingenten.
@@ -578,9 +580,14 @@ function ReoptimizeFotosButton({ disabled }: { disabled: boolean }) {
         enc && typeof enc.maxEdge === 'number' && typeof enc.webpQuality === 'number'
           ? ` WebP für den Nachlauf: max. ${enc.maxEdge}px, Qualität ${enc.webpQuality}%.`
           : ''
+      const mpLim = typeof data?.maxDecodeMegapixels === 'number' ? data.maxDecodeMegapixels : undefined
+      const mpTxt =
+        typeof mpLim === 'number'
+          ? ` Dekodierung: große JPG/PNG über ~${mpLim} MP werden übersprungen.`
+          : ''
       const note = typeof data?.note === 'string' ? data.note : ''
       setReport(
-        `Probelauf: ${total} Einträge mit R2-Schlüssel in der Datenbank. Geschätzt ${batchesNeeded} Server-Schritt(e) à bis zu ${batchSize} Foto/Fotos für die echte Komprimierung.${encTxt} ${note}`
+        `Probelauf: ${total} Einträge mit R2-Schlüssel in der Datenbank. Geschätzt ${batchesNeeded} Server-Schritt(e) à bis zu ${batchSize} Foto/Fotos für die echte Komprimierung.${encTxt}${mpTxt} ${note}`
       )
     } catch (e) {
       setReport(e instanceof Error ? e.message : String(e))

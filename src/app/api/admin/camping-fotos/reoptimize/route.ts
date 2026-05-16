@@ -7,7 +7,7 @@ import {
   updateCampingplatzFotoR2,
 } from '@/lib/db'
 import { requireAuth, requireAdmin } from '@/lib/api-auth'
-import { optimizeCampingPhotoToWebp } from '@/lib/camping-photo-optimize'
+import { optimizeCampingPhotoToWebp, peekRasterMegapixels } from '@/lib/camping-photo-optimize'
 import { buildCampingplatzFotoObjectKey } from '@/lib/campingplatz-foto-import'
 
 /**
@@ -26,8 +26,8 @@ function getReoptimizeBatchSize(): number {
 
 /** Etwas leichtere WebP‑Parameter nur für Bulk-Nachlauf (Workers-CPU unter Free Limits). Neue Uploads bleiben 1600 px @ 85 %. */
 function getReoptimizeEncodeOptions(): { maxEdge: number; webpQuality: number } {
-  const defEdge = 1200
-  const defQuality = 78
+  const defEdge = 896
+  const defQuality = 72
   const maxEdgeRaw = process.env.REOPTIMIZE_MAX_EDGE
   const qRaw = process.env.REOPTIMIZE_WEBP_QUALITY
   let maxEdge =
@@ -46,7 +46,20 @@ function getReoptimizeEncodeOptions(): { maxEdge: number; webpQuality: number } 
 }
 
 /**
- * Nachoptimierung bestehender R2-Campingfotos (Bulk: WebP, Standard max. Kante 1200, Qualität 78 — über Env anpassbar).
+ * Vor der Volldekodierung: JPEG-/PNG-Schätzung (Header), um `exceededCpu` auf Workers Free zu vermeiden.
+ * WebP ohne Headerpeek zählen nicht gegen dieses Limit.
+ */
+function getReoptimizeMaxDecodeMegapixels(): number {
+  const raw = process.env.REOPTIMIZE_MAX_DECODE_MEGAPIXELS
+  const def = 5
+  if (raw == null || raw === '') return def
+  const n = Number(raw)
+  if (!Number.isFinite(n) || n < 0.25) return def
+  return Math.min(n, 200)
+}
+
+/**
+ * Nachoptimierung bestehender R2-Campingfotos (Bulk: WebP, Standard max. Kante 896 px, Qualität 72 — über Env anpassbar).
  *
  * Probelauf (`dryRun: true`): nur Datenbank — keine R2-Zugriffe (sofort, kein Worker-Timeout).
  *
@@ -81,6 +94,7 @@ export async function POST(request: NextRequest) {
 
     const batchLimit = getReoptimizeBatchSize()
     const encodeOpts = getReoptimizeEncodeOptions()
+    const maxDecodeMegapixels = getReoptimizeMaxDecodeMegapixels()
 
     /** Schneller Probelauf: keine R2-/WASM-Arbeit — nur Zeilen aus D1 */
     if (dryRun) {
@@ -93,8 +107,9 @@ export async function POST(request: NextRequest) {
           batchSize: batchLimit,
           batchesNeeded,
           reoptimizeEncode: encodeOpts,
+          maxDecodeMegapixels,
           note:
-            'Es wurden keine Bilddaten gelesen. Auf Cloudflare Free ist standardmäßig ein Bild pro Server-Anfrage (über REOPTIMIZE_BATCH_SIZE erhöhbar bei mehr Kontingent). Bulk nutzt zur CPU-Entlastung leichtere WebP‑Parameter als frische Uploads (REOPTIMIZE_MAX_EDGE / REOPTIMIZE_WEBP_QUALITY).',
+            'Es wurden keine Bilddaten gelesen. Auf Cloudflare Free ist standardmäßig ein Bild pro Server-Anfrage (über REOPTIMIZE_BATCH_SIZE erhöhbar). Bulk nutzt leichtere WebP‑Parameter als frische Uploads (REOPTIMIZE_MAX_EDGE / REOPTIMIZE_WEBP_QUALITY). Großflächige JPG/PNG werden vor der Dekodierung begrenzt (REOPTIMIZE_MAX_DECODE_MEGAPIXELS, Standard 5 MP).',
         },
       })
     }
@@ -120,7 +135,20 @@ export async function POST(request: NextRequest) {
         }
         const buf = new Uint8Array(await obj.arrayBuffer())
         batchBytesBefore += buf.byteLength
-        const opt = await optimizeCampingPhotoToWebp(buf, obj.httpMetadata?.contentType, encodeOpts)
+        const guessedMp = peekRasterMegapixels(buf, obj.httpMetadata?.contentType)
+        if (guessedMp != null && guessedMp > maxDecodeMegapixels) {
+          errors.push(
+            `${key}: sehr große Vorlage (~${guessedMp.toFixed(
+              1,
+            )} MP; Dekodierungsgrenze Nachkomprimierung ${maxDecodeMegapixels} MP). Überspringe, damit Workers Free‑CPU nicht überschritten wird.`,
+          )
+          skippedInBatch++
+          continue
+        }
+        const opt = await optimizeCampingPhotoToWebp(buf, obj.httpMetadata?.contentType, {
+          ...encodeOpts,
+          maxDecodeMegapixels,
+        })
         if (!opt) {
           skippedInBatch++
           continue
@@ -167,6 +195,7 @@ export async function POST(request: NextRequest) {
         batchSizeConfigured: batchLimit,
         batchSize: slice.length,
         reoptimizeEncode: encodeOpts,
+        maxDecodeMegapixels,
         processedInBatch,
         skippedInBatch,
         nextBatchOffset: complete ? null : nextBatchOffset,

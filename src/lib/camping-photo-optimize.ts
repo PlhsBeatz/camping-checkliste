@@ -1,9 +1,9 @@
 /**
  * Campingplatz-Fotos: serverseitig auf WebP (lange Kante max. 1600 px, Qualität 85) optimieren.
- * Läuft ohne native Bindings (jpeg-js, pngjs, @jsquash/webp) — kompatibel mit Cloudflare Workers.
+ * Läuft ohne native Bindings (pngjs, @jsquash/jpeg, @jsquash/webp) — kompatibel mit Cloudflare Workers.
  */
-import { decode as decodeJpeg } from 'jpeg-js'
 import { PNG } from 'pngjs'
+import jpegDecode from '@jsquash/jpeg/decode'
 import webpDecode from '@jsquash/webp/decode'
 import webpEncode from '@jsquash/webp/encode'
 
@@ -42,9 +42,92 @@ function detectKind(buf: Uint8Array, mimeHint?: string): 'jpeg' | 'png' | 'webp'
   return null
 }
 
-function toClampRgba(data: Uint8Array | Uint8ClampedArray, w: number, h: number): Uint8ClampedArray {
-  if (data instanceof Uint8ClampedArray && data.byteLength === w * h * 4) return data
-  return new Uint8ClampedArray(data.buffer, data.byteOffset, w * h * 4)
+/** Schnelle JPEG-SOF-Parse ohne Volldekodierung (hilft beim CPU-Budget unter Workers Free). */
+function peekJpegDimensions(buf: Uint8Array): { w: number; h: number } | null {
+  const n = buf.length
+  if (n < 4 || buf[0] !== 0xff || buf[1] !== 0xd8) return null
+  let p = 2
+  while (p < n - 9) {
+    if (buf[p] !== 0xff) {
+      p++
+      continue
+    }
+    p++
+    while (p < n && buf[p] === 0xff) p++
+    if (p >= n) return null
+    const marker = buf[p]!
+    p++
+
+    if (marker >= 0xd0 && marker <= 0xd7) continue
+    if (marker === 0xd9) break
+
+    if (marker === 0x01 || marker === 0xd8) continue
+
+    if (p + 2 > n) return null
+    const Ls = (buf[p++]! << 8) | buf[p++]!
+    if (Ls < 2 || p + (Ls - 2) > n) return null
+
+    const isSOF =
+      marker === 0xc0 ||
+      marker === 0xc1 ||
+      marker === 0xc2 ||
+      marker === 0xc3 ||
+      marker === 0xc5 ||
+      marker === 0xc6 ||
+      marker === 0xc7 ||
+      marker === 0xc9 ||
+      marker === 0xca ||
+      marker === 0xcb ||
+      marker === 0xcd ||
+      marker === 0xcf
+
+    if (isSOF && Ls >= 8 && p + 5 <= n) {
+      const hh = buf[p + 1]! * 256 + buf[p + 2]!
+      const ww = buf[p + 3]! * 256 + buf[p + 4]!
+      if (ww > 0 && hh > 0 && ww <= 65535 && hh <= 65535) return { w: ww, h: hh }
+    }
+
+    p += Ls - 2
+  }
+  return null
+}
+
+/** PNG‑IHDR, wenn erste Chunk ihr Standard-IHDR bleibt. */
+function peekPngIhdrDimensions(buf: Uint8Array): { w: number; h: number } | null {
+  if (buf.length < 24) return null
+  if (!(buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47)) return null
+  if (buf[12] !== 0x49 || buf[13] !== 0x48 || buf[14] !== 0x44 || buf[15] !== 0x52) return null
+  const readU32BE = (o: number): number =>
+    buf[o]! * (1 << 24) +
+    buf[o + 1]! * (1 << 16) +
+    buf[o + 2]! * (1 << 8) +
+    buf[o + 3]!
+  const w = readU32BE(16)
+  const h = readU32BE(20)
+  if (w <= 0 || h <= 0) return null
+  return { w, h }
+}
+
+/** Megapixelzahl (Breite × Höhe / 10⁶) vor dem Dekodieren; `null` bei unbekanntem Format ohne Headerpeek (z. B. WebP). */
+export function peekRasterMegapixels(buf: Uint8Array, mimeHint?: string): number | null {
+  const kind = detectKind(buf, mimeHint)
+  if (!kind) return null
+  if (kind === 'jpeg') {
+    const d = peekJpegDimensions(buf)
+    return d ? (d.w * d.h) / 1_000_000 : null
+  }
+  if (kind === 'png') {
+    const d = peekPngIhdrDimensions(buf)
+    return d ? (d.w * d.h) / 1_000_000 : null
+  }
+  return null
+}
+
+export type CampingPhotoOptimizeOptions = {
+  maxEdge?: number
+  webpQuality?: number
+  /** Vor Volldekodierung überspringen (JPEG/PNG), wenn geschätzte Megapixel höher sind (Workers Free‑CPU). */
+  maxDecodeMegapixels?: number
 }
 
 function bilinearResize(
@@ -109,13 +192,22 @@ function makeImageData(rgba: Uint8ClampedArray, width: number, height: number): 
 export async function optimizeCampingPhotoToWebp(
   input: Uint8Array,
   mimeHint?: string,
-  opts?: { maxEdge?: number; webpQuality?: number }
+  opts?: CampingPhotoOptimizeOptions
 ): Promise<{ data: Uint8Array } | null> {
   const kind = detectKind(input, mimeHint)
   if (!kind) return null
 
   const maxEdge = opts?.maxEdge ?? MAX_EDGE
   const webpQuality = opts?.webpQuality ?? WEBP_QUALITY
+  const decodeMpLim = opts?.maxDecodeMegapixels
+  if (
+    decodeMpLim != null &&
+    decodeMpLim > 0 &&
+    (kind === 'jpeg' || kind === 'png')
+  ) {
+    const guessed = peekRasterMegapixels(input, mimeHint)
+    if (guessed != null && guessed > decodeMpLim) return null
+  }
 
   let rgba: Uint8ClampedArray
   let sw: number
@@ -123,13 +215,13 @@ export async function optimizeCampingPhotoToWebp(
 
   try {
     if (kind === 'jpeg') {
-      const raw = decodeJpeg(input, {
-        useTArray: true,
-        formatAsRGBA: true,
-      })
-      sw = raw.width
-      sh = raw.height
-      rgba = toClampRgba(raw.data, sw, sh)
+      const jpegCopy = new Uint8Array(input.byteLength)
+      jpegCopy.set(input)
+      const ab = jpegCopy.buffer.slice(jpegCopy.byteOffset, jpegCopy.byteOffset + jpegCopy.byteLength)
+      const img = await jpegDecode(ab)
+      sw = img.width
+      sh = img.height
+      rgba = new Uint8ClampedArray(img.data)
     } else if (kind === 'png') {
       const png = PNG.sync.read(Buffer.from(input))
       sw = png.width

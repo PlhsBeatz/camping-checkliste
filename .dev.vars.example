@@ -8,5 +8,7 @@ JWT_SECRET=dein-mindestens-32-zeichen-langer-geheimer-schluessel
 # Free Tier: Standard 1 Foto je Request (Workers CPU + Subrequests). Auf Paid höher möglich.
 # REOPTIMIZE_BATCH_SIZE=1
 # Leichtere WebP-Parameter nur für Bulk-Nachlauf (Uploads bleiben 1600 px @ 85 %):
-# REOPTIMIZE_MAX_EDGE=1200
-# REOPTIMIZE_WEBP_QUALITY=78
+# REOPTIMIZE_MAX_EDGE=896
+# REOPTIMIZE_WEBP_QUALITY=72
+# Sehr große JPG/PNG vor der Dekodierung überspringen (Workers Free CPU, Standard ~5 MP):
+# REOPTIMIZE_MAX_DECODE_MEGAPIXELS=5
