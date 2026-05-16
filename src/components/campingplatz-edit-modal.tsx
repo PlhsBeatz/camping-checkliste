@@ -276,9 +276,8 @@ export function CampingplatzEditModal({
     try {
       let first = savedFotos.length === 0
       for (const file of files) {
-        const prepared = await prepareCampingplatzUploadFile(file)
         const fd = new FormData()
-        fd.append('file', prepared)
+        fd.append('file', file)
         fd.append('setAsCover', first ? 'true' : 'false')
         first = false
         const res = await fetch(`/api/campingplaetze/${editId}/fotos`, {
@@ -406,9 +405,8 @@ export function CampingplatzEditModal({
           isFirst = false
         }
         for (const file of pendingFiles) {
-          const prepared = await prepareCampingplatzUploadFile(file)
           const formData = new FormData()
-          formData.append('file', prepared)
+          formData.append('file', file)
           formData.append('setAsCover', isFirst ? 'true' : 'false')
           isFirst = false
           const fr = await fetch(`/api/campingplaetze/${newId}/fotos`, {
