@@ -1,7 +1,7 @@
 /**
  * Admin-Backup als ZIP: backup.json + export-meta.json + Binärdateien unter r2/<object key>
  */
-import { strFromU8, strToU8, unzipSync, zip } from 'fflate'
+import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate'
 
 export const ZIP_BACKUP_JSON = 'backup.json'
 export const ZIP_EXPORT_META = 'export-meta.json'
@@ -39,13 +39,8 @@ export async function buildBackupZipBuffer(opts: {
     files[path] = f.data
   }
 
-  /* Niedrigere Kompression spart Workers-CPU (Free Tier ~50 ms CPU-Zeit). */
-  return new Promise((resolve, reject) => {
-    zip(files, { level: 1 }, (err, data) => {
-      if (err) reject(err)
-      else resolve(data)
-    })
-  })
+  /* fflate zip() nutzt Worker/Threads (auf Cloudflare Workers nicht verfügbar) — zipSync. Niedriges level = weniger CPU. */
+  return zipSync(files, { level: 1 })
 }
 
 function normalizeZipPath(p: string): string {
