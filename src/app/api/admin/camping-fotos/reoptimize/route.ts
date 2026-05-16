@@ -7,11 +7,7 @@ import {
   updateCampingplatzFotoR2,
 } from '@/lib/db'
 import { requireAuth, requireAdmin } from '@/lib/api-auth'
-import {
-  detectCampingPhotoKind,
-  optimizeCampingPhotoToWebp,
-  peekRasterMegapixels,
-} from '@/lib/camping-photo-optimize'
+import { optimizeCampingPhotoToWebp } from '@/lib/camping-photo-optimize'
 import { buildCampingplatzFotoObjectKey } from '@/lib/campingplatz-foto-import'
 
 /**
@@ -139,42 +135,19 @@ export async function POST(request: NextRequest) {
         }
         const buf = new Uint8Array(await obj.arrayBuffer())
         batchBytesBefore += buf.byteLength
-        const guessedMp = peekRasterMegapixels(buf, obj.httpMetadata?.contentType)
-        if (guessedMp != null && guessedMp > maxDecodeMegapixels) {
-          errors.push(
-            `${key}: sehr große Vorlage (~${guessedMp.toFixed(
-              1,
-            )} MP; Dekodierungsgrenze Nachkomprimierung ${maxDecodeMegapixels} MP). Überspringe, damit Workers Free‑CPU nicht überschritten wird.`,
-          )
-          skippedInBatch++
-          continue
-        }
-        const opt = await optimizeCampingPhotoToWebp(buf, obj.httpMetadata?.contentType, {
+        const result = await optimizeCampingPhotoToWebp(buf, obj.httpMetadata?.contentType, {
           ...encodeOpts,
           maxDecodeMegapixels,
         })
-        if (!opt) {
-          const fmt = detectCampingPhotoKind(buf, obj.httpMetadata?.contentType)
-          let detail: string
-          if (!fmt) {
-            detail =
-              'Datei konnte nicht als JPEG/PNG/WebP erkannt werden (MIME-Typ oder Inhalt passt nicht).'
-          } else if (fmt === 'jpeg' || fmt === 'png') {
-            const mpLabel =
-              guessedMp != null ? `~${guessedMp.toFixed(2)} MP, ` : 'Megapixelzahl nicht aus Header ermittelbar, '
-            detail = `${fmt.toUpperCase()}, ${mpLabel}unter der Dekodierungsgrenze oder Grenze nicht prüfbar — Dekodierung oder WebP‑Encode ist fehlgeschlagen (beschädigte Daten, unübliches JPEG‑Profil, PNG zu groß/komplex, oder Workers‑Limits).`
-          } else {
-            detail =
-              `${fmt.toUpperCase()} — Dekodierung oder Neu‑Encode fehlgeschlagen (beschädigte Daten oder Codec‑Limits).`
-          }
-          errors.push(`${key}: ${detail}`)
+        if (!result.ok) {
+          errors.push(`${key}: ${result.reason}`)
           skippedInBatch++
           continue
         }
-        batchBytesAfter += opt.data.byteLength
+        batchBytesAfter += result.data.byteLength
         const newKey = buildCampingplatzFotoObjectKey(foto.campingplatz_id, foto.id, 'image/webp')
 
-        await bucket.put(newKey, opt.data, { httpMetadata: { contentType: 'image/webp' } })
+        await bucket.put(newKey, result.data, { httpMetadata: { contentType: 'image/webp' } })
         const updated = await updateCampingplatzFotoR2(db, foto.id, newKey, 'image/webp')
         if (!updated) {
           errors.push(`DB-Update fehlgeschlagen: ${foto.id}`)

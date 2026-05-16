@@ -3,7 +3,8 @@
  * Läuft ohne native Bindings (pngjs, @jsquash/jpeg, @jsquash/webp) — kompatibel mit Cloudflare Workers.
  */
 import { PNG } from 'pngjs'
-import jpegDecode from '@jsquash/jpeg/decode'
+import jpegDecodeWasm from '@jsquash/jpeg/decode'
+import { decode as decodeJpegJs } from 'jpeg-js'
 import webpDecode from '@jsquash/webp/decode'
 import webpEncode from '@jsquash/webp/encode'
 
@@ -138,6 +139,48 @@ export type CampingPhotoOptimizeOptions = {
   maxDecodeMegapixels?: number
 }
 
+/** Erfolg oder lesbare Ursache — vermeidet stilles Ausweichen wie bei `?.data ?? original`. */
+export type CampingPhotoOptimizeResult =
+  | { ok: true; data: Uint8Array }
+  | { ok: false; reason: string }
+
+/** MozJPEG-WASM schlägt in manchen gebündelten Workers fehl (`Decoding error`); jpeg-js stabilisiert den JPEG-Pfad (CPU höher bei großen Dateien – daher weiter Megapixel‑Limit beim Bulk-Nachlauf). */
+async function decodeJpegToRgba(input: Uint8Array): Promise<{ rgba: Uint8ClampedArray; w: number; h: number }> {
+  const wasmIn = new Uint8Array(input.byteLength)
+  wasmIn.set(input)
+  const wasmAb = wasmIn.buffer.slice(
+    wasmIn.byteOffset,
+    wasmIn.byteOffset + wasmIn.byteLength
+  ) as ArrayBuffer
+  let wasmErr: unknown
+  try {
+    const img = await jpegDecodeWasm(wasmAb)
+    return {
+      w: img.width,
+      h: img.height,
+      rgba: new Uint8ClampedArray(img.data),
+    }
+  } catch (e) {
+    wasmErr = e
+  }
+  try {
+    const raw = decodeJpegJs(input, {
+      useTArray: true,
+      formatAsRGBA: true,
+    })
+    const rgba = new Uint8ClampedArray(raw.data)
+    return {
+      w: raw.width,
+      h: raw.height,
+      rgba,
+    }
+  } catch (jsErr) {
+    const w = wasmErr instanceof Error ? wasmErr.message : String(wasmErr)
+    const j = jsErr instanceof Error ? jsErr.message : String(jsErr)
+    throw new Error(`JPEG-Dekodierung: WASM („${w}“); Fallback jpeg-js („${j}“).`)
+  }
+}
+
 function bilinearResize(
   src: Uint8Array | Uint8ClampedArray,
   sw: number,
@@ -195,15 +238,20 @@ function makeImageData(rgba: Uint8ClampedArray, width: number, height: number): 
 
 /**
  * Dekodiert gängige Rasterformate zu RGBA, skaliert auf maxEdge, kodiert WebP mit quality.
- * @returns `null`, wenn keine sinnvolle Optimierung möglich ist — Aufrufer speichert dann die Originalbytes.
+ * Upload-Routen: bei `ok: false` typischerweise Originalbytes speichern; Admin-Nachkomprimieren: Hinweis anzeigen.
  */
 export async function optimizeCampingPhotoToWebp(
   input: Uint8Array,
   mimeHint?: string,
   opts?: CampingPhotoOptimizeOptions
-): Promise<{ data: Uint8Array } | null> {
+): Promise<CampingPhotoOptimizeResult> {
   const kind = detectKind(input, mimeHint)
-  if (!kind) return null
+  if (!kind) {
+    return {
+      ok: false,
+      reason: 'Unbekanntes Bildformat (Magic Bytes oder MIME passen nicht zu JPEG/PNG/WebP).',
+    }
+  }
 
   const maxEdge = opts?.maxEdge ?? MAX_EDGE
   const webpQuality = opts?.webpQuality ?? WEBP_QUALITY
@@ -214,22 +262,24 @@ export async function optimizeCampingPhotoToWebp(
     (kind === 'jpeg' || kind === 'png')
   ) {
     const guessed = peekRasterMegapixels(input, mimeHint)
-    if (guessed != null && guessed > decodeMpLim) return null
+    if (guessed != null && guessed > decodeMpLim) {
+      return {
+        ok: false,
+        reason: `Zu viele Pixel zur Dekodierung (~${guessed.toFixed(1)} MP, Limit ${decodeMpLim} MP; schützt Workers‑CPU).`,
+      }
+    }
   }
 
-  let rgba: Uint8ClampedArray
-  let sw: number
-  let sh: number
-
   try {
+    let rgba: Uint8ClampedArray
+    let sw: number
+    let sh: number
+
     if (kind === 'jpeg') {
-      const jpegCopy = new Uint8Array(input.byteLength)
-      jpegCopy.set(input)
-      const ab = jpegCopy.buffer.slice(jpegCopy.byteOffset, jpegCopy.byteOffset + jpegCopy.byteLength)
-      const img = await jpegDecode(ab)
-      sw = img.width
-      sh = img.height
-      rgba = new Uint8ClampedArray(img.data)
+      const decoded = await decodeJpegToRgba(input)
+      sw = decoded.w
+      sh = decoded.h
+      rgba = decoded.rgba
     } else if (kind === 'png') {
       const png = PNG.sync.read(Buffer.from(input))
       sw = png.width
@@ -244,20 +294,23 @@ export async function optimizeCampingPhotoToWebp(
       sh = img.height
       rgba = new Uint8ClampedArray(img.data)
     }
-  } catch {
-    return null
+
+    if (sw < 1 || sh < 1) {
+      return { ok: false, reason: 'Ungültige Bildmaße nach Dekodierung.' }
+    }
+
+    const { w: tw, h: th } = containSize(sw, sh, maxEdge)
+    let pixels = rgba
+    if (tw !== sw || th !== sh) {
+      pixels = bilinearResize(rgba, sw, sh, tw, th)
+    }
+
+    const ab = await webpEncode(makeImageData(pixels, tw, th), { quality: webpQuality })
+    return { ok: true, data: new Uint8Array(ab) }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    return { ok: false, reason: msg }
   }
-
-  if (sw < 1 || sh < 1) return null
-
-  const { w: tw, h: th } = containSize(sw, sh, maxEdge)
-  let pixels = rgba
-  if (tw !== sw || th !== sh) {
-    pixels = bilinearResize(rgba, sw, sh, tw, th)
-  }
-
-  const ab = await webpEncode(makeImageData(pixels, tw, th), { quality: webpQuality })
-  return { data: new Uint8Array(ab) }
 }
 
 export const CAMPING_PHOTO_MAX_EDGE = MAX_EDGE

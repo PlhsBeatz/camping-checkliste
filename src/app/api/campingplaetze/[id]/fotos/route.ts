@@ -101,8 +101,8 @@ export async function POST(
       const setAsCover = form.get('setAsCover') === 'true' || form.get('setAsCover') === '1'
       const buf = new Uint8Array(await file.arrayBuffer())
       const optimized = await optimizeCampingPhotoToWebp(buf, mime)
-      const outBytes = optimized?.data ?? buf
-      const outMime: string = optimized ? 'image/webp' : mime
+      const outBytes = optimized.ok ? optimized.data : buf
+      const outMime: string = optimized.ok ? 'image/webp' : mime
       const created = await createCampingplatzFoto(db, {
         campingplatz_id: campingplatzId,
         source: 'upload',
@@ -148,8 +148,8 @@ export async function POST(
       const fetched = await fetchGooglePlacePhotoBytes({ apiKey: googleKey, googlePhotoName: name })
       if (fetched) {
         const optimized = await optimizeCampingPhotoToWebp(fetched.data, fetched.contentType)
-        const outBytes = optimized?.data ?? fetched.data
-        const outMime: string = optimized ? 'image/webp' : fetched.contentType
+        const outBytes = optimized.ok ? optimized.data : fetched.data
+        const outMime: string = optimized.ok ? 'image/webp' : fetched.contentType
         const objectKey = buildCampingplatzFotoObjectKey(campingplatzId, foto.id, outMime)
         await bucket.put(objectKey, outBytes, {
           httpMetadata: { contentType: outMime },
