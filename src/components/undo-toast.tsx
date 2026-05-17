@@ -7,7 +7,10 @@ import { cn } from '@/lib/utils'
 
 interface UndoToastProps {
   isVisible: boolean
-  itemName: string
+  /** Packliste: Kurzname des Gegenstands; wird zu „… als gepackt markiert“. */
+  itemName?: string
+  /** Wenn gesetzt, wird dieser Text statt der Packlisten-Formulierung angezeigt (z. B. Checkliste). */
+  message?: string
   onUndo: () => void
   onDismiss: () => void
   duration?: number
@@ -16,6 +19,7 @@ interface UndoToastProps {
 export function UndoToast({
   isVisible,
   itemName,
+  message,
   onUndo,
   onDismiss,
   duration = 5000
@@ -32,12 +36,19 @@ export function UndoToast({
 
   if (!isVisible) return null
 
+  const line =
+    message != null && message !== ''
+      ? message
+      : itemName != null && itemName !== ''
+        ? `${itemName} als gepackt markiert`
+        : ''
+
   return (
     <div className="fixed bottom-6 left-4 right-4 z-50 animate-in slide-in-from-bottom-5 md:left-auto md:right-6 md:max-w-md">
       <div className="bg-primary text-primary-foreground rounded-lg shadow-xl p-4 flex items-center justify-between border border-primary-foreground/10">
         <div className="flex-1 pr-4">
           <p className="text-sm font-medium">
-            {itemName} als gepackt markiert
+            {line}
           </p>
         </div>
         <Button

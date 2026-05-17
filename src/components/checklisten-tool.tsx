@@ -38,6 +38,9 @@ import {
 } from '@/components/ui/dropdown-menu'
 import {
   ArrowLeft,
+  CheckCheck,
+  Eye,
+  EyeOff,
   GripVertical,
   MoreVertical,
   Pencil,
@@ -56,6 +59,14 @@ import {
   OUTBOX_SYNCED_EVENT_NAME,
 } from '@/lib/offline-sync'
 import { cacheChecklisten } from '@/lib/offline-db'
+import { UndoToast } from '@/components/undo-toast'
+
+/** Toast-Zeilenumbruch vermeiden: einheitlich kürzen */
+function truncateForUndoToast(s: string, maxLen: number): string {
+  const t = s.trim()
+  if (t.length <= maxLen) return t
+  return `${t.slice(0, maxLen)}…`
+}
 
 /** Checkbox wie in der Packliste (Pauschal / normales Abhaken) */
 const CHECKLIST_RUNNER_CHECKBOX_CLASS =
@@ -65,19 +76,51 @@ function ChecklisteRunnerEintrag({
   entry,
   checklistId,
   onToggle,
+  hideErledigteEinträge,
+  onShowUndo,
 }: {
   entry: ChecklisteEintrag
   checklistId: string
   onToggle: (checklistId: string, entryId: string, erledigt: boolean) => void
+  hideErledigteEinträge: boolean
+  onShowUndo?: (message: string, undoAction: () => void) => void
 }) {
   const [tickAnim, setTickAnim] = useState(false)
+  const [isExiting, setIsExiting] = useState(false)
+  const [hasExited, setHasExited] = useState(false)
   const tickTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const previousShouldHideRef = useRef<boolean | 'init'>('init')
 
   useEffect(() => {
     return () => {
       if (tickTimeoutRef.current != null) clearTimeout(tickTimeoutRef.current)
     }
   }, [])
+
+  /** Ausblenden wie in der Packliste: Micro-Animation beim frischen Abhaken, nicht beim Laden schon erledigter Einträge. */
+  const shouldHide = hideErledigteEinträge && entry.erledigt
+  useEffect(() => {
+    if (previousShouldHideRef.current === 'init') {
+      previousShouldHideRef.current = shouldHide
+      if (shouldHide) setHasExited(true)
+      return undefined
+    }
+    if (shouldHide) {
+      const wasVisible = !previousShouldHideRef.current
+      previousShouldHideRef.current = true
+      if (wasVisible) {
+        setIsExiting(true)
+        const t = setTimeout(() => setHasExited(true), 280)
+        return () => clearTimeout(t)
+      }
+      setHasExited(true)
+      return undefined
+    }
+    previousShouldHideRef.current = false
+    setIsExiting(false)
+    setHasExited(false)
+    return undefined
+  }, [shouldHide])
 
   const handleChecked = (checked: boolean) => {
     if (checked) {
@@ -89,6 +132,16 @@ function ChecklisteRunnerEintrag({
       }, 360)
     }
     onToggle(checklistId, entry.id, checked)
+    if (checked && hideErledigteEinträge && onShowUndo) {
+      const textPart = truncateForUndoToast(entry.text, 72)
+      onShowUndo(`„${textPart}“ erledigt`, () => {
+        onToggle(checklistId, entry.id, false)
+      })
+    }
+  }
+
+  if (hasExited) {
+    return null
   }
 
   return (
@@ -96,7 +149,8 @@ function ChecklisteRunnerEintrag({
       className={cn(
         'mb-2 py-2 px-3 bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden transition-all duration-200',
         tickAnim && 'animate-checklist-row-tick',
-        entry.erledigt ? 'opacity-60' : 'hover:shadow-md'
+        isExiting && 'animate-pack-item-out',
+        !isExiting && (entry.erledigt ? 'opacity-60' : 'hover:shadow-md')
       )}
     >
       <div className="flex items-start space-x-3">
@@ -430,6 +484,13 @@ export function ChecklistenTool({ onHeaderContextChange, headerTrailingRef }: Ch
     titel: string
   } | null>(null)
   const [katTitel, setKatTitel] = useState('')
+  /** Runner: abgehakte Einträge ausblenden (Standard an – wie Packliste). */
+  const [hideErledigteEinträge, setHideErledigteEinträge] = useState(true)
+  const [undoToast, setUndoToast] = useState<{
+    visible: boolean
+    message: string
+    action: () => void
+  } | null>(null)
 
   const sensors = useSensors(
     useSensor(TouchSensor, { activationConstraint: { delay: 160, tolerance: 8 } }),
@@ -506,6 +567,19 @@ export function ChecklistenTool({ onHeaderContextChange, headerTrailingRef }: Ch
   useEffect(() => {
     if (!detailId) setEditMode(false)
   }, [detailId])
+
+  useEffect(() => {
+    setHideErledigteEinträge(true)
+    setUndoToast(null)
+  }, [detailId])
+
+  const showChecklistUndo = useCallback((message: string, undoAction: () => void) => {
+    setUndoToast({
+      visible: true,
+      message,
+      action: undoAction,
+    })
+  }, [])
 
   const openChecklist = useCallback((id: string) => {
     router.push(`${CHECKLISTEN_PATH}?id=${encodeURIComponent(id)}`, { scroll: false })
@@ -888,11 +962,17 @@ export function ChecklistenTool({ onHeaderContextChange, headerTrailingRef }: Ch
     const catsSorted = [...activeChecklist.kategorien].sort(
       (a, b) => a.reihenfolge - b.reihenfolge || a.titel.localeCompare(b.titel)
     )
+    const runnerTotal = catsSorted.reduce((n, k) => n + k.eintraege.length, 0)
+    const runnerDone = catsSorted.reduce(
+      (n, k) => n + k.eintraege.filter(e => e.erledigt).length,
+      0
+    )
+    const allRunnerErledigt = runnerTotal > 0 && runnerDone === runnerTotal
 
     const headerTrailingEl = headerTrailingRef?.current ?? null
     const detailActionsMenu =
       headerTrailingEl && !editMode ? (
-        <DropdownMenu>
+        <DropdownMenu modal={false}>
           <DropdownMenuTrigger asChild>
             <Button
               type="button"
@@ -904,7 +984,24 @@ export function ChecklistenTool({ onHeaderContextChange, headerTrailingRef }: Ch
               <MoreVertical className="h-5 w-5" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="min-w-[10rem]">
+          <DropdownMenuContent align="end" className="z-[110] min-w-[10rem]">
+            <DropdownMenuItem
+              className="cursor-pointer gap-2"
+              onSelect={() => setHideErledigteEinträge(v => !v)}
+            >
+              {hideErledigteEinträge ? (
+                <>
+                  <Eye className="h-4 w-4 shrink-0" />
+                  Zeige abgehakte Einträge
+                </>
+              ) : (
+                <>
+                  <EyeOff className="h-4 w-4 shrink-0" />
+                  Abgehakte Einträge ausblenden
+                </>
+              )}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
             <DropdownMenuItem className="cursor-pointer gap-2" onSelect={() => setResetListId(detailId)}>
               <RotateCcw className="h-4 w-4" />
               Zurücksetzen
@@ -1056,28 +1153,60 @@ export function ChecklistenTool({ onHeaderContextChange, headerTrailingRef }: Ch
               </Button>
             </div>
             <div className="space-y-6">
-              {catsSorted.map(kat => (
-                <div key={kat.id}>
-                  <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-3 px-1">
-                    {kat.titel}
-                  </h3>
-                  <Card className="border-none shadow-none overflow-hidden bg-transparent">
-                    <CardContent className="p-0 bg-transparent">
-                      {kat.eintraege.map(e => (
-                        <ChecklisteRunnerEintrag
-                          key={e.id}
-                          entry={e}
-                          checklistId={detailId}
-                          onToggle={toggleErledigt}
-                        />
-                      ))}
+              {allRunnerErledigt && hideErledigteEinträge ? (
+                <div className="flex flex-col items-center justify-center min-h-[50vh] py-12">
+                  <Card className="max-w-md w-full border-[rgb(45,79,30)]/20 shadow-lg bg-white/95">
+                    <CardContent className="pt-8 pb-8 px-8 text-center">
+                      <div className="mx-auto w-16 h-16 rounded-full bg-[rgb(45,79,30)]/10 flex items-center justify-center mb-6">
+                        <CheckCheck className="h-9 w-9 text-[rgb(45,79,30)]" />
+                      </div>
+                      <h2 className="text-xl font-semibold text-[rgb(45,79,30)] mb-2">Alles erledigt!</h2>
+                      <p className="text-muted-foreground">
+                        Alle Einträge dieser Checkliste sind abgehakt.
+                      </p>
                     </CardContent>
                   </Card>
                 </div>
-              ))}
+              ) : (
+                catsSorted.map(kat => {
+                  if (hideErledigteEinträge && !kat.eintraege.some(e => !e.erledigt)) {
+                    return null
+                  }
+                  return (
+                    <div key={kat.id}>
+                      <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-3 px-1">
+                        {kat.titel}
+                      </h3>
+                      <Card className="border-none shadow-none overflow-hidden bg-transparent">
+                        <CardContent className="p-0 bg-transparent">
+                          {kat.eintraege.map(e => (
+                            <ChecklisteRunnerEintrag
+                              key={e.id}
+                              entry={e}
+                              checklistId={detailId}
+                              onToggle={toggleErledigt}
+                              hideErledigteEinträge={hideErledigteEinträge}
+                              onShowUndo={showChecklistUndo}
+                            />
+                          ))}
+                        </CardContent>
+                      </Card>
+                    </div>
+                  )
+                })
+              )}
             </div>
           </div>
         )}
+
+        {undoToast ? (
+          <UndoToast
+            isVisible={undoToast.visible}
+            message={undoToast.message}
+            onUndo={undoToast.action}
+            onDismiss={() => setUndoToast(null)}
+          />
+        ) : null}
 
         <ConfirmDialog
           open={resetListId !== null}
