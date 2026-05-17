@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { ResponsiveModal } from '@/components/ui/responsive-modal'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -22,9 +22,10 @@ import {
 } from '@/components/category-select-grouped'
 import { parseWeightInput } from '@/lib/utils'
 import type { ApiResponse } from '@/lib/api-types'
-import type { EquipmentItem, MainCategory } from '@/lib/db'
+import type { EquipmentItem, MainCategory, Mitreisender } from '@/lib/db'
 import { MengenRegelEditor } from '@/components/mengen-regel-editor'
 import { regelToStandardAnzahl, type MengenRegel } from '@/lib/packing-quantity'
+import { sortMitreisendeNachRolleUndName } from '@/lib/mitreisenden-sort'
 
 interface CategoryWithMain {
   id: string
@@ -39,7 +40,7 @@ interface AddSingleItemDialogProps {
   onOpenChange: (open: boolean) => void
   initialName: string
   vacationId: string
-  vacationMitreisende: Array<{ id: string; name: string }>
+  vacationMitreisende: Mitreisender[]
   selectedPackProfile: string | null
   mainCategories: MainCategory[]
   /** Beim Aufklappen der Kategorie-Liste positionieren (Packliste: aktueller Hauptkategorie-Tab). */
@@ -47,7 +48,7 @@ interface AddSingleItemDialogProps {
   categories: CategoryWithMain[]
   transportVehicles: Array<{ id: string; name: string }>
   tags?: Array<{ id: string; titel: string }>
-  mitreisende?: Array<{ id: string; name: string }>
+  mitreisende?: Mitreisender[]
   onSuccess: () => void
 }
 
@@ -86,6 +87,11 @@ export function AddSingleItemDialog({
   mitreisende: mitreisendeProp = [],
   onSuccess,
 }: AddSingleItemDialogProps) {
+  const vacationMitSortiert = useMemo(
+    () => sortMitreisendeNachRolleUndName(vacationMitreisende),
+    [vacationMitreisende]
+  )
+
   const [form, setForm] = useState(defaultForm)
   /** Nur ohne „In Ausrüstung speichern“, Packprofil einer Person */
   const [tempProfilModus, setTempProfilModus] = useState<'nur_person' | 'pauschal'>('nur_person')
@@ -94,7 +100,12 @@ export function AddSingleItemDialog({
   const [tempZentralPersonenIds, setTempZentralPersonenIds] = useState<string[]>([])
   const [isSaving, setIsSaving] = useState(false)
   const [tags, setTags] = useState<Array<{ id: string; titel: string }>>(tagsProp)
-  const [mitreisende, setMitreisende] = useState<Array<{ id: string; name: string }>>(mitreisendeProp)
+  const [mitreisende, setMitreisende] = useState<Mitreisender[]>(mitreisendeProp)
+
+  const alleMitreisendeSortiert = useMemo(
+    () => sortMitreisendeNachRolleUndName(mitreisende),
+    [mitreisende]
+  )
 
   useEffect(() => {
     if (open && form.saveToEquipment && tags.length === 0 && tagsProp.length === 0) {
@@ -113,7 +124,7 @@ export function AddSingleItemDialog({
       fetch('/api/mitreisende')
         .then((r) => r.json())
         .then((d: unknown) => {
-          const res = d as ApiResponse<Array<{ id: string; name: string }>>
+          const res = d as ApiResponse<Mitreisender[]>
           if (res.success && res.data) setMitreisende(res.data)
         })
         .catch(() => {})
@@ -318,7 +329,7 @@ export function AddSingleItemDialog({
                   <RadioGroupItem value="nur_person" id="tmp-nur-person" className="mt-0.5" />
                   <Label htmlFor="tmp-nur-person" className="cursor-pointer font-normal leading-snug">
                     Nur für{' '}
-                    {vacationMitreisende.find((m) => m.id === selectedPackProfile)?.name ??
+                    {vacationMitSortiert.find((m) => m.id === selectedPackProfile)?.name ??
                       'dieses Packprofil'}
                   </Label>
                 </div>
@@ -351,10 +362,10 @@ export function AddSingleItemDialog({
                 </RadioGroup>
                 {tempZentralModus === 'personen' && (
                   <div className="space-y-2 pl-1">
-                    {vacationMitreisende.length === 0 ? (
+                    {vacationMitSortiert.length === 0 ? (
                       <p className="text-xs text-muted-foreground">Keine Personen für diesen Urlaub hinterlegt.</p>
                     ) : (
-                      vacationMitreisende.map((m) => (
+                      vacationMitSortiert.map((m) => (
                         <label key={m.id} className="flex cursor-pointer items-center gap-2 text-sm">
                           <Checkbox
                             checked={tempZentralPersonenIds.includes(m.id)}
@@ -484,7 +495,7 @@ export function AddSingleItemDialog({
               <div>
                 <Label>Mitreisende</Label>
                 <div className="flex flex-wrap gap-2 mt-2">
-                  {mitreisende.map((m) => (
+                  {alleMitreisendeSortiert.map((m) => (
                     <label
                       key={m.id}
                       className="flex items-center gap-1 text-xs bg-muted px-2 py-1 rounded cursor-pointer hover:bg-muted/80"

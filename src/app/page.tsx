@@ -12,6 +12,7 @@ import { useState, useEffect, Suspense, useMemo, useCallback, useRef } from 'rea
 import { Vacation, PackingItem, TransportVehicle, Mitreisender, EquipmentItem, Category, MainCategory } from '@/lib/db'
 import type { ApiResponse } from '@/lib/api-types'
 import { berechneAnzahl, berechneReiseTage, istKind, regelKurzLabel } from '@/lib/packing-quantity'
+import { sortMitreisendenZeilenNachStammdaten } from '@/lib/mitreisenden-sort'
 import { ResponsiveModal } from '@/components/ui/responsive-modal'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { MarkAllConfirmationDialog } from '@/components/mark-all-confirmation-dialog'
@@ -1022,12 +1023,15 @@ function HomeContent() {
     if (personenbezogen) {
       setDeletePersonsConfirm({
         packingItemId: id,
-        travelers: (item.mitreisende ?? []).map((m) => ({
-          id: m.mitreisender_id,
-          name: m.mitreisender_name,
-          gepackt: !!m.gepackt,
-          gepackt_vorgemerkt: !!m.gepackt_vorgemerkt,
-        })),
+        travelers: sortMitreisendenZeilenNachStammdaten(
+          (item.mitreisende ?? []).map((m) => ({
+            id: m.mitreisender_id,
+            name: m.mitreisender_name,
+            gepackt: !!m.gepackt,
+            gepackt_vorgemerkt: !!m.gepackt_vorgemerkt,
+          })),
+          vacationMitreisende
+        ),
       })
       return
     }

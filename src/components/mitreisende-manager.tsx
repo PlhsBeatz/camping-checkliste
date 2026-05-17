@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -15,6 +15,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { sortMitreisendeNachRolleUndName } from '@/lib/mitreisenden-sort'
 
 interface MitreisendeManagerProps {
   vacationId: string | null
@@ -128,6 +129,19 @@ export function MitreisendeManager({ vacationId, onMitreisendeChange }: Mitreise
     }
   }
 
+  const weiterOhneStd = useMemo(
+    () => allMitreisende.filter((m) => !m.is_default_member),
+    [allMitreisende]
+  )
+  const standardMitreisendeSortiert = useMemo(
+    () => sortMitreisendeNachRolleUndName(allMitreisende.filter((m) => m.is_default_member)),
+    [allMitreisende]
+  )
+  const weitereMitSortiert = useMemo(
+    () => sortMitreisendeNachRolleUndName(weiterOhneStd),
+    [weiterOhneStd]
+  )
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -141,23 +155,19 @@ export function MitreisendeManager({ vacationId, onMitreisendeChange }: Mitreise
               type="button"
               variant="outline"
               size="sm"
-              disabled={
-                allMitreisende.filter((m) => !m.is_default_member).length === 0
-              }
+              disabled={weitereMitSortiert.length === 0}
             >
               Weitere auswählen
               <ChevronDown className="h-3 w-3 ml-1" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">
-            {allMitreisende.filter((m) => !m.is_default_member).length === 0 ? (
+            {weitereMitSortiert.length === 0 ? (
               <div className="px-2 py-1 text-xs text-muted-foreground">
                 Keine weiteren Mitreisenden vorhanden.
               </div>
             ) : (
-              allMitreisende
-                .filter((m) => !m.is_default_member)
-                .map((m) => {
+              weitereMitSortiert.map((m) => {
                   const checked = vacationMitreisende.includes(m.id)
                   return (
                     <DropdownMenuItem
@@ -188,9 +198,7 @@ export function MitreisendeManager({ vacationId, onMitreisendeChange }: Mitreise
             Noch keine Mitreisenden angelegt
           </p>
         ) : (
-          [...allMitreisende]
-            .filter((m) => m.is_default_member)
-            .map((mitreisender) => (
+          standardMitreisendeSortiert.map((mitreisender) => (
               <div
                 key={mitreisender.id}
                 className="flex items-center justify-between py-2 px-3 hover:bg-muted/50 rounded-md"

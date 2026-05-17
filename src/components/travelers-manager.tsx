@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { ResponsiveModal } from '@/components/ui/responsive-modal'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Button } from '@/components/ui/button'
@@ -31,6 +31,7 @@ import { useAuth } from '@/components/auth-provider'
 import type { ApiResponse } from '@/lib/api-types'
 import { USER_COLORS, DEFAULT_USER_COLOR_BG } from '@/lib/user-colors'
 import { getInitials } from '@/lib/utils'
+import { sortMitreisendeNachRolleUndName } from '@/lib/mitreisenden-sort'
 
 const getAvatarColor = (index: number, customColor?: string | null) => {
   if (customColor) {
@@ -465,9 +466,14 @@ export function TravelersManager({ travelers, onRefresh }: TravelersManagerProps
     }
   }
 
-  // Separate default and non-default travelers
-  const defaultTravelers = travelers.filter(t => t.is_default_member)
-  const otherTravelers = travelers.filter(t => !t.is_default_member)
+  const defaultTravelers = useMemo(
+    () => sortMitreisendeNachRolleUndName(travelers.filter((t) => t.is_default_member)),
+    [travelers]
+  )
+  const otherTravelers = useMemo(
+    () => sortMitreisendeNachRolleUndName(travelers.filter((t) => !t.is_default_member)),
+    [travelers]
+  )
   const travelerNames = travelers.map((t) => t.name)
   const getTravelerInitials = (name: string) => getInitials(name, travelerNames)
 

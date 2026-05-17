@@ -1,18 +1,14 @@
 'use client'
 
+import { useMemo } from 'react'
 import { X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
 import { cn, getInitials } from '@/lib/utils'
 import { USER_COLORS } from '@/lib/user-colors'
-
-interface Mitreisender {
-  id: string
-  name: string
-  is_default_member: boolean
-  farbe?: string | null
-}
+import type { Mitreisender } from '@/lib/db'
+import { sortMitreisendeNachRolleUndName } from '@/lib/mitreisenden-sort'
 
 interface PackingSettingsSidebarProps {
   isOpen: boolean
@@ -41,6 +37,11 @@ export function PackingSettingsSidebar({
   showAlleOption = true
 }: PackingSettingsSidebarProps) {
   const travelerNames = mitreisende.map((m) => m.name)
+  const sortedMitreisende = useMemo(
+    () => sortMitreisendeNachRolleUndName(mitreisende),
+    [mitreisende]
+  )
+
   const getTravelerInitials = (name: string) => getInitials(name, travelerNames)
 
   const getAvatarStyle = (person: Mitreisender, index: number) => {
@@ -154,9 +155,9 @@ export function PackingSettingsSidebar({
           )}
 
           {/* Mitreisende Grid */}
-          {mitreisende.length > 0 && (
+          {sortedMitreisende.length > 0 && (
             <div className="grid grid-cols-2 gap-3">
-              {mitreisende.map((person, index) => (
+              {sortedMitreisende.map((person, index) => (
                 <button
                   key={person.id}
                   onClick={() => onProfileChange(person.id)}

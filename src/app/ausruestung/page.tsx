@@ -3,7 +3,7 @@ import { useAuth } from '@/components/auth-provider'
 import { Button } from '@/components/ui/button'
 import { NavigationSidebar } from '@/components/navigation-sidebar'
 import { EquipmentTable } from '@/components/equipment-table'
-import { Plus, Menu, Star } from 'lucide-react'
+import { ChevronDown, Plus, Menu, Star } from 'lucide-react'
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { EquipmentItem, Category, MainCategory, TransportVehicle, Tag, TagKategorie, Mitreisender } from '@/lib/db'
 import type { ApiResponse } from '@/lib/api-types'
@@ -26,6 +26,7 @@ import {
   type CategorySelectScrollTarget,
 } from '@/components/category-select-grouped'
 import { Checkbox } from '@/components/ui/checkbox'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { cn, parseWeightInput } from '@/lib/utils'
 import { MengenRegelEditor } from '@/components/mengen-regel-editor'
 import { regelToStandardAnzahl, type MengenRegel } from '@/lib/packing-quantity'
@@ -48,6 +49,7 @@ import {
   cacheMitreisende,
 } from '@/lib/offline-db'
 import { useReconnectRefetch } from '@/hooks/use-reconnect-refetch'
+import { sortMitreisendeNachRolleUndName } from '@/lib/mitreisenden-sort'
 
 interface CategoryWithMain extends Category {
   hauptkategorie_titel: string
@@ -62,6 +64,108 @@ const EQUIPMENT_DIALOG_ROW_CHECKBOX_CLASS =
   'h-4 w-4 shrink-0 border-[rgb(45,79,30)] data-[state=checked]:bg-[rgb(45,79,30)] data-[state=checked]:text-white data-[state=checked]:border-[rgb(45,79,30)]'
 
 type TagGroupForEquipment = { kat: TagKategorie; tags: Tag[] }
+
+type MitreisendenZeile = {
+  id: string
+  name: string
+  is_default_member: boolean
+  user_id?: string | null
+  user_role?: Mitreisender['user_role']
+}
+
+function mitreisendenZeileAusApi(m: Mitreisender): MitreisendenZeile {
+  const v = m.is_default_member as boolean | number | undefined
+  return {
+    id: m.id,
+    name: m.name,
+    is_default_member: v === true || v === 1,
+    user_id: m.user_id ?? null,
+    user_role: m.user_role ?? null,
+  }
+}
+
+function IndividuelleMitreisendeAuswahl({
+  mitreisende,
+  standardMitreisendeIds,
+  onStandardMitreisendeChange,
+  extraOpen,
+  onExtraOpenChange,
+}: {
+  mitreisende: MitreisendenZeile[]
+  standardMitreisendeIds: string[]
+  onStandardMitreisendeChange: (next: string[]) => void
+  extraOpen: boolean
+  onExtraOpenChange: (open: boolean) => void
+}) {
+  const standardMit = useMemo(
+    () =>
+      sortMitreisendeNachRolleUndName(mitreisende.filter((m) => m.is_default_member)),
+    [mitreisende]
+  )
+  const weitereMit = useMemo(
+    () =>
+      sortMitreisendeNachRolleUndName(mitreisende.filter((m) => !m.is_default_member)),
+    [mitreisende]
+  )
+  const kannEinklappen = standardMit.length > 0 && weitereMit.length > 0
+
+  const toggleOne = (id: string, checked: boolean) => {
+    if (checked) {
+      if (!standardMitreisendeIds.includes(id))
+        onStandardMitreisendeChange([...standardMitreisendeIds, id])
+    } else {
+      onStandardMitreisendeChange(standardMitreisendeIds.filter((x) => x !== id))
+    }
+  }
+
+  const renderChips = (rows: MitreisendenZeile[]) => (
+    <div className="flex flex-wrap gap-2 mt-2">
+      {rows.map((m) => (
+        <label
+          key={m.id}
+          className="flex items-center gap-1.5 text-xs bg-muted px-2 py-1 rounded cursor-pointer hover:bg-muted/80"
+        >
+          <Checkbox
+            checked={standardMitreisendeIds.includes(m.id)}
+            onCheckedChange={(c) => toggleOne(m.id, !!c)}
+            className={EQUIPMENT_CHIP_CHECKBOX_CLASS}
+          />
+          {m.name}
+        </label>
+      ))}
+    </div>
+  )
+
+  const anzuzeigen = kannEinklappen ? standardMit : sortMitreisendeNachRolleUndName(mitreisende)
+
+  return (
+    <div>
+      <Label>Mitreisende</Label>
+      {renderChips(anzuzeigen)}
+      {kannEinklappen && (
+        <Collapsible open={extraOpen} onOpenChange={onExtraOpenChange}>
+          <CollapsibleTrigger asChild>
+            <button
+              type="button"
+              className={cn(
+                'flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground mt-2',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm px-1 -ml-1'
+              )}
+            >
+              <ChevronDown
+                className={cn('h-3.5 w-3.5 shrink-0 transition-transform', extraOpen && 'rotate-180')}
+              />
+              {extraOpen
+                ? 'Weniger anzeigen'
+                : `Weitere (${weitereMit.length})`}
+            </button>
+          </CollapsibleTrigger>
+          <CollapsibleContent>{renderChips(weitereMit)}</CollapsibleContent>
+        </Collapsible>
+      )}
+    </div>
+  )
+}
 
 function EquipmentTagsBlock({
   groups,
@@ -116,7 +220,9 @@ export default function AusruestungPage() {
   const [transportVehicles, setTransportVehicles] = useState<TransportVehicle[]>([])
   const [tags, setTags] = useState<Tag[]>([])
   const [tagKategorien, setTagKategorien] = useState<TagKategorie[]>([])
-  const [mitreisende, setMitreisende] = useState<{ id: string; name: string }[]>([])
+  const [mitreisende, setMitreisende] = useState<MitreisendenZeile[]>([])
+  /** Aufklapp-Zustand für die zusätzlichen Mitreisenden-Zeilen (Individuell) */
+  const [individuelleMitreisendeExtraOffen, setIndividuelleMitreisendeExtraOffen] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   // Bump-Counter, der bei Reconnect alle useEffects (mit Cache-Befüllung) neu auslöst.
@@ -322,21 +428,31 @@ export default function AusruestungPage() {
     const fetchMitreisende = async () => {
       try {
         const res = await fetch('/api/mitreisende')
-        const data = (await res.json()) as ApiResponse<{ id: string; name: string }[]>
+        const data = (await res.json()) as ApiResponse<Mitreisender[]>
         if (data.success && data.data) {
-          setMitreisende(data.data)
-          await cacheMitreisende(data.data as Mitreisender[])
+          setMitreisende(data.data.map(mitreisendenZeileAusApi))
+          await cacheMitreisende(data.data)
         }
       } catch (error) {
         console.error('Failed to fetch mitreisende:', error)
         if (typeof navigator !== 'undefined' && !navigator.onLine) {
           const cached = await getCachedMitreisende()
-          if (cached.length > 0) setMitreisende(cached.map((m) => ({ id: m.id, name: m.name })))
+          if (cached.length > 0) setMitreisende(cached.map(mitreisendenZeileAusApi))
         }
       }
     }
     fetchMitreisende()
   }, [refetchTick])
+
+  // Bearbeitung: Bei nicht-⭐-Mitreisenden in der Auswahl Bereich automatisch aufklappen
+  useEffect(() => {
+    if (!showEditDialog || !editingItem) return
+    const picks = editingItem.standard_mitreisende ?? []
+    const brauchtWeitere = picks.some((id) =>
+      mitreisende.some((m) => m.id === id && !m.is_default_member)
+    )
+    if (brauchtWeitere) setIndividuelleMitreisendeExtraOffen(true)
+  }, [showEditDialog, editingItem, mitreisende])
 
   const resetForm = () => {
     setFormData({
@@ -365,6 +481,7 @@ export default function AusruestungPage() {
     if (categoryId) target = { kind: 'categoryRow', categoryId }
     else if (mainTitle) target = { kind: 'mainHeading', mainTitle }
     setAddEquipmentCategoryScrollTarget(target)
+    setIndividuelleMitreisendeExtraOffen(false)
     setShowAddDialog(true)
   }
 
@@ -636,7 +753,10 @@ export default function AusruestungPage() {
         open={showAddDialog}
         onOpenChange={(open) => {
           setShowAddDialog(open)
-          if (!open) setAddEquipmentCategoryScrollTarget(null)
+          if (!open) {
+            setAddEquipmentCategoryScrollTarget(null)
+            setIndividuelleMitreisendeExtraOffen(false)
+          }
         }}
         title="Neuen Gegenstand hinzufügen"
         description="Fügen Sie einen neuen Ausrüstungsgegenstand hinzu"
@@ -765,29 +885,15 @@ export default function AusruestungPage() {
                 </div>
 
                 {formData.mitreisenden_typ === 'ausgewaehlte' && (
-                  <div>
-                    <Label>Mitreisende</Label>
-                    <div className="flex flex-wrap gap-2 mt-2">
-                      {mitreisende.map(m => (
-                        <label key={m.id} className="flex items-center gap-1.5 text-xs bg-muted px-2 py-1 rounded cursor-pointer hover:bg-muted/80">
-                          <Checkbox
-                            checked={formData.standard_mitreisende.includes(m.id)}
-                            onCheckedChange={(c) => {
-                              const checked = !!c
-                              setFormData((prev) => ({
-                                ...prev,
-                                standard_mitreisende: checked
-                                  ? [...prev.standard_mitreisende, m.id]
-                                  : prev.standard_mitreisende.filter((id) => id !== m.id),
-                              }))
-                            }}
-                            className={EQUIPMENT_CHIP_CHECKBOX_CLASS}
-                          />
-                          {m.name}
-                        </label>
-                      ))}
-                    </div>
-                  </div>
+                  <IndividuelleMitreisendeAuswahl
+                    mitreisende={mitreisende}
+                    standardMitreisendeIds={formData.standard_mitreisende}
+                    onStandardMitreisendeChange={(next) =>
+                      setFormData((prev) => ({ ...prev, standard_mitreisende: next }))
+                    }
+                    extraOpen={individuelleMitreisendeExtraOffen}
+                    onExtraOpenChange={setIndividuelleMitreisendeExtraOffen}
+                  />
                 )}
               </div>
 
@@ -899,7 +1005,10 @@ export default function AusruestungPage() {
       {/* Edit Equipment Dialog – Padding wie Packliste */}
       <ResponsiveModal
         open={showEditDialog}
-        onOpenChange={setShowEditDialog}
+        onOpenChange={(open) => {
+          setShowEditDialog(open)
+          if (!open) setIndividuelleMitreisendeExtraOffen(false)
+        }}
         title="Gegenstand bearbeiten"
         description="Bearbeiten Sie die Details des Ausrüstungsgegenstands"
         contentClassName="max-w-2xl max-h-[90vh] overflow-y-auto"
@@ -1028,29 +1137,15 @@ export default function AusruestungPage() {
                 </div>
 
                 {formData.mitreisenden_typ === 'ausgewaehlte' && (
-                  <div>
-                    <Label>Mitreisende</Label>
-                    <div className="flex flex-wrap gap-2 mt-2">
-                      {mitreisende.map(m => (
-                        <label key={m.id} className="flex items-center gap-1.5 text-xs bg-muted px-2 py-1 rounded cursor-pointer hover:bg-muted/80">
-                          <Checkbox
-                            checked={formData.standard_mitreisende.includes(m.id)}
-                            onCheckedChange={(c) => {
-                              const checked = !!c
-                              setFormData((prev) => ({
-                                ...prev,
-                                standard_mitreisende: checked
-                                  ? [...prev.standard_mitreisende, m.id]
-                                  : prev.standard_mitreisende.filter((id) => id !== m.id),
-                              }))
-                            }}
-                            className={EQUIPMENT_CHIP_CHECKBOX_CLASS}
-                          />
-                          {m.name}
-                        </label>
-                      ))}
-                    </div>
-                  </div>
+                  <IndividuelleMitreisendeAuswahl
+                    mitreisende={mitreisende}
+                    standardMitreisendeIds={formData.standard_mitreisende}
+                    onStandardMitreisendeChange={(next) =>
+                      setFormData((prev) => ({ ...prev, standard_mitreisende: next }))
+                    }
+                    extraOpen={individuelleMitreisendeExtraOffen}
+                    onExtraOpenChange={setIndividuelleMitreisendeExtraOffen}
+                  />
                 )}
               </div>
 

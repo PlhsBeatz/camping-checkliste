@@ -17,11 +17,12 @@ import {
 } from "@/components/ui/popover";
 import { MoreVertical, Edit2, Trash2, RotateCcw, CheckCheck, Clock } from "lucide-react";
 import { useMemo, useState, useEffect, useRef, useCallback } from "react";
-import { PackingItem as DBPackingItem } from "@/lib/db";
+import { PackingItem as DBPackingItem, type Mitreisender } from "@/lib/db";
 import { MarkAllConfirmationDialog, type TravelerForMarkAll } from "./mark-all-confirmation-dialog";
 import { UndoToast } from "./undo-toast";
 import { cn } from "@/lib/utils";
 import { DEFAULT_USER_COLOR_BG } from "@/lib/user-colors";
+import { sortMitreisendeNachRolleUndName, sortMitreisendenZeilenNachStammdaten } from "@/lib/mitreisenden-sort";
 
 interface PackingItemProps {
   id: string;
@@ -50,7 +51,7 @@ interface PackingItemProps {
   fullItem: DBPackingItem;
   selectedProfile: string | null;
   hidePackedItems: boolean;
-  vacationMitreisende?: Array<{ id: string; name: string }>;
+  vacationMitreisende?: Mitreisender[];
   onMarkAllConfirm?: (selectedTravelerIds: string[]) => void;
   onShowToast?: (itemName: string, travelerName: string | undefined, undoAction: () => void) => void;
   isTemporaer?: boolean;
@@ -129,6 +130,19 @@ const PackingItem: React.FC<PackingItemProps> = ({
     if (mitreisenden_typ === 'pauschal') return 1;
     return mitreisende?.length ?? 0;
   }, [mitreisenden_typ, mitreisende]);
+
+  /** Reihenfolge „Admin → Kind → …“ wie in Packprofil-Sidebar (Stammdaten aus Urlaub) */
+  const mitreisendeFuerPopover = useMemo(() => {
+    const list = mitreisende ?? [];
+    if (!list.length) return list;
+    const order = sortMitreisendenZeilenNachStammdaten(
+      list.map((m) => ({ id: m.mitreisender_id, name: m.mitreisender_name })),
+      vacationMitreisende
+    ).map((r) => r.id);
+    const byId = new Map(list.map((m) => [m.mitreisender_id, m]));
+    const ordered = order.map((tid) => byId.get(tid)).filter(Boolean) as typeof list;
+    return ordered.length > 0 ? ordered : list;
+  }, [mitreisende, vacationMitreisende]);
 
   // Determine if checkbox should be enabled
   const canTogglePauschal = mitreisenden_typ === 'pauschal';
@@ -276,25 +290,32 @@ const PackingItem: React.FC<PackingItemProps> = ({
   const travelersForMarkAll: TravelerForMarkAll[] = useMemo(() => {
     let list = mitreisende ?? [];
     if (list.length === 0 && mitreisenden_typ === 'alle' && vacationMitreisende.length > 0) {
-      list = vacationMitreisende.map(m => ({
+      const sortedVacation = sortMitreisendeNachRolleUndName(vacationMitreisende);
+      list = sortedVacation.map((m) => ({
         mitreisender_id: m.id,
         mitreisender_name: m.name,
         gepackt: false
       }));
     }
-    // Nur wenn alle final gepackt: Unmark-Dialog (Zurücksetzen); sonst Abhaken-Dialog mit noch nicht gepackten
+    let rows: TravelerForMarkAll[];
     if (isFullyPackedFinal) {
-      return list.filter(m => m.gepackt).map(m => ({
-        id: m.mitreisender_id,
-        name: m.mitreisender_name,
-        isCurrentlyPacked: true
-      }));
+      rows = list
+        .filter((m) => m.gepackt)
+        .map((m) => ({
+          id: m.mitreisender_id,
+          name: m.mitreisender_name,
+          isCurrentlyPacked: true
+        }));
+    } else {
+      rows = list
+        .filter((m) => !m.gepackt)
+        .map((m) => ({
+          id: m.mitreisender_id,
+          name: m.mitreisender_name,
+          isCurrentlyPacked: false
+        }));
     }
-    return list.filter(m => !m.gepackt).map(m => ({
-      id: m.mitreisender_id,
-      name: m.mitreisender_name,
-      isCurrentlyPacked: false
-    }));
+    return sortMitreisendenZeilenNachStammdaten(rows, vacationMitreisende);
   }, [mitreisende, mitreisenden_typ, vacationMitreisende, isFullyPackedFinal]);
 
   // Hide if packed – nach Exit-Animation
@@ -422,7 +443,7 @@ const PackingItem: React.FC<PackingItemProps> = ({
                         <p className="text-xs font-semibold text-foreground">Gepackt pro Person</p>
                       </div>
                       <ul className="max-h-48 overflow-y-auto py-1">
-                        {mitreisende.map((m) => {
+                        {mitreisendeFuerPopover.map((m) => {
                           const packed = canConfirmVorgemerkt ? m.gepackt : (m.gepackt || !!m.gepackt_vorgemerkt);
                           const vorgemerkt = !!m.gepackt_vorgemerkt && !m.gepackt;
                           const canConfirmThis = vorgemerkt && canConfirmVorgemerkt && onConfirmVorgemerkt;
@@ -556,7 +577,7 @@ interface PackingListProps {
   hidePackedItems: boolean;
   listDisplayMode: 'alles' | 'packliste';
   onOpenSettings: () => void;
-  vacationMitreisende?: Array<{ id: string; name: string }>;
+  vacationMitreisende?: Mitreisender[];
   /** Farbe des gewählten Packprofils (Mitreisender) für Fortschrittsbalken „nur eigene“ */
   selectedProfileColor?: string | null;
   /** Urlaubs-Abreisedatum (abfahrtdatum ?? startdatum) – für erst_abreisetag_gepackt im Packliste-Modus */
