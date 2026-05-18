@@ -57,6 +57,31 @@ function findZipEntry(files: Record<string, Uint8Array>, basename: string): Uint
   return undefined
 }
 
+/** Nur export-meta.json (robuste Pfadsuche wie bei parseBackupZip), z. B. für mehrteiligen Download in der UI. */
+export function parseExportMetaFromZipBuffer(buf: Uint8Array): {
+  meta: ZipExportMeta | null
+  unzipError?: string
+  jsonError?: string
+} {
+  let unzipped: Record<string, Uint8Array>
+  try {
+    unzipped = unzipSync(buf)
+  } catch (e) {
+    return { meta: null, unzipError: e instanceof Error ? e.message : String(e) }
+  }
+  const flat: Record<string, Uint8Array> = {}
+  for (const [k, v] of Object.entries(unzipped)) {
+    flat[normalizeZipPath(k)] = v
+  }
+  const metaRaw = findZipEntry(flat, ZIP_EXPORT_META) ?? flat[ZIP_EXPORT_META]
+  if (!metaRaw) return { meta: null }
+  try {
+    return { meta: JSON.parse(strFromU8(metaRaw)) as ZipExportMeta }
+  } catch (e) {
+    return { meta: null, jsonError: e instanceof Error ? e.message : String(e) }
+  }
+}
+
 export function parseBackupZip(buf: Uint8Array): {
   rawBundle: unknown
   r2Files: Map<string, Uint8Array>

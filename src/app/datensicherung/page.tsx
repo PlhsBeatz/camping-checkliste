@@ -14,6 +14,7 @@ import type { ApiResponse } from '@/lib/api-types'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
+import { parseExportMetaFromZipBuffer } from '@/lib/data-backup/backup-zip'
 
 /** Presets in der UI (ohne Legacy referenceCore und ohne separates auth-Preset) */
 type UiPresetKey = Exclude<BackupPreset, 'referenceCore' | 'auth'>
@@ -197,7 +198,6 @@ export default function DatensicherungPage() {
         return
       }
 
-      const { unzipSync, strFromU8 } = await import('fflate')
       const runTs = new Date().toISOString().slice(0, 19).replace(/:/g, '-')
       let offset = 0
       let parts = 0
@@ -224,22 +224,17 @@ export default function DatensicherungPage() {
         triggerZipDownload(ab, filename)
         parts++
 
-        let nextOffset: number | null | undefined
-        try {
-          const u = unzipSync(new Uint8Array(ab))
-          const rawMeta = u['export-meta.json']
-          if (rawMeta) {
-            const meta = JSON.parse(strFromU8(rawMeta)) as {
-              warnings?: string[]
-              r2Batch?: { nextOffset: number | null }
-            }
-            if (meta.warnings?.length) collectedWarnings.push(...meta.warnings)
-            nextOffset = meta.r2Batch?.nextOffset
-          }
-        } catch {
-          /* ohne Meta keine Folge-Teile */
+        const parsed = parseExportMetaFromZipBuffer(new Uint8Array(ab))
+        if (parsed.unzipError || parsed.jsonError) {
+          setMessage(
+            `ZIP-Teil ${parts} ließ sich nicht auswerten (${parsed.unzipError ?? parsed.jsonError}). ` +
+              `Folge-Teile des Bildexports wurden nicht geladen — prüfen Sie ggf. blockierte Downloads im Browser.`
+          )
+          return
         }
+        if (parsed.meta?.warnings?.length) collectedWarnings.push(...parsed.meta.warnings)
 
+        const nextOffset = parsed.meta?.r2Batch?.nextOffset
         if (nextOffset === undefined || nextOffset === null) break
         offset = nextOffset
         if (parts > 400) {
@@ -252,7 +247,11 @@ export default function DatensicherungPage() {
         collectedWarnings.length > 0
           ? ` Hinweise (Auszug): ${collectedWarnings.slice(0, 4).join(' — ')}`
           : ''
-      setMessage(`Export OK (${parts} ZIP-Teil(e) mit Bildern).${hint}`)
+      const mehrteilig =
+        parts > 1
+          ? ` Es wurden ${parts} Dateien heruntergeladen (Bilder auf mehrere ZIPs verteilt — je nach Browser ggf. mehrere Download-Bestätigungen).`
+          : ''
+      setMessage(`Export OK (${parts} ZIP-Teil(e) mit Bildern).${mehrteilig}${hint}`)
     } catch (e) {
       setMessage(e instanceof Error ? e.message : String(e))
     } finally {
