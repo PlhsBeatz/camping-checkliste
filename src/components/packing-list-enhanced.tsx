@@ -15,7 +15,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { MoreVertical, Edit2, Trash2, RotateCcw, CheckCheck, Clock } from "lucide-react";
+import { MoreVertical, Edit2, Trash2, RotateCcw, CheckCheck, Check, Clock } from "lucide-react";
 import { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import { PackingItem as DBPackingItem, type Mitreisender, type TransportVehicle } from "@/lib/db";
 import { MarkAllConfirmationDialog, type TravelerForMarkAll } from "./mark-all-confirmation-dialog";
@@ -537,20 +537,23 @@ const PackingItem: React.FC<PackingItemProps> = ({
                               return (
                                 <span
                                   key={m.mitreisender_id}
-                                  className="inline-flex items-center gap-0.5 w-10 shrink-0"
+                                  className="inline-flex items-center gap-1 w-10 shrink-0"
                                   title={m.mitreisender_name}
                                 >
-                                  <Checkbox
-                                    checked={packed || vorgemerkt}
-                                    disabled
+                                  <span
                                     className={cn(
-                                      "h-3.5 w-3.5 min-h-3.5 min-w-3.5 rounded border-2 border-gray-300 shrink-0 pointer-events-none",
-                                      vorgemerkt
-                                        ? "data-[state=checked]:bg-[rgb(230,126,34)] data-[state=checked]:border-[rgb(230,126,34)]"
-                                        : "data-[state=checked]:bg-[rgb(45,79,30)] data-[state=checked]:border-[rgb(45,79,30)]"
+                                      "inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border-2 border-gray-300",
+                                      (packed || vorgemerkt) &&
+                                        (vorgemerkt
+                                          ? "border-[rgb(230,126,34)] bg-[rgb(230,126,34)] text-white"
+                                          : "border-[rgb(45,79,30)] bg-[rgb(45,79,30)] text-white")
                                     )}
                                     aria-hidden
-                                  />
+                                  >
+                                    {(packed || vorgemerkt) && (
+                                      <Check className="h-2.5 w-2.5" strokeWidth={3} />
+                                    )}
+                                  </span>
                                   <span className="text-[10px] font-semibold leading-none text-left shrink-0 text-muted-foreground">
                                     {initials}
                                   </span>
