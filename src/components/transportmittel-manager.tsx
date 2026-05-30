@@ -18,14 +18,21 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Trash2, Plus, MoreVertical, Pencil, Truck, ChevronDown, ChevronRight } from 'lucide-react'
+import { Trash2, Plus, MoreVertical, Pencil, ChevronDown, ChevronRight } from 'lucide-react'
 import {
   TransportVehicle,
   TransportVehicleFestgewichtManuell,
   type TransportVehicleWithFestgewicht,
 } from '@/lib/db'
 import type { ApiResponse } from '@/lib/api-types'
-import { formatWeightForDisplay, parseWeightInput } from '@/lib/utils'
+import { cn, formatWeightForDisplay, parseWeightInput } from '@/lib/utils'
+import {
+  TRANSPORT_ICON_OPTIONS,
+  TransportIcon,
+  inferTransportIconFromName,
+  resolveTransportIconKey,
+  type TransportIconKey,
+} from '@/lib/transport-icons'
 
 function TransportmittelRow({
   vehicle,
@@ -43,7 +50,7 @@ function TransportmittelRow({
     <div className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 bg-white">
       <div className="flex items-center gap-3">
         <div className="h-10 w-10 rounded-lg bg-[rgb(45,79,30)]/10 flex items-center justify-center flex-shrink-0">
-          <Truck className="h-5 w-5 text-[rgb(45,79,30)]" />
+          <TransportIcon icon={vehicle.icon} name={vehicle.name} className="text-[rgb(45,79,30)] [&_svg]:h-5 [&_svg]:w-5" />
         </div>
         <div>
           <p className="font-medium">{vehicle.name}</p>
@@ -102,6 +109,7 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
 
   const [form, setForm] = useState({
     name: '',
+    icon: 'truck' as TransportIconKey,
     zulGesamtgewicht: '',
     eigengewicht: '',
   })
@@ -167,6 +175,7 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name,
+          icon: form.icon,
           zulGesamtgewicht: zul,
           eigengewicht: eigen,
         }),
@@ -225,6 +234,7 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
         body: JSON.stringify({
           id: editingVehicle.id,
           name,
+          icon: form.icon,
           zulGesamtgewicht: zul,
           eigengewicht: eigen,
         }),
@@ -278,6 +288,7 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
   const resetForm = () => {
     setForm({
       name: '',
+      icon: 'truck',
       zulGesamtgewicht: '',
       eigengewicht: '',
     })
@@ -312,6 +323,7 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
     setEditingVehicle(vehicle)
     setForm({
       name: vehicle.name,
+      icon: resolveTransportIconKey(vehicle.icon, vehicle.name),
       zulGesamtgewicht: String(vehicle.zul_gesamtgewicht),
       eigengewicht: String(vehicle.eigengewicht),
     })
@@ -407,9 +419,41 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
             <Input
               id="vehicle-name"
               value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              onChange={(e) => {
+                const name = e.target.value
+                setForm((prev) => ({
+                  ...prev,
+                  name,
+                  icon: editingVehicle
+                    ? prev.icon
+                    : inferTransportIconFromName(name),
+                }))
+              }}
               placeholder="z.B. Wohnwagen, Auto"
             />
+          </div>
+          <div>
+            <Label>Icon (Packliste)</Label>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {TRANSPORT_ICON_OPTIONS.map(({ key, label, Icon }) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setForm((prev) => ({ ...prev, icon: key }))}
+                  className={cn(
+                    'flex flex-col items-center gap-1 rounded-lg border-2 px-3 py-2 min-w-[4.5rem] transition-colors',
+                    form.icon === key
+                      ? 'border-[rgb(45,79,30)] bg-[rgb(45,79,30)]/5'
+                      : 'border-gray-200 hover:border-gray-300'
+                  )}
+                  aria-pressed={form.icon === key}
+                  title={label}
+                >
+                  <Icon className="h-5 w-5 text-[rgb(45,79,30)]" strokeWidth={1.75} />
+                  <span className="text-[10px] font-medium text-muted-foreground">{label}</span>
+                </button>
+              ))}
+            </div>
           </div>
           <div>
             <Label>Zulässiges Gesamtgewicht *</Label>

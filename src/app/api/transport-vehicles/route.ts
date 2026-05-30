@@ -48,12 +48,14 @@ export async function POST(request: NextRequest) {
 
     const body = (await request.json()) as {
       name?: string
+      icon?: string | null
       zulGesamtgewicht?: number
       zul_gesamtgewicht?: number
       eigengewicht?: number
       festInstalliertMitrechnen?: boolean
     }
     const name = body.name
+    const icon = body.icon
     const zulGesamtgewicht = body.zulGesamtgewicht ?? body.zul_gesamtgewicht
     const eigengewicht = body.eigengewicht
     const festInstalliertMitrechnen = body.festInstalliertMitrechnen ?? false
@@ -79,7 +81,8 @@ export async function POST(request: NextRequest) {
       name.trim(),
       zulGesamtgewicht,
       eigengewicht,
-      festInstalliertMitrechnen
+      festInstalliertMitrechnen,
+      icon
     )
     if (!id) {
       return NextResponse.json({ success: false, error: 'Fehler beim Erstellen' }, { status: 500 })
@@ -114,12 +117,13 @@ export async function PUT(request: NextRequest) {
     const body = (await request.json()) as {
       id?: string
       name?: string
+      icon?: string | null
       zulGesamtgewicht?: number
       zul_gesamtgewicht?: number
       eigengewicht?: number
       festInstalliertMitrechnen?: boolean
     }
-    const { id, name, zulGesamtgewicht, zul_gesamtgewicht, eigengewicht, festInstalliertMitrechnen } =
+    const { id, name, icon, zulGesamtgewicht, zul_gesamtgewicht, eigengewicht, festInstalliertMitrechnen } =
       body
 
     if (!id || !name?.trim()) {
@@ -145,7 +149,8 @@ export async function PUT(request: NextRequest) {
       name.trim(),
       zul,
       eigengewicht,
-      festInstalliertMitrechnen
+      festInstalliertMitrechnen,
+      icon
     )
     if (!success) {
       return NextResponse.json({ success: false, error: 'Fehler beim Aktualisieren' }, { status: 500 })

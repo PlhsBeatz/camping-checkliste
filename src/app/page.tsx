@@ -1434,6 +1434,12 @@ function HomeContent() {
                   listDisplayMode={listDisplayMode}
                   onOpenSettings={() => setShowPackSettings(true)}
                   vacationMitreisende={vacationMitreisende}
+                  transportVehicles={transportVehicles}
+                  visiblePackProfileMitreisende={
+                    canSelectOtherProfiles || !user?.mitreisender_id
+                      ? vacationMitreisende
+                      : vacationMitreisende.filter((m) => m.id === user.mitreisender_id)
+                  }
                   abreiseDatum={currentVacation?.abfahrtdatum?.trim() || currentVacation?.startdatum || null}
                   onScrollContextChange={handleScrollContextChange}
               />

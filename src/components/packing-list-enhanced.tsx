@@ -17,10 +17,11 @@ import {
 } from "@/components/ui/popover";
 import { MoreVertical, Edit2, Trash2, RotateCcw, CheckCheck, Clock } from "lucide-react";
 import { useMemo, useState, useEffect, useRef, useCallback } from "react";
-import { PackingItem as DBPackingItem, type Mitreisender } from "@/lib/db";
+import { PackingItem as DBPackingItem, type Mitreisender, type TransportVehicle } from "@/lib/db";
 import { MarkAllConfirmationDialog, type TravelerForMarkAll } from "./mark-all-confirmation-dialog";
 import { UndoToast } from "./undo-toast";
-import { cn } from "@/lib/utils";
+import { cn, getInitials } from "@/lib/utils";
+import { TransportIcon } from "@/lib/transport-icons";
 import { DEFAULT_USER_COLOR_BG } from "@/lib/user-colors";
 import { sortMitreisendeNachRolleUndName, sortMitreisendenZeilenNachStammdaten } from "@/lib/mitreisenden-sort";
 
@@ -52,9 +53,12 @@ interface PackingItemProps {
   selectedProfile: string | null;
   hidePackedItems: boolean;
   vacationMitreisende?: Mitreisender[];
+  transportVehicles?: TransportVehicle[];
   onMarkAllConfirm?: (selectedTravelerIds: string[]) => void;
   onShowToast?: (itemName: string, travelerName: string | undefined, undoAction: () => void) => void;
   isTemporaer?: boolean;
+  /** true: „x/y Personen“-Button mit Popup; false: Personen inline mit Kürzel + Checkbox */
+  showPersonStatusAsPopover?: boolean;
 }
 
 const PackingItem: React.FC<PackingItemProps> = ({
@@ -81,9 +85,11 @@ const PackingItem: React.FC<PackingItemProps> = ({
   selectedProfile,
   hidePackedItems,
   vacationMitreisende = [],
+  transportVehicles = [],
   onMarkAllConfirm,
   onShowToast,
-  isTemporaer = false
+  isTemporaer = false,
+  showPersonStatusAsPopover = true
 }) => {
   const [showMarkAllDialog, setShowMarkAllDialog] = useState(false);
   const [personListPopoverOpen, setPersonListPopoverOpen] = useState(false);
@@ -153,18 +159,38 @@ const PackingItem: React.FC<PackingItemProps> = ({
     return mitreisende.find(m => m.mitreisender_id === selectedProfile);
   }, [selectedProfile, mitreisende]);
 
-  /** Transport für Pill: im Personen-Profil der Person-Transport, im Alle-Profil Haupt + ggf. weiteres mit "+" */
-  const displayTransportName = useMemo(() => {
-    if (selectedProfile !== null) {
-      const person = fullItem.mitreisende?.find(m => m.mitreisender_id === selectedProfile);
-      return person?.transport_name ?? fullItem.transport_name ?? null;
+  /** Transport-Icons: im Personen-Profil ein Icon, im Alle-Profil ggf. mehrere unterschiedliche */
+  const displayTransports = useMemo((): TransportVehicle[] => {
+    const byId = (transportId: string | null | undefined): TransportVehicle | null => {
+      if (!transportId) return null
+      return transportVehicles.find((tv) => tv.id === transportId) ?? null
     }
-    const main = fullItem.transport_name ?? null;
-    const personTransports = (fullItem.mitreisende ?? []).map(m => m.transport_name).filter(Boolean) as string[];
-    const others = [...new Set(personTransports)].filter(t => t !== main);
-    if (others.length === 0) return main;
-    return [main, ...others].filter(Boolean).join('+');
-  }, [fullItem, selectedProfile]);
+
+    if (selectedProfile !== null) {
+      const person = fullItem.mitreisende?.find((m) => m.mitreisender_id === selectedProfile)
+      const tv = byId(person?.transport_id ?? fullItem.transport_id)
+      return tv ? [tv] : []
+    }
+
+    const mainId = fullItem.transport_id ?? null
+    const personTransportIds = (fullItem.mitreisende ?? [])
+      .map((m) => m.transport_id ?? mainId)
+      .filter((id): id is string => !!id)
+    const others = [...new Set(personTransportIds.filter((id) => id !== mainId))]
+    const icons: TransportVehicle[] = []
+    const mainTv = byId(mainId)
+    if (mainTv) icons.push(mainTv)
+    for (const id of others) {
+      const tv = byId(id)
+      if (tv) icons.push(tv)
+    }
+    if (icons.length === 0 && personTransportIds.length > 0) {
+      return [...new Set(personTransportIds)]
+        .map((id) => byId(id))
+        .filter((tv): tv is TransportVehicle => tv != null)
+    }
+    return icons
+  }, [fullItem, selectedProfile, transportVehicles]);
 
   /** Gepackt für Transparenz-Anzeige (opacity-60): Admin nur bei final gepackt, sonst auch vorgemerkt */
   const isPackedForOpacity = useMemo(() => {
@@ -286,6 +312,58 @@ const PackingItem: React.FC<PackingItemProps> = ({
     }
     setShowMarkAllDialog(false);
   };
+
+  const personInitialsContext = useMemo(
+    () => mitreisendeFuerPopover.map((m) => m.mitreisender_name),
+    [mitreisendeFuerPopover]
+  );
+
+  const renderPersonListPopoverContent = () => (
+    <>
+      <div className="p-2 border-b bg-muted/30">
+        <p className="text-xs font-semibold text-foreground">Gepackt pro Person</p>
+      </div>
+      <ul className="max-h-48 overflow-y-auto py-1">
+        {mitreisendeFuerPopover.map((m) => {
+          const packed = canConfirmVorgemerkt ? m.gepackt : (m.gepackt || !!m.gepackt_vorgemerkt);
+          const vorgemerkt = !!m.gepackt_vorgemerkt && !m.gepackt;
+          const canConfirmThis = vorgemerkt && canConfirmVorgemerkt && onConfirmVorgemerkt;
+          return (
+            <li
+              key={m.mitreisender_id}
+              className={cn(
+                "flex items-center gap-2 px-3 py-2 text-sm",
+                canConfirmThis && "cursor-pointer hover:bg-muted/50 active:bg-muted transition-colors"
+              )}
+              onClick={canConfirmThis ? () => { onConfirmVorgemerkt(id, m.mitreisender_id); } : undefined}
+              role={canConfirmThis ? "button" : undefined}
+            >
+              <Checkbox
+                checked={packed || vorgemerkt}
+                disabled
+                className={cn(
+                  "h-4 w-4 min-h-4 min-w-4 rounded-md border-2 border-gray-300 shrink-0 cursor-default",
+                  packed && "data-[state=checked]:bg-[rgb(45,79,30)] data-[state=checked]:border-[rgb(45,79,30)]",
+                  vorgemerkt && !packed && "data-[state=checked]:bg-[rgb(230,126,34)] data-[state=checked]:border-[rgb(230,126,34)]"
+                )}
+                aria-hidden
+              />
+              <span className={cn(
+                "truncate",
+                packed && "text-muted-foreground",
+                vorgemerkt && "text-amber-700"
+              )}>
+                {m.mitreisender_name}
+              </span>
+              {vorgemerkt && canConfirmVorgemerkt && (
+                <span className="text-xs text-amber-600 ml-auto shrink-0">Klicken zum Abhaken</span>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </>
+  );
 
   const travelersForMarkAll: TravelerForMarkAll[] = useMemo(() => {
     let list = mitreisende ?? [];
@@ -427,72 +505,87 @@ const PackingItem: React.FC<PackingItemProps> = ({
                 )}
                 {selectedProfile === null && mitreisende && mitreisende.length > 0 && (
                   <Popover open={personListPopoverOpen} onOpenChange={setPersonListPopoverOpen}>
-                    <PopoverTrigger asChild>
-                      <button
-                        type="button"
-                        className="text-xs text-accent font-medium hover:underline focus:outline-none focus:ring-2 focus:ring-primary/20 rounded px-1 -mx-1"
-                      >
-                        {canConfirmVorgemerkt ? packedCountFinal : packedCount}/{totalCount} Personen
-                        {canConfirmVorgemerkt && vorgemerktNames.length > 0 && (
-                          <> (Prüfen: {vorgemerktNames.join(', ')})</>
-                        )}
-                      </button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-64 p-0" align="start">
-                      <div className="p-2 border-b bg-muted/30">
-                        <p className="text-xs font-semibold text-foreground">Gepackt pro Person</p>
-                      </div>
-                      <ul className="max-h-48 overflow-y-auto py-1">
-                        {mitreisendeFuerPopover.map((m) => {
-                          const packed = canConfirmVorgemerkt ? m.gepackt : (m.gepackt || !!m.gepackt_vorgemerkt);
-                          const vorgemerkt = !!m.gepackt_vorgemerkt && !m.gepackt;
-                          const canConfirmThis = vorgemerkt && canConfirmVorgemerkt && onConfirmVorgemerkt;
-                          return (
-                            <li
-                              key={m.mitreisender_id}
-                              className={cn(
-                                "flex items-center gap-2 px-3 py-2 text-sm",
-                                canConfirmThis && "cursor-pointer hover:bg-muted/50 active:bg-muted transition-colors"
-                              )}
-                              onClick={canConfirmThis ? () => { onConfirmVorgemerkt(id, m.mitreisender_id); } : undefined}
-                              role={canConfirmThis ? "button" : undefined}
-                            >
-                              <Checkbox
-                                checked={packed || vorgemerkt}
-                                disabled
-                                className={cn(
-                                  "h-4 w-4 min-h-4 min-w-4 rounded-md border-2 border-gray-300 shrink-0 cursor-default",
-                                  packed && "data-[state=checked]:bg-[rgb(45,79,30)] data-[state=checked]:border-[rgb(45,79,30)]",
-                                  vorgemerkt && !packed && "data-[state=checked]:bg-[rgb(230,126,34)] data-[state=checked]:border-[rgb(230,126,34)]"
-                                )}
-                                aria-hidden
-                              />
-                              <span className={cn(
-                                "truncate",
-                                packed && "text-muted-foreground",
-                                vorgemerkt && "text-amber-700"
-                              )}>
-                                {m.mitreisender_name}
-                              </span>
-                              {vorgemerkt && canConfirmVorgemerkt && (
-                                <span className="text-xs text-amber-600 ml-auto shrink-0">Klicken zum Abhaken</span>
-                              )}
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    </PopoverContent>
+                    {showPersonStatusAsPopover ? (
+                      <>
+                        <PopoverTrigger asChild>
+                          <button
+                            type="button"
+                            className="text-xs text-accent font-medium hover:underline focus:outline-none focus:ring-2 focus:ring-primary/20 rounded px-1 -mx-1"
+                          >
+                            {canConfirmVorgemerkt ? packedCountFinal : packedCount}/{totalCount} Personen
+                            {canConfirmVorgemerkt && vorgemerktNames.length > 0 && (
+                              <> (Prüfen: {vorgemerktNames.join(', ')})</>
+                            )}
+                          </button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-64 p-0" align="start">
+                          {renderPersonListPopoverContent()}
+                        </PopoverContent>
+                      </>
+                    ) : (
+                      <>
+                        <PopoverTrigger asChild>
+                          <button
+                            type="button"
+                            className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-left rounded px-0.5 -mx-0.5 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                            aria-label="Gepackt-Status pro Person anzeigen"
+                          >
+                            {mitreisendeFuerPopover.map((m) => {
+                              const packed = canConfirmVorgemerkt ? m.gepackt : (m.gepackt || !!m.gepackt_vorgemerkt);
+                              const vorgemerkt = !!m.gepackt_vorgemerkt && !m.gepackt;
+                              const initials = getInitials(m.mitreisender_name, personInitialsContext);
+                              return (
+                                <span
+                                  key={m.mitreisender_id}
+                                  className="inline-flex items-center gap-0.5 shrink-0"
+                                  title={m.mitreisender_name}
+                                >
+                                  <Checkbox
+                                    checked={packed || vorgemerkt}
+                                    disabled
+                                    className={cn(
+                                      "h-3.5 w-3.5 min-h-3.5 min-w-3.5 rounded border-2 border-gray-300 shrink-0 pointer-events-none",
+                                      vorgemerkt
+                                        ? "data-[state=checked]:bg-[rgb(230,126,34)] data-[state=checked]:border-[rgb(230,126,34)]"
+                                        : "data-[state=checked]:bg-[rgb(45,79,30)] data-[state=checked]:border-[rgb(45,79,30)]"
+                                    )}
+                                    aria-hidden
+                                  />
+                                  <span
+                                    className={cn(
+                                      "text-[10px] font-semibold leading-none",
+                                      vorgemerkt ? "text-amber-700" : packed ? "text-muted-foreground" : "text-accent"
+                                    )}
+                                  >
+                                    {initials}
+                                  </span>
+                                </span>
+                              );
+                            })}
+                          </button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-64 p-0" align="start">
+                          {renderPersonListPopoverContent()}
+                        </PopoverContent>
+                      </>
+                    )}
                   </Popover>
                 )}
               </div>
             )}
           </div>
 
-          {/* Transport-Pill und Three-dot menu */}
-          <div className="flex items-center gap-1 flex-shrink-0">
-            {displayTransportName && (
-              <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-md">
-                {displayTransportName}
+          {/* Transport-Icons und Three-dot menu */}
+          <div className="flex items-center gap-0.5 flex-shrink-0">
+            {displayTransports.length > 0 && (
+              <span className="inline-flex items-center gap-0.5 px-0.5">
+                {displayTransports.map((tv) => (
+                  <TransportIcon
+                    key={tv.id}
+                    icon={tv.icon}
+                    name={tv.name}
+                  />
+                ))}
               </span>
             )}
             <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
@@ -578,6 +671,9 @@ interface PackingListProps {
   listDisplayMode: 'alles' | 'packliste';
   onOpenSettings: () => void;
   vacationMitreisende?: Mitreisender[];
+  transportVehicles?: TransportVehicle[];
+  /** Im Packprofil sichtbare Mitreisende (Berechtigungen) – für Schwellwert Inline vs. Popup */
+  visiblePackProfileMitreisende?: Mitreisender[];
   /** Farbe des gewählten Packprofils (Mitreisender) für Fortschrittsbalken „nur eigene“ */
   selectedProfileColor?: string | null;
   /** Urlaubs-Abreisedatum (abfahrtdatum ?? startdatum) – für erst_abreisetag_gepackt im Packliste-Modus */
@@ -604,6 +700,8 @@ export function PackingList({
   listDisplayMode,
   onOpenSettings: _onOpenSettings,
   vacationMitreisende = [],
+  visiblePackProfileMitreisende,
+  transportVehicles = [],
   selectedProfileColor = null,
   abreiseDatum,
   onScrollContextChange
@@ -619,6 +717,8 @@ export function PackingList({
   const tabsScrollContainerRef = useRef<HTMLDivElement | null>(null);
   const categoryRefsMap = useRef<Map<string, HTMLDivElement | null>>(new Map());
   const contentTouchStart = useRef<{ x: number; y: number } | null>(null);
+
+  const showPersonStatusAsPopover = (visiblePackProfileMitreisende ?? vacationMitreisende).length > 4;
 
   useEffect(() => {
     return () => {
@@ -1106,6 +1206,8 @@ export function PackingList({
                               selectedProfile={selectedProfile}
                               hidePackedItems={hidePackedItems}
                               vacationMitreisende={vacationMitreisende}
+                              transportVehicles={transportVehicles}
+                              showPersonStatusAsPopover={showPersonStatusAsPopover}
                               onMarkAllConfirm={(ids) => handleMarkAllForItem(item, ids)}
                               onShowToast={showToast}
                             />

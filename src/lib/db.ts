@@ -120,6 +120,8 @@ export interface EquipmentLink {
 export interface TransportVehicle {
   id: string
   name: string
+  /** Packlisten-Icon: caravan | car | truck | bus */
+  icon?: string | null
   zul_gesamtgewicht: number
   eigengewicht: number
   fest_installiert_mitrechnen: boolean
@@ -1389,23 +1391,29 @@ export async function getCategoriesWithMainCategories(db: D1Database): Promise<A
 interface TransportVehicleRow {
   id: string
   name: string
+  icon?: string | null
   zul_gesamtgewicht: number
   eigengewicht: number
   fest_installiert_mitrechnen?: number
   created_at: string
 }
 
+function mapTransportVehicleRow(row: TransportVehicleRow): TransportVehicle {
+  return {
+    id: row.id,
+    name: row.name,
+    icon: row.icon ?? null,
+    zul_gesamtgewicht: row.zul_gesamtgewicht,
+    eigengewicht: row.eigengewicht,
+    fest_installiert_mitrechnen: !!(row.fest_installiert_mitrechnen ?? 0),
+    created_at: row.created_at,
+  }
+}
+
 export async function getTransportVehicles(db: D1Database): Promise<TransportVehicle[]> {
   try {
     const result = await db.prepare('SELECT * FROM transportmittel ORDER BY name').all<TransportVehicleRow>()
-    return (result.results || []).map((row) => ({
-      id: row.id,
-      name: row.name,
-      zul_gesamtgewicht: row.zul_gesamtgewicht,
-      eigengewicht: row.eigengewicht,
-      fest_installiert_mitrechnen: !!(row.fest_installiert_mitrechnen ?? 0),
-      created_at: row.created_at
-    }))
+    return (result.results || []).map(mapTransportVehicleRow)
   } catch (error) {
     console.error('Error fetching transport vehicles:', error)
     return []
@@ -1420,29 +1428,45 @@ export async function createTransportVehicle(
   name: string,
   zulGesamtgewicht: number,
   eigengewicht: number,
-  festInstalliertMitrechnen: boolean = false
+  festInstalliertMitrechnen: boolean = false,
+  icon?: string | null
 ): Promise<string | null> {
   const id = crypto.randomUUID()
   try {
     await db
       .prepare(
-        'INSERT INTO transportmittel (id, name, zul_gesamtgewicht, eigengewicht, fest_installiert_mitrechnen) VALUES (?, ?, ?, ?, ?)'
+        'INSERT INTO transportmittel (id, name, icon, zul_gesamtgewicht, eigengewicht, fest_installiert_mitrechnen) VALUES (?, ?, ?, ?, ?, ?)'
       )
-      .bind(id, name, zulGesamtgewicht, eigengewicht, festInstalliertMitrechnen ? 1 : 0)
+      .bind(id, name, icon ?? null, zulGesamtgewicht, eigengewicht, festInstalliertMitrechnen ? 1 : 0)
       .run()
     return id
   } catch (error) {
     const errMsg = error instanceof Error ? error.message : String(error)
-    if (errMsg.includes('fest_installiert_mitrechnen') || errMsg.includes('no such column')) {
+    if (errMsg.includes('icon') || errMsg.includes('fest_installiert_mitrechnen') || errMsg.includes('no such column')) {
       try {
         await db
           .prepare(
-            'INSERT INTO transportmittel (id, name, zul_gesamtgewicht, eigengewicht) VALUES (?, ?, ?, ?)'
+            'INSERT INTO transportmittel (id, name, zul_gesamtgewicht, eigengewicht, fest_installiert_mitrechnen) VALUES (?, ?, ?, ?, ?)'
           )
-          .bind(id, name, zulGesamtgewicht, eigengewicht)
+          .bind(id, name, zulGesamtgewicht, eigengewicht, festInstalliertMitrechnen ? 1 : 0)
           .run()
         return id
       } catch (fallbackError) {
+        const errMsg2 = fallbackError instanceof Error ? fallbackError.message : String(fallbackError)
+        if (errMsg2.includes('fest_installiert_mitrechnen') || errMsg2.includes('no such column')) {
+          try {
+            await db
+              .prepare(
+                'INSERT INTO transportmittel (id, name, zul_gesamtgewicht, eigengewicht) VALUES (?, ?, ?, ?)'
+              )
+              .bind(id, name, zulGesamtgewicht, eigengewicht)
+              .run()
+            return id
+          } catch (fallbackError2) {
+            console.error('Error creating transport vehicle (fallback):', fallbackError2)
+            return null
+          }
+        }
         console.error('Error creating transport vehicle (fallback):', fallbackError)
         return null
       }
@@ -1463,29 +1487,45 @@ export async function updateTransportVehicle(
   name: string,
   zulGesamtgewicht: number,
   eigengewicht: number,
-  festInstalliertMitrechnen?: boolean
+  festInstalliertMitrechnen?: boolean,
+  icon?: string | null
 ): Promise<boolean> {
   const fim = festInstalliertMitrechnen ?? false
   try {
     await db
       .prepare(
-        'UPDATE transportmittel SET name = ?, zul_gesamtgewicht = ?, eigengewicht = ?, fest_installiert_mitrechnen = ? WHERE id = ?'
+        'UPDATE transportmittel SET name = ?, icon = ?, zul_gesamtgewicht = ?, eigengewicht = ?, fest_installiert_mitrechnen = ? WHERE id = ?'
       )
-      .bind(name, zulGesamtgewicht, eigengewicht, fim ? 1 : 0, id)
+      .bind(name, icon ?? null, zulGesamtgewicht, eigengewicht, fim ? 1 : 0, id)
       .run()
     return true
   } catch (error) {
     const errMsg = error instanceof Error ? error.message : String(error)
-    if (errMsg.includes('fest_installiert_mitrechnen') || errMsg.includes('no such column')) {
+    if (errMsg.includes('icon') || errMsg.includes('fest_installiert_mitrechnen') || errMsg.includes('no such column')) {
       try {
         await db
           .prepare(
-            'UPDATE transportmittel SET name = ?, zul_gesamtgewicht = ?, eigengewicht = ? WHERE id = ?'
+            'UPDATE transportmittel SET name = ?, zul_gesamtgewicht = ?, eigengewicht = ?, fest_installiert_mitrechnen = ? WHERE id = ?'
           )
-          .bind(name, zulGesamtgewicht, eigengewicht, id)
+          .bind(name, zulGesamtgewicht, eigengewicht, fim ? 1 : 0, id)
           .run()
         return true
       } catch (fallbackError) {
+        const errMsg2 = fallbackError instanceof Error ? fallbackError.message : String(fallbackError)
+        if (errMsg2.includes('fest_installiert_mitrechnen') || errMsg2.includes('no such column')) {
+          try {
+            await db
+              .prepare(
+                'UPDATE transportmittel SET name = ?, zul_gesamtgewicht = ?, eigengewicht = ? WHERE id = ?'
+              )
+              .bind(name, zulGesamtgewicht, eigengewicht, id)
+              .run()
+            return true
+          } catch (fallbackError2) {
+            console.error('Error updating transport vehicle (fallback):', fallbackError2)
+            return false
+          }
+        }
         console.error('Error updating transport vehicle (fallback):', fallbackError)
         return false
       }
