@@ -1,9 +1,9 @@
 'use client'
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { NavigationSidebar } from '@/components/navigation-sidebar'
-import { MitreisendeManager } from '@/components/mitreisende-manager'
+import { VacationEditModal } from '@/components/vacation-edit-modal'
 import {
   Archive,
   Plus,
@@ -11,12 +11,8 @@ import {
   MoreVertical,
   Pencil,
   Trash2,
-  GripVertical,
   Route,
-  Settings,
   Calendar as CalendarIcon,
-  ChevronLeft,
-  ChevronRight,
 } from 'lucide-react'
 import {
   DropdownMenu,
@@ -25,7 +21,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Suspense, useState, useEffect, useRef, useMemo } from 'react'
-import { Vacation, Mitreisender, Campingplatz } from '@/lib/db'
+import { Vacation, Campingplatz } from '@/lib/db'
 import type { ApiResponse } from '@/lib/api-types'
 
 /** Maximale gleichzeitige Routen-API-Anfragen (Campingplatz → Entfernung/Dauer). */
@@ -36,10 +32,7 @@ type CampingplatzRouteInfo = {
   durationMinutes: number
   provider: string
 }
-import { ResponsiveModal } from '@/components/ui/responsive-modal'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
 import { campingplatzListThumbnailSrc } from '@/lib/campingplatz-photo-url'
 import { useRouter, useSearchParams } from 'next/navigation'
@@ -48,133 +41,7 @@ import { cacheVacations, cacheCampingplaetze } from '@/lib/offline-db'
 import { useReconnectRefetch } from '@/hooks/use-reconnect-refetch'
 import { format, isSameMonth, isSameYear } from 'date-fns'
 import { de } from 'date-fns/locale'
-import type { DateRange } from 'react-day-picker'
-import { useNavigation, type CaptionProps } from 'react-day-picker'
-import { Calendar } from '@/components/ui/calendar'
-import { buttonVariants } from '@/components/ui/button'
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from '@/components/ui/popover'
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
 import Image from 'next/image'
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from '@/components/ui/command'
-import {
-  DndContext,
-  PointerSensor,
-  TouchSensor,
-  closestCenter,
-  useSensor,
-  useSensors,
-  type DragEndEvent,
-} from '@dnd-kit/core'
-import {
-  SortableContext,
-  arrayMove,
-  useSortable,
-  verticalListSortingStrategy,
-} from '@dnd-kit/sortable'
-import { CSS } from '@dnd-kit/utilities'
-
-/** Caption mit eigener Navigation pro Monat (für Mobile, wenn zwei Monate untereinander stehen) */
-function RangeCalendarCaption(props: CaptionProps) {
-  const { goToMonth, nextMonth, previousMonth } = useNavigation()
-  return (
-    <div className="flex justify-between items-center pt-1 w-full gap-1">
-      <button
-        type="button"
-        disabled={!previousMonth}
-        onClick={() => previousMonth && goToMonth(previousMonth)}
-        className={cn(
-          buttonVariants({ variant: 'outline' }),
-          'h-7 w-7 shrink-0 bg-transparent p-0 opacity-50 hover:opacity-100 disabled:opacity-30'
-        )}
-        aria-label="Vorheriger Monat"
-      >
-        <ChevronLeft className="h-4 w-4" />
-      </button>
-      <span className="text-sm font-medium">
-        {format(props.displayMonth, 'MMMM yyyy', { locale: de })}
-      </span>
-      <button
-        type="button"
-        disabled={!nextMonth}
-        onClick={() => nextMonth && goToMonth(nextMonth)}
-        className={cn(
-          buttonVariants({ variant: 'outline' }),
-          'h-7 w-7 shrink-0 bg-transparent p-0 opacity-50 hover:opacity-100 disabled:opacity-30'
-        )}
-        aria-label="Nächster Monat"
-      >
-        <ChevronRight className="h-4 w-4" />
-      </button>
-    </div>
-  )
-}
-
-/** True wenn Viewport schmal (z. B. Smartphone/Tablet) – dann Daterangepicker als Dialog statt Popover */
-function useIsSmallViewport() {
-  const [isSmall, setIsSmall] = useState(false)
-  useEffect(() => {
-    const mql = window.matchMedia('(max-width: 768px)')
-    const set = () => setIsSmall(mql.matches)
-    set()
-    mql.addEventListener('change', set)
-    return () => mql.removeEventListener('change', set)
-  }, [])
-  return isSmall
-}
-
-function SortableSelectedCampingRow({ campingplatz }: { campingplatz: Campingplatz }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id: campingplatz.id,
-  })
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.6 : 1,
-  }
-
-  return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      className="flex items-center gap-2 py-1.5 px-2 rounded-md bg-muted/60 border border-muted-foreground/10"
-    >
-      <button
-        type="button"
-        {...attributes}
-        {...listeners}
-        className="flex items-center justify-center h-8 w-6 text-muted-foreground cursor-grab active:cursor-grabbing shrink-0"
-        style={{ touchAction: 'none' }}
-        aria-label="Campingplatz-Reihenfolge ändern"
-      >
-        <GripVertical className="h-4 w-4" />
-      </button>
-      <div className="flex-1 min-w-0">
-        <div className="text-sm font-medium truncate">{campingplatz.name}</div>
-        <div className="text-xs text-muted-foreground truncate">
-          {campingplatz.ort}, {campingplatz.land}
-          {campingplatz.bundesland && ` (${campingplatz.bundesland})`}
-        </div>
-      </div>
-    </div>
-  )
-}
 
 function UrlaubePageContent() {
   const router = useRouter()
@@ -183,45 +50,20 @@ function UrlaubePageContent() {
   const [vacationsViewMode, setVacationsViewMode] = useState<'aktuell' | 'archiv'>(() =>
     filterCampingplatzId ? 'archiv' : 'aktuell'
   )
-  const isSmallViewport = useIsSmallViewport()
   const [showNavSidebar, setShowNavSidebar] = useState(false)
   const [vacations, setVacations] = useState<Vacation[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [showNewVacationDialog, setShowNewVacationDialog] = useState(false)
   const [editingVacationId, setEditingVacationId] = useState<string | null>(null)
-  const [vacationMitreisende, setVacationMitreisende] = useState<Mitreisender[]>([])
   const [deleteVacationId, setDeleteVacationId] = useState<string | null>(null)
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
   const [vacationCampingplaetze, setVacationCampingplaetze] = useState<Record<string, Campingplatz[]>>(
     {}
   )
   const [allCampingplaetze, setAllCampingplaetze] = useState<Campingplatz[]>([])
-  const [campingSelectionIds, setCampingSelectionIds] = useState<string[]>([])
-  const [campingSearchOpen, setCampingSearchOpen] = useState(false)
   const [routeInfo, setRouteInfo] = useState<Record<string, CampingplatzRouteInfo>>({})
   const routeInfoRef = useRef(routeInfo)
   routeInfoRef.current = routeInfo
-  const [homeCoords, setHomeCoords] = useState<{ lat: number; lng: number } | null>(null)
-  const [homeCoordsLoaded, setHomeCoordsLoaded] = useState(false)
-  
-  const [newVacationForm, setNewVacationForm] = useState({
-    titel: '',
-    startdatum: '',
-    abfahrtdatum: '',
-    enddatum: '',
-    reiseziel_name: '',
-    reiseziel_adresse: '',
-    land_region: '',
-    packliste_default_ansicht: 'packliste' as 'packliste' | 'alles'
-  })
-  const [showVacationSettingsModal, setShowVacationSettingsModal] = useState(false)
-  const [abfahrtPopoverOpen, setAbfahrtPopoverOpen] = useState(false)
-  const [rangePopoverOpen, setRangePopoverOpen] = useState(false)
-  const [draftRange, setDraftRange] = useState<DateRange | undefined>(undefined)
-  const sensors = useSensors(
-    useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 8 } }),
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
-  )
 
   // Sidebar offen: Body-Scroll sperren
   useEffect(() => {
@@ -427,122 +269,8 @@ function UrlaubePageContent() {
     return allCampingplaetze.find((c) => c.id === filterCampingplatzId)?.name ?? null
   }, [filterCampingplatzId, allCampingplaetze])
 
-  const handleCreateVacation = async () => {
-    if (!newVacationForm.titel || !newVacationForm.startdatum || !newVacationForm.enddatum) {
-      alert('Bitte füllen Sie alle erforderlichen Felder aus')
-      return
-    }
-
-    setIsLoading(true)
-    try {
-      const method = editingVacationId ? 'PUT' : 'POST'
-      const { packliste_default_ansicht, ...restForm } = newVacationForm
-      const body = editingVacationId
-        ? { ...restForm, id: editingVacationId, packliste_default_ansicht }
-        : { ...restForm, packliste_default_ansicht }
-
-      const res = await fetch('/api/vacations', {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      })
-      const data = (await res.json()) as ApiResponse<Vacation>
-      if (data.success && data.data) {
-        const savedVacation = data.data
-        const vacationIdForCamping = savedVacation.id
-
-        if (campingSelectionIds.length >= 0) {
-          try {
-            const campingRes = await fetch('/api/vacations/campingplaetze', {
-              method: 'PUT',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                urlaubId: vacationIdForCamping,
-                campingplatzIds: campingSelectionIds,
-              }),
-            })
-            const campingData = (await campingRes.json()) as {
-              success?: boolean
-              error?: string
-            }
-            if (!campingData.success) {
-              alert(
-                'Fehler beim Speichern der Campingplätze: ' +
-                  (campingData.error ?? 'Unbekannt')
-              )
-            } else {
-              const selected = allCampingplaetze.filter((c) =>
-                campingSelectionIds.includes(c.id)
-              )
-              setVacationCampingplaetze((prev) => ({
-                ...prev,
-                [vacationIdForCamping]: selected,
-              }))
-            }
-          } catch (error) {
-            console.error('Failed to save vacation campingplaetze:', error)
-            alert('Fehler beim Speichern der Campingplätze.')
-          }
-        }
-
-        if (editingVacationId) {
-          setVacations(vacations.map((v) => (v.id === editingVacationId ? savedVacation : v)))
-        } else {
-          const newVacationId = savedVacation.id
-
-          if (vacationMitreisende.length > 0) {
-            const selectedIds = vacationMitreisende.map((m) => m.id)
-            await fetch('/api/mitreisende', {
-              method: 'PUT',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                vacationId: newVacationId,
-                mitreisendeIds: selectedIds,
-              }),
-            })
-          }
-
-          setVacations([...vacations, savedVacation])
-        }
-        setShowNewVacationDialog(false)
-        setEditingVacationId(null)
-        setNewVacationForm({
-          titel: '',
-          startdatum: '',
-          abfahrtdatum: '',
-          enddatum: '',
-          reiseziel_name: '',
-          reiseziel_adresse: '',
-          land_region: '',
-          packliste_default_ansicht: 'packliste',
-        })
-        setVacationMitreisende([])
-        setCampingSelectionIds([])
-      } else {
-        alert('Fehler beim Speichern des Urlaubs: ' + (data.error ?? 'Unbekannt'))
-      }
-    } catch (error) {
-      console.error('Failed to save vacation:', error)
-      alert('Fehler beim Speichern des Urlaubs')
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
   const handleEditVacation = (vacation: Vacation, fromDropdown = false) => {
     setEditingVacationId(vacation.id)
-    setNewVacationForm({
-      titel: vacation.titel,
-      startdatum: vacation.startdatum,
-      abfahrtdatum: vacation.abfahrtdatum || '',
-      enddatum: vacation.enddatum,
-      reiseziel_name: vacation.reiseziel_name,
-      reiseziel_adresse: vacation.reiseziel_adresse || '',
-      land_region: vacation.land_region || '',
-      packliste_default_ansicht: (vacation.packliste_default_ansicht === 'alles' ? 'alles' : 'packliste') as 'packliste' | 'alles'
-    })
-    const existingCamping = vacationCampingplaetze[vacation.id] ?? []
-    setCampingSelectionIds(existingCamping.map((c) => c.id))
     if (fromDropdown) {
       requestAnimationFrame(() => {
         requestAnimationFrame(() => setShowNewVacationDialog(true))
@@ -550,25 +278,6 @@ function UrlaubePageContent() {
     } else {
       setShowNewVacationDialog(true)
     }
-  }
-
-  const handleCloseVacationDialog = () => {
-    setShowNewVacationDialog(false)
-    setEditingVacationId(null)
-    setAbfahrtPopoverOpen(false)
-    setShowVacationSettingsModal(false)
-    setNewVacationForm({
-      titel: '',
-      startdatum: '',
-      abfahrtdatum: '',
-      enddatum: '',
-      reiseziel_name: '',
-      reiseziel_adresse: '',
-      land_region: '',
-      packliste_default_ansicht: 'packliste'
-    })
-    setVacationMitreisende([])
-    setCampingSelectionIds([])
   }
 
   const handleDeleteVacation = (vacationId: string) => {
@@ -599,54 +308,7 @@ function UrlaubePageContent() {
   }
 
   const handleSelectVacation = (vacationId: string) => {
-    // Navigate to home page with selected vacation
     router.push(`/?vacation=${vacationId}`)
-  }
-
-  const openInAdacMaps = async (campingplatz: Campingplatz) => {
-    // Wenn Koordinaten des Campingplatzes fehlen, auf generische Routenplaner-Ansicht mit POI-Name zurückfallen
-    if (campingplatz.lat == null || campingplatz.lng == null) {
-      const labelFallback = `${campingplatz.name}, ${campingplatz.ort}, ${campingplatz.land}`
-      const urlFallback = `https://maps.adac.de/routenplaner?poi=${encodeURIComponent(labelFallback)}`
-      window.open(urlFallback, '_blank')
-      return
-    }
-
-    // Heimatkoordinaten (Start) einmalig laden und im State cachen
-    let coords = homeCoords
-    if (!homeCoordsLoaded) {
-      try {
-        const res = await fetch('/api/profile/home-location')
-        const data = (await res.json()) as ApiResponse<{
-          heimat_adresse: string | null
-          heimat_lat: number | null
-          heimat_lng: number | null
-        }>
-        if (data.success && data.data && data.data.heimat_lat != null && data.data.heimat_lng != null) {
-          coords = { lat: data.data.heimat_lat, lng: data.data.heimat_lng }
-          setHomeCoords(coords)
-        } else {
-          coords = null
-        }
-      } catch {
-        coords = null
-      } finally {
-        setHomeCoordsLoaded(true)
-      }
-    }
-
-    // Wenn keine Heimatkoordinaten vorhanden sind, notfalls nur das Ziel vorbelegen
-    if (!coords) {
-      const targetOnly = `${campingplatz.lat.toFixed(5)}_${campingplatz.lng.toFixed(5)}_6_0`
-      const urlOnly = `https://maps.adac.de/route?vehicle-type=trailer&places=${targetOnly}`
-      window.open(urlOnly, '_blank')
-      return
-    }
-
-    const start = `${coords.lat.toFixed(5)}_${coords.lng.toFixed(5)}_1_0`
-    const target = `${campingplatz.lat.toFixed(5)}_${campingplatz.lng.toFixed(5)}_6_0`
-    const url = `https://maps.adac.de/route?vehicle-type=trailer&places=${start},${target}`
-    window.open(url, '_blank')
   }
 
   // Verhindert, dass der Card-Touch (nach Dropdown-Auswahl) als Klick zählt – nur auf Mobile relevant
@@ -657,7 +319,7 @@ function UrlaubePageContent() {
       ignoreNextCardClickRef.current = false
       return
     }
-    handleSelectVacation(vacationId)
+    router.push(`/urlaube/${vacationId}`)
   }
 
   const formatVacationDateRange = (start: string, end: string) => {
@@ -758,525 +420,28 @@ function UrlaubePageContent() {
             </DropdownMenu>
           </div>
 
-          {/* Dialog für Neuer Urlaub - Drawer auf Mobile */}
-          <ResponsiveModal
+          <VacationEditModal
             open={showNewVacationDialog}
             onOpenChange={(open) => {
-              if (!open) handleCloseVacationDialog()
-              else setShowNewVacationDialog(true)
+              setShowNewVacationDialog(open)
+              if (!open) setEditingVacationId(null)
             }}
-            title={editingVacationId ? 'Urlaub bearbeiten' : 'Neuen Urlaub erstellen'}
-            description={editingVacationId ? 'Bearbeiten Sie die Details des Urlaubs' : 'Geben Sie die Details für Ihren neuen Urlaub ein'}
-            contentClassName="max-w-2xl max-h-[90vh] overflow-y-auto"
-          >
-            <div className="space-y-4">
-                  <div className="flex justify-end -mt-1">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                      onClick={() => setShowVacationSettingsModal(true)}
-                      aria-label="Urlaub-Einstellungen"
-                    >
-                      <Settings className="h-4 w-4" />
-                    </Button>
-                  </div>
-                  <div>
-                    <Label htmlFor="titel">Titel *</Label>
-                    <Input
-                      id="titel"
-                      placeholder="z.B. Sommerurlaub 2024"
-                      value={newVacationForm.titel}
-                      onChange={(e) =>
-                        setNewVacationForm({ ...newVacationForm, titel: e.target.value })
-                      }
-                    />
-                  </div>
-                  <div className="space-y-4">
-                    <div>
-                      <Label>Reisedatum *</Label>
-                      {isSmallViewport ? (
-                        <>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className={cn(
-                              'w-full justify-start text-left font-normal',
-                              !newVacationForm.startdatum && !newVacationForm.enddatum && 'text-muted-foreground'
-                            )}
-                            onClick={() => {
-                              const from = newVacationForm.startdatum ? new Date(newVacationForm.startdatum) : undefined
-                              const to = newVacationForm.enddatum ? new Date(newVacationForm.enddatum) : undefined
-                              setDraftRange(from ? { from, to: to ?? from } : undefined)
-                              setRangePopoverOpen(true)
-                            }}
-                          >
-                            <CalendarIcon className="mr-2 h-4 w-4" />
-                            {newVacationForm.startdatum && newVacationForm.enddatum ? (
-                              <>
-                                {format(new Date(newVacationForm.startdatum), 'EE, dd. MMM yyyy', { locale: de })} - {format(new Date(newVacationForm.enddatum), 'EE, dd. MMM yyyy', { locale: de })}
-                              </>
-                            ) : (
-                              <span>Start- und Enddatum wählen</span>
-                            )}
-                          </Button>
-                          <Dialog
-                            open={rangePopoverOpen}
-                            onOpenChange={(open) => {
-                              setRangePopoverOpen(open)
-                              if (!open) setDraftRange(undefined)
-                            }}
-                          >
-                            <DialogContent className="p-0 gap-0 w-[calc(100vw-2rem)] max-w-[420px] max-h-[90vh] overflow-y-auto">
-                              <DialogHeader className="px-3 pt-2 pb-0">
-                                <DialogTitle>Reisedatum wählen</DialogTitle>
-                              </DialogHeader>
-                              <div className="flex justify-center w-full px-2">
-                                <Calendar
-                                  mode="range"
-                                  className="p-2"
-                                  classNames={{
-                                    months: 'flex flex-col sm:flex-row space-y-1 sm:space-x-4 sm:space-y-0',
-                                    month: 'space-y-1'
-                                  }}
-                                  defaultMonth={
-                                    draftRange?.from
-                                      ? draftRange.from
-                                      : newVacationForm.startdatum
-                                        ? new Date(newVacationForm.startdatum)
-                                        : new Date()
-                                  }
-                                  selected={
-                                    draftRange ??
-                                    (newVacationForm.startdatum && newVacationForm.enddatum
-                                      ? {
-                                          from: new Date(newVacationForm.startdatum),
-                                          to: new Date(newVacationForm.enddatum)
-                                        }
-                                      : undefined)
-                                  }
-                                  onSelect={(range: DateRange | undefined) => {
-                                    if (range?.from) {
-                                      setDraftRange({
-                                        from: range.from,
-                                        to: range.to ?? range.from
-                                      })
-                                    }
-                                  }}
-                                  locale={de}
-                                  numberOfMonths={2}
-                                  components={{ Caption: RangeCalendarCaption }}
-                                />
-                              </div>
-                              <div className="flex gap-2 p-2 border-t bg-muted/30">
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  className="flex-1 bg-[rgb(45,79,30)] text-white hover:bg-[rgb(45,79,30)]/90 hover:text-white border-[rgb(45,79,30)]"
-                                  disabled={!draftRange?.from}
-                                  onClick={() => {
-                                    if (!draftRange?.from) return
-                                    setNewVacationForm((prev) => ({
-                                      ...prev,
-                                      startdatum: format(draftRange.from!, 'yyyy-MM-dd'),
-                                      enddatum: format((draftRange.to ?? draftRange.from)!, 'yyyy-MM-dd')
-                                    }))
-                                    setRangePopoverOpen(false)
-                                    setDraftRange(undefined)
-                                  }}
-                                >
-                                  OK
-                                </Button>
-                              </div>
-                            </DialogContent>
-                          </Dialog>
-                        </>
-                      ) : (
-                        <Popover
-                          open={rangePopoverOpen}
-                          onOpenChange={(open) => {
-                            setRangePopoverOpen(open)
-                            if (open) {
-                              const from = newVacationForm.startdatum ? new Date(newVacationForm.startdatum) : undefined
-                              const to = newVacationForm.enddatum ? new Date(newVacationForm.enddatum) : undefined
-                              setDraftRange(from ? { from, to: to ?? from } : undefined)
-                            } else {
-                              setDraftRange(undefined)
-                            }
-                          }}
-                        >
-                          <PopoverTrigger asChild>
-                            <Button
-                              variant="outline"
-                              className={cn(
-                                'w-full justify-start text-left font-normal',
-                                !newVacationForm.startdatum && !newVacationForm.enddatum && 'text-muted-foreground'
-                              )}
-                            >
-                              <CalendarIcon className="mr-2 h-4 w-4" />
-                              {newVacationForm.startdatum && newVacationForm.enddatum ? (
-                                <>
-                                  {format(new Date(newVacationForm.startdatum), 'EE, dd. MMM yyyy', { locale: de })} - {format(new Date(newVacationForm.enddatum), 'EE, dd. MMM yyyy', { locale: de })}
-                                </>
-                              ) : (
-                                <span>Start- und Enddatum wählen</span>
-                              )}
-                            </Button>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-auto p-0" align="start" side="bottom">
-                            <Calendar
-                              mode="range"
-                              defaultMonth={
-                                draftRange?.from
-                                  ? draftRange.from
-                                  : newVacationForm.startdatum
-                                    ? new Date(newVacationForm.startdatum)
-                                    : new Date()
-                              }
-                              selected={
-                                draftRange ??
-                                (newVacationForm.startdatum && newVacationForm.enddatum
-                                  ? {
-                                      from: new Date(newVacationForm.startdatum),
-                                      to: new Date(newVacationForm.enddatum)
-                                    }
-                                  : undefined)
-                              }
-                              onSelect={(range: DateRange | undefined) => {
-                                if (range?.from) {
-                                  setDraftRange({
-                                    from: range.from,
-                                    to: range.to ?? range.from
-                                  })
-                                }
-                              }}
-                              locale={de}
-                              numberOfMonths={2}
-                              components={{ Caption: RangeCalendarCaption }}
-                            />
-                            <div className="flex gap-2 p-3 border-t bg-muted/30">
-                              <Button
-                                type="button"
-                                size="sm"
-                                className="flex-1 bg-[rgb(45,79,30)] text-white hover:bg-[rgb(45,79,30)]/90 hover:text-white border-[rgb(45,79,30)]"
-                                disabled={!draftRange?.from}
-                                onClick={() => {
-                                  if (!draftRange?.from) return
-                                  setNewVacationForm((prev) => ({
-                                    ...prev,
-                                    startdatum: format(draftRange.from!, 'yyyy-MM-dd'),
-                                    enddatum: format((draftRange.to ?? draftRange.from)!, 'yyyy-MM-dd')
-                                  }))
-                                  setRangePopoverOpen(false)
-                                  setDraftRange(undefined)
-                                }}
-                              >
-                                OK
-                              </Button>
-                            </div>
-                          </PopoverContent>
-                        </Popover>
-                      )}
-                    </div>
-
-                    {/* Reisebeginn – dezenter, nur bei Abweichung prominent */}
-                    <div className="text-sm text-muted-foreground">
-                      <Label className="text-xs font-normal text-muted-foreground">Reisebeginn (optional)</Label>
-                      {newVacationForm.abfahrtdatum ? (
-                        <div className="flex items-center gap-2 mt-1">
-                          <span className="text-foreground font-medium">
-                            {format(new Date(newVacationForm.abfahrtdatum), 'EE, dd. MMM yyyy', { locale: de })}
-                          </span>
-                          <Popover open={abfahrtPopoverOpen} onOpenChange={setAbfahrtPopoverOpen}>
-                            <PopoverTrigger asChild>
-                              <Button variant="outline" size="sm" className="h-7 text-xs">
-                                Ändern
-                              </Button>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-auto p-0 bg-white" align="start">
-                              <Calendar
-                                mode="single"
-                                defaultMonth={new Date(newVacationForm.abfahrtdatum)}
-                                selected={new Date(newVacationForm.abfahrtdatum)}
-                                onSelect={(date) => {
-                                  if (date) {
-                                    setNewVacationForm((prev) => ({
-                                      ...prev,
-                                      abfahrtdatum: format(date, 'yyyy-MM-dd')
-                                    }))
-                                  }
-                                }}
-                                locale={de}
-                              />
-                              <div className="flex gap-2 p-3 border-t bg-muted/30">
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="sm"
-                                  className="flex-1 bg-[rgb(45,79,30)] text-white hover:bg-[rgb(45,79,30)]/90 hover:text-white border-[rgb(45,79,30)]"
-                                  onClick={() => setAbfahrtPopoverOpen(false)}
-                                >
-                                  OK
-                                </Button>
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="sm"
-                                  className="flex-1"
-                                  onClick={() => {
-                                    setNewVacationForm((prev) => ({ ...prev, abfahrtdatum: '' }))
-                                    setAbfahrtPopoverOpen(false)
-                                  }}
-                                >
-                                  Löschen
-                                </Button>
-                              </div>
-                            </PopoverContent>
-                          </Popover>
-                        </div>
-                      ) : (
-                        <Popover open={abfahrtPopoverOpen} onOpenChange={setAbfahrtPopoverOpen}>
-                          <PopoverTrigger asChild>
-                            <button
-                              type="button"
-                              className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 mt-1"
-                            >
-                              Reisebeginn wählen
-                            </button>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-auto p-0 bg-white" align="start">
-                            <Calendar
-                              mode="single"
-                              defaultMonth={
-                                newVacationForm.startdatum
-                                  ? new Date(newVacationForm.startdatum)
-                                  : new Date()
-                              }
-                              selected={undefined}
-                              onSelect={(date) => {
-                                if (date) {
-                                  setNewVacationForm((prev) => ({
-                                    ...prev,
-                                    abfahrtdatum: format(date, 'yyyy-MM-dd')
-                                  }))
-                                }
-                              }}
-                              locale={de}
-                            />
-                            <div className="flex gap-2 p-3 border-t bg-muted/30">
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                className="flex-1 bg-[rgb(45,79,30)] text-white hover:bg-[rgb(45,79,30)]/90 hover:text-white border-[rgb(45,79,30)]"
-                                onClick={() => {
-                                  const start = newVacationForm.startdatum
-                                    ? new Date(newVacationForm.startdatum)
-                                    : new Date()
-                                  setNewVacationForm((prev) => ({
-                                    ...prev,
-                                    abfahrtdatum: format(start, 'yyyy-MM-dd')
-                                  }))
-                                  setAbfahrtPopoverOpen(false)
-                                }}
-                              >
-                                OK
-                              </Button>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                className="flex-1"
-                                onClick={() => {
-                                  setNewVacationForm((prev) => ({ ...prev, abfahrtdatum: '' }))
-                                  setAbfahrtPopoverOpen(false)
-                                }}
-                              >
-                                Löschen
-                              </Button>
-                            </div>
-                          </PopoverContent>
-                        </Popover>
-                      )}
-                      {!newVacationForm.abfahrtdatum && (
-                        <p className="text-xs text-muted-foreground mt-0.5">
-                          Ohne Angabe gilt das Startdatum als Reisebeginn.
-                        </p>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>Campingplätze für diesen Urlaub</Label>
-                    <div className="space-y-2">
-                      <div>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className="w-full justify-between"
-                          onClick={() => setCampingSearchOpen(true)}
-                        >
-                          <span>Campingplatz hinzufügen…</span>
-                        </Button>
-                        <Dialog open={campingSearchOpen} onOpenChange={setCampingSearchOpen}>
-                          <DialogContent className="p-0 max-w-lg">
-                            <DialogHeader className="px-4 pt-4 pb-2">
-                              <DialogTitle>Campingplatz auswählen</DialogTitle>
-                            </DialogHeader>
-                            <Command>
-                              <CommandInput placeholder="Name, Ort, Bundesland oder Land eingeben…" />
-                              <CommandList>
-                                <CommandEmpty>Keine Campingplätze gefunden.</CommandEmpty>
-                                <CommandGroup heading="Campingplätze">
-                                  {allCampingplaetze
-                                    .filter((c) => !c.is_archived)
-                                    .sort((a, b) => a.name.localeCompare(b.name))
-                                    .map((c) => (
-                                      <CommandItem
-                                        key={c.id}
-                                        value={`${c.name} ${c.ort} ${c.bundesland ?? ''} ${c.land}`}
-                                        onSelect={() => {
-                                          setCampingSelectionIds((prev) =>
-                                            prev.includes(c.id) ? prev : [...prev, c.id]
-                                          )
-                                          setCampingSearchOpen(false)
-                                        }}
-                                      >
-                                        <div className="flex flex-col">
-                                          <span className="font-medium text-sm">{c.name}</span>
-                                          <span className="text-xs text-muted-foreground">
-                                            {c.ort}, {c.land}
-                                            {c.bundesland && ` (${c.bundesland})`}
-                                          </span>
-                                        </div>
-                                      </CommandItem>
-                                    ))}
-                                </CommandGroup>
-                              </CommandList>
-                            </Command>
-                          </DialogContent>
-                        </Dialog>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Öffnen Sie die Suche, um einen Campingplatz zu finden und zur Liste
-                          hinzuzufügen.
-                        </p>
-                      </div>
-                      <div className="space-y-1">
-                        <DndContext
-                          sensors={sensors}
-                          collisionDetection={closestCenter}
-                          onDragEnd={(event: DragEndEvent) => {
-                            const { active, over } = event
-                            if (!over || active.id === over.id) return
-                            setCampingSelectionIds((prev) => {
-                              const oldIndex = prev.indexOf(String(active.id))
-                              const newIndex = prev.indexOf(String(over.id))
-                              if (oldIndex === -1 || newIndex === -1) return prev
-                              return arrayMove(prev, oldIndex, newIndex)
-                            })
-                          }}
-                        >
-                          <SortableContext
-                            items={campingSelectionIds}
-                            strategy={verticalListSortingStrategy}
-                          >
-                            <div className="space-y-1">
-                              {campingSelectionIds.length === 0 ? (
-                                <p className="text-xs text-muted-foreground">
-                                  Noch keine Campingplätze ausgewählt.
-                                </p>
-                              ) : (
-                                campingSelectionIds.map((id) => {
-                                  const c = allCampingplaetze.find((cp) => cp.id === id)
-                                  if (!c) return null
-                                  return (
-                                    <div key={id} className="flex items-center gap-2">
-                                      <div className="flex-1">
-                                        <SortableSelectedCampingRow campingplatz={c} />
-                                      </div>
-                                      <Button
-                                        type="button"
-                                        variant="ghost"
-                                        size="icon"
-                                        className="h-7 w-7 text-xs"
-                                        onClick={() =>
-                                          setCampingSelectionIds((prev) =>
-                                            prev.filter((x) => x !== id)
-                                          )
-                                        }
-                                      >
-                                        ×
-                                      </Button>
-                                    </div>
-                                  )
-                                })
-                              )}
-                            </div>
-                          </SortableContext>
-                        </DndContext>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  {/* Mitreisenden-Verwaltung */}
-                  <MitreisendeManager 
-                    vacationId={editingVacationId}
-                    onMitreisendeChange={setVacationMitreisende}
-                  />
-                  
-                  <Button onClick={handleCreateVacation} disabled={isLoading} className="w-full">
-                    {isLoading ? 'Wird gespeichert...' : editingVacationId ? 'Urlaub aktualisieren' : 'Urlaub erstellen'}
-                  </Button>
-                </div>
-          </ResponsiveModal>
-
-          {/* Urlaub-Einstellungen: Standardansicht (dezentes Modal) */}
-          <ResponsiveModal
-            open={showVacationSettingsModal}
-            onOpenChange={setShowVacationSettingsModal}
-            title="Urlaub-Einstellungen"
-            description="Optionale Einstellungen für diesen Urlaub"
-            contentClassName="max-w-sm"
-          >
-            <div className="space-y-4">
-              <div>
-                <Label className="text-sm text-muted-foreground">Standardansicht der Packliste</Label>
-                <p className="text-xs text-muted-foreground mt-0.5 mb-2">
-                  Welche Ansicht beim Öffnen der Packliste standardmäßig angezeigt wird.
-                </p>
-                <div className="flex rounded-lg border border-gray-200 p-0.5 bg-gray-50 overflow-hidden">
-                  <button
-                    type="button"
-                    onClick={() => setNewVacationForm((prev) => ({ ...prev, packliste_default_ansicht: 'packliste' }))}
-                    className={cn(
-                      'flex-1 py-2 text-sm transition-colors',
-                      newVacationForm.packliste_default_ansicht === 'packliste'
-                        ? 'bg-white text-[rgb(45,79,30)] shadow-sm rounded-md font-medium'
-                        : 'text-gray-600 hover:text-gray-900'
-                    )}
-                  >
-                    Packliste
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setNewVacationForm((prev) => ({ ...prev, packliste_default_ansicht: 'alles' }))}
-                    className={cn(
-                      'flex-1 py-2 text-sm transition-colors',
-                      newVacationForm.packliste_default_ansicht === 'alles'
-                        ? 'bg-white text-[rgb(45,79,30)] shadow-sm rounded-md font-medium'
-                        : 'text-gray-600 hover:text-gray-900'
-                    )}
-                  >
-                    Alles
-                  </button>
-                </div>
-              </div>
-              <Button variant="outline" className="w-full" onClick={() => setShowVacationSettingsModal(false)}>
-                Schließen
-              </Button>
-            </div>
-          </ResponsiveModal>
+            vacationId={editingVacationId}
+            onSaved={({ vacation, campingplaetze, isNew }) => {
+              if (isNew) {
+                setVacations((prev) => [...prev, vacation])
+                router.push(`/urlaube/${vacation.id}`)
+              } else {
+                setVacations((prev) =>
+                  prev.map((v) => (v.id === vacation.id ? vacation : v))
+                )
+              }
+              setVacationCampingplaetze((prev) => ({
+                ...prev,
+                [vacation.id]: campingplaetze,
+              }))
+            }}
+          />
 
           {/* Urlaub löschen – Bestätigung */}
           <ConfirmDialog
@@ -1337,7 +502,7 @@ function UrlaubePageContent() {
                     <div className="flex justify-between items-start">
                       <div className="flex-1">
                         <CardTitle>{vacation.titel}</CardTitle>
-                        <CardDescription>
+                        <div className="text-sm text-muted-foreground">
                           <div className="space-y-1 mt-2">
                             {vacation.abfahrtdatum && (
                               <p>
@@ -1356,7 +521,7 @@ function UrlaubePageContent() {
                               </p>
                             )}
                           </div>
-                        </CardDescription>
+                        </div>
                       </div>
                       <DropdownMenu open={openMenuId === vacation.id} onOpenChange={(o) => setOpenMenuId(o ? vacation.id : null)}>
                         <DropdownMenuTrigger asChild>
@@ -1421,10 +586,23 @@ function UrlaubePageContent() {
                             return (
                               <div
                                 key={cp.id}
+                                role="button"
+                                tabIndex={0}
                                 className={cn(
-                                  'bg-white rounded-xl border border-gray-200 shadow-sm px-3 py-2 flex items-start justify-between gap-3',
+                                  'bg-white rounded-xl border border-gray-200 shadow-sm px-3 py-2 flex items-start justify-between gap-3 cursor-pointer transition-colors hover:bg-neutral-50',
                                   cp.is_archived && 'opacity-60 bg-muted/60'
                                 )}
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  router.push(`/campingplaetze/${cp.id}`)
+                                }}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter' || e.key === ' ') {
+                                    e.preventDefault()
+                                    e.stopPropagation()
+                                    router.push(`/campingplaetze/${cp.id}`)
+                                  }
+                                }}
                               >
                                 <div className="flex gap-3 flex-1 min-w-0">
                                   {(() => {
@@ -1477,33 +655,6 @@ function UrlaubePageContent() {
                                     )}
                                   </div>
                                 </div>
-                                <div className="flex flex-col items-end gap-2">
-                                  <DropdownMenu>
-                                    <DropdownMenuTrigger asChild>
-                                      <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        className="h-8 w-8 p-0"
-                                        onClick={(e) => e.stopPropagation()}
-                                      >
-                                        <MoreVertical className="h-4 w-4" />
-                                      </Button>
-                                    </DropdownMenuTrigger>
-                                    <DropdownMenuContent
-                                      align="end"
-                                      onClick={(e) => e.stopPropagation()}
-                                    >
-                                      <DropdownMenuItem
-                                        onSelect={() => {
-                                          void openInAdacMaps(cp)
-                                        }}
-                                      >
-                                        <Route className="h-4 w-4 mr-2" />
-                                        ADAC Routenplanung öffnen
-                                      </DropdownMenuItem>
-                                    </DropdownMenuContent>
-                                  </DropdownMenu>
-                                </div>
                               </div>
                             )
                           })
@@ -1523,18 +674,6 @@ function UrlaubePageContent() {
             size="icon"
             onClick={() => {
               setEditingVacationId(null)
-              setNewVacationForm({
-                titel: '',
-                startdatum: '',
-                abfahrtdatum: '',
-                enddatum: '',
-                reiseziel_name: '',
-                reiseziel_adresse: '',
-                land_region: '',
-                packliste_default_ansicht: 'packliste',
-              })
-              setVacationMitreisende([])
-              setCampingSelectionIds([])
               setShowNewVacationDialog(true)
             }}
             className="h-14 w-14 rounded-full shadow-lg hover:shadow-xl transition-shadow bg-[rgb(45,79,30)] hover:bg-[rgb(45,79,30)]/90 text-white aspect-square p-0"
@@ -1548,10 +687,11 @@ function UrlaubePageContent() {
   )
 }
 
-/** Remount wenn sich die Suchparameter ändern, damit clientseitiges Navigieren /urlaube ↔ ?campingplatz= nie veralteten View-Modus übernimmt. */
+/** Remount wenn sich der Campingplatz-Filter ändert, damit clientseitiges Navigieren /urlaube ↔ ?campingplatz= nie veralteten View-Modus übernimmt. */
 function UrlaubePageGate() {
   const searchParams = useSearchParams()
-  return <UrlaubePageContent key={searchParams.toString()} />
+  const campingFilter = searchParams.get('campingplatz') ?? ''
+  return <UrlaubePageContent key={campingFilter} />
 }
 
 export default function UrlaubePage() {

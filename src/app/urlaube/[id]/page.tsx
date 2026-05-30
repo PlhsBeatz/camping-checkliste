@@ -1,0 +1,583 @@
+'use client'
+
+import { useAuth } from '@/components/auth-provider'
+import { useParams, useRouter } from 'next/navigation'
+import Link from 'next/link'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Button } from '@/components/ui/button'
+import { NavigationSidebar } from '@/components/navigation-sidebar'
+import { VacationEditModal } from '@/components/vacation-edit-modal'
+import { UrlaubOverviewMap } from '@/components/urlaub-overview-map'
+import {
+  ArrowLeft,
+  ListChecks,
+  Menu,
+  MoreVertical,
+  Pencil,
+  Route,
+  Trash2,
+  Users,
+} from 'lucide-react'
+import { cn } from '@/lib/utils'
+import type { ApiResponse } from '@/lib/api-types'
+import { Vacation, Mitreisender, Campingplatz } from '@/lib/db'
+import Image from 'next/image'
+import { campingplatzListThumbnailSrc } from '@/lib/campingplatz-photo-url'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import { Card, CardContent } from '@/components/ui/card'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { format, isSameMonth, isSameYear } from 'date-fns'
+import { de } from 'date-fns/locale'
+import {
+  getCachedVacations,
+  getCachedVacationMitreisende,
+} from '@/lib/offline-sync'
+import { useReconnectRefetch } from '@/hooks/use-reconnect-refetch'
+import { openCampingplatzInAdacMaps } from '@/lib/adac-maps'
+import { getVacationCountdown } from '@/lib/vacation-helpers'
+
+type CampingplatzRouteInfo = {
+  distanceKm: number
+  durationMinutes: number
+}
+
+function formatVacationDateRange(start: string, end: string) {
+  const startDate = new Date(start)
+  const endDate = new Date(end)
+  const sameYear = isSameYear(startDate, endDate)
+  const sameMonth = isSameMonth(startDate, endDate)
+
+  const dayStart = format(startDate, 'd.', { locale: de })
+  const dayEnd = format(endDate, 'd.', { locale: de })
+
+  if (sameYear && sameMonth) {
+    const monthYear = format(endDate, 'LLLL yyyy', { locale: de })
+    return `${dayStart} bis ${dayEnd} ${monthYear}`
+  }
+
+  if (sameYear && !sameMonth) {
+    const partStart = format(startDate, 'd. LLLL', { locale: de })
+    const partEnd = format(endDate, 'd. LLLL yyyy', { locale: de })
+    return `${partStart} bis ${partEnd}`
+  }
+
+  const fullStart = format(startDate, 'd. LLLL yyyy', { locale: de })
+  const fullEnd = format(endDate, 'd. LLLL yyyy', { locale: de })
+  return `${fullStart} bis ${fullEnd}`
+}
+
+function formatDurationMinutes(durationMinutes: number) {
+  const hours = Math.floor(durationMinutes / 60)
+  const minutes = Math.round(durationMinutes % 60)
+  const parts: string[] = []
+  if (hours > 0) parts.push(`${hours} h`)
+  if (minutes > 0 || hours === 0) parts.push(`${minutes} min`)
+  return parts.join(' ')
+}
+
+function CountdownHeader({ vacation }: { vacation: Vacation }) {
+  const countdown = getVacationCountdown(vacation)
+  const isPast = countdown.tone === 'past'
+
+  return (
+    <div
+      className={cn(
+        'rounded-t-lg px-4 py-2.5 text-center md:py-4',
+        isPast
+          ? 'bg-[hsl(103,32%,88%)] text-[rgb(45,79,30)]'
+          : 'bg-[rgb(45,79,30)] text-white'
+      )}
+    >
+      <p className="text-lg font-bold tracking-tight md:text-2xl">{countdown.primary}</p>
+      {countdown.secondary && (
+        <p
+          className={cn(
+            'mt-0.5 text-xs md:text-sm',
+            isPast ? 'opacity-80' : 'text-white/85'
+          )}
+        >
+          {countdown.secondary}
+        </p>
+      )}
+    </div>
+  )
+}
+
+export default function UrlaubDetailPage() {
+  const params = useParams()
+  const id = typeof params.id === 'string' ? params.id : ''
+  const router = useRouter()
+  const { user, loading, canAccessConfig } = useAuth()
+  const [showNavSidebar, setShowNavSidebar] = useState(false)
+  const [vacation, setVacation] = useState<Vacation | null>(null)
+  const [mitreisende, setMitreisende] = useState<Mitreisender[]>([])
+  const [campingplaetze, setCampingplaetze] = useState<Campingplatz[]>([])
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [deleteBusy, setDeleteBusy] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [editOpen, setEditOpen] = useState(false)
+  const [routeInfo, setRouteInfo] = useState<Record<string, CampingplatzRouteInfo>>({})
+  const [homeCoords, setHomeCoords] = useState<{
+    lat: number
+    lng: number
+    label?: string
+  } | null>(null)
+  const routeInfoRef = useRef(routeInfo)
+  routeInfoRef.current = routeInfo
+
+  const load = useCallback(async () => {
+    if (!id) return
+    setLoadError(null)
+    try {
+      const res = await fetch(`/api/vacations/${id}`)
+      const data = (await res.json()) as ApiResponse<{
+        vacation: Vacation
+        mitreisende: Mitreisender[]
+        campingplaetze: Campingplatz[]
+      }>
+      if (!data.success || !data.data) {
+        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+          const cached = await getCachedVacations()
+          const v = cached.find((c) => c.id === id)
+          if (v) {
+            setVacation(v)
+            setMitreisende(await getCachedVacationMitreisende(id))
+            setCampingplaetze([])
+            return
+          }
+        }
+        setLoadError(data.error ?? 'Nicht gefunden')
+        setVacation(null)
+        setMitreisende([])
+        setCampingplaetze([])
+        return
+      }
+      setVacation(data.data.vacation)
+      setMitreisende(data.data.mitreisende)
+      setCampingplaetze(data.data.campingplaetze)
+    } catch {
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        const cached = await getCachedVacations()
+        const v = cached.find((c) => c.id === id)
+        if (v) {
+          setVacation(v)
+          setMitreisende(await getCachedVacationMitreisende(id))
+          setCampingplaetze([])
+          return
+        }
+      }
+      setLoadError('Laden fehlgeschlagen')
+      setVacation(null)
+      setMitreisende([])
+      setCampingplaetze([])
+    }
+  }, [id])
+
+  useEffect(() => {
+    if (!loading && !user) router.replace('/login')
+  }, [loading, user, router])
+
+  useEffect(() => {
+    void load()
+  }, [load])
+
+  useReconnectRefetch(load)
+
+  useEffect(() => {
+    let aborted = false
+    void (async () => {
+      try {
+        const res = await fetch('/api/profile/home-location')
+        const data = (await res.json()) as ApiResponse<{
+          heimat_adresse: string | null
+          heimat_lat: number | null
+          heimat_lng: number | null
+        }>
+        if (aborted) return
+        if (
+          data.success &&
+          data.data?.heimat_lat != null &&
+          data.data.heimat_lng != null
+        ) {
+          setHomeCoords({
+            lat: data.data.heimat_lat,
+            lng: data.data.heimat_lng,
+            label: data.data.heimat_adresse ?? 'Heimatadresse',
+          })
+        } else {
+          setHomeCoords(null)
+        }
+      } catch {
+        if (!aborted) setHomeCoords(null)
+      }
+    })()
+    return () => {
+      aborted = true
+    }
+  }, [])
+
+  useEffect(() => {
+    if (campingplaetze.length === 0) return
+    let aborted = false
+    const controller = new AbortController()
+
+    const loadRoutes = async () => {
+      for (const cp of campingplaetze) {
+        if (aborted) return
+        if (!cp.lat || !cp.lng) continue
+        if (routeInfoRef.current[cp.id]) continue
+        try {
+          const res = await fetch('/api/routes/campingplatz', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ campingplatzId: cp.id }),
+            signal: controller.signal,
+          })
+          if (!res.ok || aborted) continue
+          const data = (await res.json()) as {
+            success?: boolean
+            data?: CampingplatzRouteInfo
+          }
+          if (!data.success || !data.data) continue
+          setRouteInfo((prev) =>
+            prev[cp.id] ? prev : { ...prev, [cp.id]: data.data! }
+          )
+        } catch {
+          if (aborted) return
+        }
+      }
+    }
+
+    void loadRoutes()
+    return () => {
+      aborted = true
+      controller.abort()
+    }
+  }, [campingplaetze])
+
+  const mapCampingplaetze = useMemo(
+    () =>
+      campingplaetze
+        .filter((cp) => cp.lat != null && cp.lng != null)
+        .map((cp) => ({
+          id: cp.id,
+          lat: cp.lat!,
+          lng: cp.lng!,
+          name: cp.name,
+        })),
+    [campingplaetze]
+  )
+
+  const executeDelete = async () => {
+    if (!vacation) return
+    setDeleteBusy(true)
+    try {
+      const res = await fetch(`/api/vacations?id=${vacation.id}`, { method: 'DELETE' })
+      const data = (await res.json()) as ApiResponse<boolean>
+      if (!data.success) {
+        alert('Fehler beim Löschen: ' + (data.error ?? 'Unbekannt'))
+      } else {
+        router.push('/urlaube')
+      }
+    } catch {
+      alert('Fehler beim Löschen des Urlaubs.')
+    } finally {
+      setDeleteBusy(false)
+      setShowDeleteConfirm(false)
+    }
+  }
+
+  const subtitle = vacation
+    ? formatVacationDateRange(vacation.startdatum, vacation.enddatum)
+    : '—'
+
+  if (!id) return null
+
+  return (
+    <div className="min-h-screen flex max-w-full overflow-x-clip">
+      <NavigationSidebar isOpen={showNavSidebar} onClose={() => setShowNavSidebar(false)} />
+
+      <div className={cn('flex-1 transition-all duration-300 min-w-0', 'lg:ml-[280px]')}>
+        <div className="container mx-auto p-4 md:p-6 space-y-6 max-w-full">
+          <div className="sticky top-0 z-20 shrink-0 flex items-center justify-between gap-3 bg-white shadow pb-4 -mx-4 px-4 -mt-4 pt-4 md:-mx-6 md:px-6 md:-mt-6 md:pt-6 md:pb-4">
+            <div className="flex min-w-0 flex-1 items-center gap-4">
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => setShowNavSidebar(true)}
+                className="lg:hidden flex-shrink-0"
+              >
+                <Menu className="h-5 w-5" />
+              </Button>
+              <div className="min-w-0">
+                <h1 className="text-xl font-bold text-[rgb(45,79,30)] truncate">
+                  {vacation?.titel ?? 'Urlaub'}
+                </h1>
+                <p className="text-sm text-muted-foreground truncate">{subtitle}</p>
+              </div>
+            </div>
+            {canAccessConfig && vacation && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-9 w-9 shrink-0 rounded-full border-0 bg-transparent text-foreground shadow-none hover:bg-neutral-100 focus-visible:ring-2 focus-visible:ring-[rgb(45,79,30)]/30"
+                    aria-label="Weitere Aktionen"
+                  >
+                    <MoreVertical className="h-5 w-5" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="min-w-[10rem]">
+                  <DropdownMenuItem
+                    className="cursor-pointer gap-2"
+                    onClick={() => setEditOpen(true)}
+                  >
+                    <Pencil className="h-4 w-4" />
+                    Bearbeiten
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    className="cursor-pointer gap-2 text-destructive focus:text-destructive"
+                    onClick={() => setShowDeleteConfirm(true)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    Löschen
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+          </div>
+
+          {loadError && (
+            <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-sm">
+              {loadError}
+            </div>
+          )}
+
+          {!vacation && !loadError && (
+            <div className="flex justify-center py-16 text-muted-foreground">Laden…</div>
+          )}
+
+          {vacation && (
+            <>
+              <div className="hidden flex-wrap gap-2 md:flex">
+                <Button variant="outline" size="sm" className="bg-white hover:bg-neutral-50" asChild>
+                  <Link
+                    href="/urlaube"
+                    className="inline-flex items-center gap-2 whitespace-nowrap"
+                  >
+                    <ArrowLeft className="h-4 w-4 shrink-0" />
+                    Zur Liste
+                  </Link>
+                </Button>
+              </div>
+
+              <Card className="overflow-hidden rounded-lg border shadow-sm bg-white">
+                <CountdownHeader vacation={vacation} />
+                <CardContent className="space-y-6 p-4 pt-4 md:p-6 md:pt-6">
+                  <section className="space-y-3">
+                    <h2 className="text-sm font-semibold text-[rgb(45,79,30)]">Reisedaten</h2>
+                    <dl className="space-y-2 text-sm">
+                      <div className="flex flex-wrap gap-x-2">
+                        <dt className="text-muted-foreground shrink-0">Reisezeitraum:</dt>
+                        <dd>{formatVacationDateRange(vacation.startdatum, vacation.enddatum)}</dd>
+                      </div>
+                      {vacation.abfahrtdatum && (
+                        <div className="flex flex-wrap gap-x-2">
+                          <dt className="text-muted-foreground shrink-0">Reisebeginn (Abfahrt):</dt>
+                          <dd>
+                            {format(new Date(vacation.abfahrtdatum), 'd. LLLL yyyy', {
+                              locale: de,
+                            })}
+                          </dd>
+                        </div>
+                      )}
+                    </dl>
+                  </section>
+
+                  <section className="space-y-3">
+                    <h2 className="text-sm font-semibold text-[rgb(45,79,30)] flex items-center gap-2">
+                      <Users className="h-4 w-4 shrink-0" aria-hidden />
+                      Mitreisende
+                    </h2>
+                    {mitreisende.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">Keine Mitreisenden zugeordnet.</p>
+                    ) : (
+                      <ul className="flex flex-wrap gap-2">
+                        {mitreisende.map((m) => (
+                          <li
+                            key={m.id}
+                            className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1 text-sm shadow-sm"
+                          >
+                            {m.farbe && (
+                              <span
+                                className="h-2.5 w-2.5 shrink-0 rounded-full"
+                                style={{ backgroundColor: m.farbe }}
+                                aria-hidden
+                              />
+                            )}
+                            {m.name}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </section>
+
+                  <section className="space-y-3">
+                    <h2 className="text-sm font-semibold text-[rgb(45,79,30)]">Campingplätze</h2>
+                    {campingplaetze.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">
+                        Noch keine Campingplätze zugeordnet.
+                      </p>
+                    ) : (
+                      <div className="space-y-2">
+                        {campingplaetze.map((cp) => {
+                          const r = routeInfo[cp.id]
+                          const photoUrl = campingplatzListThumbnailSrc(cp)
+                          return (
+                            <div
+                              key={cp.id}
+                              className={cn(
+                                'bg-white rounded-xl border border-gray-200 shadow-sm px-3 py-2 flex items-start justify-between gap-3',
+                                cp.is_archived && 'opacity-60 bg-muted/60'
+                              )}
+                            >
+                              <Link
+                                href={`/campingplaetze/${cp.id}`}
+                                className="flex gap-3 items-start flex-1 min-w-0 transition-colors hover:opacity-90"
+                              >
+                                <div className="flex-shrink-0 w-12 h-12 rounded-lg overflow-hidden bg-muted flex items-center justify-center">
+                                  {photoUrl ? (
+                                    <Image
+                                      src={photoUrl}
+                                      alt=""
+                                      width={48}
+                                      height={48}
+                                      unoptimized
+                                      className="w-full h-full object-cover"
+                                    />
+                                  ) : (
+                                    <span className="text-[10px] leading-tight text-muted-foreground px-1 text-center">
+                                      Kein Bild
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="space-y-1 min-w-0 flex-1">
+                                  <span className="font-semibold text-sm truncate block">
+                                    {cp.name}
+                                  </span>
+                                  <div className="text-xs text-gray-600">
+                                    {cp.ort}, {cp.land}
+                                    {cp.bundesland && ` (${cp.bundesland})`}
+                                  </div>
+                                  {r && (
+                                    <div className="flex items-center gap-1 text-xs text-gray-600 mt-0.5">
+                                      <Route className="h-3.5 w-3.5 text-[rgb(45,79,30)]" />
+                                      <span>
+                                        {Math.round(r.distanceKm)} km ·{' '}
+                                        {formatDurationMinutes(r.durationMinutes)}
+                                      </span>
+                                    </div>
+                                  )}
+                                </div>
+                              </Link>
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-8 w-8 p-0 shrink-0"
+                                    aria-label="Weitere Aktionen"
+                                  >
+                                    <MoreVertical className="h-4 w-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem
+                                    onSelect={() => {
+                                      void openCampingplatzInAdacMaps(
+                                        cp,
+                                        homeCoords
+                                          ? { lat: homeCoords.lat, lng: homeCoords.lng }
+                                          : null
+                                      )
+                                    }}
+                                  >
+                                    <Route className="h-4 w-4 mr-2" />
+                                    ADAC Routenplanung öffnen
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                    {(mapCampingplaetze.length > 0 || homeCoords) && (
+                      <UrlaubOverviewMap
+                        home={homeCoords}
+                        campingplaetze={mapCampingplaetze}
+                        title={vacation.titel}
+                      />
+                    )}
+                  </section>
+
+                  <section className="space-y-3">
+                    <h2 className="text-sm font-semibold text-[rgb(45,79,30)] flex items-center gap-2">
+                      <ListChecks className="h-4 w-4 shrink-0" aria-hidden />
+                      Packliste
+                    </h2>
+                    <p className="text-sm text-muted-foreground">
+                      Standardansicht:{' '}
+                      {vacation.packliste_default_ansicht === 'alles'
+                        ? 'Alles anzeigen'
+                        : 'Nur Packliste'}
+                    </p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="bg-white hover:bg-neutral-50"
+                      onClick={() => router.push(`/?vacation=${vacation.id}`)}
+                    >
+                      Packliste öffnen
+                    </Button>
+                  </section>
+                </CardContent>
+              </Card>
+            </>
+          )}
+        </div>
+      </div>
+
+      {vacation && (
+        <VacationEditModal
+          open={editOpen}
+          onOpenChange={setEditOpen}
+          vacationId={vacation.id}
+          onSaved={({ vacation: saved, campingplaetze: savedCamping }) => {
+            setVacation(saved)
+            setCampingplaetze(savedCamping)
+            void load()
+          }}
+        />
+      )}
+
+      <ConfirmDialog
+        open={showDeleteConfirm}
+        onOpenChange={setShowDeleteConfirm}
+        title="Urlaub löschen"
+        description="Möchten Sie diesen Urlaub wirklich löschen? Die zugehörige Packliste wird ebenfalls entfernt."
+        onConfirm={executeDelete}
+        isLoading={deleteBusy}
+      />
+    </div>
+  )
+}

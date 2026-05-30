@@ -239,3 +239,58 @@ gmp-place-autocomplete::part(prediction-item) {
     }
   }
 }
+
+/* Leaflet: eigene Pin-Icons ohne Standard-Marker-Hintergrund */
+.urlaub-leaflet-pin {
+  background: transparent !important;
+  border: none !important;
+}
+
+.urlaub-leaflet-pin svg {
+  display: block;
+}
+
+/* Leaflet-Z-Index im Container halten – sonst überlagert die Karte Menü (z-50) und Dialoge */
+.urlaub-map-root {
+  position: relative;
+  z-index: 0;
+  isolation: isolate;
+}
+
+.urlaub-leaflet-map.leaflet-container {
+  z-index: 0 !important;
+  font-family: inherit;
+}
+
+.urlaub-leaflet-map .leaflet-pane {
+  z-index: 1 !important;
+}
+
+.urlaub-leaflet-map .leaflet-tile-pane {
+  z-index: 1 !important;
+}
+
+.urlaub-leaflet-map .leaflet-overlay-pane {
+  z-index: 2 !important;
+}
+
+.urlaub-leaflet-map .leaflet-shadow-pane {
+  z-index: 3 !important;
+}
+
+.urlaub-leaflet-map .leaflet-marker-pane {
+  z-index: 4 !important;
+}
+
+.urlaub-leaflet-map .leaflet-tooltip-pane {
+  z-index: 5 !important;
+}
+
+.urlaub-leaflet-map .leaflet-popup-pane {
+  z-index: 6 !important;
+}
+
+.urlaub-leaflet-map .leaflet-top,
+.urlaub-leaflet-map .leaflet-bottom {
+  z-index: 7 !important;
+}

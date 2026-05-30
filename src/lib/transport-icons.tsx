@@ -1,17 +1,19 @@
 'use client'
 
 import {
-  Box,
   Bus,
   Car,
   Caravan,
-  Container,
-  Package,
   Truck,
   Van,
   type LucideIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import {
+  TransportRearBox,
+  TransportRoofBox,
+  TransportTrailer,
+} from '@/lib/transport-icons-custom'
 
 /** Aktive Auswahl in Transportmittel-Verwaltung */
 export const TRANSPORT_ICON_KEYS = [
@@ -39,9 +41,9 @@ export const TRANSPORT_ICON_OPTIONS: Array<{
   { key: 'caravan', label: 'Wohnwagen', Icon: Caravan },
   { key: 'van', label: 'Kastenwagen', Icon: Van },
   { key: 'bus', label: 'Wohnmobil', Icon: Bus },
-  { key: 'container', label: 'Anhänger', Icon: Container },
-  { key: 'package', label: 'Dachbox', Icon: Package },
-  { key: 'box', label: 'Heckbox', Icon: Box },
+  { key: 'container', label: 'Anhänger', Icon: TransportTrailer },
+  { key: 'package', label: 'Dachbox', Icon: TransportRoofBox },
+  { key: 'box', label: 'Heckbox', Icon: TransportRearBox },
 ]
 
 const ICON_BY_KEY: Record<AnyTransportIconKey, LucideIcon> = {
@@ -49,9 +51,9 @@ const ICON_BY_KEY: Record<AnyTransportIconKey, LucideIcon> = {
   caravan: Caravan,
   van: Van,
   bus: Bus,
-  container: Container,
-  package: Package,
-  box: Box,
+  container: TransportTrailer,
+  package: TransportRoofBox,
+  box: TransportRearBox,
   truck: Truck,
 }
 
