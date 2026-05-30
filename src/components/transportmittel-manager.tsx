@@ -30,7 +30,7 @@ import {
   TRANSPORT_ICON_OPTIONS,
   TransportIcon,
   inferTransportIconFromName,
-  resolveTransportIconKey,
+  resolveTransportIconKeyForForm,
   type TransportIconKey,
 } from '@/lib/transport-icons'
 
@@ -109,7 +109,7 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
 
   const [form, setForm] = useState({
     name: '',
-    icon: 'truck' as TransportIconKey,
+    icon: 'van' as TransportIconKey,
     zulGesamtgewicht: '',
     eigengewicht: '',
   })
@@ -288,7 +288,7 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
   const resetForm = () => {
     setForm({
       name: '',
-      icon: 'truck',
+      icon: 'van',
       zulGesamtgewicht: '',
       eigengewicht: '',
     })
@@ -323,7 +323,7 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
     setEditingVehicle(vehicle)
     setForm({
       name: vehicle.name,
-      icon: resolveTransportIconKey(vehicle.icon, vehicle.name),
+      icon: resolveTransportIconKeyForForm(vehicle.icon, vehicle.name),
       zulGesamtgewicht: String(vehicle.zul_gesamtgewicht),
       eigengewicht: String(vehicle.eigengewicht),
     })

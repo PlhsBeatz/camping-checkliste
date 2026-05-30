@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS hauptkategorien (
 CREATE TABLE IF NOT EXISTS transportmittel (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL UNIQUE,
+    icon TEXT,
     zul_gesamtgewicht REAL NOT NULL,
     eigengewicht REAL NOT NULL,
     fest_installiert_mitrechnen INTEGER NOT NULL DEFAULT 0,

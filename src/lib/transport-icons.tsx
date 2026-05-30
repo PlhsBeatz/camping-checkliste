@@ -1,48 +1,96 @@
 'use client'
 
-import { Bus, Car, Caravan, Truck, type LucideIcon } from 'lucide-react'
+import {
+  Box,
+  Bus,
+  Car,
+  Caravan,
+  Container,
+  Package,
+  Truck,
+  Van,
+  type LucideIcon,
+} from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-export const TRANSPORT_ICON_KEYS = ['caravan', 'car', 'truck', 'bus'] as const
+/** Aktive Auswahl in Transportmittel-Verwaltung */
+export const TRANSPORT_ICON_KEYS = [
+  'car',
+  'caravan',
+  'van',
+  'bus',
+  'container',
+  'package',
+  'box',
+] as const
 export type TransportIconKey = (typeof TRANSPORT_ICON_KEYS)[number]
+
+/** Legacy-Schlüssel aus früheren Versionen (DB-Kompatibilität) */
+const LEGACY_TRANSPORT_ICON_KEYS = ['truck'] as const
+type LegacyTransportIconKey = (typeof LEGACY_TRANSPORT_ICON_KEYS)[number]
+type AnyTransportIconKey = TransportIconKey | LegacyTransportIconKey
 
 export const TRANSPORT_ICON_OPTIONS: Array<{
   key: TransportIconKey
   label: string
   Icon: LucideIcon
 }> = [
-  { key: 'caravan', label: 'Wohnwagen', Icon: Caravan },
   { key: 'car', label: 'Auto', Icon: Car },
-  { key: 'truck', label: 'Sonstiges', Icon: Truck },
-  { key: 'bus', label: 'Bus', Icon: Bus },
+  { key: 'caravan', label: 'Wohnwagen', Icon: Caravan },
+  { key: 'van', label: 'Kastenwagen', Icon: Van },
+  { key: 'bus', label: 'Wohnmobil', Icon: Bus },
+  { key: 'container', label: 'Anhänger', Icon: Container },
+  { key: 'package', label: 'Dachbox', Icon: Package },
+  { key: 'box', label: 'Heckbox', Icon: Box },
 ]
 
-const ICON_BY_KEY: Record<TransportIconKey, LucideIcon> = {
-  caravan: Caravan,
+const ICON_BY_KEY: Record<AnyTransportIconKey, LucideIcon> = {
   car: Car,
-  truck: Truck,
+  caravan: Caravan,
+  van: Van,
   bus: Bus,
+  container: Container,
+  package: Package,
+  box: Box,
+  truck: Truck,
 }
 
-export function isTransportIconKey(value: string | null | undefined): value is TransportIconKey {
-  return !!value && (TRANSPORT_ICON_KEYS as readonly string[]).includes(value)
+export function isTransportIconKey(value: string | null | undefined): value is AnyTransportIconKey {
+  return (
+    !!value &&
+    ([...TRANSPORT_ICON_KEYS, ...LEGACY_TRANSPORT_ICON_KEYS] as readonly string[]).includes(value)
+  )
 }
 
 /** Standard-Icon anhand des Namens (Neuanlage / fehlende DB-Spalte). */
 export function inferTransportIconFromName(name: string): TransportIconKey {
   const n = name.trim().toLowerCase()
+  if (n.includes('dachbox')) return 'package'
+  if (n.includes('heckbox')) return 'box'
+  if (n.includes('anhänger') || n.includes('anhaenger') || n.includes('trailer')) return 'container'
+  if (n.includes('wohnmobil')) return 'bus'
+  if (n.includes('kastenwagen') || n.includes('van')) return 'van'
   if (n.includes('wohnwagen') || n.includes('caravan')) return 'caravan'
   if (n.includes('auto') || n.includes('pkw')) return 'car'
-  if (n.includes('bus')) return 'bus'
-  return 'truck'
+  return 'van'
 }
 
 export function resolveTransportIconKey(
   icon: string | null | undefined,
   name: string
-): TransportIconKey {
+): AnyTransportIconKey {
   if (isTransportIconKey(icon)) return icon
   return inferTransportIconFromName(name)
+}
+
+/** Für Formular-Auswahl: Legacy-Werte auf gültige Option mappen. */
+export function resolveTransportIconKeyForForm(
+  icon: string | null | undefined,
+  name: string
+): TransportIconKey {
+  const key = resolveTransportIconKey(icon, name)
+  if (key === 'truck') return 'van'
+  return key
 }
 
 interface TransportIconProps {

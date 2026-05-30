@@ -527,7 +527,7 @@ const PackingItem: React.FC<PackingItemProps> = ({
                         <PopoverTrigger asChild>
                           <button
                             type="button"
-                            className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-left rounded px-0.5 -mx-0.5 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                            className="inline-flex flex-wrap items-center gap-x-1 gap-y-1 text-left rounded px-0.5 -mx-0.5 focus:outline-none focus:ring-2 focus:ring-primary/20"
                             aria-label="Gepackt-Status pro Person anzeigen"
                           >
                             {mitreisendeFuerPopover.map((m) => {
@@ -537,7 +537,7 @@ const PackingItem: React.FC<PackingItemProps> = ({
                               return (
                                 <span
                                   key={m.mitreisender_id}
-                                  className="inline-flex items-center gap-0.5 shrink-0"
+                                  className="inline-flex items-center gap-0.5 w-10 shrink-0"
                                   title={m.mitreisender_name}
                                 >
                                   <Checkbox
@@ -551,12 +551,7 @@ const PackingItem: React.FC<PackingItemProps> = ({
                                     )}
                                     aria-hidden
                                   />
-                                  <span
-                                    className={cn(
-                                      "text-[10px] font-semibold leading-none",
-                                      vorgemerkt ? "text-amber-700" : packed ? "text-muted-foreground" : "text-accent"
-                                    )}
-                                  >
+                                  <span className="text-[10px] font-semibold leading-none text-left shrink-0 text-muted-foreground">
                                     {initials}
                                   </span>
                                 </span>
