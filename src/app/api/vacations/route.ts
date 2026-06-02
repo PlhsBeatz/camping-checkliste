@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getCloudflareContext } from '@opennextjs/cloudflare'
 import { getDB, getVacations, createVacation, updateVacation, deleteVacation, CloudflareEnv } from '@/lib/db'
 import { requireAuth, requireAdmin } from '@/lib/api-auth'
+import { notifyIntegrationChange } from '@/lib/integration-events'
 
 export async function GET(request: NextRequest) {
   try {
@@ -102,6 +104,9 @@ export async function PUT(request: NextRequest) {
     if (!vacation) {
       return NextResponse.json({ error: 'Failed to update vacation' }, { status: 400 })
     }
+
+    const cfEnv = (await getCloudflareContext({ async: true })).env as unknown as CloudflareEnv
+    notifyIntegrationChange(cfEnv, id)
 
     return NextResponse.json({ success: true, data: vacation })
   } catch (error: unknown) {

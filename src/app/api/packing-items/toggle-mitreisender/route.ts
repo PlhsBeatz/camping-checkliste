@@ -9,6 +9,7 @@ import {
   getMitreisendeForVacation,
 } from '@/lib/db'
 import { notifyPackingSyncChange } from '@/lib/packing-sync'
+import { notifyIntegrationChange } from '@/lib/integration-events'
 import { requireAuth } from '@/lib/api-auth'
 import { canAccessVacation, gepacktRequiresParentApproval } from '@/lib/permissions'
 
@@ -58,6 +59,7 @@ export async function PUT(request: NextRequest) {
     if (vacationId) {
       const cfEnv = (await getCloudflareContext({ async: true })).env as unknown as CloudflareEnv
       await notifyPackingSyncChange(cfEnv, vacationId)
+      notifyIntegrationChange(cfEnv, vacationId)
     }
 
     return NextResponse.json({ success: true })

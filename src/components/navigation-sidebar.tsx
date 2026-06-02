@@ -35,7 +35,8 @@ export function NavigationSidebar({ isOpen, onClose }: NavigationSidebarProps) {
       pathname.startsWith('/tags') ||
       pathname.startsWith('/mitreisende') ||
       pathname.startsWith('/transportmittel') ||
-      pathname.startsWith('/datensicherung')
+      pathname.startsWith('/datensicherung') ||
+      pathname.startsWith('/integrationen')
     ) {
       setConfigExpanded(true)
     }
@@ -85,6 +86,7 @@ export function NavigationSidebar({ isOpen, onClose }: NavigationSidebarProps) {
     { label: 'MITREISENDE', href: '/mitreisende' },
     { label: 'TRANSPORTMITTEL', href: '/transportmittel' },
     { label: 'DATENSICHERUNG', href: '/datensicherung' },
+    { label: 'INTEGRATIONEN', href: '/integrationen' },
   ]
 
   return (

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getCloudflareContext } from '@opennextjs/cloudflare'
 import { getDB, addPackingItem, getPacklisteId, getMitreisendeForVacation, CloudflareEnv } from '@/lib/db'
 import { notifyPackingSyncChange } from '@/lib/packing-sync'
+import { notifyIntegrationChange } from '@/lib/integration-events'
 import { requireAuth } from '@/lib/api-auth'
 import { canAccessVacation } from '@/lib/permissions'
 
@@ -64,6 +65,7 @@ export async function POST(request: NextRequest) {
 
     const cfEnv = (await getCloudflareContext({ async: true })).env as unknown as CloudflareEnv
     await notifyPackingSyncChange(cfEnv, vacationId)
+    notifyIntegrationChange(cfEnv, vacationId)
 
     const successCount = results.filter(r => r.success).length
     return NextResponse.json({

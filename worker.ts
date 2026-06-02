@@ -29,7 +29,10 @@ interface WorkerEnv {
   PACKING_SYNC_DO: DurableObjectNamespace
   DB?: unknown
   ASSETS?: Fetcher
+  INTEGRATION_CRON_SECRET?: string
 }
+
+const CRON_DAILY_PATH = '/api/integrations/cron/daily'
 
 export default {
   async fetch(
@@ -78,5 +81,28 @@ export default {
     }
 
     return handler.fetch(request, env, ctx)
+  },
+
+  async scheduled(
+    event: ScheduledEvent,
+    env: WorkerEnv,
+    ctx: ExecutionContext
+  ): Promise<void> {
+    const secret = env.INTEGRATION_CRON_SECRET?.trim()
+    if (!secret) {
+      console.warn('INTEGRATION_CRON_SECRET not set — skipping integration cron')
+      return
+    }
+    const url = new URL(CRON_DAILY_PATH, 'https://cron.internal')
+    ctx.waitUntil(
+      handler.fetch(
+        new Request(url.toString(), {
+          method: 'GET',
+          headers: { Authorization: `Bearer ${secret}` },
+        }),
+        env,
+        ctx
+      )
+    )
   },
 } satisfies ExportedHandler<WorkerEnv>

@@ -15,6 +15,7 @@ import {
   CloudflareEnv,
 } from '@/lib/db'
 import { notifyPackingSyncChange } from '@/lib/packing-sync'
+import { notifyIntegrationChange } from '@/lib/integration-events'
 import { requireAuth } from '@/lib/api-auth'
 import { canAccessVacation, gepacktRequiresParentApproval } from '@/lib/permissions'
 
@@ -112,6 +113,7 @@ export async function POST(request: NextRequest) {
 
     const cfEnv = (await getCloudflareContext({ async: true })).env as unknown as CloudflareEnv
     await notifyPackingSyncChange(cfEnv, vacationId)
+    notifyIntegrationChange(cfEnv, vacationId)
 
     return NextResponse.json({ success: true }, { status: 201 })
   } catch (error: unknown) {
@@ -224,6 +226,7 @@ export async function PUT(request: NextRequest) {
     if (success && vacationId) {
       const cfEnv = (await getCloudflareContext({ async: true })).env as unknown as CloudflareEnv
       await notifyPackingSyncChange(cfEnv, vacationId)
+      notifyIntegrationChange(cfEnv, vacationId)
     }
 
     return NextResponse.json({ success: true, data: success })
@@ -262,6 +265,7 @@ export async function DELETE(request: NextRequest) {
     if (vacationId) {
       const env = (await getCloudflareContext({ async: true })).env as unknown as CloudflareEnv
       await notifyPackingSyncChange(env, vacationId)
+      notifyIntegrationChange(env, vacationId)
     }
 
     return NextResponse.json({ success: true })

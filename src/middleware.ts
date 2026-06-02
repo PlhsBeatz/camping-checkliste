@@ -17,6 +17,10 @@ const PUBLIC_PATHS = [
   '/api/init' // DB-Initialisierung (optional öffentlich für Setup)
 ]
 
+function isIntegrationApiPath(pathname: string): boolean {
+  return pathname.startsWith('/api/integrations/')
+}
+
 function isPublicPath(pathname: string): boolean {
   if (PUBLIC_PATHS.some(p => pathname === p || pathname.startsWith(p + '/'))) return true
   if (pathname.startsWith('/_next') || pathname.startsWith('/icon') || pathname.startsWith('/icons/') || pathname === '/manifest.json' || pathname === '/apple-icon') return true
@@ -29,6 +33,11 @@ export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
   if (isPublicPath(pathname)) {
+    return NextResponse.next()
+  }
+
+  // Integrations-API: eigene Auth (Bearer-Token / Cron-Secret / Admin-Session in Route)
+  if (isIntegrationApiPath(pathname)) {
     return NextResponse.next()
   }
 
