@@ -1442,6 +1442,8 @@ function HomeContent() {
                   }
                   abreiseDatum={currentVacation?.abfahrtdatum?.trim() || currentVacation?.startdatum || null}
                   onScrollContextChange={handleScrollContextChange}
+                  canSelectOtherProfiles={canSelectOtherProfiles}
+                  onProfileChange={(profileId) => setSelectedPackProfile(profileId)}
               />
 
               {/* Auto-generate button - Only when list is empty */}

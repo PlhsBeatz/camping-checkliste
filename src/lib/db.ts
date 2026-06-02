@@ -1693,17 +1693,47 @@ export type TransportVehicleWithFestgewicht = TransportVehicle & { festgewichtTo
 
 /**
  * Transportmittel mit Festgewicht-Gesamtsumme (für Übersicht)
+ * Festgewicht in 2 Batch-Queries (wie getPackStatus), kein N+1 pro Fahrzeug.
  */
 export async function getTransportVehiclesWithFestgewicht(
   db: D1Database
 ): Promise<TransportVehicleWithFestgewicht[]> {
   const vehicles = await getTransportVehicles(db)
-  const result: TransportVehicleWithFestgewicht[] = []
+  const festSums = new Map<string, { manuell: number; equipment: number }>()
   for (const v of vehicles) {
-    const sums = await getTransportVehicleFestgewichtSums(db, v.id)
-    result.push({ ...v, festgewichtTotal: sums.total })
+    festSums.set(v.id, { manuell: 0, equipment: 0 })
   }
-  return result
+  try {
+    const manuellAll = await db
+      .prepare(
+        'SELECT transport_id, COALESCE(SUM(gewicht), 0) as s FROM transportmittel_festgewicht_manuell GROUP BY transport_id'
+      )
+      .all<{ transport_id: string; s: number }>()
+    for (const r of manuellAll.results || []) {
+      const entry = festSums.get(r.transport_id)
+      if (entry) entry.manuell = r.s
+    }
+  } catch {
+    // Tabelle existiert möglicherweise noch nicht
+  }
+  try {
+    const equipAll = await db
+      .prepare(
+        `SELECT transport_id, COALESCE(SUM(einzelgewicht * COALESCE(standard_anzahl, 1)), 0) as s
+         FROM ausruestungsgegenstaende WHERE status = 'Fest Installiert' AND transport_id IS NOT NULL GROUP BY transport_id`
+      )
+      .all<{ transport_id: string; s: number }>()
+    for (const r of equipAll.results || []) {
+      const entry = festSums.get(r.transport_id)
+      if (entry) entry.equipment = r.s
+    }
+  } catch {
+    // ignore
+  }
+  return vehicles.map(v => {
+    const s = festSums.get(v.id) ?? { manuell: 0, equipment: 0 }
+    return { ...v, festgewichtTotal: s.manuell + s.equipment }
+  })
 }
 
 export interface PackStatusTransportOverview {

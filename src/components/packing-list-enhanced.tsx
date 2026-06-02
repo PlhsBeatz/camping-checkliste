@@ -15,15 +15,82 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { MoreVertical, Edit2, Trash2, RotateCcw, CheckCheck, Check, Clock } from "lucide-react";
+import { MoreVertical, Edit2, Trash2, RotateCcw, CheckCheck, Check, Clock, ChevronRight } from "lucide-react";
 import { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import { PackingItem as DBPackingItem, type Mitreisender, type TransportVehicle } from "@/lib/db";
 import { MarkAllConfirmationDialog, type TravelerForMarkAll } from "./mark-all-confirmation-dialog";
 import { UndoToast } from "./undo-toast";
 import { cn, getInitials } from "@/lib/utils";
 import { TransportIcon } from "@/lib/transport-icons";
-import { DEFAULT_USER_COLOR_BG } from "@/lib/user-colors";
+import { DEFAULT_USER_COLOR_BG, USER_COLORS } from "@/lib/user-colors";
 import { sortMitreisendeNachRolleUndName, sortMitreisendenZeilenNachStammdaten } from "@/lib/mitreisenden-sort";
+
+type VisibleItemsFilterOpts = {
+  listDisplayMode: 'alles' | 'packliste';
+  abreiseDatum?: string | null;
+  toYYYYMMDD: (d: string) => string;
+  canEditPauschalEntries: boolean;
+  vacationMitreisende: Mitreisender[];
+};
+
+function filterVisibleItemsForProfile(
+  items: DBPackingItem[],
+  selectedProfile: string | null,
+  opts: VisibleItemsFilterOpts
+): DBPackingItem[] {
+  const { listDisplayMode, abreiseDatum, toYYYYMMDD, canEditPauschalEntries, vacationMitreisende } = opts;
+  const now = new Date();
+  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+  return items.filter(item => {
+    if (listDisplayMode === 'packliste' && String(item.status || '').trim() === 'Immer gepackt') return false;
+    const isErstAbreisetag = !!item.erst_abreisetag_gepackt;
+    if (listDisplayMode === 'packliste' && isErstAbreisetag && abreiseDatum) {
+      const abreiseStr = toYYYYMMDD(abreiseDatum);
+      if (abreiseStr && todayStr !== abreiseStr) return false;
+    }
+    if (!selectedProfile) return true;
+    if (item.mitreisenden_typ === 'pauschal') {
+      return canEditPauschalEntries;
+    }
+    const personAssigned = item.mitreisende?.some(m => m.mitreisender_id === selectedProfile);
+    if (personAssigned) return true;
+    if (item.mitreisenden_typ === 'alle' && (!item.mitreisende || item.mitreisende.length === 0) && vacationMitreisende.some(m => m.id === selectedProfile)) {
+      return true;
+    }
+    return false;
+  });
+}
+
+/** Nur personenbezogene Einträge (ohne Pauschal) für eine Person im Profil */
+function filterPersonAssignedItems(
+  profileVisible: DBPackingItem[],
+  personId: string
+): DBPackingItem[] {
+  return profileVisible.filter(
+    item =>
+      item.mitreisenden_typ !== 'pauschal' &&
+      item.mitreisende?.some(m => m.mitreisender_id === personId)
+  );
+}
+
+function isItemFullyPackedForProfile(
+  item: DBPackingItem,
+  selectedProfile: string | null,
+  canConfirmVorgemerkt: boolean
+): boolean {
+  if (item.mitreisenden_typ === 'pauschal') {
+    return canConfirmVorgemerkt ? item.gepackt : (item.gepackt || !!item.gepackt_vorgemerkt);
+  }
+  if (selectedProfile) {
+    const m = item.mitreisende?.find(t => t.mitreisender_id === selectedProfile);
+    if (!m) return true;
+    return canConfirmVorgemerkt ? m.gepackt : (m.gepackt || !!m.gepackt_vorgemerkt);
+  }
+  return (item.mitreisende?.length ?? 0) > 0 && item.mitreisende!.every(m =>
+    canConfirmVorgemerkt ? m.gepackt : (m.gepackt || !!m.gepackt_vorgemerkt)
+  );
+}
 
 interface PackingItemProps {
   id: string;
@@ -678,6 +745,10 @@ interface PackingListProps {
   abreiseDatum?: string | null;
   /** Callback wenn sich die sichtbare Kategorie ändert (für Add-Dialog-Scroll) */
   onScrollContextChange?: (ctx: { mainCategory: string; category: string } | null) => void;
+  /** Admin: andere Packprofile wählbar – bei „alles gepackt“ im Profil ggf. Team-Übersicht */
+  canSelectOtherProfiles?: boolean;
+  /** Wechsel in ein anderes Packprofil (z. B. aus Team-Übersicht) */
+  onProfileChange?: (profileId: string) => void;
 }
 
 export function PackingList({
@@ -702,7 +773,9 @@ export function PackingList({
   transportVehicles = [],
   selectedProfileColor = null,
   abreiseDatum,
-  onScrollContextChange
+  onScrollContextChange,
+  canSelectOtherProfiles = false,
+  onProfileChange
 }: PackingListProps) {
   const [undoToast, setUndoToast] = useState<{ visible: boolean; itemName: string; action: () => void } | null>(null);
   const [activeMainCategory, setActiveMainCategory] = useState<string>('');
@@ -746,35 +819,18 @@ export function PackingList({
     };
   }, []);
 
-  // Prüft ob ein Eintrag im aktuellen Profil sichtbar ist
-  // Gefilterte Einträge: Anzeige-Modus + Profil + erst_abreisetag_gepackt
-  const visibleItems = useMemo(() => {
-    const now = new Date();
-    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  const visibleItemsFilterOpts = useMemo((): VisibleItemsFilterOpts => ({
+    listDisplayMode,
+    abreiseDatum,
+    toYYYYMMDD,
+    canEditPauschalEntries,
+    vacationMitreisende
+  }), [listDisplayMode, abreiseDatum, toYYYYMMDD, canEditPauschalEntries, vacationMitreisende]);
 
-    return items.filter(item => {
-      // Nur im Packliste-Modus: „Immer gepackt“ ausblenden (robust gegen undefined/Leerstring)
-      if (listDisplayMode === 'packliste' && String(item.status || '').trim() === 'Immer gepackt') return false;
-      // Nur im Packliste-Modus: erst_abreisetag_gepackt nur am Abreisetag anzeigen
-      const isErstAbreisetag = !!item.erst_abreisetag_gepackt;
-      if (listDisplayMode === 'packliste' && isErstAbreisetag && abreiseDatum) {
-        const abreiseStr = toYYYYMMDD(abreiseDatum);
-        if (abreiseStr && todayStr !== abreiseStr) return false;
-      }
-      if (!selectedProfile) return true;
-      if (item.mitreisenden_typ === 'pauschal') {
-        return canEditPauschalEntries;
-      }
-      // Typ „alle“ oder „ausgewaehlte“: anzeigen, wenn der gewählte Mitreisende zugeordnet ist
-      const personAssigned = item.mitreisende?.some(m => m.mitreisender_id === selectedProfile);
-      if (personAssigned) return true;
-      // Typ „alle“ ohne Zuordnungen: trotzdem anzeigen, wenn das Profil im Urlaub ist (Datenkonsistenz)
-      if (item.mitreisenden_typ === 'alle' && (!item.mitreisende || item.mitreisende.length === 0) && vacationMitreisende.some(m => m.id === selectedProfile)) {
-        return true;
-      }
-      return false;
-    });
-  }, [items, listDisplayMode, selectedProfile, abreiseDatum, toYYYYMMDD, canEditPauschalEntries, vacationMitreisende]);
+  const visibleItems = useMemo(
+    () => filterVisibleItemsForProfile(items, selectedProfile, visibleItemsFilterOpts),
+    [items, selectedProfile, visibleItemsFilterOpts]
+  );
 
   // Group items by main category and category (nur sichtbare)
   const itemsByMainCategory = useMemo(() => {
@@ -923,20 +979,49 @@ export function PackingList({
     });
   };
 
-  // Ist ein Eintrag vollständig gepackt (aus Sicht des aktuellen Profils/Berechtigungen)?
-  const isItemFullyPackedForView = useCallback((item: DBPackingItem) => {
-    if (item.mitreisenden_typ === 'pauschal') {
-      return canConfirmVorgemerkt ? item.gepackt : (item.gepackt || !!item.gepackt_vorgemerkt);
-    }
-    if (selectedProfile) {
-      const m = item.mitreisende?.find(t => t.mitreisender_id === selectedProfile);
-      if (!m) return true;
-      return canConfirmVorgemerkt ? m.gepackt : (m.gepackt || !!m.gepackt_vorgemerkt);
-    }
-    return (item.mitreisende?.length ?? 0) > 0 && item.mitreisende!.every(m =>
-      canConfirmVorgemerkt ? m.gepackt : (m.gepackt || !!m.gepackt_vorgemerkt)
-    );
-  }, [selectedProfile, canConfirmVorgemerkt]);
+  const isItemFullyPackedForView = useCallback(
+    (item: DBPackingItem) => isItemFullyPackedForProfile(item, selectedProfile, !!canConfirmVorgemerkt),
+    [selectedProfile, canConfirmVorgemerkt]
+  );
+
+  const sortedProfileMitreisende = useMemo(
+    () => sortMitreisendeNachRolleUndName(visiblePackProfileMitreisende ?? vacationMitreisende),
+    [visiblePackProfileMitreisende, vacationMitreisende]
+  );
+
+  const travelerNames = useMemo(
+    () => sortedProfileMitreisende.map(m => m.name),
+    [sortedProfileMitreisende]
+  );
+
+  const personPackStatuses = useMemo(() => {
+    const isAdmin = !!canConfirmVorgemerkt;
+    return sortedProfileMitreisende.map(person => {
+      const profileVisible = filterVisibleItemsForProfile(items, person.id, visibleItemsFilterOpts);
+      const personItems = filterPersonAssignedItems(profileVisible, person.id);
+      let packed = 0;
+      let pendingConfirmation = 0;
+      let open = 0;
+      for (const item of personItems) {
+        const m = item.mitreisende?.find(t => t.mitreisender_id === person.id);
+        if (!m) continue;
+        if (isAdmin) {
+          if (m.gepackt) packed += 1;
+          else if (m.gepackt_vorgemerkt) pendingConfirmation += 1;
+          else open += 1;
+        } else if (m.gepackt || m.gepackt_vorgemerkt) {
+          packed += 1;
+        } else {
+          open += 1;
+        }
+      }
+      const total = personItems.length;
+      const allPacked = total === 0 || (open === 0 && pendingConfirmation === 0);
+      return { person, allPacked, packed, pendingConfirmation, open, total };
+    });
+  }, [sortedProfileMitreisende, items, visibleItemsFilterOpts, canConfirmVorgemerkt]);
+
+  const allPersonsFullyPacked = personPackStatuses.every(s => s.allPacked);
 
   // Fortschritt „alle sichtbaren Einträge“ (jeder sichtbare Eintrag zählt 1) – für Packprofil einer Person inkl. Pauschal
   const progressForAllVisible = useMemo(() => ({
@@ -969,8 +1054,12 @@ export function PackingList({
   const isProgressBarClickable = !!(selectedProfile && canEditPauschalEntries);
 
   const hasItems = visibleItems.length > 0;
-  // "Alles gepackt!": Nur anzeigen, wenn alle Einträge abgehakt sind, die der User in diesem Profil sehen kann (Rolle + Packprofil inkl. pauschal falls berechtigt).
   const allPackedFromCurrentView = hasItems && visibleItems.every(item => isItemFullyPackedForView(item));
+  const showTeamPackOverview = allPackedFromCurrentView && hidePackedItems && canSelectOtherProfiles && !allPersonsFullyPacked;
+  const showAllPackedCelebration = allPackedFromCurrentView && hidePackedItems && (!canSelectOtherProfiles || allPersonsFullyPacked);
+  const currentProfileName = selectedProfile
+    ? vacationMitreisende.find(m => m.id === selectedProfile)?.name
+    : null;
   const visibleMainCategories = useMemo(() => {
     if (!hidePackedItems) return mainCategories;
     return mainCategories.filter(mainCat => {
@@ -994,7 +1083,7 @@ export function PackingList({
     return categoryItems.some(item => !isItemFullyPackedForView(item));
   };
 
-  const tabsForSwipe = allPackedFromCurrentView && hidePackedItems
+  const tabsForSwipe = (allPackedFromCurrentView && hidePackedItems)
     ? []
     : (hidePackedItems ? visibleMainCategories : mainCategories);
 
@@ -1135,7 +1224,109 @@ export function PackingList({
             tabSwipeDirection === 'right' && "animate-tab-swipe-in-from-left"
           )}
         >
-        {allPackedFromCurrentView && hidePackedItems ? (
+        {showTeamPackOverview ? (
+          <div className="flex flex-col items-center justify-center min-h-[50vh] py-8">
+            <Card className="max-w-md w-full border-[rgb(45,79,30)]/20 shadow-lg bg-white/95">
+              <CardContent className="pt-8 pb-6 px-6 sm:px-8">
+                <div className="text-center mb-6">
+                  <div className="mx-auto w-14 h-14 rounded-full bg-[rgb(45,79,30)]/10 flex items-center justify-center mb-4">
+                    <CheckCheck className="h-8 w-8 text-[rgb(45,79,30)]" />
+                  </div>
+                  <h2 className="text-xl font-semibold text-[rgb(45,79,30)] mb-2">
+                    {currentProfileName
+                      ? `Alles gepackt für ${currentProfileName}!`
+                      : 'Alles gepackt!'}
+                  </h2>
+                  <p className="text-sm text-muted-foreground">
+                    Andere Mitreisende haben noch offene Einträge.
+                  </p>
+                </div>
+                <p className="text-xs font-medium text-gray-600 uppercase tracking-wide mb-3 px-1">
+                  Mitreisende
+                </p>
+                <ul className="space-y-2">
+                  {personPackStatuses.map(({ person, allPacked, packed, pendingConfirmation, total }, index) => {
+                    const preset = person.farbe ? USER_COLORS.find(c => c.bg === person.farbe) : null;
+                    const avatarStyle = person.farbe
+                      ? { backgroundColor: person.farbe, color: preset?.fg ?? '#ffffff' }
+                      : { backgroundColor: USER_COLORS[index % USER_COLORS.length]!.bg, color: USER_COLORS[index % USER_COLORS.length]!.fg };
+                    const isCurrent = selectedProfile === person.id;
+                    const rowContent = (
+                      <>
+                        <div
+                          className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0"
+                          style={avatarStyle}
+                        >
+                          {getInitials(person.name, travelerNames)}
+                        </div>
+                        <div className="flex-1 min-w-0 text-left">
+                          <div className="font-medium text-gray-900 truncate">
+                            {person.name}
+                            {isCurrent && (
+                              <span className="text-xs font-normal text-muted-foreground ml-1">(aktiv)</span>
+                            )}
+                          </div>
+                          <div className={cn(
+                            'text-xs flex items-center gap-1 mt-0.5',
+                            allPacked ? 'text-[rgb(45,79,30)]' : 'text-[#e67e22]'
+                          )}>
+                            {allPacked ? (
+                              <>
+                                <CheckCheck className="h-3.5 w-3.5 flex-shrink-0" />
+                                Alles gepackt
+                              </>
+                            ) : (
+                              <>
+                                <Clock className="h-3.5 w-3.5 flex-shrink-0" />
+                                <span>
+                                  {total > 0
+                                    ? `${packed} von ${total} erledigt`
+                                    : 'Noch offen'}
+                                  {pendingConfirmation > 0 && (
+                                    <>
+                                      {total > 0 ? ' · ' : ''}
+                                      {pendingConfirmation === 1
+                                        ? '1 zu kontrollieren'
+                                        : `${pendingConfirmation} zu kontrollieren`}
+                                    </>
+                                  )}
+                                </span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                        {!allPacked && onProfileChange && (
+                          <ChevronRight className="h-5 w-5 text-gray-400 flex-shrink-0" />
+                        )}
+                      </>
+                    );
+                    if (!allPacked && onProfileChange) {
+                      return (
+                        <li key={person.id}>
+                          <button
+                            type="button"
+                            onClick={() => onProfileChange(person.id)}
+                            className="w-full flex items-center gap-3 p-3 rounded-xl border-2 border-gray-200 hover:border-[rgb(45,79,30)]/40 hover:bg-[rgb(45,79,30)]/5 transition-colors"
+                          >
+                            {rowContent}
+                          </button>
+                        </li>
+                      );
+                    }
+                    return (
+                      <li
+                        key={person.id}
+                        className="flex items-center gap-3 p-3 rounded-xl border-2 border-gray-100 bg-gray-50/80"
+                      >
+                        {rowContent}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </CardContent>
+            </Card>
+          </div>
+        ) : showAllPackedCelebration ? (
           <div className="flex flex-col items-center justify-center min-h-[50vh] py-12">
             <Card className="max-w-md w-full border-[rgb(45,79,30)]/20 shadow-lg bg-white/95">
               <CardContent className="pt-8 pb-8 px-8 text-center">
@@ -1146,7 +1337,9 @@ export function PackingList({
                   Alles gepackt!
                 </h2>
                 <p className="text-muted-foreground mb-6">
-                  Aus Ihrer aktuellen Sicht sind alle Einträge abgehakt.
+                  {canSelectOtherProfiles
+                    ? 'Alle Mitreisenden haben ihre Einträge abgehakt.'
+                    : 'Aus Ihrer aktuellen Sicht sind alle Einträge abgehakt.'}
                 </p>
                 <p className="text-lg font-medium text-[rgb(45,79,30)]">
                   Schönen Urlaub!
