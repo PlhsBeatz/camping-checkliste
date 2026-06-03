@@ -7,7 +7,7 @@ import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 
 const CAMPING_GREEN = 'rgb(45, 79, 30)'
-const HOME_ORANGE = '#f97316'
+const HOME_ORANGE = 'rgb(230, 126, 34)'
 const DE_OSM_TILE_URL = 'https://{s}.tile.openstreetmap.de/tiles/osmde/{z}/{x}/{y}.png'
 const MAP_ATTRIBUTION =
   '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> ' +
@@ -22,11 +22,16 @@ type MapPoint = {
 }
 
 type FitOptions = {
-  paddingPx: number
+  /** Zusätzlicher Pixelrand über das für die Pin-Größe nötige Minimum hinaus. */
+  edgePad: number
   maxZoom: number
-  /** Zusätzlicher geographischer Rand um alle Markierungen (Anteil der Spanne). */
-  boundsPad: number
 }
+
+/** Pin-Maße (siehe createPinIcon): Anker liegt an der unteren Spitze. */
+const PIN_WIDTH = 32
+const PIN_HEIGHT = 40
+/** Zusätzlicher Kontext unterhalb des untersten Pins (Anker = Spitze unten). */
+const PIN_BOTTOM_CONTEXT = 24
 
 /** Korrigiert vertauschte lat/lng (lat muss in [-90, 90] liegen). */
 function normalizeCoords(lat: number, lng: number): { lat: number; lng: number } {
@@ -80,8 +85,13 @@ function fitMapToPoints(map: L.Map, points: MapPoint[], options: FitOptions) {
   }
 
   const bounds = L.latLngBounds(points.map((p) => [p.lat, p.lng] as [number, number]))
-  map.fitBounds(bounds.pad(options.boundsPad), {
-    padding: [options.paddingPx, options.paddingPx],
+  // Knappes, asymmetrisches Padding: nur so viel Rand, dass die Pins nicht abgeschnitten
+  // werden (Anker unten → Korpus ragt nach oben, halbe Breite zu den Seiten). So füllen
+  // die Markierungen den Ausschnitt möglichst aus und liegen eher am Rand statt mittig.
+  const padX = Math.round(PIN_WIDTH / 2) + options.edgePad
+  map.fitBounds(bounds, {
+    paddingTopLeft: [padX, PIN_HEIGHT + options.edgePad],
+    paddingBottomRight: [padX, options.edgePad + PIN_BOTTOM_CONTEXT],
     maxZoom: options.maxZoom,
     animate: false,
   })
@@ -166,8 +176,8 @@ function UrlaubLeafletMap({
     let refitTimers: (() => void) | null = null
 
     const fitOptions: FitOptions = interactive
-      ? { paddingPx: 48, maxZoom: 14, boundsPad: 0.1 }
-      : { paddingPx: 40, maxZoom: 12, boundsPad: 0.12 }
+      ? { edgePad: 24, maxZoom: 14 }
+      : { edgePad: 18, maxZoom: 13 }
 
     const scheduleRefit = (map: L.Map) => {
       refitTimers?.()

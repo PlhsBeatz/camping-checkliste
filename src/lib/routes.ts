@@ -2,8 +2,11 @@ import { D1Database } from '@cloudflare/workers-types'
 import {
   Campingplatz,
   CampingplatzRouteCacheEntry,
+  CampingplatzSegmentRouteCacheEntry,
   getRouteForUserAndCampingplatz,
   setRouteForUserAndCampingplatz,
+  getSegmentRoute,
+  setSegmentRoute,
 } from '@/lib/db'
 
 const EARTH_RADIUS_KM = 6371
@@ -140,5 +143,61 @@ export async function calculateRouteWithCaching(params: {
   }
 
   return null
+}
+
+/**
+ * Route zwischen zwei Campingplätzen (geografisch, nutzerunabhängig) – mit Caching.
+ * Gleiche Berechnungslogik wie Heimat→Platz (Google Distance Matrix, sonst Haversine-Schätzung).
+ */
+export async function calculateSegmentRouteWithCaching(params: {
+  db: D1Database
+  from: Campingplatz
+  to: Campingplatz
+}): Promise<CampingplatzSegmentRouteCacheEntry | null> {
+  const { db, from, to } = params
+
+  const existing = await getSegmentRoute(db, from.id, to.id)
+  if (existing) {
+    return existing
+  }
+
+  if (from.lat == null || from.lng == null || to.lat == null || to.lng == null) {
+    return null
+  }
+
+  const fromGoogle = await callGoogleDistanceMatrix(
+    { lat: from.lat, lng: from.lng },
+    { lat: to.lat, lng: to.lng }
+  )
+  if (fromGoogle) {
+    const entry: CampingplatzSegmentRouteCacheEntry = {
+      from_campingplatz_id: from.id,
+      to_campingplatz_id: to.id,
+      distance_km: fromGoogle.distanceKm,
+      duration_min: fromGoogle.durationMinutes,
+      provider: 'google',
+      updated_at: new Date().toISOString(),
+    }
+    await setSegmentRoute(db, entry)
+    return entry
+  }
+
+  const baseDistanceKm = haversineDistanceKm({
+    lat1: from.lat,
+    lng1: from.lng,
+    lat2: to.lat,
+    lng2: to.lng,
+  })
+  const est = estimateRouteFromHaversine(baseDistanceKm)
+  const entry: CampingplatzSegmentRouteCacheEntry = {
+    from_campingplatz_id: from.id,
+    to_campingplatz_id: to.id,
+    distance_km: est.distanceKm,
+    duration_min: est.durationMinutes,
+    provider: 'haversine',
+    updated_at: new Date().toISOString(),
+  }
+  await setSegmentRoute(db, entry)
+  return entry
 }
 

@@ -103,8 +103,8 @@ async function getColumnSet(db: D1Database, table: string): Promise<Set<string> 
  */
 const COMPOSITE_PRIMARY_KEY: Record<string, readonly string[]> = {
   urlaub_mitreisende: ['urlaub_id', 'mitreisender_id'],
-  urlaub_campingplaetze: ['urlaub_id', 'campingplatz_id'],
   campingplatz_routen_cache: ['user_id', 'campingplatz_id'],
+  campingplatz_segment_routen_cache: ['from_campingplatz_id', 'to_campingplatz_id'],
   mitreisende_berechtigungen: ['mitreisender_id', 'berechtigung'],
   ausruestungsgegenstaende_standard_mitreisende: ['gegenstand_id', 'mitreisender_id'],
   ausruestungsgegenstaende_tags: ['gegenstand_id', 'tag_id'],

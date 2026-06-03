@@ -236,6 +236,32 @@ export interface CampingplatzRouteCacheEntry {
   updated_at: string
 }
 
+/** Routen-Cache zwischen zwei Campingplätzen (geografisch, nutzerunabhängig) */
+export interface CampingplatzSegmentRouteCacheEntry {
+  from_campingplatz_id: string
+  to_campingplatz_id: string
+  distance_km: number
+  duration_min: number
+  provider: 'google' | 'haversine'
+  updated_at: string
+}
+
+/**
+ * Eine konkrete Zuordnung eines Campingplatzes zu einem Urlaub inkl. Aufenthaltsdauer.
+ * Ein Campingplatz kann einem Urlaub mehrfach zugeordnet sein (jeweils eigene `id`).
+ */
+export interface VacationCampingStay {
+  id: string
+  urlaub_id: string
+  campingplatz_id: string
+  start_datum: string | null
+  end_datum: string | null
+  sort_index: number | null
+  notizen: string | null
+  created_at: string
+  campingplatz: Campingplatz
+}
+
 export type UserRole = 'admin' | 'kind' | 'gast'
 
 export interface User {
@@ -3847,6 +3873,10 @@ export async function archiveCampingplatz(
 }
 
 // Verknüpfung Urlaube <-> Campingplätze
+/**
+ * Liefert die einem Urlaub zugeordneten Campingplätze – dedupliziert (jeder Platz nur einmal),
+ * sortiert nach dem frühesten Aufenthaltsbeginn. Für Listen- und Kartendarstellung.
+ */
 export async function getCampingplaetzeForVacation(
   db: D1Database,
   vacationId: string
@@ -3855,12 +3885,15 @@ export async function getCampingplaetzeForVacation(
     const result = await db
       .prepare(
         `SELECT c.*, cf.id AS cover_foto_id, cf.r2_object_key AS cover_r2_object_key,
-         cf.google_photo_name AS cover_google_photo_name
+         cf.google_photo_name AS cover_google_photo_name,
+         MIN(uc.start_datum) AS first_start,
+         MIN(COALESCE(uc.sort_index, 999999)) AS min_sort
          FROM urlaub_campingplaetze uc
          JOIN campingplaetze c ON uc.campingplatz_id = c.id
          LEFT JOIN campingplatz_fotos cf ON cf.campingplatz_id = c.id AND cf.is_cover = 1
          WHERE uc.urlaub_id = ?
-         ORDER BY COALESCE(uc.sort_index, 999999), c.land, c.bundesland, c.ort, c.name`
+         GROUP BY c.id
+         ORDER BY (first_start IS NULL), first_start, min_sort, c.land, c.bundesland, c.ort, c.name`
       )
       .bind(vacationId)
       .all<Record<string, unknown>>()
@@ -3868,6 +3901,49 @@ export async function getCampingplaetzeForVacation(
     return rows.map((row) => mapCampingplatzRow(row))
   } catch (error) {
     console.error('Error fetching campingplaetze for vacation:', error)
+    return []
+  }
+}
+
+/**
+ * Liefert alle Campingplatz-Aufenthalte (Stays) eines Urlaubs inkl. Dauer,
+ * sortiert nach Startdatum (ohne Datum zuletzt). Mehrfachzuordnungen bleiben als
+ * separate Einträge erhalten.
+ */
+export async function getCampingStaysForVacation(
+  db: D1Database,
+  vacationId: string
+): Promise<VacationCampingStay[]> {
+  try {
+    const result = await db
+      .prepare(
+        `SELECT c.*, cf.id AS cover_foto_id, cf.r2_object_key AS cover_r2_object_key,
+         cf.google_photo_name AS cover_google_photo_name,
+         uc.id AS stay_id, uc.urlaub_id AS stay_urlaub_id, uc.campingplatz_id AS stay_campingplatz_id,
+         uc.start_datum AS stay_start, uc.end_datum AS stay_end,
+         uc.sort_index AS stay_sort, uc.notizen AS stay_notizen, uc.created_at AS stay_created_at
+         FROM urlaub_campingplaetze uc
+         JOIN campingplaetze c ON uc.campingplatz_id = c.id
+         LEFT JOIN campingplatz_fotos cf ON cf.campingplatz_id = c.id AND cf.is_cover = 1
+         WHERE uc.urlaub_id = ?
+         ORDER BY (uc.start_datum IS NULL), uc.start_datum, COALESCE(uc.sort_index, 999999), c.name`
+      )
+      .bind(vacationId)
+      .all<Record<string, unknown>>()
+    const rows = result.results || []
+    return rows.map((row) => ({
+      id: String(row.stay_id),
+      urlaub_id: String(row.stay_urlaub_id),
+      campingplatz_id: String(row.stay_campingplatz_id),
+      start_datum: row.stay_start != null ? String(row.stay_start) : null,
+      end_datum: row.stay_end != null ? String(row.stay_end) : null,
+      sort_index: row.stay_sort != null ? Number(row.stay_sort) : null,
+      notizen: row.stay_notizen != null ? String(row.stay_notizen) : null,
+      created_at: String(row.stay_created_at || ''),
+      campingplatz: mapCampingplatzRow(row),
+    }))
+  } catch (error) {
+    console.error('Error fetching camping stays for vacation:', error)
     return []
   }
 }
@@ -3890,12 +3966,15 @@ export async function getCampingplaetzeForVacationsBatch(
       const chunk = vacationIds.slice(i, i + CHUNK)
       const placeholders = chunk.map(() => '?').join(',')
       const sql = `SELECT uc.urlaub_id AS urlaub_id, c.*, cf.id AS cover_foto_id, cf.r2_object_key AS cover_r2_object_key,
-         cf.google_photo_name AS cover_google_photo_name
+         cf.google_photo_name AS cover_google_photo_name,
+         MIN(uc.start_datum) AS first_start,
+         MIN(COALESCE(uc.sort_index, 999999)) AS min_sort
          FROM urlaub_campingplaetze uc
          JOIN campingplaetze c ON uc.campingplatz_id = c.id
          LEFT JOIN campingplatz_fotos cf ON cf.campingplatz_id = c.id AND cf.is_cover = 1
          WHERE uc.urlaub_id IN (${placeholders})
-         ORDER BY uc.urlaub_id, COALESCE(uc.sort_index, 999999), c.land, c.bundesland, c.ort, c.name`
+         GROUP BY uc.urlaub_id, c.id
+         ORDER BY uc.urlaub_id, (first_start IS NULL), first_start, min_sort, c.land, c.bundesland, c.ort, c.name`
       const result = await db
         .prepare(sql)
         .bind(...chunk)
@@ -3916,30 +3995,81 @@ export async function getCampingplaetzeForVacationsBatch(
   }
 }
 
+export type CampingStayInput = {
+  campingplatz_id: string
+  start_datum?: string | null
+  end_datum?: string | null
+  notizen?: string | null
+}
+
+/**
+ * Setzt die Campingplatz-Aufenthalte eines Urlaubs neu (ersetzt alle bisherigen Zuordnungen).
+ * Mehrfachzuordnung desselben Campingplatzes ist möglich. Nach dem Setzen wird der
+ * Reisezeitraum des Urlaubs aus den Aufenthaltsdauern abgeleitet (frühester Start /
+ * spätestes Ende), sofern mindestens ein Aufenthalt datiert ist.
+ */
 export async function setCampingplaetzeForVacation(
   db: D1Database,
   vacationId: string,
-  campingplatzIds: string[]
+  stays: CampingStayInput[]
 ): Promise<boolean> {
   try {
     await db
       .prepare('DELETE FROM urlaub_campingplaetze WHERE urlaub_id = ?')
       .bind(vacationId)
       .run()
-    for (let index = 0; index < campingplatzIds.length; index++) {
-      const cid = campingplatzIds[index]
+    for (let index = 0; index < stays.length; index++) {
+      const stay = stays[index]
+      if (!stay || !stay.campingplatz_id) continue
       await db
         .prepare(
-          'INSERT INTO urlaub_campingplaetze (urlaub_id, campingplatz_id, sort_index) VALUES (?, ?, ?)'
+          'INSERT INTO urlaub_campingplaetze (id, urlaub_id, campingplatz_id, start_datum, end_datum, notizen, sort_index) VALUES (?, ?, ?, ?, ?, ?, ?)'
         )
-        .bind(vacationId, cid, index)
+        .bind(
+          crypto.randomUUID(),
+          vacationId,
+          stay.campingplatz_id,
+          stay.start_datum || null,
+          stay.end_datum || null,
+          stay.notizen || null,
+          index
+        )
         .run()
     }
+    await deriveAndPersistVacationDates(db, vacationId)
     return true
   } catch (error) {
     console.error('Error setting campingplaetze for vacation:', error)
     return false
   }
+}
+
+/**
+ * Leitet startdatum/enddatum des Urlaubs aus den datierten Campingplatz-Aufenthalten ab
+ * (MIN(start_datum) / MAX(end_datum)) und speichert sie. Gibt es keinen datierten
+ * Aufenthalt, bleiben die bestehenden Urlaubsdaten unverändert.
+ */
+export async function deriveAndPersistVacationDates(
+  db: D1Database,
+  vacationId: string
+): Promise<void> {
+  const row = await db
+    .prepare(
+      `SELECT MIN(start_datum) AS min_start, MAX(end_datum) AS max_end
+       FROM urlaub_campingplaetze
+       WHERE urlaub_id = ? AND start_datum IS NOT NULL AND start_datum != ''`
+    )
+    .bind(vacationId)
+    .first<{ min_start: string | null; max_end: string | null }>()
+
+  const minStart = row?.min_start || null
+  const maxEnd = row?.max_end || minStart || null
+  if (!minStart) return
+
+  await db
+    .prepare("UPDATE urlaube SET startdatum = ?, enddatum = ?, updated_at = datetime('now') WHERE id = ?")
+    .bind(minStart, maxEnd, vacationId)
+    .run()
 }
 
 // Routen-Cache
@@ -4052,6 +4182,57 @@ export async function deleteRoutesForCampingplatz(
     return true
   } catch (error) {
     console.error('Error deleting route cache entries for campingplatz:', error)
+    return false
+  }
+}
+
+// Segment-Routen-Cache (Campingplatz -> Campingplatz)
+export async function getSegmentRoute(
+  db: D1Database,
+  fromCampingplatzId: string,
+  toCampingplatzId: string
+): Promise<CampingplatzSegmentRouteCacheEntry | null> {
+  try {
+    const row = await db
+      .prepare(
+        'SELECT * FROM campingplatz_segment_routen_cache WHERE from_campingplatz_id = ? AND to_campingplatz_id = ?'
+      )
+      .bind(fromCampingplatzId, toCampingplatzId)
+      .first<CampingplatzSegmentRouteCacheEntry>()
+    return row || null
+  } catch (error) {
+    console.error('Error fetching segment route cache entry:', error)
+    return null
+  }
+}
+
+export async function setSegmentRoute(
+  db: D1Database,
+  entry: CampingplatzSegmentRouteCacheEntry
+): Promise<boolean> {
+  try {
+    await db
+      .prepare(
+        `INSERT INTO campingplatz_segment_routen_cache
+           (from_campingplatz_id, to_campingplatz_id, distance_km, duration_min, provider, updated_at)
+         VALUES (?, ?, ?, ?, ?, datetime('now'))
+         ON CONFLICT(from_campingplatz_id, to_campingplatz_id) DO UPDATE SET
+           distance_km = excluded.distance_km,
+           duration_min = excluded.duration_min,
+           provider = excluded.provider,
+           updated_at = datetime('now')`
+      )
+      .bind(
+        entry.from_campingplatz_id,
+        entry.to_campingplatz_id,
+        entry.distance_km,
+        entry.duration_min,
+        entry.provider
+      )
+      .run()
+    return true
+  } catch (error) {
+    console.error('Error setting segment route cache entry:', error)
     return false
   }
 }

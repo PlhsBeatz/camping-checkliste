@@ -20,7 +20,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { ApiResponse } from '@/lib/api-types'
-import { Vacation, Mitreisender, Campingplatz } from '@/lib/db'
+import { Vacation, Mitreisender, Campingplatz, VacationCampingStay } from '@/lib/db'
 import Image from 'next/image'
 import { campingplatzListThumbnailSrc } from '@/lib/campingplatz-photo-url'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
@@ -41,10 +41,41 @@ import {
 import { useReconnectRefetch } from '@/hooks/use-reconnect-refetch'
 import { openCampingplatzInAdacMaps } from '@/lib/adac-maps'
 import { getVacationCountdown } from '@/lib/vacation-helpers'
+import { sortMitreisendeNachRolleUndName } from '@/lib/mitreisenden-sort'
 
 type CampingplatzRouteInfo = {
   distanceKm: number
   durationMinutes: number
+}
+
+function segmentKey(fromId: string, toId: string) {
+  return `${fromId}|${toId}`
+}
+
+function formatStayDateRange(start: string | null, end: string | null) {
+  if (!start) return 'Kein Datum'
+  const startDate = new Date(start)
+  if (!end || end === start) {
+    return format(startDate, 'd. MMM yyyy', { locale: de })
+  }
+  const endDate = new Date(end)
+  const sameYear = isSameYear(startDate, endDate)
+  const sameMonth = isSameMonth(startDate, endDate)
+  if (sameYear && sameMonth) {
+    return `${format(startDate, 'd.', { locale: de })}–${format(endDate, 'd. MMM yyyy', { locale: de })}`
+  }
+  if (sameYear) {
+    return `${format(startDate, 'd. MMM', { locale: de })} – ${format(endDate, 'd. MMM yyyy', { locale: de })}`
+  }
+  return `${format(startDate, 'd. MMM yyyy', { locale: de })} – ${format(endDate, 'd. MMM yyyy', { locale: de })}`
+}
+
+function stayNights(start: string | null, end: string | null) {
+  if (!start || !end) return 0
+  const diff = Math.round(
+    (new Date(end).getTime() - new Date(start).getTime()) / (1000 * 60 * 60 * 24)
+  )
+  return diff > 0 ? diff : 0
 }
 
 function formatVacationDateRange(start: string, end: string) {
@@ -109,6 +140,58 @@ function CountdownHeader({ vacation }: { vacation: Vacation }) {
   )
 }
 
+/** Routen-Abschnitt direkt auf dem Hintergrund (ohne Box) – zwischen zwei Stationen. */
+function RouteLeg({
+  label,
+  route,
+  onOpenAdac,
+}: {
+  label: string
+  route: CampingplatzRouteInfo | undefined
+  onOpenAdac?: () => void
+}) {
+  return (
+    <div className="flex items-center gap-2 py-1.5 pl-4 pr-1 text-xs text-muted-foreground">
+      <div className="flex flex-col items-center self-stretch">
+        <span className="w-px flex-1 bg-border" />
+        <Route className="my-0.5 h-3.5 w-3.5 shrink-0 text-[rgb(45,79,30)]" />
+        <span className="w-px flex-1 bg-border" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <span className="font-medium text-foreground/70">{label}</span>
+        {route ? (
+          <span className="ml-1.5">
+            {Math.round(route.distanceKm)} km · {formatDurationMinutes(route.durationMinutes)}
+          </span>
+        ) : (
+          <span className="ml-1.5 italic opacity-70">Route wird berechnet…</span>
+        )}
+      </div>
+      {onOpenAdac && (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 w-7 shrink-0 p-0 text-muted-foreground"
+              aria-label="Routenoptionen"
+            >
+              <MoreVertical className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onSelect={() => onOpenAdac()}>
+              <Route className="h-4 w-4 mr-2" />
+              ADAC Routenplanung öffnen
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
+    </div>
+  )
+}
+
 export default function UrlaubDetailPage() {
   const params = useParams()
   const id = typeof params.id === 'string' ? params.id : ''
@@ -118,11 +201,17 @@ export default function UrlaubDetailPage() {
   const [vacation, setVacation] = useState<Vacation | null>(null)
   const [mitreisende, setMitreisende] = useState<Mitreisender[]>([])
   const [campingplaetze, setCampingplaetze] = useState<Campingplatz[]>([])
+  const [stays, setStays] = useState<VacationCampingStay[]>([])
   const [loadError, setLoadError] = useState<string | null>(null)
   const [deleteBusy, setDeleteBusy] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
   const [routeInfo, setRouteInfo] = useState<Record<string, CampingplatzRouteInfo>>({})
+  const [segmentRouteInfo, setSegmentRouteInfo] = useState<
+    Record<string, CampingplatzRouteInfo>
+  >({})
+  const segmentRouteInfoRef = useRef(segmentRouteInfo)
+  segmentRouteInfoRef.current = segmentRouteInfo
   const [homeCoords, setHomeCoords] = useState<{
     lat: number
     lng: number
@@ -140,6 +229,7 @@ export default function UrlaubDetailPage() {
         vacation: Vacation
         mitreisende: Mitreisender[]
         campingplaetze: Campingplatz[]
+        stays?: VacationCampingStay[]
       }>
       if (!data.success || !data.data) {
         if (typeof navigator !== 'undefined' && !navigator.onLine) {
@@ -149,6 +239,7 @@ export default function UrlaubDetailPage() {
             setVacation(v)
             setMitreisende(await getCachedVacationMitreisende(id))
             setCampingplaetze([])
+            setStays([])
             return
           }
         }
@@ -156,11 +247,13 @@ export default function UrlaubDetailPage() {
         setVacation(null)
         setMitreisende([])
         setCampingplaetze([])
+        setStays([])
         return
       }
       setVacation(data.data.vacation)
       setMitreisende(data.data.mitreisende)
       setCampingplaetze(data.data.campingplaetze)
+      setStays(data.data.stays ?? [])
     } catch {
       if (typeof navigator !== 'undefined' && !navigator.onLine) {
         const cached = await getCachedVacations()
@@ -169,6 +262,7 @@ export default function UrlaubDetailPage() {
           setVacation(v)
           setMitreisende(await getCachedVacationMitreisende(id))
           setCampingplaetze([])
+          setStays([])
           return
         }
       }
@@ -176,6 +270,7 @@ export default function UrlaubDetailPage() {
       setVacation(null)
       setMitreisende([])
       setCampingplaetze([])
+      setStays([])
     }
   }, [id])
 
@@ -260,6 +355,58 @@ export default function UrlaubDetailPage() {
       controller.abort()
     }
   }, [campingplaetze])
+
+  // Segment-Routen (Campingplatz → Campingplatz) für aufeinanderfolgende Aufenthalte laden
+  useEffect(() => {
+    if (stays.length < 2) return
+    let aborted = false
+    const controller = new AbortController()
+
+    const loadSegments = async () => {
+      for (let i = 0; i < stays.length - 1; i++) {
+        if (aborted) return
+        const fromStay = stays[i]
+        const toStay = stays[i + 1]
+        if (!fromStay || !toStay) continue
+        const from = fromStay.campingplatz
+        const to = toStay.campingplatz
+        if (from.id === to.id) continue
+        if (!from.lat || !from.lng || !to.lat || !to.lng) continue
+        const key = segmentKey(from.id, to.id)
+        if (segmentRouteInfoRef.current[key]) continue
+        try {
+          const res = await fetch('/api/routes/segment', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ fromId: from.id, toId: to.id }),
+            signal: controller.signal,
+          })
+          if (!res.ok || aborted) continue
+          const data = (await res.json()) as {
+            success?: boolean
+            data?: CampingplatzRouteInfo
+          }
+          if (!data.success || !data.data) continue
+          setSegmentRouteInfo((prev) =>
+            prev[key] ? prev : { ...prev, [key]: data.data! }
+          )
+        } catch {
+          if (aborted) return
+        }
+      }
+    }
+
+    void loadSegments()
+    return () => {
+      aborted = true
+      controller.abort()
+    }
+  }, [stays])
+
+  const sortedMitreisende = useMemo(
+    () => sortMitreisendeNachRolleUndName(mitreisende),
+    [mitreisende]
+  )
 
   const mapCampingplaetze = useMemo(
     () =>
@@ -412,7 +559,7 @@ export default function UrlaubDetailPage() {
                       <p className="text-sm text-muted-foreground">Keine Mitreisenden zugeordnet.</p>
                     ) : (
                       <ul className="flex flex-wrap gap-2">
-                        {mitreisende.map((m) => (
+                        {sortedMitreisende.map((m) => (
                           <li
                             key={m.id}
                             className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1 text-sm shadow-sm"
@@ -433,26 +580,45 @@ export default function UrlaubDetailPage() {
 
                   <section className="space-y-3">
                     <h2 className="text-sm font-semibold text-[rgb(45,79,30)]">Campingplätze</h2>
-                    {campingplaetze.length === 0 ? (
+                    {stays.length === 0 ? (
                       <p className="text-sm text-muted-foreground">
                         Noch keine Campingplätze zugeordnet.
                       </p>
                     ) : (
-                      <div className="space-y-2">
-                        {campingplaetze.map((cp) => {
-                          const r = routeInfo[cp.id]
+                      <div>
+                        {(() => {
+                          const firstStay = stays[0]
+                          return homeCoords && firstStay && firstStay.campingplatz.lat != null ? (
+                            <RouteLeg
+                              label="Von zu Hause"
+                              route={routeInfo[firstStay.campingplatz.id]}
+                              onOpenAdac={() =>
+                                void openCampingplatzInAdacMaps(firstStay.campingplatz, {
+                                  lat: homeCoords.lat,
+                                  lng: homeCoords.lng,
+                                })
+                              }
+                            />
+                          ) : null
+                        })()}
+                        {stays.map((stay, index) => {
+                          const cp = stay.campingplatz
                           const photoUrl = campingplatzListThumbnailSrc(cp)
+                          const nights = stayNights(stay.start_datum, stay.end_datum)
+                          const next = stays[index + 1]
+                          const showLeg =
+                            next &&
+                            next.campingplatz.id !== cp.id &&
+                            cp.lat != null &&
+                            next.campingplatz.lat != null
                           return (
-                            <div
-                              key={cp.id}
-                              className={cn(
-                                'bg-white rounded-xl border border-gray-200 shadow-sm px-3 py-2 flex items-start justify-between gap-3',
-                                cp.is_archived && 'opacity-60 bg-muted/60'
-                              )}
-                            >
+                            <div key={stay.id}>
                               <Link
                                 href={`/campingplaetze/${cp.id}`}
-                                className="flex gap-3 items-start flex-1 min-w-0 transition-colors hover:opacity-90"
+                                className={cn(
+                                  'bg-white rounded-xl border border-gray-200 shadow-sm px-3 py-2 flex gap-3 items-start transition-colors hover:bg-neutral-50',
+                                  cp.is_archived && 'opacity-60 bg-muted/60'
+                                )}
                               >
                                 <div className="flex-shrink-0 w-12 h-12 rounded-lg overflow-hidden bg-muted flex items-center justify-center">
                                   {photoUrl ? (
@@ -478,47 +644,54 @@ export default function UrlaubDetailPage() {
                                     {cp.ort}, {cp.land}
                                     {cp.bundesland && ` (${cp.bundesland})`}
                                   </div>
-                                  {r && (
-                                    <div className="flex items-center gap-1 text-xs text-gray-600 mt-0.5">
-                                      <Route className="h-3.5 w-3.5 text-[rgb(45,79,30)]" />
-                                      <span>
-                                        {Math.round(r.distanceKm)} km ·{' '}
-                                        {formatDurationMinutes(r.durationMinutes)}
-                                      </span>
-                                    </div>
-                                  )}
+                                  <div className="text-xs font-medium text-[rgb(45,79,30)]">
+                                    {formatStayDateRange(stay.start_datum, stay.end_datum)}
+                                    {nights > 0 &&
+                                      ` · ${nights} ${nights === 1 ? 'Nacht' : 'Nächte'}`}
+                                  </div>
                                 </div>
                               </Link>
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-8 w-8 p-0 shrink-0"
-                                    aria-label="Weitere Aktionen"
-                                  >
-                                    <MoreVertical className="h-4 w-4" />
-                                  </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end">
-                                  <DropdownMenuItem
-                                    onSelect={() => {
-                                      void openCampingplatzInAdacMaps(
-                                        cp,
-                                        homeCoords
-                                          ? { lat: homeCoords.lat, lng: homeCoords.lng }
-                                          : null
-                                      )
-                                    }}
-                                  >
-                                    <Route className="h-4 w-4 mr-2" />
-                                    ADAC Routenplanung öffnen
-                                  </DropdownMenuItem>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
+                              {showLeg && next && (
+                                <RouteLeg
+                                  label="Weiterfahrt"
+                                  route={
+                                    segmentRouteInfo[
+                                      segmentKey(cp.id, next.campingplatz.id)
+                                    ]
+                                  }
+                                  onOpenAdac={() =>
+                                    void openCampingplatzInAdacMaps(
+                                      next.campingplatz,
+                                      cp.lat != null && cp.lng != null
+                                        ? { lat: cp.lat, lng: cp.lng }
+                                        : null
+                                    )
+                                  }
+                                />
+                              )}
+                              {next && next.campingplatz.id === cp.id && (
+                                <div className="py-1.5 pl-4 text-xs italic text-muted-foreground">
+                                  Aufenthalt am selben Platz
+                                </div>
+                              )}
                             </div>
                           )
                         })}
+                        {(() => {
+                          const lastStay = stays[stays.length - 1]
+                          return homeCoords && lastStay && lastStay.campingplatz.lat != null ? (
+                            <RouteLeg
+                              label="Zurück nach Hause"
+                              route={routeInfo[lastStay.campingplatz.id]}
+                              onOpenAdac={() =>
+                                void openCampingplatzInAdacMaps(lastStay.campingplatz, {
+                                  lat: homeCoords.lat,
+                                  lng: homeCoords.lng,
+                                })
+                              }
+                            />
+                          ) : null
+                        })()}
                       </div>
                     )}
                     {(mapCampingplaetze.length > 0 || homeCoords) && (

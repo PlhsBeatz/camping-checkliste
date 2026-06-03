@@ -5,6 +5,7 @@ import {
   getVacation,
   getMitreisendeForVacation,
   getCampingplaetzeForVacation,
+  getCampingStaysForVacation,
 } from '@/lib/db'
 import { requireAuth } from '@/lib/api-auth'
 import { canAccessVacation } from '@/lib/permissions'
@@ -31,9 +32,10 @@ export async function GET(
       return NextResponse.json({ success: false, error: 'Nicht gefunden' }, { status: 404 })
     }
 
-    const [mitreisende, campingplaetze] = await Promise.all([
+    const [mitreisende, campingplaetze, stays] = await Promise.all([
       getMitreisendeForVacation(db, id),
       getCampingplaetzeForVacation(db, id),
+      getCampingStaysForVacation(db, id),
     ])
 
     if (!canAccessVacation(userContext, mitreisende.map((m) => m.id))) {
@@ -42,7 +44,7 @@ export async function GET(
 
     return NextResponse.json({
       success: true,
-      data: { vacation, mitreisende, campingplaetze },
+      data: { vacation, mitreisende, campingplaetze, stays },
     })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error)

@@ -3,9 +3,11 @@ import {
   CloudflareEnv,
   getDB,
   getVacations,
+  getVacation,
   getCampingplaetzeForVacation,
   getCampingplaetzeForVacationsBatch,
   setCampingplaetzeForVacation,
+  type CampingStayInput,
 } from '@/lib/db'
 import { requireAuth, requireAdmin } from '@/lib/api-auth'
 
@@ -50,10 +52,18 @@ export async function PUT(request: NextRequest) {
       urlaubId?: string
       vacationId?: string
       campingplatzIds?: string[]
+      stays?: Array<{
+        campingplatzId?: string
+        campingplatz_id?: string
+        startDatum?: string | null
+        start_datum?: string | null
+        endDatum?: string | null
+        end_datum?: string | null
+        notizen?: string | null
+      }>
     }
 
     const vacationId = body.urlaubId || body.vacationId
-    const campingplatzIds = body.campingplatzIds ?? []
 
     if (!vacationId) {
       return NextResponse.json(
@@ -62,7 +72,22 @@ export async function PUT(request: NextRequest) {
       )
     }
 
-    const ok = await setCampingplaetzeForVacation(db, vacationId, campingplatzIds)
+    // Bevorzugt das neue Format mit Dauern; legacy `campingplatzIds` (ohne Datum) bleibt unterstützt.
+    let stays: CampingStayInput[]
+    if (Array.isArray(body.stays)) {
+      stays = body.stays
+        .map((s) => ({
+          campingplatz_id: String(s.campingplatzId ?? s.campingplatz_id ?? ''),
+          start_datum: s.startDatum ?? s.start_datum ?? null,
+          end_datum: s.endDatum ?? s.end_datum ?? null,
+          notizen: s.notizen ?? null,
+        }))
+        .filter((s) => s.campingplatz_id)
+    } else {
+      stays = (body.campingplatzIds ?? []).map((id) => ({ campingplatz_id: id }))
+    }
+
+    const ok = await setCampingplaetzeForVacation(db, vacationId, stays)
     if (!ok) {
       return NextResponse.json(
         { success: false, error: 'Failed to set campingplaetze for vacation' },
@@ -70,7 +95,8 @@ export async function PUT(request: NextRequest) {
       )
     }
 
-    return NextResponse.json({ success: true })
+    const vacation = await getVacation(db, vacationId)
+    return NextResponse.json({ success: true, data: { vacation } })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error)
     return NextResponse.json({ success: false, error: message }, { status: 500 })

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { ResponsiveModal } from '@/components/ui/responsive-modal'
 import { Input } from '@/components/ui/input'
@@ -11,7 +11,7 @@ import { getCachedCampingplaetze } from '@/lib/offline-sync'
 import type { ApiResponse } from '@/lib/api-types'
 import type { Campingplatz, Mitreisender, Vacation } from '@/lib/db'
 import { deriveReisezielName } from '@/lib/vacation-helpers'
-import { format } from 'date-fns'
+import { addDays, differenceInCalendarDays, format } from 'date-fns'
 import { de } from 'date-fns/locale'
 import type { DateRange } from 'react-day-picker'
 import { useNavigation, type CaptionProps } from 'react-day-picker'
@@ -28,22 +28,6 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import {
-  DndContext,
-  PointerSensor,
-  TouchSensor,
-  closestCenter,
-  useSensor,
-  useSensors,
-  type DragEndEvent,
-} from '@dnd-kit/core'
-import {
-  SortableContext,
-  arrayMove,
-  useSortable,
-  verticalListSortingStrategy,
-} from '@dnd-kit/sortable'
-import { CSS } from '@dnd-kit/utilities'
-import {
   Command,
   CommandEmpty,
   CommandGroup,
@@ -55,8 +39,9 @@ import {
   Calendar as CalendarIcon,
   ChevronLeft,
   ChevronRight,
-  GripVertical,
+  Plus,
   Settings,
+  Trash2,
 } from 'lucide-react'
 
 export type VacationEditModalProps = {
@@ -70,10 +55,107 @@ export type VacationEditModalProps = {
   }) => void
 }
 
+type VacationStayApi = {
+  id: string
+  campingplatz_id: string
+  start_datum: string | null
+  end_datum: string | null
+}
+
 type VacationEditResponse = {
   vacation: Vacation
   mitreisende: Mitreisender[]
   campingplaetze: Campingplatz[]
+  stays?: VacationStayApi[]
+}
+
+/** Lokaler Bearbeitungszustand für einen Campingplatz-Aufenthalt. */
+type StayDraft = {
+  key: string
+  campingplatzId: string
+  /** 'yyyy-MM-dd' oder '' */
+  startDatum: string
+  endDatum: string
+}
+
+/** Sortiert Aufenthalte nach Startdatum; undatierte ans Ende. */
+function sortStays(stays: StayDraft[]): StayDraft[] {
+  return [...stays].sort((a, b) => {
+    if (!a.startDatum && !b.startDatum) return 0
+    if (!a.startDatum) return 1
+    if (!b.startDatum) return -1
+    return a.startDatum.localeCompare(b.startDatum)
+  })
+}
+
+/**
+ * FLIP-Animation: verschiebt umsortierte Listenzeilen dezent von ihrer alten an die neue Position.
+ * Liefert eine ref-Callback, mit der jede Zeile (per stabilem Key) registriert wird.
+ */
+function useFlipReorder() {
+  const elements = useRef(new Map<string, HTMLElement>())
+  const positions = useRef(new Map<string, number>())
+
+  const register = useCallback((key: string, el: HTMLElement | null) => {
+    if (el) elements.current.set(key, el)
+    else elements.current.delete(key)
+  }, [])
+
+  useEffect(() => {
+    const next = new Map<string, number>()
+    elements.current.forEach((el, key) => {
+      next.set(key, el.getBoundingClientRect().top)
+    })
+    next.forEach((top, key) => {
+      const old = positions.current.get(key)
+      if (old != null && Math.abs(old - top) > 1) {
+        const el = elements.current.get(key)
+        el?.animate?.(
+          [
+            { transform: `translateY(${old - top}px)` },
+            { transform: 'translateY(0px)' },
+          ],
+          { duration: 220, easing: 'cubic-bezier(0.2, 0, 0, 1)' }
+        )
+      }
+    })
+    positions.current = next
+  })
+
+  return register
+}
+
+/** Anzahl Nächte zwischen zwei ISO-Daten (>= 0). */
+function nightsBetween(start: string, end: string): number {
+  if (!start || !end) return 0
+  const diff = differenceInCalendarDays(new Date(end), new Date(start))
+  return diff > 0 ? diff : 0
+}
+
+/**
+ * Vorbelegung für einen neu hinzugefügten Aufenthalt:
+ * im Anschluss an den spätesten datierten Aufenthalt (1 Nacht), sonst der Seed-Zeitraum.
+ */
+function computeDefaultStayDates(
+  stays: StayDraft[],
+  seedStart: string,
+  seedEnd: string
+): { startDatum: string; endDatum: string } {
+  const datedEnds = stays
+    .map((s) => s.endDatum)
+    .filter((d): d is string => Boolean(d))
+    .sort((a, b) => a.localeCompare(b))
+  const lastEnd = datedEnds[datedEnds.length - 1]
+  if (lastEnd) {
+    const start = lastEnd
+    const end = format(addDays(new Date(start), 1), 'yyyy-MM-dd')
+    return { startDatum: start, endDatum: end }
+  }
+  if (seedStart) {
+    return { startDatum: seedStart, endDatum: seedEnd || seedStart }
+  }
+  const today = format(new Date(), 'yyyy-MM-dd')
+  return { startDatum: today, endDatum: format(addDays(new Date(), 1), 'yyyy-MM-dd') }
 }
 
 type VacationFormState = {
@@ -147,40 +229,125 @@ function useIsSmallViewport() {
   return isSmall
 }
 
-function SortableSelectedCampingRow({ campingplatz }: { campingplatz: Campingplatz }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id: campingplatz.id,
-  })
+function StayRow({
+  stay,
+  campingplatz,
+  overlapHint,
+  onChangeDates,
+  onRemove,
+}: {
+  stay: StayDraft
+  campingplatz: Campingplatz | undefined
+  overlapHint: string | null
+  onChangeDates: (startDatum: string, endDatum: string) => void
+  onRemove: () => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [draftRange, setDraftRange] = useState<DateRange | undefined>(undefined)
 
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.6 : 1,
-  }
+  const hasDates = Boolean(stay.startDatum && stay.endDatum)
+  const nights = hasDates ? nightsBetween(stay.startDatum, stay.endDatum) : 0
+
+  const selectedRange: DateRange | undefined =
+    stay.startDatum && stay.endDatum
+      ? { from: new Date(stay.startDatum), to: new Date(stay.endDatum) }
+      : stay.startDatum
+      ? { from: new Date(stay.startDatum), to: new Date(stay.startDatum) }
+      : undefined
 
   return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      className="flex items-center gap-2 py-1.5 px-2 rounded-md bg-muted/60 border border-muted-foreground/10"
-    >
-      <button
-        type="button"
-        {...attributes}
-        {...listeners}
-        className="flex items-center justify-center h-8 w-6 text-muted-foreground cursor-grab active:cursor-grabbing shrink-0"
-        style={{ touchAction: 'none' }}
-        aria-label="Campingplatz-Reihenfolge ändern"
-      >
-        <GripVertical className="h-4 w-4" />
-      </button>
-      <div className="flex-1 min-w-0">
-        <div className="text-sm font-medium truncate">{campingplatz.name}</div>
-        <div className="text-xs text-muted-foreground truncate">
-          {campingplatz.ort}, {campingplatz.land}
-          {campingplatz.bundesland && ` (${campingplatz.bundesland})`}
+    <div className="flex items-start gap-2 py-2 px-2 rounded-md bg-muted/60 border border-muted-foreground/10">
+      <div className="flex-1 min-w-0 space-y-1.5">
+        <div>
+          <div className="text-sm font-medium truncate">
+            {campingplatz?.name ?? 'Unbekannter Campingplatz'}
+          </div>
+          {campingplatz && (
+            <div className="text-xs text-muted-foreground truncate">
+              {campingplatz.ort}, {campingplatz.land}
+              {campingplatz.bundesland && ` (${campingplatz.bundesland})`}
+            </div>
+          )}
         </div>
+        <Popover
+          open={open}
+          onOpenChange={(isOpen) => {
+            setOpen(isOpen)
+            if (isOpen) setDraftRange(selectedRange)
+            else setDraftRange(undefined)
+          }}
+        >
+          <PopoverTrigger asChild>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className={cn('h-8 justify-start text-left font-normal', !hasDates && 'text-muted-foreground')}
+            >
+              <CalendarIcon className="mr-2 h-3.5 w-3.5 shrink-0" />
+              {hasDates ? (
+                <span className="truncate">
+                  {format(new Date(stay.startDatum), 'dd.MM.yy', { locale: de })} –{' '}
+                  {format(new Date(stay.endDatum), 'dd.MM.yy', { locale: de })}
+                  {nights > 0 && ` · ${nights} ${nights === 1 ? 'Nacht' : 'Nächte'}`}
+                </span>
+              ) : (
+                <span>Dauer wählen</span>
+              )}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0 bg-white max-h-[80vh] overflow-y-auto" align="start">
+            <Calendar
+              mode="range"
+              className="p-2"
+              classNames={{
+                months: 'flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-4',
+                month: 'space-y-1',
+              }}
+              defaultMonth={draftRange?.from ?? selectedRange?.from ?? new Date()}
+              selected={draftRange ?? selectedRange}
+              onSelect={(range: DateRange | undefined) => {
+                if (range?.from) {
+                  setDraftRange({ from: range.from, to: range.to ?? range.from })
+                }
+              }}
+              locale={de}
+              numberOfMonths={2}
+              components={{ Caption: RangeCalendarCaption }}
+            />
+            <div className="flex gap-2 p-3 border-t bg-muted/30">
+              <Button
+                type="button"
+                size="sm"
+                className="flex-1 bg-[rgb(45,79,30)] text-white hover:bg-[rgb(45,79,30)]/90 hover:text-white border-[rgb(45,79,30)]"
+                disabled={!draftRange?.from}
+                onClick={() => {
+                  if (!draftRange?.from) return
+                  onChangeDates(
+                    format(draftRange.from, 'yyyy-MM-dd'),
+                    format((draftRange.to ?? draftRange.from)!, 'yyyy-MM-dd')
+                  )
+                  setOpen(false)
+                  setDraftRange(undefined)
+                }}
+              >
+                OK
+              </Button>
+            </div>
+          </PopoverContent>
+        </Popover>
+        {overlapHint && <p className="text-xs text-amber-600">{overlapHint}</p>}
       </div>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive"
+        onClick={onRemove}
+        aria-label="Campingplatz entfernen"
+      >
+        <Trash2 className="h-4 w-4" />
+      </Button>
     </div>
   )
 }
@@ -194,7 +361,7 @@ export function VacationEditModal({
   const isSmallViewport = useIsSmallViewport()
   const [isLoading, setIsLoading] = useState(false)
   const [allCampingplaetze, setAllCampingplaetze] = useState<Campingplatz[]>([])
-  const [campingSelectionIds, setCampingSelectionIds] = useState<string[]>([])
+  const [stays, setStays] = useState<StayDraft[]>([])
   const [campingSearchOpen, setCampingSearchOpen] = useState(false)
   const [vacationMitreisende, setVacationMitreisende] = useState<Mitreisender[]>([])
   const [newVacationForm, setNewVacationForm] = useState<VacationFormState>(emptyVacationForm)
@@ -202,23 +369,69 @@ export function VacationEditModal({
   const [abfahrtPopoverOpen, setAbfahrtPopoverOpen] = useState(false)
   const [rangePopoverOpen, setRangePopoverOpen] = useState(false)
   const [draftRange, setDraftRange] = useState<DateRange | undefined>(undefined)
-  const sensors = useSensors(
-    useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 8 } }),
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
-  )
 
   const isEditing = Boolean(vacationId)
+  const registerStayRow = useFlipReorder()
 
-  const selectedCampingplaetze = useMemo(
-    () => allCampingplaetze.filter((c) => campingSelectionIds.includes(c.id)),
-    [allCampingplaetze, campingSelectionIds]
-  )
+  const campingplatzById = useMemo(() => {
+    const map = new Map<string, Campingplatz>()
+    for (const c of allCampingplaetze) map.set(c.id, c)
+    return map
+  }, [allCampingplaetze])
+
+  const sortedStays = useMemo(() => sortStays(stays), [stays])
+
+  /** Eindeutige Campingplätze in Datumsreihenfolge (für onSaved / Reiseziel-Ableitung). */
+  const orderedDistinctCampIds = useMemo(() => {
+    const seen = new Set<string>()
+    const ids: string[] = []
+    for (const s of sortedStays) {
+      if (seen.has(s.campingplatzId)) continue
+      seen.add(s.campingplatzId)
+      ids.push(s.campingplatzId)
+    }
+    return ids
+  }, [sortedStays])
+
+  /** Abgeleiteter Reisezeitraum (für die Anzeige im Bearbeiten-Modus). */
+  const derivedRangeLabel = useMemo(() => {
+    const dated = sortedStays.filter((s) => s.startDatum && s.endDatum)
+    const start = dated.length
+      ? dated.map((s) => s.startDatum).sort((a, b) => a.localeCompare(b))[0]
+      : newVacationForm.startdatum
+    const end = dated.length
+      ? dated.map((s) => s.endDatum).sort((a, b) => b.localeCompare(a))[0]
+      : newVacationForm.enddatum
+    if (!start || !end) return 'Noch kein Datum – über die Dauer eines Campingplatzes festlegen.'
+    return `${format(new Date(start), 'EE, dd. MMM yyyy', { locale: de })} – ${format(
+      new Date(end),
+      'EE, dd. MMM yyyy',
+      { locale: de }
+    )}`
+  }, [sortedStays, newVacationForm.startdatum, newVacationForm.enddatum])
+
+  /** Überlappungs-/Lücken-Hinweise je Aufenthalt (nur Hinweis, kein Blocker). */
+  const overlapHints = useMemo(() => {
+    const hints = new Map<string, string>()
+    const dated = sortedStays.filter((s) => s.startDatum && s.endDatum)
+    for (let i = 1; i < dated.length; i++) {
+      const prev = dated[i - 1]
+      const cur = dated[i]
+      if (!prev || !cur) continue
+      if (cur.startDatum < prev.endDatum) {
+        hints.set(cur.key, 'Überlappt mit dem vorherigen Aufenthalt.')
+      } else if (cur.startDatum > prev.endDatum) {
+        hints.set(cur.key, 'Lücke zum vorherigen Aufenthalt.')
+      }
+    }
+    return hints
+  }, [sortedStays])
 
   const resetInternalState = () => {
     setIsLoading(false)
     setNewVacationForm(emptyVacationForm())
     setVacationMitreisende([])
-    setCampingSelectionIds([])
+    setStays([])
     setCampingSearchOpen(false)
     setShowVacationSettingsModal(false)
     setAbfahrtPopoverOpen(false)
@@ -282,7 +495,27 @@ export function VacationEditModal({
             ) as 'packliste' | 'alles',
           })
           setVacationMitreisende(payload.mitreisende ?? [])
-          setCampingSelectionIds((payload.campingplaetze ?? []).map((c) => c.id))
+          const apiStays = payload.stays ?? []
+          if (apiStays.length > 0) {
+            setStays(
+              apiStays.map((s) => ({
+                key: s.id || crypto.randomUUID(),
+                campingplatzId: s.campingplatz_id,
+                startDatum: s.start_datum ?? '',
+                endDatum: s.end_datum ?? '',
+              }))
+            )
+          } else {
+            // Fallback (z. B. veraltete Antwort ohne stays): Plätze ohne Datum übernehmen.
+            setStays(
+              (payload.campingplaetze ?? []).map((c) => ({
+                key: crypto.randomUUID(),
+                campingplatzId: c.id,
+                startDatum: '',
+                endDatum: '',
+              }))
+            )
+          }
         } else {
           alert('Fehler beim Laden des Urlaubs: ' + (data.error ?? 'Unbekannt'))
         }
@@ -298,8 +531,26 @@ export function VacationEditModal({
   }, [open, vacationId])
 
   const handleSaveVacation = async () => {
-    if (!newVacationForm.titel || !newVacationForm.startdatum || !newVacationForm.enddatum) {
-      alert('Bitte füllen Sie alle erforderlichen Felder aus')
+    // Reisezeitraum wird aus den datierten Aufenthalten abgeleitet; der Seed-Zeitraum
+    // (Eingabefeld beim Anlegen bzw. die bereits gespeicherten Urlaubsdaten) dient als Rückfall.
+    const datedStays = sortedStays.filter((s) => s.startDatum && s.endDatum)
+    const derivedStart = datedStays.length
+      ? datedStays.map((s) => s.startDatum).sort((a, b) => a.localeCompare(b))[0]
+      : ''
+    const derivedEnd = datedStays.length
+      ? datedStays.map((s) => s.endDatum).sort((a, b) => b.localeCompare(a))[0]
+      : ''
+    const vacationStart = derivedStart || newVacationForm.startdatum
+    const vacationEnd = derivedEnd || newVacationForm.enddatum
+
+    if (!newVacationForm.titel) {
+      alert('Bitte geben Sie einen Titel ein.')
+      return
+    }
+    if (!vacationStart || !vacationEnd) {
+      alert(
+        'Bitte legen Sie einen Reisezeitraum fest – entweder über das Datumsfeld oder über die Dauer eines Campingplatzes.'
+      )
       return
     }
 
@@ -309,21 +560,17 @@ export function VacationEditModal({
       const { packliste_default_ansicht, ...restForm } = newVacationForm
       const normalizedReisezielName = deriveReisezielName(
         restForm.reiseziel_name,
-        campingSelectionIds,
+        orderedDistinctCampIds,
         allCampingplaetze
       )
-      const body = isEditing
-        ? {
-            ...restForm,
-            id: vacationId,
-            reiseziel_name: normalizedReisezielName,
-            packliste_default_ansicht,
-          }
-        : {
-            ...restForm,
-            reiseziel_name: normalizedReisezielName,
-            packliste_default_ansicht,
-          }
+      const body = {
+        ...restForm,
+        startdatum: vacationStart,
+        enddatum: vacationEnd,
+        reiseziel_name: normalizedReisezielName,
+        packliste_default_ansicht,
+        ...(isEditing ? { id: vacationId } : {}),
+      }
 
       const res = await fetch('/api/vacations', {
         method,
@@ -332,35 +579,40 @@ export function VacationEditModal({
       })
       const data = (await res.json()) as ApiResponse<Vacation>
       if (data.success && data.data) {
-        const savedVacation = data.data
+        let savedVacation = data.data
         const vacationIdForCamping = savedVacation.id
 
-        if (campingSelectionIds.length >= 0) {
-          try {
-            const campingRes = await fetch('/api/vacations/campingplaetze', {
-              method: 'PUT',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                urlaubId: vacationIdForCamping,
-                campingplatzIds: campingSelectionIds,
-              }),
-            })
-            const campingData = (await campingRes.json()) as {
-              success?: boolean
-              error?: string
-            }
-            if (!campingData.success) {
-              alert(
-                'Fehler beim Speichern der Campingplätze: ' +
-                  (campingData.error ?? 'Unbekannt')
-              )
-              return
-            }
-          } catch (error) {
-            console.error('Failed to save vacation campingplaetze:', error)
-            alert('Fehler beim Speichern der Campingplätze.')
+        try {
+          const campingRes = await fetch('/api/vacations/campingplaetze', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              urlaubId: vacationIdForCamping,
+              stays: sortedStays.map((s) => ({
+                campingplatzId: s.campingplatzId,
+                startDatum: s.startDatum || null,
+                endDatum: s.endDatum || null,
+              })),
+            }),
+          })
+          const campingData = (await campingRes.json()) as {
+            success?: boolean
+            error?: string
+            data?: { vacation?: Vacation | null }
+          }
+          if (!campingData.success) {
+            alert(
+              'Fehler beim Speichern der Campingplätze: ' + (campingData.error ?? 'Unbekannt')
+            )
             return
           }
+          // Server leitet startdatum/enddatum aus den Aufenthalten ab und liefert den
+          // aktualisierten Urlaub zurück.
+          if (campingData.data?.vacation) savedVacation = campingData.data.vacation
+        } catch (error) {
+          console.error('Failed to save vacation campingplaetze:', error)
+          alert('Fehler beim Speichern der Campingplätze.')
+          return
         }
 
         if (!isEditing && vacationMitreisende.length > 0) {
@@ -375,9 +627,13 @@ export function VacationEditModal({
           })
         }
 
+        const distinctCampingplaetze = orderedDistinctCampIds
+          .map((id) => campingplatzById.get(id))
+          .filter((c): c is Campingplatz => Boolean(c))
+
         onSaved?.({
           vacation: savedVacation,
-          campingplaetze: selectedCampingplaetze,
+          campingplaetze: distinctCampingplaetze,
           isNew: !isEditing,
         })
         handleClose()
@@ -390,6 +646,25 @@ export function VacationEditModal({
     } finally {
       setIsLoading(false)
     }
+  }
+
+  const handleAddCamping = (campingplatzId: string) => {
+    setStays((prev) => {
+      const def = computeDefaultStayDates(
+        prev,
+        newVacationForm.startdatum,
+        newVacationForm.enddatum
+      )
+      return [
+        ...prev,
+        {
+          key: crypto.randomUUID(),
+          campingplatzId,
+          startDatum: def.startDatum,
+          endDatum: def.endDatum,
+        },
+      ]
+    })
   }
 
   return (
@@ -436,7 +711,8 @@ export function VacationEditModal({
             />
           </div>
           <div className="space-y-4">
-            <div>
+            {!isEditing ? (
+              <div>
               <Label>Reisedatum *</Label>
               {isSmallViewport ? (
                 <>
@@ -651,7 +927,15 @@ export function VacationEditModal({
                   </PopoverContent>
                 </Popover>
               )}
-            </div>
+              </div>
+            ) : (
+              <div className="rounded-md border border-muted-foreground/10 bg-muted/40 px-3 py-2">
+                <span className="text-xs text-muted-foreground">
+                  Reisezeitraum (automatisch aus den Campingplatz-Dauern)
+                </span>
+                <div className="text-sm font-medium">{derivedRangeLabel}</div>
+              </div>
+            )}
 
             <div className="text-sm text-muted-foreground">
               <Label className="text-xs font-normal text-muted-foreground">
@@ -784,15 +1068,43 @@ export function VacationEditModal({
           </div>
 
           <div className="space-y-2">
-            <Label>Campingplätze für diesen Urlaub</Label>
+            <Label>Campingplätze &amp; Dauer</Label>
             <div className="space-y-2">
+              <div className="space-y-1.5">
+                {sortedStays.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">
+                    Noch keine Campingplätze ausgewählt.
+                  </p>
+                ) : (
+                  sortedStays.map((stay) => (
+                    <div key={stay.key} ref={(el) => registerStayRow(stay.key, el)}>
+                      <StayRow
+                        stay={stay}
+                        campingplatz={campingplatzById.get(stay.campingplatzId)}
+                        overlapHint={overlapHints.get(stay.key) ?? null}
+                        onChangeDates={(startDatum, endDatum) =>
+                          setStays((prev) =>
+                            prev.map((s) =>
+                              s.key === stay.key ? { ...s, startDatum, endDatum } : s
+                            )
+                          )
+                        }
+                        onRemove={() =>
+                          setStays((prev) => prev.filter((s) => s.key !== stay.key))
+                        }
+                      />
+                    </div>
+                  ))
+                )}
+              </div>
               <div>
                 <Button
                   type="button"
                   variant="outline"
-                  className="w-full justify-between"
+                  className="w-full justify-center gap-2"
                   onClick={() => setCampingSearchOpen(true)}
                 >
+                  <Plus className="h-4 w-4" />
                   <span>Campingplatz hinzufügen…</span>
                 </Button>
                 <Dialog open={campingSearchOpen} onOpenChange={setCampingSearchOpen}>
@@ -813,9 +1125,7 @@ export function VacationEditModal({
                                 key={c.id}
                                 value={`${c.name} ${c.ort} ${c.bundesland ?? ''} ${c.land}`}
                                 onSelect={() => {
-                                  setCampingSelectionIds((prev) =>
-                                    prev.includes(c.id) ? prev : [...prev, c.id]
-                                  )
+                                  handleAddCamping(c.id)
                                   setCampingSearchOpen(false)
                                 }}
                               >
@@ -834,63 +1144,9 @@ export function VacationEditModal({
                   </DialogContent>
                 </Dialog>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Öffnen Sie die Suche, um einen Campingplatz zu finden und zur Liste
-                  hinzuzufügen.
+                  Der erste Campingplatz übernimmt den Reisezeitraum, weitere schließen mit
+                  einer Nacht an. Ein Platz kann mehrfach zugeordnet werden.
                 </p>
-              </div>
-              <div className="space-y-1">
-                <DndContext
-                  sensors={sensors}
-                  collisionDetection={closestCenter}
-                  onDragEnd={(event: DragEndEvent) => {
-                    const { active, over } = event
-                    if (!over || active.id === over.id) return
-                    setCampingSelectionIds((prev) => {
-                      const oldIndex = prev.indexOf(String(active.id))
-                      const newIndex = prev.indexOf(String(over.id))
-                      if (oldIndex === -1 || newIndex === -1) return prev
-                      return arrayMove(prev, oldIndex, newIndex)
-                    })
-                  }}
-                >
-                  <SortableContext
-                    items={campingSelectionIds}
-                    strategy={verticalListSortingStrategy}
-                  >
-                    <div className="space-y-1">
-                      {campingSelectionIds.length === 0 ? (
-                        <p className="text-xs text-muted-foreground">
-                          Noch keine Campingplätze ausgewählt.
-                        </p>
-                      ) : (
-                        campingSelectionIds.map((id) => {
-                          const c = allCampingplaetze.find((cp) => cp.id === id)
-                          if (!c) return null
-                          return (
-                            <div key={id} className="flex items-center gap-2">
-                              <div className="flex-1">
-                                <SortableSelectedCampingRow campingplatz={c} />
-                              </div>
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                className="h-7 w-7 text-xs"
-                                onClick={() =>
-                                  setCampingSelectionIds((prev) =>
-                                    prev.filter((x) => x !== id)
-                                  )
-                                }
-                              >
-                                ×
-                              </Button>
-                            </div>
-                          )
-                        })
-                      )}
-                    </div>
-                  </SortableContext>
-                </DndContext>
               </div>
             </div>
           </div>

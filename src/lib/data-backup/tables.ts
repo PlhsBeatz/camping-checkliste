@@ -29,6 +29,7 @@ export const BACKUP_TABLE_ORDER: string[] = [
   'packlisten_eintrag_mitreisende',
   'packlisten_eintrag_mitreisende_temporaer',
   'campingplatz_routen_cache',
+  'campingplatz_segment_routen_cache',
   'checklisten',
   'checklisten_kategorien',
   'checklisten_eintraege',
@@ -83,7 +84,12 @@ const VACATIONS = new Set([
   'packlisten_eintrag_mitreisende_temporaer',
 ])
 
-const PLACES = new Set(['campingplaetze', 'campingplatz_fotos', 'urlaub_campingplaetze'])
+const PLACES = new Set([
+  'campingplaetze',
+  'campingplatz_fotos',
+  'urlaub_campingplaetze',
+  'campingplatz_segment_routen_cache',
+])
 const TOOLS = new Set(['checklisten', 'checklisten_kategorien', 'checklisten_eintraege'])
 export const AUTH_TABLES = new Set([
   'users',
@@ -114,13 +120,14 @@ export const PK_PARTS: Record<string, string[]> = {
   campingplatz_fotos: ['id'],
   urlaube: ['id'],
   urlaub_mitreisende: ['urlaub_id', 'mitreisender_id'],
-  urlaub_campingplaetze: ['urlaub_id', 'campingplatz_id'],
+  urlaub_campingplaetze: ['id'],
   packlisten: ['id'],
   packlisten_eintraege_temporaer: ['id'],
   packlisten_eintraege: ['id'],
   packlisten_eintrag_mitreisende: ['packlisten_eintrag_id', 'mitreisender_id'],
   packlisten_eintrag_mitreisende_temporaer: ['packlisten_eintrag_id', 'mitreisender_id'],
   campingplatz_routen_cache: ['user_id', 'campingplatz_id'],
+  campingplatz_segment_routen_cache: ['from_campingplatz_id', 'to_campingplatz_id'],
   checklisten: ['id'],
   checklisten_kategorien: ['id'],
   checklisten_eintraege: ['id'],
