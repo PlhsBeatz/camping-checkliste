@@ -94,8 +94,8 @@ export function computePackingProgress(
     }
   }
 
-  const percent = total > 0 ? Math.round((packed / total) * 100) : 100
-  const complete = total === 0 || packed >= total
+  const percent = total > 0 ? Math.round((packed / total) * 100) : 0
+  const complete = total > 0 && packed >= total
 
   return {
     total,

@@ -10,6 +10,7 @@ import { NavigationSidebar } from '@/components/navigation-sidebar'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Menu, Copy, Trash2, Plus, Webhook, Key, RefreshCw } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
+import { cn } from '@/lib/utils'
 import type { ApiResponse } from '@/lib/api-types'
 import type { TripStatusPayload } from '@/lib/trip-readiness'
 import { ALL_INTEGRATION_EVENT_TYPES, type IntegrationEventType } from '@/lib/integration-db'
@@ -236,22 +237,29 @@ export default function IntegrationenPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen flex max-w-full overflow-x-clip">
       <NavigationSidebar isOpen={showNavSidebar} onClose={() => setShowNavSidebar(false)} />
 
-      <header className="sticky top-0 z-30 bg-[rgb(45,79,30)] text-white px-4 py-3 flex items-center gap-3 lg:pl-[280px]">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="lg:hidden text-white hover:bg-white/10"
-          onClick={() => setShowNavSidebar(true)}
-        >
-          <Menu className="h-5 w-5" />
-        </Button>
-        <h1 className="text-lg font-semibold">Integrationen</h1>
-      </header>
+      <div className={cn('flex-1 min-w-0 transition-all duration-300', 'lg:ml-[280px]')}>
+        <div className="container mx-auto p-4 md:p-6 space-y-6 max-w-full">
+          <div className="sticky top-0 z-10 flex items-center justify-between bg-white shadow pb-4 -mx-4 px-4 -mt-4 pt-4 md:-mx-6 md:px-6 md:-mt-6 md:pt-6">
+            <div className="flex items-center gap-4">
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => setShowNavSidebar(true)}
+                className="lg:hidden"
+                aria-label="Menü"
+              >
+                <Menu className="h-5 w-5" />
+              </Button>
+              <h1 className="text-lg sm:text-xl font-bold tracking-tight text-[rgb(45,79,30)]">
+                Integrationen
+              </h1>
+            </div>
+          </div>
 
-      <main className="p-4 lg:pl-[280px] max-w-4xl mx-auto space-y-6 pb-12">
+          <div className="space-y-6 pb-6">
         {message && (
           <div className="rounded-md border bg-white px-4 py-3 text-sm">{message}</div>
         )}
@@ -443,7 +451,9 @@ export default function IntegrationenPage() {
             </p>
           </CardContent>
         </Card>
-      </main>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
