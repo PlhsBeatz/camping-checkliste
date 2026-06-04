@@ -32,7 +32,12 @@ import { cn, formatWeight, getInitials } from '@/lib/utils'
 import { USER_COLORS, DEFAULT_USER_COLOR_BG } from '@/lib/user-colors'
 import { useAuth } from '@/components/auth-provider'
 import { useVacationSearchParam } from '@/hooks/use-vacation-search-param'
-import { readPacklistUiSettings, writePacklistUiSettings } from '@/lib/packlist-ui-settings'
+import {
+  getInitialPacklistUiState,
+  readPacklistUiSettings,
+  resolveVacationIdForUi,
+  writePacklistUiSettings,
+} from '@/lib/packlist-ui-settings'
 import { usePackingSync } from '@/hooks/use-packing-sync'
 import { useOptimisticMutation } from '@/hooks/use-optimistic-mutation'
 import {
@@ -44,8 +49,8 @@ import {
   getCachedMainCategories,
   getCachedTransportVehicles,
   getCachedVacationMitreisende,
+  getSyncQueueCount,
   subscribeToOnlineStatus,
-  processSyncQueue,
   OUTBOX_SYNCED_EVENT_NAME,
 } from '@/lib/offline-sync'
 import {
@@ -99,12 +104,18 @@ interface CategoryWithMain extends Category {
 function HomeContent() {
   const { user, canSelectOtherProfiles, canAccessConfig, gepacktRequiresParentApproval, canEditPauschalEntries } = useAuth()
   const { mutate } = useOptimisticMutation()
+
+  const initialVacationIdForUi = resolveVacationIdForUi()
+  const initialPacklistUi = getInitialPacklistUiState(initialVacationIdForUi)
+
   // Data state
   const [vacations, setVacations] = useState<Vacation[]>([])
   const [packingItems, setPackingItems] = useState<PackingItem[]>([])
   const [transportVehicles, setTransportVehicles] = useState<TransportVehicle[]>([])
   const [vacationMitreisende, setVacationMitreisende] = useState<Mitreisender[]>([])
-  const [selectedVacationId, setSelectedVacationId] = useState<string | null>(null)
+  const [selectedVacationId, setSelectedVacationId] = useState<string | null>(
+    initialVacationIdForUi
+  )
   const [isLoading, setIsLoading] = useState(false)
   
   // Equipment data for FAB modal
@@ -121,10 +132,19 @@ function HomeContent() {
   const [editingPackingItemId, setEditingPackingItemId] = useState<string | null>(null)
   const [editingForMitreisenderId, setEditingForMitreisenderId] = useState<string | null>(null)
   const [_equipmentSearchTerm, _setEquipmentSearchTerm] = useState('')
-  const [selectedPackProfile, setSelectedPackProfile] = useState<string | null>(null)
+  const [selectedPackProfile, setSelectedPackProfile] = useState<string | null>(
+    initialPacklistUi.selectedPackProfile
+  )
   // Für Admins: merken, für welchen Urlaub das Standard-Packprofil bereits automatisch gesetzt wurde
-  const [autoProfileInitializedVacationId, setAutoProfileInitializedVacationId] = useState<string | null>(null)
-  const [hidePackedItems, setHidePackedItems] = useState(true)
+  const [autoProfileInitializedVacationId, setAutoProfileInitializedVacationId] = useState<string | null>(
+    initialPacklistUi.selectedPackProfile !== null && initialVacationIdForUi
+      ? initialVacationIdForUi
+      : null
+  )
+  const [hidePackedItems, setHidePackedItems] = useState(initialPacklistUi.hidePackedItems)
+  const [activeMainCategory, setActiveMainCategory] = useState(
+    initialPacklistUi.activeMainCategory
+  )
   const [deletePackingItemConfirm, setDeletePackingItemConfirm] = useState<{
     id: string
     forMitreisenderId?: string | null
@@ -135,9 +155,53 @@ function HomeContent() {
     packingItemId: string
     travelers: Array<{ id: string; name: string; gepackt?: boolean; gepackt_vorgemerkt?: boolean }>
   } | null>(null)
-  const [listDisplayMode, setListDisplayMode] = useState<'alles' | 'packliste'>('packliste')
-  /** Beim Wechsel des Urlaubs: Standardansicht aus Urlaub übernehmen (wird in useEffect gesetzt) */
-  const lastAppliedDefaultVacationIdRef = useRef<string | null>(null)
+  const [listDisplayMode, setListDisplayMode] = useState<'alles' | 'packliste'>(
+    initialPacklistUi.listDisplayMode
+  )
+  /** Beim Wechsel des Urlaubs: UI aus Storage oder Urlaubs-Standard (einmal pro Urlaub). */
+  const lastAppliedDefaultVacationIdRef = useRef<string | null>(
+    initialVacationIdForUi
+  )
+
+  const persistPacklistUi = useCallback(
+    (patch: Parameters<typeof writePacklistUiSettings>[1]) => {
+      if (!selectedVacationId) return
+      writePacklistUiSettings(selectedVacationId, patch)
+    },
+    [selectedVacationId]
+  )
+
+  const handleHidePackedChange = useCallback(
+    (hide: boolean) => {
+      setHidePackedItems(hide)
+      persistPacklistUi({ hidePackedItems: hide })
+    },
+    [persistPacklistUi]
+  )
+
+  const handleListDisplayModeChange = useCallback(
+    (mode: 'alles' | 'packliste') => {
+      setListDisplayMode(mode)
+      persistPacklistUi({ listDisplayMode: mode })
+    },
+    [persistPacklistUi]
+  )
+
+  const handlePackProfileChange = useCallback(
+    (profileId: string | null) => {
+      setSelectedPackProfile(profileId)
+      persistPacklistUi({ selectedPackProfile: profileId })
+    },
+    [persistPacklistUi]
+  )
+
+  const handleActiveMainCategoryChange = useCallback(
+    (category: string) => {
+      setActiveMainCategory(category)
+      persistPacklistUi({ activeMainCategory: category })
+    },
+    [persistPacklistUi]
+  )
   const addDialogScrollContextRef = useRef<{ mainCategory: string; category: string } | null>(null)
   const addDialogScrollRef = useRef<HTMLDivElement>(null)
   const [showAddSingleItemDialog, setShowAddSingleItemDialog] = useState(false)
@@ -336,10 +400,13 @@ function HomeContent() {
     void cachePackingItems(selectedVacationId, packingItems)
   }, [selectedVacationId, packingItems])
 
+  const fetchPackingItemsNowRef = useRef(fetchPackingItemsNow)
+  fetchPackingItemsNowRef.current = fetchPackingItemsNow
+
   useEffect(() => {
     if (!selectedVacationId) return
-    void fetchPackingItemsNow()
-  }, [selectedVacationId, fetchPackingItemsNow])
+    void fetchPackingItemsNowRef.current()
+  }, [selectedVacationId])
 
   // WebSocket für Echtzeit-Sync: gebündelt; nach Reconnect kurz pausieren
   const handlePackingSyncUpdate = useCallback(() => {
@@ -349,7 +416,7 @@ function HomeContent() {
   }, [schedulePackingRefresh])
   usePackingSync(selectedVacationId, handlePackingSyncUpdate)
 
-  // Bei Reconnect: Outbox → ein gebündelter Refetch (kein Hin-und-Her durch WS/Outbox-Events)
+  // Bei Reconnect: Sync über OfflineBanner; hier nur gebündelter Daten-Refresh (kein doppeltes processSyncQueue)
   useEffect(() => {
     let initial = true
     let lastOnline =
@@ -362,20 +429,26 @@ function HomeContent() {
       }
       if (online && !lastOnline) {
         wsRefreshSuppressUntilRef.current = Date.now() + PACKING_WS_SUPPRESS_MS
-        void (async () => {
-          await processSyncQueue()
-          schedulePackingRefresh(80)
-        })()
+        void getSyncQueueCount().then((count) => {
+          // Mit Outbox wartet der OfflineBanner auf Sync + OUTBOX_SYNCED (ein Refresh)
+          if (count === 0) schedulePackingRefresh(400)
+        })
       }
       lastOnline = online
     })
   }, [schedulePackingRefresh])
 
-  // Outbox-Sync (Banner / Background): dasselbe gebündelte Refresh wie bei Reconnect
+  // Outbox-Sync (OfflineBanner): ein Refresh nach abgeschlossener Sync – nicht parallel zum Reconnect-Timer
+  const outboxRefreshScheduledRef = useRef(false)
   useEffect(() => {
     if (typeof window === 'undefined') return
     const onOutboxSynced = () => {
-      schedulePackingRefresh()
+      if (outboxRefreshScheduledRef.current) return
+      outboxRefreshScheduledRef.current = true
+      schedulePackingRefresh(200)
+      window.setTimeout(() => {
+        outboxRefreshScheduledRef.current = false
+      }, 800)
     }
     window.addEventListener(OUTBOX_SYNCED_EVENT_NAME, onOutboxSynced)
     return () => window.removeEventListener(OUTBOX_SYNCED_EVENT_NAME, onOutboxSynced)
@@ -410,7 +483,9 @@ function HomeContent() {
 
     if (!canSelectOtherProfiles) {
       // Kind/Gast: immer eigenes Profil, kein „Alle“-Profil
-      setSelectedPackProfile(ownId)
+      if (selectedPackProfile !== ownId) {
+        handlePackProfileChange(ownId)
+      }
       return
     }
 
@@ -423,7 +498,7 @@ function HomeContent() {
     // Admin: nur beim ersten Laden dieses Urlaubs automatisch eigenes Profil setzen,
     // und nur, wenn aktuell noch kein Profil gewählt wurde (z.B. durch Session/URL)
     if (selectedPackProfile === null) {
-      setSelectedPackProfile(ownId)
+      handlePackProfileChange(ownId)
     }
     setAutoProfileInitializedVacationId(selectedVacationId)
   }, [
@@ -434,6 +509,7 @@ function HomeContent() {
     user,
     selectedVacationId,
     autoProfileInitializedVacationId,
+    handlePackProfileChange,
   ])
 
   // Fetch Equipment Items for FAB modal
@@ -612,9 +688,9 @@ function HomeContent() {
     }
   }, [selectedVacationId, vacations])
 
-  // Beim Wechsel des Urlaubs: gespeicherte UI-Einstellungen oder Urlaubs-Standard
+  // Beim Wechsel des Urlaubs: gespeicherte UI laden (nur wenn Urlaub wechselt – nicht bei Reconnect-Refetch)
   useEffect(() => {
-    if (!selectedVacationId || vacations.length === 0) return
+    if (!selectedVacationId) return
     if (lastAppliedDefaultVacationIdRef.current === selectedVacationId) return
     lastAppliedDefaultVacationIdRef.current = selectedVacationId
 
@@ -624,7 +700,7 @@ function HomeContent() {
     }
     if (saved?.listDisplayMode) {
       setListDisplayMode(saved.listDisplayMode)
-    } else {
+    } else if (vacations.length > 0) {
       const vacation = vacations.find((v) => v.id === selectedVacationId)
       const defaultMode =
         vacation?.packliste_default_ansicht === 'alles' ? 'alles' : 'packliste'
@@ -636,17 +712,8 @@ function HomeContent() {
         setAutoProfileInitializedVacationId(selectedVacationId)
       }
     }
+    setActiveMainCategory(saved?.activeMainCategory ?? '')
   }, [selectedVacationId, vacations])
-
-  // UI-Einstellungen pro Urlaub persistieren (überlebt Reconnect / Remount)
-  useEffect(() => {
-    if (!selectedVacationId) return
-    writePacklistUiSettings(selectedVacationId, {
-      hidePackedItems,
-      listDisplayMode,
-      selectedPackProfile,
-    })
-  }, [selectedVacationId, hidePackedItems, listDisplayMode, selectedPackProfile])
 
   const handleGeneratePackingList = async (equipmentItems: EquipmentItem[]) => {
     if (!selectedVacationId || equipmentItems.length === 0) return
@@ -1547,7 +1614,9 @@ function HomeContent() {
                   abreiseDatum={currentVacation?.abfahrtdatum?.trim() || currentVacation?.startdatum || null}
                   onScrollContextChange={handleScrollContextChange}
                   canSelectOtherProfiles={canSelectOtherProfiles}
-                  onProfileChange={(profileId) => setSelectedPackProfile(profileId)}
+                  activeMainCategory={activeMainCategory}
+                  onActiveMainCategoryChange={handleActiveMainCategoryChange}
+                  onProfileChange={handlePackProfileChange}
               />
 
               {/* Auto-generate button - Only when list is empty */}
@@ -1735,11 +1804,11 @@ function HomeContent() {
             : vacationMitreisende.filter((m) => m.id === user.mitreisender_id)
         }
         selectedProfile={selectedPackProfile}
-        onProfileChange={setSelectedPackProfile}
+        onProfileChange={handlePackProfileChange}
         hidePackedItems={hidePackedItems}
-        onHidePackedChange={setHidePackedItems}
+        onHidePackedChange={handleHidePackedChange}
         listDisplayMode={listDisplayMode}
-        onListDisplayModeChange={setListDisplayMode}
+        onListDisplayModeChange={handleListDisplayModeChange}
         showAlleOption={canSelectOtherProfiles}
       />
 

@@ -751,6 +751,9 @@ interface PackingListProps {
   canSelectOtherProfiles?: boolean;
   /** Wechsel in ein anderes Packprofil (z. B. aus Team-Übersicht) */
   onProfileChange?: (profileId: string) => void;
+  /** Aktive Hauptkategorie (vom Parent gesteuert – bleibt über Reconnect erhalten) */
+  activeMainCategory?: string;
+  onActiveMainCategoryChange?: (mainCategory: string) => void;
 }
 
 export function PackingList({
@@ -777,10 +780,21 @@ export function PackingList({
   abreiseDatum,
   onScrollContextChange,
   canSelectOtherProfiles = false,
-  onProfileChange
+  onProfileChange,
+  activeMainCategory: activeMainCategoryProp,
+  onActiveMainCategoryChange,
 }: PackingListProps) {
   const [undoToast, setUndoToast] = useState<{ visible: boolean; itemName: string; action: () => void } | null>(null);
-  const [activeMainCategory, setActiveMainCategory] = useState<string>('');
+  const [internalActiveMainCategory, setInternalActiveMainCategory] = useState('');
+  const activeMainCategory =
+    activeMainCategoryProp !== undefined ? activeMainCategoryProp : internalActiveMainCategory;
+  const setActiveMainCategory = useCallback(
+    (category: string) => {
+      if (onActiveMainCategoryChange) onActiveMainCategoryChange(category);
+      else setInternalActiveMainCategory(category);
+    },
+    [onActiveMainCategoryChange]
+  );
   const [firstVisibleCategory, setFirstVisibleCategory] = useState<string>('');
   const [tabsScrollbarVisible, setTabsScrollbarVisible] = useState(false);
   const [tabSwipeDirection, setTabSwipeDirection] = useState<'left' | 'right' | null>(null);
@@ -853,15 +867,14 @@ export function PackingList({
 
   const mainCategories = Object.keys(itemsByMainCategory);
 
-  // Set initial active tab
-  useMemo(() => {
-    if (mainCategories.length > 0 && !activeMainCategory) {
-      const firstCategory = mainCategories[0];
-      if (firstCategory) {  // Type guard to ensure it's not undefined
-        setActiveMainCategory(firstCategory);
-      }
+  // Erste Hauptkategorie nur setzen, wenn noch keine gewählt (Parent speichert Auswahl)
+  useEffect(() => {
+    if (activeMainCategoryProp !== undefined) return;
+    if (mainCategories.length > 0 && !internalActiveMainCategory) {
+      const first = mainCategories[0];
+      if (first) setInternalActiveMainCategory(first);
     }
-  }, [mainCategories, activeMainCategory]);
+  }, [mainCategories, internalActiveMainCategory, activeMainCategoryProp]);
 
   // Für Admin (canConfirmVorgemerkt): Nur verifiziert (gepackt) zählt im Fortschritt; Kind/Gast: vorgemerkt zählt mit.
   const countedAsPacked = useCallback(
@@ -1073,16 +1086,27 @@ export function PackingList({
 
   // Aktive Tab nur korrigieren wenn die aktuelle Hauptkategorie wirklich nicht mehr sichtbar ist
   const visibleMainCategoriesKey = visibleMainCategories.join('\u0001');
+  const lastTabCorrectionKeyRef = useRef<string | null>(null);
   useEffect(() => {
     if (visibleMainCategories.length === 0) return;
     if (
       activeMainCategory &&
       visibleMainCategories.includes(activeMainCategory)
     ) {
+      lastTabCorrectionKeyRef.current = null;
       return;
     }
-    setActiveMainCategory(visibleMainCategories[0]!);
-  }, [visibleMainCategoriesKey, activeMainCategory, visibleMainCategories]);
+    const next = visibleMainCategories[0]!;
+    const correctionKey = `${visibleMainCategoriesKey}\u0001${next}`;
+    if (lastTabCorrectionKeyRef.current === correctionKey) return;
+    lastTabCorrectionKeyRef.current = correctionKey;
+    setActiveMainCategory(next);
+  }, [
+    visibleMainCategoriesKey,
+    activeMainCategory,
+    visibleMainCategories,
+    setActiveMainCategory,
+  ]);
 
   // Kategorien anzeigen: wenn hidePackedItems, nur wenn mind. ein Eintrag ungepackt
   const shouldShowCategory = (categoryItems: DBPackingItem[]) => {
