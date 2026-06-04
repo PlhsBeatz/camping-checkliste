@@ -13,6 +13,10 @@ import { Vacation, PackingItem, TransportVehicle, Mitreisender, EquipmentItem, C
 import type { ApiResponse } from '@/lib/api-types'
 import { berechneAnzahl, berechneReiseTage, istKind, regelKurzLabel } from '@/lib/packing-quantity'
 import { packingItemsEqual } from '@/lib/packing-items-equal'
+import {
+  getPackingItemsMemory,
+  setPackingItemsMemory,
+} from '@/lib/packing-items-memory'
 import { sortMitreisendenZeilenNachStammdaten } from '@/lib/mitreisenden-sort'
 import { ResponsiveModal } from '@/components/ui/responsive-modal'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
@@ -68,7 +72,9 @@ const PACKABLE_STATUSES: readonly string[] = ['Normal', 'Immer gepackt']
 /** Nach Reconnect: WS-Refetch kurz unterdrücken (Outbox erzeugt viele packing-list-changed). */
 const PACKING_WS_SUPPRESS_MS = 4000
 /** Mehrere Refetch-Auslöser (Reconnect, Outbox, WS) zu einem UI-Update bündeln. */
-const PACKING_REFRESH_DEBOUNCE_MS = 300
+const PACKING_REFRESH_DEBOUNCE_MS = 400
+/** Mindestabstand zwischen Post-Reconnect-Refreshes (verhindert doppeltes Laden). */
+const POST_RECONNECT_REFRESH_GAP_MS = 1500
 
 // Helper function to find the next vacation - FIXED
 const findNextVacation = (vacations: Vacation[]): Vacation | null => {
@@ -110,7 +116,16 @@ function HomeContent() {
 
   // Data state
   const [vacations, setVacations] = useState<Vacation[]>([])
-  const [packingItems, setPackingItems] = useState<PackingItem[]>([])
+  const [packingItems, setPackingItems] = useState<PackingItem[]>(() => {
+    if (!initialVacationIdForUi) return []
+    return getPackingItemsMemory(initialVacationIdForUi) ?? []
+  })
+  /** Einmal Inhalt für diesen Urlaub gehabt – leere Meldung nur dann, nicht während Hintergrund-Sync. */
+  const packingHadContentRef = useRef(
+    (initialVacationIdForUi
+      ? (getPackingItemsMemory(initialVacationIdForUi)?.length ?? 0)
+      : 0) > 0
+  )
   const [transportVehicles, setTransportVehicles] = useState<TransportVehicle[]>([])
   const [vacationMitreisende, setVacationMitreisende] = useState<Mitreisender[]>([])
   const [selectedVacationId, setSelectedVacationId] = useState<string | null>(
@@ -315,8 +330,8 @@ function HomeContent() {
   const packingCacheReadyVacationRef = useRef<string | null>(null)
   const packingRefreshDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const packingRefreshInFlightRef = useRef<Promise<void> | null>(null)
-  const packingRefreshPendingRef = useRef(false)
   const wsRefreshSuppressUntilRef = useRef(0)
+  const postReconnectRefreshUntilRef = useRef(0)
 
   // Zähler ausstehender eigener Mutationen: Refetch nur wenn 0 (Änderung von anderem Gerät
   // oder alle eigenen PUTs abgeschlossen – verhindert partielle Daten bei schnellem Abhaken)
@@ -324,7 +339,10 @@ function HomeContent() {
 
   const applyPackingItemsFromFetch = useCallback(
     (next: PackingItem[]) => {
+      if (!selectedVacationId) return
       packingCacheReadyVacationRef.current = selectedVacationId
+      if (next.length > 0) packingHadContentRef.current = true
+      setPackingItemsMemory(selectedVacationId, next)
       setPackingItems((prev) => (packingItemsEqual(prev, next) ? prev : next))
     },
     [selectedVacationId]
@@ -348,24 +366,16 @@ function HomeContent() {
 
   const runPackingRefresh = useCallback(async () => {
     if (packingRefreshInFlightRef.current) {
-      packingRefreshPendingRef.current = true
-      await packingRefreshInFlightRef.current
-      if (!packingRefreshPendingRef.current) return
-      packingRefreshPendingRef.current = false
+      return packingRefreshInFlightRef.current
     }
     const run = fetchPackingItemsNow()
     packingRefreshInFlightRef.current = run
-    try {
-      await run
-    } finally {
+    void run.finally(() => {
       if (packingRefreshInFlightRef.current === run) {
         packingRefreshInFlightRef.current = null
       }
-      if (packingRefreshPendingRef.current) {
-        packingRefreshPendingRef.current = false
-        await runPackingRefresh()
-      }
-    }
+    })
+    return run
   }, [fetchPackingItemsNow])
 
   const schedulePackingRefresh = useCallback(
@@ -381,6 +391,14 @@ function HomeContent() {
     [runPackingRefresh]
   )
 
+  /** Nach Reconnect/Outbox höchstens ein gebündelter Packlisten-Refresh. */
+  const schedulePostReconnectRefresh = useCallback(() => {
+    const now = Date.now()
+    if (now < postReconnectRefreshUntilRef.current) return
+    postReconnectRefreshUntilRef.current = now + POST_RECONNECT_REFRESH_GAP_MS
+    schedulePackingRefresh(PACKING_REFRESH_DEBOUNCE_MS)
+  }, [schedulePackingRefresh])
+
   useEffect(() => {
     return () => {
       if (packingRefreshDebounceRef.current) {
@@ -393,12 +411,22 @@ function HomeContent() {
     packingCacheReadyVacationRef.current = null
   }, [selectedVacationId])
 
-  // Optimistische Offline-Änderungen in IndexedDB spiegeln (Abhaken bleibt nach Reload erhalten)
+  // Optimistische Änderungen: Memory + IndexedDB (Remount & Offline)
   useEffect(() => {
     if (!selectedVacationId) return
+    if (packingItems.length > 0) {
+      packingHadContentRef.current = true
+      setPackingItemsMemory(selectedVacationId, packingItems)
+    }
     if (packingCacheReadyVacationRef.current !== selectedVacationId) return
     void cachePackingItems(selectedVacationId, packingItems)
   }, [selectedVacationId, packingItems])
+
+  useEffect(() => {
+    if (!selectedVacationId) return
+    const mem = getPackingItemsMemory(selectedVacationId)
+    packingHadContentRef.current = (mem?.length ?? 0) > 0
+  }, [selectedVacationId])
 
   const fetchPackingItemsNowRef = useRef(fetchPackingItemsNow)
   fetchPackingItemsNowRef.current = fetchPackingItemsNow
@@ -430,29 +458,22 @@ function HomeContent() {
       if (online && !lastOnline) {
         wsRefreshSuppressUntilRef.current = Date.now() + PACKING_WS_SUPPRESS_MS
         void getSyncQueueCount().then((count) => {
-          // Mit Outbox wartet der OfflineBanner auf Sync + OUTBOX_SYNCED (ein Refresh)
-          if (count === 0) schedulePackingRefresh(400)
+          // Mit Outbox: Refresh nur über OUTBOX_SYNCED (OfflineBanner)
+          if (count === 0) schedulePostReconnectRefresh()
         })
       }
       lastOnline = online
     })
-  }, [schedulePackingRefresh])
+  }, [schedulePostReconnectRefresh])
 
-  // Outbox-Sync (OfflineBanner): ein Refresh nach abgeschlossener Sync – nicht parallel zum Reconnect-Timer
-  const outboxRefreshScheduledRef = useRef(false)
   useEffect(() => {
     if (typeof window === 'undefined') return
     const onOutboxSynced = () => {
-      if (outboxRefreshScheduledRef.current) return
-      outboxRefreshScheduledRef.current = true
-      schedulePackingRefresh(200)
-      window.setTimeout(() => {
-        outboxRefreshScheduledRef.current = false
-      }, 800)
+      schedulePostReconnectRefresh()
     }
     window.addEventListener(OUTBOX_SYNCED_EVENT_NAME, onOutboxSynced)
     return () => window.removeEventListener(OUTBOX_SYNCED_EVENT_NAME, onOutboxSynced)
-  }, [schedulePackingRefresh])
+  }, [schedulePostReconnectRefresh])
 
   // Fetch Mitreisende for vacation (mit Offline-Cache pro Urlaub)
   useEffect(() => {
@@ -1620,7 +1641,7 @@ function HomeContent() {
               />
 
               {/* Auto-generate button - Only when list is empty */}
-              {packingItems.length === 0 && (
+              {packingItems.length === 0 && !packingHadContentRef.current && (
                 <div className="p-6 text-center bg-white">
                   <p className="text-muted-foreground mb-4">
                     Ihre Packliste ist leer. Generieren Sie automatisch Vorschläge oder fügen Sie manuell Gegenstände hinzu.
