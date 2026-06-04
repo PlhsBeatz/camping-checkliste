@@ -308,6 +308,9 @@ function UrlaubePageContent() {
   }
 
   const handleSelectVacation = (vacationId: string) => {
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('packlistVacationId', vacationId)
+    }
     router.push(`/?vacation=${vacationId}`)
   }
 

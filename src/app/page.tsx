@@ -176,51 +176,54 @@ function HomeContent() {
   const searchParams = useSearchParams()
   const urlVacationId = searchParams.get('vacation')
 
-  // Fetch Vacations und Urlaub wählen (gleiche Logik wie Pack-Status: URL → sessionStorage → nächster)
+  // Refetch-Tick: bei Reconnect bumpen → Stammdaten- und Urlaubsliste neu laden
+  const [refetchTick, setRefetchTick] = useState(0)
+
+  const vacationFetchVersionRef = useRef(0)
+
+  // „Packliste öffnen“ (/?vacation=…): Auswahl sofort setzen, nicht auf API warten
   useEffect(() => {
-    const fetchVacations = async () => {
-      try {
-        const res = await fetch('/api/vacations')
-        const data = (await res.json()) as ApiResponse<Vacation[]>
-        if (data.success && data.data) {
-          setVacations(data.data)
-          await cacheVacations(data.data)
-          const stored =
-            urlVacationId && data.data.some((v: Vacation) => v.id === urlVacationId)
-              ? urlVacationId
-              : typeof window !== 'undefined'
-                ? sessionStorage.getItem('packlistVacationId')
-                : null
-          const validStored = stored && data.data.some((v: Vacation) => v.id === stored)
-          if (validStored) {
-            setSelectedVacationId(stored)
-          } else if (data.data.length > 0) {
-            const nextVacation = findNextVacation(data.data)
-            if (nextVacation) {
-              setSelectedVacationId(nextVacation.id)
-            }
-          }
-        }
-      } catch (error) {
-        console.error('Failed to fetch vacations:', error)
-        if (typeof navigator !== 'undefined' && !navigator.onLine) {
-          const cached = await getCachedVacations()
-          if (cached.length > 0) {
-            setVacations(cached)
-            const stored = typeof window !== 'undefined' ? sessionStorage.getItem('packlistVacationId') : null
-            const validStored = stored && cached.some((v: Vacation) => v.id === stored)
-            if (validStored) {
-              setSelectedVacationId(stored)
-            } else {
-              const next = findNextVacation(cached)
-              if (next) setSelectedVacationId(next.id)
-            }
-          }
-        }
-      }
-    }
-    fetchVacations()
+    if (!urlVacationId) return
+    setSelectedVacationId(urlVacationId)
   }, [urlVacationId])
+
+  // Urlaubsliste laden (IndexedDB-Fallback wie bei Packlisten-Einträgen)
+  useEffect(() => {
+    const myVersion = ++vacationFetchVersionRef.current
+    const loadVacations = async () => {
+      const { data } = await fetchAndCache<Vacation[]>(
+        '/api/vacations',
+        cacheVacations,
+        getCachedVacations,
+        { cache: 'no-store' }
+      )
+      if (myVersion !== vacationFetchVersionRef.current) return
+      if (data !== null) setVacations(data)
+    }
+    void loadVacations()
+  }, [refetchTick])
+
+  // Gewählten Urlaub: URL hat Vorrang, sonst sessionStorage, sonst nächster Urlaub
+  useEffect(() => {
+    if (vacations.length === 0) return
+
+    if (urlVacationId) {
+      if (vacations.some((v) => v.id === urlVacationId)) {
+        setSelectedVacationId(urlVacationId)
+      }
+      return
+    }
+
+    const stored =
+      typeof window !== 'undefined' ? sessionStorage.getItem('packlistVacationId') : null
+    if (stored && vacations.some((v) => v.id === stored)) {
+      setSelectedVacationId(stored)
+      return
+    }
+
+    const nextVacation = findNextVacation(vacations)
+    if (nextVacation) setSelectedVacationId(nextVacation.id)
+  }, [urlVacationId, vacations])
 
   // Pack-Status nutzt diesen Urlaub; bei Wechsel sync zu sessionStorage
   useEffect(() => {
@@ -277,9 +280,6 @@ function HomeContent() {
     fetchPackingItems()
   }, [fetchPackingItems])
   usePackingSync(selectedVacationId, handlePackingSyncUpdate)
-
-  // Refetch-Tick: bumpen wir bei Reconnect, alle Stammdaten-Effekte hängen daran.
-  const [refetchTick, setRefetchTick] = useState(0)
 
   // Bei Reconnect: Packliste neu laden + Bump-Tick → Stammdaten-Refetch in den anderen useEffects
   useEffect(() => {
@@ -529,7 +529,22 @@ function HomeContent() {
       })
   }, [availableEquipment, searchTerm, categories, mainCategories])
 
-  const currentVacation = vacations.find(v => v.id === selectedVacationId)
+  const currentVacation = useMemo((): Vacation | null => {
+    if (!selectedVacationId) return null
+    const found = vacations.find((v) => v.id === selectedVacationId)
+    if (found) return found
+    // Metadaten noch nicht aus Cache – Packliste trotzdem anzeigen (z. B. direkt nach ?vacation=)
+    const today = new Date().toISOString().slice(0, 10)
+    return {
+      id: selectedVacationId,
+      titel: 'Packliste',
+      startdatum: today,
+      enddatum: today,
+      reiseziel_name: '',
+      created_at: today,
+      packliste_default_ansicht: 'packliste',
+    }
+  }, [selectedVacationId, vacations])
 
   // Beim Wechsel des Urlaubs: Standardansicht aus Urlaub übernehmen
   useEffect(() => {

@@ -718,7 +718,12 @@ export default function UrlaubDetailPage() {
                       variant="outline"
                       size="sm"
                       className="bg-white hover:bg-neutral-50"
-                      onClick={() => router.push(`/?vacation=${vacation.id}`)}
+                      onClick={() => {
+                        if (typeof window !== 'undefined') {
+                          sessionStorage.setItem('packlistVacationId', vacation.id)
+                        }
+                        router.push(`/?vacation=${vacation.id}`)
+                      }}
                     >
                       Packliste öffnen
                     </Button>
