@@ -39,6 +39,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { getCachedVacations, getCachedCampingplaetze } from '@/lib/offline-sync'
 import { cacheVacations, cacheCampingplaetze } from '@/lib/offline-db'
 import { useReconnectRefetch } from '@/hooks/use-reconnect-refetch'
+import { notifyVacationSearchParamChanged } from '@/hooks/use-vacation-search-param'
 import { format, isSameMonth, isSameYear } from 'date-fns'
 import { de } from 'date-fns/locale'
 import Image from 'next/image'
@@ -312,6 +313,7 @@ function UrlaubePageContent() {
       sessionStorage.setItem('packlistVacationId', vacationId)
     }
     router.push(`/?vacation=${vacationId}`)
+    notifyVacationSearchParamChanged()
   }
 
   // Verhindert, dass der Card-Touch (nach Dropdown-Auswahl) als Klick zählt – nur auf Mobile relevant

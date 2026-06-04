@@ -8,7 +8,7 @@ import { AddSingleItemDialog } from '@/components/add-single-item-dialog'
 import { NavigationSidebar } from '@/components/navigation-sidebar'
 import { PackingSettingsSidebar } from '@/components/packing-settings-sidebar'
 import { Plus, Sparkles, Menu, Search, Users } from 'lucide-react'
-import { useState, useEffect, Suspense, useMemo, useCallback, useRef } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { Vacation, PackingItem, TransportVehicle, Mitreisender, EquipmentItem, Category, MainCategory } from '@/lib/db'
 import type { ApiResponse } from '@/lib/api-types'
 import { berechneAnzahl, berechneReiseTage, istKind, regelKurzLabel } from '@/lib/packing-quantity'
@@ -30,8 +30,9 @@ import {
 import { CategoryGroupedSelectField } from '@/components/category-select-grouped'
 import { cn, formatWeight, getInitials } from '@/lib/utils'
 import { USER_COLORS, DEFAULT_USER_COLOR_BG } from '@/lib/user-colors'
-import { useSearchParams } from 'next/navigation'
 import { useAuth } from '@/components/auth-provider'
+import { useVacationSearchParam } from '@/hooks/use-vacation-search-param'
+import { readPacklistUiSettings, writePacklistUiSettings } from '@/lib/packlist-ui-settings'
 import { usePackingSync } from '@/hooks/use-packing-sync'
 import { useOptimisticMutation } from '@/hooks/use-optimistic-mutation'
 import {
@@ -178,9 +179,7 @@ function HomeContent() {
     kategorieId: ''
   })
 
-  // Get URL parameters
-  const searchParams = useSearchParams()
-  const urlVacationId = searchParams.get('vacation')
+  const urlVacationId = useVacationSearchParam()
 
   // Refetch-Tick: bei Reconnect bumpen → Stammdaten- und Urlaubsliste neu laden
   const [refetchTick, setRefetchTick] = useState(0)
@@ -209,7 +208,7 @@ function HomeContent() {
     void loadVacations()
   }, [refetchTick])
 
-  // Gewählten Urlaub: URL hat Vorrang, sonst sessionStorage, sonst nächster Urlaub
+  // Gewählten Urlaub: URL → bestehende Auswahl beibehalten → sessionStorage → nächster
   useEffect(() => {
     if (vacations.length === 0) return
 
@@ -217,6 +216,14 @@ function HomeContent() {
       if (vacations.some((v) => v.id === urlVacationId)) {
         setSelectedVacationId(urlVacationId)
       }
+      return
+    }
+
+    // Reconnect/Refetch der Urlaubsliste: aktuellen Urlaub nicht überschreiben
+    if (
+      selectedVacationId &&
+      vacations.some((v) => v.id === selectedVacationId)
+    ) {
       return
     }
 
@@ -229,7 +236,7 @@ function HomeContent() {
 
     const nextVacation = findNextVacation(vacations)
     if (nextVacation) setSelectedVacationId(nextVacation.id)
-  }, [urlVacationId, vacations])
+  }, [urlVacationId, vacations, selectedVacationId])
 
   // Pack-Status nutzt diesen Urlaub; bei Wechsel sync zu sessionStorage
   useEffect(() => {
@@ -358,7 +365,6 @@ function HomeContent() {
         void (async () => {
           await processSyncQueue()
           schedulePackingRefresh(80)
-          setRefetchTick((t) => t + 1)
         })()
       }
       lastOnline = online
@@ -606,16 +612,41 @@ function HomeContent() {
     }
   }, [selectedVacationId, vacations])
 
-  // Beim Wechsel des Urlaubs: Standardansicht aus Urlaub übernehmen
+  // Beim Wechsel des Urlaubs: gespeicherte UI-Einstellungen oder Urlaubs-Standard
   useEffect(() => {
     if (!selectedVacationId || vacations.length === 0) return
-    const vacation = vacations.find((v) => v.id === selectedVacationId)
-    if (!vacation) return
     if (lastAppliedDefaultVacationIdRef.current === selectedVacationId) return
     lastAppliedDefaultVacationIdRef.current = selectedVacationId
-    const defaultMode = vacation.packliste_default_ansicht === 'alles' ? 'alles' : 'packliste'
-    setListDisplayMode(defaultMode)
+
+    const saved = readPacklistUiSettings(selectedVacationId)
+    if (saved?.hidePackedItems !== undefined) {
+      setHidePackedItems(saved.hidePackedItems)
+    }
+    if (saved?.listDisplayMode) {
+      setListDisplayMode(saved.listDisplayMode)
+    } else {
+      const vacation = vacations.find((v) => v.id === selectedVacationId)
+      const defaultMode =
+        vacation?.packliste_default_ansicht === 'alles' ? 'alles' : 'packliste'
+      setListDisplayMode(defaultMode)
+    }
+    if (saved?.selectedPackProfile !== undefined) {
+      setSelectedPackProfile(saved.selectedPackProfile)
+      if (saved.selectedPackProfile !== null) {
+        setAutoProfileInitializedVacationId(selectedVacationId)
+      }
+    }
   }, [selectedVacationId, vacations])
+
+  // UI-Einstellungen pro Urlaub persistieren (überlebt Reconnect / Remount)
+  useEffect(() => {
+    if (!selectedVacationId) return
+    writePacklistUiSettings(selectedVacationId, {
+      hidePackedItems,
+      listDisplayMode,
+      selectedPackProfile,
+    })
+  }, [selectedVacationId, hidePackedItems, listDisplayMode, selectedPackProfile])
 
   const handleGeneratePackingList = async (equipmentItems: EquipmentItem[]) => {
     if (!selectedVacationId || equipmentItems.length === 0) return
@@ -1922,16 +1953,5 @@ function HomeContent() {
 }
 
 export default function Home() {
-  return (
-    <Suspense fallback={
-      <div className="min-h-screen bg-scroll-pattern flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[rgb(45,79,30)] mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Lädt...</p>
-        </div>
-      </div>
-    }>
-      <HomeContent />
-    </Suspense>
-  )
+  return <HomeContent />
 }

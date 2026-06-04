@@ -1,6 +1,7 @@
 'use client'
 
 import { useAuth } from '@/components/auth-provider'
+import { notifyVacationSearchParamChanged } from '@/hooks/use-vacation-search-param'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -723,6 +724,7 @@ export default function UrlaubDetailPage() {
                           sessionStorage.setItem('packlistVacationId', vacation.id)
                         }
                         router.push(`/?vacation=${vacation.id}`)
+                        notifyVacationSearchParamChanged()
                       }}
                     >
                       Packliste öffnen

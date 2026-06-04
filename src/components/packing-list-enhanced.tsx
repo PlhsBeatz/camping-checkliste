@@ -1071,13 +1071,18 @@ export function PackingList({
     });
   }, [mainCategories, itemsByMainCategory, hidePackedItems, isItemFullyPackedForView]);
 
-  // Aktive Tab setzen/korrigieren: erste sichtbare oder wenn aktuelle ausgeblendet
+  // Aktive Tab nur korrigieren wenn die aktuelle Hauptkategorie wirklich nicht mehr sichtbar ist
+  const visibleMainCategoriesKey = visibleMainCategories.join('\u0001');
   useEffect(() => {
     if (visibleMainCategories.length === 0) return;
-    if (!activeMainCategory || !visibleMainCategories.includes(activeMainCategory)) {
-      setActiveMainCategory(visibleMainCategories[0]!);
+    if (
+      activeMainCategory &&
+      visibleMainCategories.includes(activeMainCategory)
+    ) {
+      return;
     }
-  }, [visibleMainCategories, activeMainCategory]);
+    setActiveMainCategory(visibleMainCategories[0]!);
+  }, [visibleMainCategoriesKey, activeMainCategory, visibleMainCategories]);
 
   // Kategorien anzeigen: wenn hidePackedItems, nur wenn mind. ein Eintrag ungepackt
   const shouldShowCategory = (categoryItems: DBPackingItem[]) => {
