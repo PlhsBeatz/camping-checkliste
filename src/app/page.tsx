@@ -12,6 +12,7 @@ import { useState, useEffect, Suspense, useMemo, useCallback, useRef } from 'rea
 import { Vacation, PackingItem, TransportVehicle, Mitreisender, EquipmentItem, Category, MainCategory } from '@/lib/db'
 import type { ApiResponse } from '@/lib/api-types'
 import { berechneAnzahl, berechneReiseTage, istKind, regelKurzLabel } from '@/lib/packing-quantity'
+import { packingItemsEqual } from '@/lib/packing-items-equal'
 import { sortMitreisendenZeilenNachStammdaten } from '@/lib/mitreisenden-sort'
 import { ResponsiveModal } from '@/components/ui/responsive-modal'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
@@ -57,6 +58,11 @@ import {
 } from '@/lib/offline-db'
 
 const PACKABLE_STATUSES: readonly string[] = ['Normal', 'Immer gepackt']
+
+/** Nach Reconnect: WS-Refetch kurz unterdrücken (Outbox erzeugt viele packing-list-changed). */
+const PACKING_WS_SUPPRESS_MS = 4000
+/** Mehrere Refetch-Auslöser (Reconnect, Outbox, WS) zu einem UI-Update bündeln. */
+const PACKING_REFRESH_DEBOUNCE_MS = 300
 
 // Helper function to find the next vacation - FIXED
 const findNextVacation = (vacations: Vacation[]): Vacation | null => {
@@ -236,27 +242,81 @@ function HomeContent() {
   const fetchPackingVersionRef = useRef(0)
   /** Erst nach erfolgreichem Laden für diesen Urlaub in IndexedDB schreiben (vermeidet Leeren beim Urlaubswechsel). */
   const packingCacheReadyVacationRef = useRef<string | null>(null)
+  const packingRefreshDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const packingRefreshInFlightRef = useRef<Promise<void> | null>(null)
+  const packingRefreshPendingRef = useRef(false)
+  const wsRefreshSuppressUntilRef = useRef(0)
 
   // Zähler ausstehender eigener Mutationen: Refetch nur wenn 0 (Änderung von anderem Gerät
   // oder alle eigenen PUTs abgeschlossen – verhindert partielle Daten bei schnellem Abhaken)
   const pendingMutationsRef = useRef(0)
 
-  // Fetch Packing Items when vacation changes (mit Offline-Cache via fetchAndCache)
-  const fetchPackingItems = useCallback(async () => {
+  const applyPackingItemsFromFetch = useCallback(
+    (next: PackingItem[]) => {
+      packingCacheReadyVacationRef.current = selectedVacationId
+      setPackingItems((prev) => (packingItemsEqual(prev, next) ? prev : next))
+    },
+    [selectedVacationId]
+  )
+
+  // Fetch Packing Items (mit Offline-Cache via fetchAndCache)
+  const fetchPackingItemsNow = useCallback(async () => {
     if (!selectedVacationId) return
     const myVersion = ++fetchPackingVersionRef.current
+    const preferNetwork =
+      typeof navigator !== 'undefined' && navigator.onLine
     const { data } = await fetchAndCache<PackingItem[]>(
       `/api/packing-items?vacationId=${selectedVacationId}`,
       (items) => cachePackingItems(selectedVacationId, items),
-      () => getCachedPackingItems(selectedVacationId),
+      preferNetwork ? undefined : () => getCachedPackingItems(selectedVacationId),
       { cache: 'no-store' }
     )
     if (myVersion !== fetchPackingVersionRef.current) return
-    if (data !== null) {
-      packingCacheReadyVacationRef.current = selectedVacationId
-      setPackingItems(data)
+    if (data !== null) applyPackingItemsFromFetch(data)
+  }, [selectedVacationId, applyPackingItemsFromFetch])
+
+  const runPackingRefresh = useCallback(async () => {
+    if (packingRefreshInFlightRef.current) {
+      packingRefreshPendingRef.current = true
+      await packingRefreshInFlightRef.current
+      if (!packingRefreshPendingRef.current) return
+      packingRefreshPendingRef.current = false
     }
-  }, [selectedVacationId])
+    const run = fetchPackingItemsNow()
+    packingRefreshInFlightRef.current = run
+    try {
+      await run
+    } finally {
+      if (packingRefreshInFlightRef.current === run) {
+        packingRefreshInFlightRef.current = null
+      }
+      if (packingRefreshPendingRef.current) {
+        packingRefreshPendingRef.current = false
+        await runPackingRefresh()
+      }
+    }
+  }, [fetchPackingItemsNow])
+
+  const schedulePackingRefresh = useCallback(
+    (delayMs = PACKING_REFRESH_DEBOUNCE_MS) => {
+      if (packingRefreshDebounceRef.current) {
+        clearTimeout(packingRefreshDebounceRef.current)
+      }
+      packingRefreshDebounceRef.current = setTimeout(() => {
+        packingRefreshDebounceRef.current = null
+        void runPackingRefresh()
+      }, delayMs)
+    },
+    [runPackingRefresh]
+  )
+
+  useEffect(() => {
+    return () => {
+      if (packingRefreshDebounceRef.current) {
+        clearTimeout(packingRefreshDebounceRef.current)
+      }
+    }
+  }, [])
 
   useEffect(() => {
     packingCacheReadyVacationRef.current = null
@@ -271,17 +331,18 @@ function HomeContent() {
 
   useEffect(() => {
     if (!selectedVacationId) return
-    fetchPackingItems()
-  }, [selectedVacationId, fetchPackingItems])
+    void fetchPackingItemsNow()
+  }, [selectedVacationId, fetchPackingItemsNow])
 
-  // WebSocket für Echtzeit-Sync: Refetch nur wenn keine eigenen PUTs ausstehen
+  // WebSocket für Echtzeit-Sync: gebündelt; nach Reconnect kurz pausieren
   const handlePackingSyncUpdate = useCallback(() => {
+    if (Date.now() < wsRefreshSuppressUntilRef.current) return
     if (pendingMutationsRef.current > 0) return
-    fetchPackingItems()
-  }, [fetchPackingItems])
+    schedulePackingRefresh()
+  }, [schedulePackingRefresh])
   usePackingSync(selectedVacationId, handlePackingSyncUpdate)
 
-  // Bei Reconnect: Packliste neu laden + Bump-Tick → Stammdaten-Refetch in den anderen useEffects
+  // Bei Reconnect: Outbox → ein gebündelter Refetch (kein Hin-und-Her durch WS/Outbox-Events)
   useEffect(() => {
     let initial = true
     let lastOnline =
@@ -293,27 +354,26 @@ function HomeContent() {
         return
       }
       if (online && !lastOnline) {
+        wsRefreshSuppressUntilRef.current = Date.now() + PACKING_WS_SUPPRESS_MS
         void (async () => {
-          // Erst Outbox leeren – sonst kann ein gleichzeitiges GET noch den alten
-          // Packlisten-Stand liefern (Race mit Service-Worker/HTTP).
           await processSyncQueue()
-          await fetchPackingItems()
+          schedulePackingRefresh(80)
           setRefetchTick((t) => t + 1)
         })()
       }
       lastOnline = online
     })
-  }, [selectedVacationId, fetchPackingItems])
+  }, [schedulePackingRefresh])
 
-  // Nach manueller Outbox-Sync im Banner Packliste ohne veralteten Cache neu laden.
+  // Outbox-Sync (Banner / Background): dasselbe gebündelte Refresh wie bei Reconnect
   useEffect(() => {
     if (typeof window === 'undefined') return
     const onOutboxSynced = () => {
-      void fetchPackingItems()
+      schedulePackingRefresh()
     }
     window.addEventListener(OUTBOX_SYNCED_EVENT_NAME, onOutboxSynced)
     return () => window.removeEventListener(OUTBOX_SYNCED_EVENT_NAME, onOutboxSynced)
-  }, [fetchPackingItems])
+  }, [schedulePackingRefresh])
 
   // Fetch Mitreisende for vacation (mit Offline-Cache pro Urlaub)
   useEffect(() => {

@@ -2,8 +2,8 @@
 
 import { useEffect, useRef } from 'react'
 
-/** Kurzer Debounce nur um nahezu gleichzeitige Broadcasts zu bündeln (z.B. Batch-API) */
-const SYNC_DEBOUNCE_MS = 80
+/** Broadcasts bündeln (z. B. mehrere Outbox-Syncs nach Reconnect) */
+const SYNC_DEBOUNCE_MS = 280
 const PING_INTERVAL_MS = 30_000
 
 /**
