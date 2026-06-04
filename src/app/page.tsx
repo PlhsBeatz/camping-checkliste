@@ -15,7 +15,9 @@ import { berechneAnzahl, berechneReiseTage, istKind, regelKurzLabel } from '@/li
 import { packingItemsEqual } from '@/lib/packing-items-equal'
 import {
   getPackingItemsMemory,
+  loadLocalPackingItems,
   setPackingItemsMemory,
+  snapshotPackingItemsToMemory,
 } from '@/lib/packing-items-memory'
 import { sortMitreisendenZeilenNachStammdaten } from '@/lib/mitreisenden-sort'
 import { ResponsiveModal } from '@/components/ui/responsive-modal'
@@ -74,7 +76,9 @@ const PACKING_WS_SUPPRESS_MS = 4000
 /** Mehrere Refetch-Auslöser (Reconnect, Outbox, WS) zu einem UI-Update bündeln. */
 const PACKING_REFRESH_DEBOUNCE_MS = 400
 /** Mindestabstand zwischen Post-Reconnect-Refreshes (verhindert doppeltes Laden). */
-const POST_RECONNECT_REFRESH_GAP_MS = 1500
+const POST_RECONNECT_REFRESH_GAP_MS = 2500
+/** Nach manuellem Refresh: WS-Events ignorieren (Sync sendet viele packing-list-changed). */
+const WS_FETCH_COOLDOWN_MS = 6000
 
 // Helper function to find the next vacation - FIXED
 const findNextVacation = (vacations: Vacation[]): Vacation | null => {
@@ -120,6 +124,8 @@ function HomeContent() {
     if (!initialVacationIdForUi) return []
     return getPackingItemsMemory(initialVacationIdForUi) ?? []
   })
+  const packingItemsRef = useRef(packingItems)
+  packingItemsRef.current = packingItems
   /** Einmal Inhalt für diesen Urlaub gehabt – leere Meldung nur dann, nicht während Hintergrund-Sync. */
   const packingHadContentRef = useRef(
     (initialVacationIdForUi
@@ -326,12 +332,11 @@ function HomeContent() {
 
   // Versionszähler: veraltete Fetch-Antworten ignorieren (verhindert Race bei schnellem Abhaken)
   const fetchPackingVersionRef = useRef(0)
-  /** Erst nach erfolgreichem Laden für diesen Urlaub in IndexedDB schreiben (vermeidet Leeren beim Urlaubswechsel). */
-  const packingCacheReadyVacationRef = useRef<string | null>(null)
   const packingRefreshDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const packingRefreshInFlightRef = useRef<Promise<void> | null>(null)
   const wsRefreshSuppressUntilRef = useRef(0)
   const postReconnectRefreshUntilRef = useRef(0)
+  const lastPackingFetchAtRef = useRef(0)
 
   // Zähler ausstehender eigener Mutationen: Refetch nur wenn 0 (Änderung von anderem Gerät
   // oder alle eigenen PUTs abgeschlossen – verhindert partielle Daten bei schnellem Abhaken)
@@ -340,29 +345,78 @@ function HomeContent() {
   const applyPackingItemsFromFetch = useCallback(
     (next: PackingItem[]) => {
       if (!selectedVacationId) return
-      packingCacheReadyVacationRef.current = selectedVacationId
-      if (next.length > 0) packingHadContentRef.current = true
-      setPackingItemsMemory(selectedVacationId, next)
-      setPackingItems((prev) => (packingItemsEqual(prev, next) ? prev : next))
+      setPackingItems((prev) => {
+        if (next.length === 0 && prev.length > 0) return prev
+        if (packingItemsEqual(prev, next)) return prev
+        if (next.length > 0) {
+          packingHadContentRef.current = true
+          setPackingItemsMemory(selectedVacationId, next)
+          lastPackingFetchAtRef.current = Date.now()
+        }
+        return next
+      })
     },
     [selectedVacationId]
   )
 
-  // Fetch Packing Items (mit Offline-Cache via fetchAndCache)
+  /** Beim Offline-Wechsel: sichtbare Liste sofort in Memory/IDB sichern, bevor async Fetches enden. */
+  const preservePackingSnapshot = useCallback(
+    (vacationId: string): boolean => {
+      const current = packingItemsRef.current
+      if (current.length === 0) return false
+      packingHadContentRef.current = true
+      snapshotPackingItemsToMemory(vacationId, current)
+      void cachePackingItems(vacationId, current)
+      applyPackingItemsFromFetch(current)
+      return true
+    },
+    [applyPackingItemsFromFetch]
+  )
+
+  const restorePackingFromLocal = useCallback(
+    async (vacationId: string, version: number) => {
+      if (preservePackingSnapshot(vacationId)) return
+      const local = await loadLocalPackingItems(vacationId)
+      if (version !== fetchPackingVersionRef.current) return
+      if (local) applyPackingItemsFromFetch(local)
+    },
+    [applyPackingItemsFromFetch, preservePackingSnapshot]
+  )
+
+  // Fetch Packing Items: offline nur lokal; online mit Cache-Fallback; nie [] über bestehende Liste
   const fetchPackingItemsNow = useCallback(async () => {
     if (!selectedVacationId) return
+    const vacationId = selectedVacationId
     const myVersion = ++fetchPackingVersionRef.current
-    const preferNetwork =
-      typeof navigator !== 'undefined' && navigator.onLine
+
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      await restorePackingFromLocal(vacationId, myVersion)
+      return
+    }
+
     const { data } = await fetchAndCache<PackingItem[]>(
-      `/api/packing-items?vacationId=${selectedVacationId}`,
-      (items) => cachePackingItems(selectedVacationId, items),
-      preferNetwork ? undefined : () => getCachedPackingItems(selectedVacationId),
+      `/api/packing-items?vacationId=${vacationId}`,
+      (items) =>
+        items.length > 0
+          ? cachePackingItems(vacationId, items)
+          : Promise.resolve(),
+      () => getCachedPackingItems(vacationId),
       { cache: 'no-store' }
     )
     if (myVersion !== fetchPackingVersionRef.current) return
-    if (data !== null) applyPackingItemsFromFetch(data)
-  }, [selectedVacationId, applyPackingItemsFromFetch])
+
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      await restorePackingFromLocal(vacationId, myVersion)
+      return
+    }
+
+    if (data !== null && data.length > 0) {
+      applyPackingItemsFromFetch(data)
+      return
+    }
+
+    await restorePackingFromLocal(vacationId, myVersion)
+  }, [selectedVacationId, applyPackingItemsFromFetch, restorePackingFromLocal])
 
   const runPackingRefresh = useCallback(async () => {
     if (packingRefreshInFlightRef.current) {
@@ -393,9 +447,11 @@ function HomeContent() {
 
   /** Nach Reconnect/Outbox höchstens ein gebündelter Packlisten-Refresh. */
   const schedulePostReconnectRefresh = useCallback(() => {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) return
     const now = Date.now()
     if (now < postReconnectRefreshUntilRef.current) return
     postReconnectRefreshUntilRef.current = now + POST_RECONNECT_REFRESH_GAP_MS
+    wsRefreshSuppressUntilRef.current = now + WS_FETCH_COOLDOWN_MS
     schedulePackingRefresh(PACKING_REFRESH_DEBOUNCE_MS)
   }, [schedulePackingRefresh])
 
@@ -407,19 +463,14 @@ function HomeContent() {
     }
   }, [])
 
-  useEffect(() => {
-    packingCacheReadyVacationRef.current = null
-  }, [selectedVacationId])
-
   // Optimistische Änderungen: Memory + IndexedDB (Remount & Offline)
   useEffect(() => {
     if (!selectedVacationId) return
     if (packingItems.length > 0) {
       packingHadContentRef.current = true
       setPackingItemsMemory(selectedVacationId, packingItems)
+      void cachePackingItems(selectedVacationId, packingItems)
     }
-    if (packingCacheReadyVacationRef.current !== selectedVacationId) return
-    void cachePackingItems(selectedVacationId, packingItems)
   }, [selectedVacationId, packingItems])
 
   useEffect(() => {
@@ -436,9 +487,11 @@ function HomeContent() {
     void fetchPackingItemsNowRef.current()
   }, [selectedVacationId])
 
-  // WebSocket für Echtzeit-Sync: gebündelt; nach Reconnect kurz pausieren
+  // WebSocket für Echtzeit-Sync: gebündelt; nach Reconnect/Refresh kurz pausieren
   const handlePackingSyncUpdate = useCallback(() => {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) return
     if (Date.now() < wsRefreshSuppressUntilRef.current) return
+    if (Date.now() - lastPackingFetchAtRef.current < WS_FETCH_COOLDOWN_MS) return
     if (pendingMutationsRef.current > 0) return
     schedulePackingRefresh()
   }, [schedulePackingRefresh])
@@ -455,8 +508,22 @@ function HomeContent() {
         lastOnline = online
         return
       }
+      if (!online && lastOnline) {
+        fetchPackingVersionRef.current += 1
+        if (packingRefreshDebounceRef.current) {
+          clearTimeout(packingRefreshDebounceRef.current)
+          packingRefreshDebounceRef.current = null
+        }
+        packingRefreshInFlightRef.current = null
+        if (selectedVacationId) {
+          void restorePackingFromLocal(
+            selectedVacationId,
+            fetchPackingVersionRef.current
+          )
+        }
+      }
       if (online && !lastOnline) {
-        wsRefreshSuppressUntilRef.current = Date.now() + PACKING_WS_SUPPRESS_MS
+        wsRefreshSuppressUntilRef.current = Date.now() + WS_FETCH_COOLDOWN_MS
         void getSyncQueueCount().then((count) => {
           // Mit Outbox: Refresh nur über OUTBOX_SYNCED (OfflineBanner)
           if (count === 0) schedulePostReconnectRefresh()
@@ -464,11 +531,13 @@ function HomeContent() {
       }
       lastOnline = online
     })
-  }, [schedulePostReconnectRefresh])
+  }, [schedulePostReconnectRefresh, selectedVacationId, restorePackingFromLocal])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
     const onOutboxSynced = () => {
+      if (typeof navigator !== 'undefined' && !navigator.onLine) return
+      wsRefreshSuppressUntilRef.current = Date.now() + WS_FETCH_COOLDOWN_MS
       schedulePostReconnectRefresh()
     }
     window.addEventListener(OUTBOX_SYNCED_EVENT_NAME, onOutboxSynced)
@@ -819,8 +888,8 @@ function HomeContent() {
         cache: 'no-store',
       })
       const data = (await refreshRes.json()) as ApiResponse<PackingItem[]>
-      if (data.success && data.data) {
-        setPackingItems(data.data)
+      if (data.success && data.data && data.data.length > 0) {
+        applyPackingItemsFromFetch(data.data)
       }
     } catch (error) {
       console.error('Failed to generate packing list:', error)
@@ -1174,8 +1243,8 @@ function HomeContent() {
           cache: 'no-store',
         })
         const itemsData = (await itemsRes.json()) as ApiResponse<PackingItem[]>
-        if (itemsData.success && itemsData.data) {
-          setPackingItems(itemsData.data)
+        if (itemsData.success && itemsData.data && itemsData.data.length > 0) {
+          applyPackingItemsFromFetch(itemsData.data)
         }
         setShowEditItemDialog(false)
         setEditingPackingItemId(null)
@@ -1266,8 +1335,8 @@ function HomeContent() {
           cache: 'no-store',
         })
         const itemsData = (await itemsRes.json()) as ApiResponse<PackingItem[]>
-        if (itemsData.success && itemsData.data) {
-          setPackingItems(itemsData.data)
+        if (itemsData.success && itemsData.data && itemsData.data.length > 0) {
+          applyPackingItemsFromFetch(itemsData.data)
         }
       }
     } catch (error) {
@@ -1308,8 +1377,8 @@ function HomeContent() {
           cache: 'no-store',
         })
         const itemsData = (await itemsRes.json()) as ApiResponse<PackingItem[]>
-        if (itemsData.success && itemsData.data) {
-          setPackingItems(itemsData.data)
+        if (itemsData.success && itemsData.data && itemsData.data.length > 0) {
+          applyPackingItemsFromFetch(itemsData.data)
         }
       }
     } catch (error) {
@@ -1479,8 +1548,8 @@ function HomeContent() {
         cache: 'no-store',
       })
       const itemsData = (await itemsRes.json()) as ApiResponse<PackingItem[]>
-      if (itemsData.success && itemsData.data) {
-        setPackingItems(itemsData.data)
+      if (itemsData.success && itemsData.data && itemsData.data.length > 0) {
+        applyPackingItemsFromFetch(itemsData.data)
       }
 
       setShowAddItemDialog(false)
@@ -2031,7 +2100,9 @@ function HomeContent() {
         cache: 'no-store',
       })
             const data = (await res.json()) as ApiResponse<PackingItem[]>
-            if (data.success && data.data) setPackingItems(data.data)
+            if (data.success && data.data && data.data.length > 0) {
+              applyPackingItemsFromFetch(data.data)
+            }
           }
           const eqRes = await fetch('/api/equipment-items')
           const eqData = (await eqRes.json()) as ApiResponse<EquipmentItem[]>
