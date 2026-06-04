@@ -136,13 +136,18 @@ export function ResponsiveModal({
             contentClassName
           )}
         >
-          <DrawerHeader className={noPadding ? 'px-6 pt-6 pb-4 border-b text-left' : 'px-6 pt-6 pb-4 border-b text-left'}>
+          <DrawerHeader className="px-6 pt-6 pb-0 text-left">
             <DrawerTitle className="text-left">{title}</DrawerTitle>
             {description && (
               <DrawerDescription className="text-left">{description}</DrawerDescription>
             )}
           </DrawerHeader>
-          <div className={cn('flex-1 overflow-y-auto min-h-0 overscroll-y-none', !noPadding && 'px-6 pb-6')}>
+          <div
+            className={cn(
+              'flex-1 overflow-y-auto min-h-0 overscroll-y-none',
+              !noPadding && 'px-6 pt-4 pb-6'
+            )}
+          >
             {children}
           </div>
         </DrawerContent>

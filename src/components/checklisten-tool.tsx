@@ -1114,7 +1114,7 @@ export function ChecklistenTool({ onHeaderContextChange, headerTrailingRef }: Ch
                             }}
                           />
                         ))}
-                        <div className="px-3 py-2 border-t border-dashed">
+                        <div className="px-3 pt-4 pb-2">
                           <Button
                             variant="ghost"
                             size="sm"

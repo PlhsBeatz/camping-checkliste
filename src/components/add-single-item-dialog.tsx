@@ -583,7 +583,7 @@ export function AddSingleItemDialog({
           </>
         )}
 
-        <div className="flex items-center gap-2 pt-2 border-t">
+        <div className="flex items-center gap-2 pt-4">
           <Checkbox
             id="add-save-to-equipment"
             checked={form.saveToEquipment}

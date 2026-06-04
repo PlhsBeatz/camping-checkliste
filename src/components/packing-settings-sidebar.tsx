@@ -183,7 +183,7 @@ export function PackingSettingsSidebar({
           )}
 
           {/* Gepacktes ausblenden */}
-          <div className="pt-4 border-t border-gray-200">
+          <div className="pt-4">
             <div className="flex items-center justify-between">
               <Label 
                 htmlFor="hide-packed" 

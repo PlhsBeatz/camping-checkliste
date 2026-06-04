@@ -581,7 +581,7 @@ export function TravelersManager({ travelers, onRefresh }: TravelersManagerProps
               </p>
             </div>
             {editingTraveler && !editingTraveler.user_id && canAccessConfig && (
-              <div className="space-y-2 pt-2 border-t">
+              <div className="space-y-2 pt-4">
                 <Label>Benutzer zuordnen</Label>
                 <p className="text-xs text-muted-foreground">
                   Ordnen Sie sich als Admin diesem Mitreisenden zu, um Ihr Profil mit der Packliste zu verknüpfen.
@@ -592,7 +592,7 @@ export function TravelersManager({ travelers, onRefresh }: TravelersManagerProps
               </div>
             )}
             {editingTraveler?.user_id && (
-              <div className="space-y-2 pt-2 border-t">
+              <div className="space-y-2 pt-4">
                 <Label>Benutzer-Rolle</Label>
                 <p className="text-xs text-muted-foreground">
                   Die Rolle des zugeordneten Benutzers. Wird beim Speichern übernommen.
@@ -656,7 +656,7 @@ export function TravelersManager({ travelers, onRefresh }: TravelersManagerProps
               </div>
             </div>
             {editingTraveler?.user_id && formUserRole && (formUserRole === 'kind' || formUserRole === 'gast') && (
-              <div className="space-y-3 pt-2 border-t">
+              <div className="space-y-3 pt-4">
                 <Label>Berechtigungen (für {formUserRole === 'kind' ? 'Kind' : 'Gast'})</Label>
                 <p className="text-xs text-muted-foreground">
                   {formUserRole === 'kind'
@@ -723,7 +723,7 @@ export function TravelersManager({ travelers, onRefresh }: TravelersManagerProps
                 </Select>
               </div>
               {(inviteRole === 'kind' || inviteRole === 'gast') && (
-                <div className="space-y-3 pt-2 border-t">
+                <div className="space-y-3 pt-4">
                   <Label>Berechtigungen (für {inviteRole === 'kind' ? 'Kind' : 'Gast'})</Label>
                   <p className="text-xs text-muted-foreground">
                     Diese Einstellungen gelten, sobald die Einladung angenommen wurde.

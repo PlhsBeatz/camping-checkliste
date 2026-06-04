@@ -242,6 +242,7 @@ function StayRow({
   onChangeDates: (startDatum: string, endDatum: string) => void
   onRemove: () => void
 }) {
+  const isSmallViewport = useIsSmallViewport()
   const [open, setOpen] = useState(false)
   const [draftRange, setDraftRange] = useState<DateRange | undefined>(undefined)
 
@@ -254,6 +255,30 @@ function StayRow({
       : stay.startDatum
       ? { from: new Date(stay.startDatum), to: new Date(stay.startDatum) }
       : undefined
+
+  const handleSelect = (range: DateRange | undefined) => {
+    if (range?.from) setDraftRange({ from: range.from, to: range.to ?? range.from })
+  }
+
+  const confirmRange = () => {
+    if (!draftRange?.from) return
+    onChangeDates(
+      format(draftRange.from, 'yyyy-MM-dd'),
+      format((draftRange.to ?? draftRange.from)!, 'yyyy-MM-dd')
+    )
+    setOpen(false)
+    setDraftRange(undefined)
+  }
+
+  const triggerLabel = hasDates ? (
+    <span className="truncate">
+      {format(new Date(stay.startDatum), 'dd.MM.yy', { locale: de })} –{' '}
+      {format(new Date(stay.endDatum), 'dd.MM.yy', { locale: de })}
+      {nights > 0 && ` · ${nights} ${nights === 1 ? 'Nacht' : 'Nächte'}`}
+    </span>
+  ) : (
+    <span>Dauer wählen</span>
+  )
 
   return (
     <div className="flex items-start gap-2 py-2 px-2 rounded-md bg-muted/60 border border-muted-foreground/10">
@@ -269,73 +294,117 @@ function StayRow({
             </div>
           )}
         </div>
-        <Popover
-          open={open}
-          onOpenChange={(isOpen) => {
-            setOpen(isOpen)
-            if (isOpen) setDraftRange(selectedRange)
-            else setDraftRange(undefined)
-          }}
-        >
-          <PopoverTrigger asChild>
+        {isSmallViewport ? (
+          <>
             <Button
               type="button"
               variant="outline"
               size="sm"
-              className={cn('h-8 justify-start text-left font-normal', !hasDates && 'text-muted-foreground')}
+              className={cn(
+                'h-8 w-full justify-start text-left font-normal',
+                !hasDates && 'text-muted-foreground'
+              )}
+              onClick={() => {
+                setDraftRange(selectedRange)
+                setOpen(true)
+              }}
             >
               <CalendarIcon className="mr-2 h-3.5 w-3.5 shrink-0" />
-              {hasDates ? (
-                <span className="truncate">
-                  {format(new Date(stay.startDatum), 'dd.MM.yy', { locale: de })} –{' '}
-                  {format(new Date(stay.endDatum), 'dd.MM.yy', { locale: de })}
-                  {nights > 0 && ` · ${nights} ${nights === 1 ? 'Nacht' : 'Nächte'}`}
-                </span>
-              ) : (
-                <span>Dauer wählen</span>
-              )}
+              {triggerLabel}
             </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-auto p-0 bg-white max-h-[80vh] overflow-y-auto" align="start">
-            <Calendar
-              mode="range"
-              className="p-2"
-              classNames={{
-                months: 'flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-4',
-                month: 'space-y-1',
+            <Dialog
+              open={open}
+              onOpenChange={(isOpen) => {
+                setOpen(isOpen)
+                if (!isOpen) setDraftRange(undefined)
               }}
-              defaultMonth={draftRange?.from ?? selectedRange?.from ?? new Date()}
-              selected={draftRange ?? selectedRange}
-              onSelect={(range: DateRange | undefined) => {
-                if (range?.from) {
-                  setDraftRange({ from: range.from, to: range.to ?? range.from })
-                }
-              }}
-              locale={de}
-              numberOfMonths={2}
-              components={{ Caption: RangeCalendarCaption }}
-            />
-            <div className="flex gap-2 p-3 border-t bg-muted/30">
+            >
+              <DialogContent className="p-0 gap-0 w-[calc(100vw-2rem)] max-w-[420px] max-h-[90vh] overflow-y-auto">
+                <DialogHeader className="px-3 pt-2 pb-0">
+                  <DialogTitle>Dauer wählen</DialogTitle>
+                </DialogHeader>
+                <div className="flex justify-center w-full px-2">
+                  <Calendar
+                    mode="range"
+                    className="p-2"
+                    classNames={{
+                      months: 'flex flex-col sm:flex-row space-y-1 sm:space-x-4 sm:space-y-0',
+                      month: 'space-y-1',
+                    }}
+                    defaultMonth={draftRange?.from ?? selectedRange?.from ?? new Date()}
+                    selected={draftRange ?? selectedRange}
+                    onSelect={handleSelect}
+                    locale={de}
+                    numberOfMonths={2}
+                    components={{ Caption: RangeCalendarCaption }}
+                  />
+                </div>
+                <div className="flex gap-2 p-2 pt-4 bg-muted/30">
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="flex-1 bg-[rgb(45,79,30)] text-white hover:bg-[rgb(45,79,30)]/90 hover:text-white border-[rgb(45,79,30)]"
+                    disabled={!draftRange?.from}
+                    onClick={confirmRange}
+                  >
+                    OK
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+          </>
+        ) : (
+          <Popover
+            open={open}
+            onOpenChange={(isOpen) => {
+              setOpen(isOpen)
+              if (isOpen) setDraftRange(selectedRange)
+              else setDraftRange(undefined)
+            }}
+          >
+            <PopoverTrigger asChild>
               <Button
                 type="button"
+                variant="outline"
                 size="sm"
-                className="flex-1 bg-[rgb(45,79,30)] text-white hover:bg-[rgb(45,79,30)]/90 hover:text-white border-[rgb(45,79,30)]"
-                disabled={!draftRange?.from}
-                onClick={() => {
-                  if (!draftRange?.from) return
-                  onChangeDates(
-                    format(draftRange.from, 'yyyy-MM-dd'),
-                    format((draftRange.to ?? draftRange.from)!, 'yyyy-MM-dd')
-                  )
-                  setOpen(false)
-                  setDraftRange(undefined)
-                }}
+                className={cn(
+                  'h-8 justify-start text-left font-normal',
+                  !hasDates && 'text-muted-foreground'
+                )}
               >
-                OK
+                <CalendarIcon className="mr-2 h-3.5 w-3.5 shrink-0" />
+                {triggerLabel}
               </Button>
-            </div>
-          </PopoverContent>
-        </Popover>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0 bg-white max-h-[80vh] overflow-y-auto" align="start">
+              <Calendar
+                mode="range"
+                className="p-2"
+                classNames={{
+                  months: 'flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-4',
+                  month: 'space-y-1',
+                }}
+                defaultMonth={draftRange?.from ?? selectedRange?.from ?? new Date()}
+                selected={draftRange ?? selectedRange}
+                onSelect={handleSelect}
+                locale={de}
+                numberOfMonths={2}
+                components={{ Caption: RangeCalendarCaption }}
+              />
+              <div className="flex gap-2 p-3 pt-4 bg-muted/30">
+                <Button
+                  type="button"
+                  size="sm"
+                  className="flex-1 bg-[rgb(45,79,30)] text-white hover:bg-[rgb(45,79,30)]/90 hover:text-white border-[rgb(45,79,30)]"
+                  disabled={!draftRange?.from}
+                  onClick={confirmRange}
+                >
+                  OK
+                </Button>
+              </div>
+            </PopoverContent>
+          </Popover>
+        )}
         {overlapHint && <p className="text-xs text-amber-600">{overlapHint}</p>}
       </div>
       <Button
@@ -800,7 +869,7 @@ export function VacationEditModal({
                           components={{ Caption: RangeCalendarCaption }}
                         />
                       </div>
-                      <div className="flex gap-2 p-2 border-t bg-muted/30">
+                      <div className="flex gap-2 p-2 pt-4 bg-muted/30">
                         <Button
                           type="button"
                           size="sm"
@@ -901,7 +970,7 @@ export function VacationEditModal({
                       numberOfMonths={2}
                       components={{ Caption: RangeCalendarCaption }}
                     />
-                    <div className="flex gap-2 p-3 border-t bg-muted/30">
+                    <div className="flex gap-2 p-3 pt-4 bg-muted/30">
                       <Button
                         type="button"
                         size="sm"
@@ -969,7 +1038,7 @@ export function VacationEditModal({
                         }}
                         locale={de}
                       />
-                      <div className="flex gap-2 p-3 border-t bg-muted/30">
+                      <div className="flex gap-2 p-3 pt-4 bg-muted/30">
                         <Button
                           type="button"
                           variant="outline"
@@ -1024,7 +1093,7 @@ export function VacationEditModal({
                       }}
                       locale={de}
                     />
-                    <div className="flex gap-2 p-3 border-t bg-muted/30">
+                    <div className="flex gap-2 p-3 pt-4 bg-muted/30">
                       <Button
                         type="button"
                         variant="outline"

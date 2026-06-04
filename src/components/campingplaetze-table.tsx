@@ -656,7 +656,7 @@ export function CampingplaetzeTable({
               </Select>
             </div>
 
-            <div className="space-y-3 border-t border-gray-200 pt-4 dark:border-gray-700">
+            <div className="space-y-3 pt-4">
               <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 Filterkriterien
               </p>

@@ -1668,7 +1668,7 @@ function HomeContent() {
         contentClassName="max-w-4xl max-h-[90vh] sm:max-h-[90vh] h-[85vh] sm:h-auto flex flex-col"
       >
         <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
-          <div className="px-6 pt-6 pb-4 border-b flex-shrink-0 flex items-center justify-between gap-2">
+          <div className="px-6 pt-6 pb-0 flex-shrink-0 flex items-center justify-between gap-2">
             <h2 className="text-lg font-semibold">Gegenstände hinzufügen</h2>
             <Button
               variant="outline"
@@ -1684,7 +1684,7 @@ function HomeContent() {
           </div>
 
           {/* Search Bar */}
-          <div className="px-6 py-4 border-b flex-shrink-0">
+          <div className="px-6 pt-4 pb-4 flex-shrink-0">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
@@ -1782,7 +1782,7 @@ function HomeContent() {
           </div>
 
           {/* Footer - Sticky */}
-          <div className="px-6 py-4 border-t bg-white flex gap-2 flex-shrink-0">
+          <div className="px-6 pt-4 pb-6 bg-white flex gap-2 flex-shrink-0">
             <Button
               onClick={handleAddSelectedEquipment}
               disabled={selectedEquipmentIds.size === 0 || isLoading}

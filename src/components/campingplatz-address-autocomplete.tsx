@@ -506,7 +506,7 @@ export function CampingplatzAddressAutocomplete(props: CampingplatzAddressAutoco
           {!isLoading && !error && suggestions.length > 0 && (
             <>
               {isExpandedSearch && (
-                <div className="px-3 py-1.5 text-xs text-muted-foreground border-b">
+                <div className="px-3 pt-3 pb-0 text-xs text-muted-foreground">
                   Suche auf alle Orte ausgeweitet
                 </div>
               )}
@@ -535,7 +535,7 @@ export function CampingplatzAddressAutocomplete(props: CampingplatzAddressAutoco
             </>
           )}
           {showFallbackButton && (
-            <div className="border-t border-muted">
+            <div className="pt-4">
               <button
                 type="button"
                 className="w-full text-left px-3 py-2 text-sm text-[rgb(45,79,30)] hover:bg-muted focus:bg-muted focus:outline-none font-medium"

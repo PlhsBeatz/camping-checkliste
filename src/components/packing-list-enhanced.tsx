@@ -387,10 +387,10 @@ const PackingItem: React.FC<PackingItemProps> = ({
 
   const renderPersonListPopoverContent = () => (
     <>
-      <div className="p-2 border-b bg-muted/30">
+      <div className="px-3 pt-3 pb-0 bg-muted/30">
         <p className="text-xs font-semibold text-foreground">Gepackt pro Person</p>
       </div>
-      <ul className="max-h-48 overflow-y-auto py-1">
+      <ul className="max-h-48 overflow-y-auto py-1 pt-4">
         {mitreisendeFuerPopover.map((m) => {
           const packed = canConfirmVorgemerkt ? m.gepackt : (m.gepackt || !!m.gepackt_vorgemerkt);
           const vorgemerkt = !!m.gepackt_vorgemerkt && !m.gepackt;
