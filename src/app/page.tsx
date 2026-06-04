@@ -34,6 +34,7 @@ import { useAuth } from '@/components/auth-provider'
 import { usePackingSync } from '@/hooks/use-packing-sync'
 import { useOptimisticMutation } from '@/hooks/use-optimistic-mutation'
 import {
+  fetchAndCache,
   getCachedPackingItems,
   getCachedVacations,
   getCachedEquipment,
@@ -230,38 +231,40 @@ function HomeContent() {
 
   // Versionszähler: veraltete Fetch-Antworten ignorieren (verhindert Race bei schnellem Abhaken)
   const fetchPackingVersionRef = useRef(0)
+  /** Erst nach erfolgreichem Laden für diesen Urlaub in IndexedDB schreiben (vermeidet Leeren beim Urlaubswechsel). */
+  const packingCacheReadyVacationRef = useRef<string | null>(null)
 
   // Zähler ausstehender eigener Mutationen: Refetch nur wenn 0 (Änderung von anderem Gerät
   // oder alle eigenen PUTs abgeschlossen – verhindert partielle Daten bei schnellem Abhaken)
   const pendingMutationsRef = useRef(0)
 
-  // Fetch Packing Items when vacation changes (mit Offline-Cache)
+  // Fetch Packing Items when vacation changes (mit Offline-Cache via fetchAndCache)
   const fetchPackingItems = useCallback(async () => {
     if (!selectedVacationId) return
     const myVersion = ++fetchPackingVersionRef.current
-    try {
-      const res = await fetch(`/api/packing-items?vacationId=${selectedVacationId}`, {
-        cache: 'no-store',
-      })
-      const data = (await res.json()) as ApiResponse<PackingItem[]>
-      // Nur anwenden wenn keine neuere Abfrage gestartet wurde (Race vermeiden)
-      if (myVersion !== fetchPackingVersionRef.current) return
-      if (data.success && data.data) {
-        setPackingItems(data.data)
-        await cachePackingItems(selectedVacationId, data.data)
-      }
-    } catch (error) {
-      console.error('Failed to fetch packing items:', error)
-      if (myVersion !== fetchPackingVersionRef.current) return
-      // Nur bei Offline Fallback: Bei Online würde alter Cache optimistische Updates überschreiben
-      if (typeof navigator !== 'undefined' && !navigator.onLine) {
-        const cached = await getCachedPackingItems(selectedVacationId)
-        if (cached.length > 0) {
-          setPackingItems(cached)
-        }
-      }
+    const { data } = await fetchAndCache<PackingItem[]>(
+      `/api/packing-items?vacationId=${selectedVacationId}`,
+      (items) => cachePackingItems(selectedVacationId, items),
+      () => getCachedPackingItems(selectedVacationId),
+      { cache: 'no-store' }
+    )
+    if (myVersion !== fetchPackingVersionRef.current) return
+    if (data !== null) {
+      packingCacheReadyVacationRef.current = selectedVacationId
+      setPackingItems(data)
     }
   }, [selectedVacationId])
+
+  useEffect(() => {
+    packingCacheReadyVacationRef.current = null
+  }, [selectedVacationId])
+
+  // Optimistische Offline-Änderungen in IndexedDB spiegeln (Abhaken bleibt nach Reload erhalten)
+  useEffect(() => {
+    if (!selectedVacationId) return
+    if (packingCacheReadyVacationRef.current !== selectedVacationId) return
+    void cachePackingItems(selectedVacationId, packingItems)
+  }, [selectedVacationId, packingItems])
 
   useEffect(() => {
     if (!selectedVacationId) return
@@ -317,19 +320,14 @@ function HomeContent() {
     if (!selectedVacationId) return
 
     const fetchVacationMitreisende = async () => {
-      try {
-        const res = await fetch(`/api/mitreisende?vacationId=${selectedVacationId}`)
-        const data = (await res.json()) as ApiResponse<Mitreisender[]>
-        if (data.success && data.data) {
-          setVacationMitreisende(data.data)
-          await cacheVacationMitreisende(selectedVacationId, data.data)
-        }
-      } catch (error) {
-        console.error('Failed to fetch vacation mitreisende:', error)
-        if (typeof navigator !== 'undefined' && !navigator.onLine) {
-          const cached = await getCachedVacationMitreisende(selectedVacationId)
-          if (cached.length > 0) setVacationMitreisende(cached)
-        }
+      const { data } = await fetchAndCache<Mitreisender[]>(
+        `/api/mitreisende?vacationId=${selectedVacationId}`,
+        (items) => cacheVacationMitreisende(selectedVacationId, items),
+        () => getCachedVacationMitreisende(selectedVacationId),
+        { cache: 'no-store' }
+      )
+      if (data !== null) {
+        setVacationMitreisende(data)
       }
     }
     fetchVacationMitreisende()

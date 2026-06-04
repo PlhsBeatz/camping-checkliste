@@ -55,8 +55,10 @@ function filterVisibleItemsForProfile(
     }
     const personAssigned = item.mitreisende?.some(m => m.mitreisender_id === selectedProfile);
     if (personAssigned) return true;
-    if (item.mitreisenden_typ === 'alle' && (!item.mitreisende || item.mitreisende.length === 0) && vacationMitreisende.some(m => m.id === selectedProfile)) {
-      return true;
+    if (item.mitreisenden_typ === 'alle' && (!item.mitreisende || item.mitreisende.length === 0)) {
+      // Offline: Mitreisenden-Stammdaten evtl. noch nicht geladen – „alle“ nicht ausblenden
+      if (vacationMitreisende.length === 0) return true;
+      return vacationMitreisende.some(m => m.id === selectedProfile);
     }
     return false;
   });

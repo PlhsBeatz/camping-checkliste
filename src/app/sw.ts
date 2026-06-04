@@ -22,11 +22,12 @@ declare const self: ServiceWorkerGlobalScope
  * - `/manifest.json`: SWR, damit die PWA-Manifest-Daten offline sofort verfügbar sind.
  */
 const customRuntimeCaching: RuntimeCaching[] = [
-  /** Mutationen unter /api/ nie aus dem SW-Daten-Cache bedienen (vermeidet falsche/HTML-Fallbacks). */
+  /** API nie aus dem SW-Daten-Cache bedienen – Lesepfade nutzen IndexedDB, Mutationen die Outbox. */
   {
     matcher: ({ url, request }) =>
       url.pathname.startsWith('/api/') &&
-      ['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method),
+      (request.method === 'GET' ||
+        ['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method)),
     handler: new NetworkOnly(),
   },
   {
