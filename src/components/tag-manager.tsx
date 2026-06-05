@@ -157,7 +157,7 @@ function SortableTagCategoryRow({
   }
 
   return (
-    <div ref={setNodeRef} style={style} className="rounded-lg border bg-white overflow-hidden">
+    <div ref={setNodeRef} style={style} className="rounded-lg border bg-card overflow-hidden">
       <div className="flex items-center gap-2 p-3 py-1">
         <div
           {...attributes}
@@ -169,7 +169,7 @@ function SortableTagCategoryRow({
           <GripVertical className="h-5 w-5" />
         </div>
         <div className="flex-1 min-w-0">
-          <p className="font-semibold text-[rgb(45,79,30)]">{kat.titel}</p>
+          <p className="font-semibold text-brand-heading">{kat.titel}</p>
         </div>
         <DropdownMenu open={katMenuOpen} onOpenChange={setKatMenuOpen}>
           <DropdownMenuTrigger asChild>

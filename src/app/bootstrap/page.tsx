@@ -55,7 +55,7 @@ export default function BootstrapPage() {
         <div className="flex flex-col items-center gap-3">
           <AppLogo size="default" variant="centered" />
           <div className="text-center">
-            <h2 className="text-xl font-semibold text-[rgb(45,79,30)]">Ersteinrichtung</h2>
+            <h2 className="text-xl font-semibold text-brand-heading">Ersteinrichtung</h2>
             <p className="text-sm text-gray-600 mt-1">
               Erstellen Sie den ersten Administrator-Account.
             </p>
@@ -111,7 +111,7 @@ export default function BootstrapPage() {
         </form>
 
         <p className="text-center text-sm text-gray-600">
-          <a href="/login" className="text-[rgb(45,79,30)] hover:underline">
+          <a href="/login" className="text-brand-heading hover:underline">
             Zur Anmeldung
           </a>
         </p>

@@ -79,7 +79,7 @@ export function CampingplatzOverviewMap({
       >
         <div
           className={cn(
-            'relative block w-full overflow-hidden border border-border bg-muted shadow-sm',
+            'map-embed relative block w-full overflow-hidden border border-subtle bg-muted shadow-sm',
             'aspect-[2/1] max-md:rounded-none md:aspect-[3/1] md:rounded-xl'
           )}
         >
@@ -119,14 +119,14 @@ export function CampingplatzOverviewMap({
             'flex h-[min(90dvh,760px)] min-h-0 w-[min(96vw,920px)] max-w-none flex-col gap-3 overflow-hidden p-4 sm:p-5'
           )}
         >
-          <DialogTitle className="pr-8 text-base font-semibold text-[rgb(45,79,30)]">
+          <DialogTitle className="pr-8 text-base font-semibold text-brand-heading">
             {title ? `Lage: ${title}` : 'Interaktive Karte'}
           </DialogTitle>
           <DialogDescription className="sr-only">
             Verschiebbare OpenStreetMap-Karte mit Zoom. Schließen über die Schaltfläche oben rechts.
           </DialogDescription>
           {interactiveOpen ? (
-            <div className="relative min-h-0 flex-1 overflow-hidden rounded-lg border border-border bg-muted">
+            <div className="map-embed relative min-h-0 flex-1 overflow-hidden rounded-lg border border-subtle bg-muted">
               <iframe
                 title={title ? `Lage: ${title}` : 'Interaktive Lagekarte'}
                 src={embedSrc}

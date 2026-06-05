@@ -187,7 +187,8 @@ const LAND_NAME_TO_CC: Record<string, string> = {
   polska: 'PL',
 }
 
-export function countryFlagEmojiForLandName(landName: string): string | null {
+/** ISO-3166-1 alpha-2 aus Länderfeld (Kürzel oder Name). */
+export function countryIso2ForLandName(landName: string): string | null {
   const trimmed = landName.trim()
   if (!trimmed) return null
 
@@ -195,11 +196,14 @@ export function countryFlagEmojiForLandName(landName: string): string | null {
   if (/^[A-Za-z]{2}$/.test(trimmed)) {
     const lk = trimmed.toLowerCase()
     const cc = ISO2_ALIASES[lk] ?? lk.toUpperCase()
-    const emoji = regionalIndicatorPair(cc)
-    return emoji || null
+    return /^[A-Z]{2}$/.test(cc) ? cc : null
   }
 
-  const cc = LAND_NAME_TO_CC[landKey(trimmed)]
+  return LAND_NAME_TO_CC[landKey(trimmed)] ?? null
+}
+
+export function countryFlagEmojiForLandName(landName: string): string | null {
+  const cc = countryIso2ForLandName(landName)
   if (!cc) return null
   const emoji = regionalIndicatorPair(cc)
   return emoji || null

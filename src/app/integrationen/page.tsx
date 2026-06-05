@@ -109,7 +109,7 @@ function ListRow({
   menu: React.ReactNode
 }) {
   return (
-    <li className="flex items-center gap-2 rounded-lg border bg-white px-3 py-2.5 text-sm hover:bg-muted/30 transition-colors">
+    <li className="flex items-center gap-2 rounded-lg border bg-card px-3 py-2.5 text-sm hover:bg-muted/30 transition-colors">
       <button
         type="button"
         onClick={onOpen}
@@ -436,7 +436,7 @@ export default function IntegrationenPage() {
 
       <div className={cn('flex-1 min-w-0 transition-all duration-300', 'lg:ml-[280px]')}>
         <div className="container mx-auto p-4 md:p-6 space-y-6 max-w-full">
-          <div className="sticky top-0 z-10 flex items-center justify-between bg-white shadow pb-4 -mx-4 px-4 -mt-4 pt-4 md:-mx-6 md:px-6 md:-mt-6 md:pt-6">
+          <div className="sticky top-0 z-10 flex items-center justify-between bg-card shadow pb-4 -mx-4 px-4 -mt-4 pt-4 md:-mx-6 md:px-6 md:-mt-6 md:pt-6">
             <div className="flex items-center gap-4">
               <Button
                 variant="outline"
@@ -447,7 +447,7 @@ export default function IntegrationenPage() {
               >
                 <Menu className="h-5 w-5" />
               </Button>
-              <h1 className="text-lg sm:text-xl font-bold tracking-tight text-[rgb(45,79,30)]">
+              <h1 className="text-lg sm:text-xl font-bold tracking-tight text-brand-heading">
                 Integrationen
               </h1>
             </div>
@@ -455,7 +455,7 @@ export default function IntegrationenPage() {
 
           <div className="space-y-6 pb-6">
             {message && (
-              <div className="rounded-md border bg-white px-4 py-3 text-sm flex items-start justify-between gap-2">
+              <div className="rounded-md border bg-card px-4 py-3 text-sm flex items-start justify-between gap-2">
                 <span>{message}</span>
                 <Button variant="ghost" size="sm" className="shrink-0 h-7" onClick={() => setMessage(null)}>
                   OK

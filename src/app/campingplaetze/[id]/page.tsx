@@ -552,7 +552,7 @@ export default function CampingplatzDetailPage() {
         )}
       >
         <div className="flex flex-col flex-1 min-h-0 min-w-0 container mx-auto p-4 md:p-6 space-y-6 max-w-full">
-          <div className="sticky top-0 z-10 flex items-center justify-between gap-3 bg-white shadow pb-4 -mx-4 px-4 -mt-4 pt-4 md:-mx-6 md:px-6 md:-mt-6 md:pt-6 md:pb-4">
+          <div className="sticky top-0 z-10 flex items-center justify-between gap-3 bg-card shadow pb-4 -mx-4 px-4 -mt-4 pt-4 md:-mx-6 md:px-6 md:-mt-6 md:pt-6 md:pb-4">
             <div className="flex min-w-0 flex-1 items-center gap-4">
               <Button
                 variant="outline"
@@ -563,7 +563,7 @@ export default function CampingplatzDetailPage() {
                 <Menu className="h-5 w-5" />
               </Button>
               <div className="min-w-0">
-                <h1 className="text-xl font-bold text-[rgb(45,79,30)] truncate">
+                <h1 className="text-xl font-bold text-brand-heading truncate">
                   {campingplatz?.name ?? 'Campingplatz'}
                 </h1>
                 <p className="text-sm text-muted-foreground truncate">{subtitle}</p>
@@ -621,7 +621,7 @@ export default function CampingplatzDetailPage() {
           {campingplatz && (
             <>
               <div className="hidden flex-wrap gap-2 md:flex">
-                <Button variant="outline" size="sm" className="bg-white hover:bg-neutral-50" asChild>
+                <Button variant="outline" size="sm" className="bg-card hover:bg-neutral-50" asChild>
                   <Link
                     href="/campingplaetze"
                     className="inline-flex items-center gap-2 whitespace-nowrap"
@@ -645,7 +645,7 @@ export default function CampingplatzDetailPage() {
                       <div className="flex min-w-0 flex-1 items-center gap-2 text-muted-foreground">
                         {routeInfo && (
                           <>
-                            <Route className="h-4 w-4 shrink-0 text-[rgb(45,79,30)]" aria-hidden />
+                            <Route className="h-4 w-4 shrink-0 text-brand-heading" aria-hidden />
                             <span>
                               {Math.round(routeInfo.distanceKm)} km
                               {(() => {
@@ -674,7 +674,7 @@ export default function CampingplatzDetailPage() {
                   )}
 
                   <section className="space-y-2">
-                    <h2 className="text-sm font-semibold text-[rgb(45,79,30)]">Fotos</h2>
+                    <h2 className="text-sm font-semibold text-brand-heading">Fotos</h2>
                     {fotos.length === 0 && !campingplatz.video_link ? (
                       <p className="text-sm text-muted-foreground">Keine Fotos gespeichert.</p>
                     ) : (
@@ -705,11 +705,11 @@ export default function CampingplatzDetailPage() {
                             className="relative flex aspect-[4/3] w-full flex-col items-center justify-center gap-1 overflow-hidden rounded-xl border border-input bg-muted px-2 text-center outline-none ring-offset-2 transition hover:bg-muted/90 hover:opacity-95 focus-visible:ring-2 focus-visible:ring-[rgb(45,79,30)]"
                           >
                             <PlayCircle
-                              className="h-8 w-8 shrink-0 text-[rgb(45,79,30)] sm:h-9 sm:w-9"
+                              className="h-8 w-8 shrink-0 text-brand-heading sm:h-9 sm:w-9"
                               strokeWidth={1.5}
                               aria-hidden
                             />
-                            <span className="text-xs font-medium text-[rgb(45,79,30)]">Video</span>
+                            <span className="text-xs font-medium text-brand-heading">Video</span>
                           </a>
                         ) : null}
                       </div>
@@ -722,7 +722,7 @@ export default function CampingplatzDetailPage() {
                   </section>
 
                   <section className="space-y-3">
-                    <h2 className="text-sm font-semibold text-[rgb(45,79,30)]">Adresse</h2>
+                    <h2 className="text-sm font-semibold text-brand-heading">Adresse</h2>
                     {webseiteLink && (
                       <div className="flex flex-wrap items-start gap-2 text-sm">
                         <Globe2
@@ -733,7 +733,7 @@ export default function CampingplatzDetailPage() {
                           href={webseiteLink.href}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="min-w-0 break-all text-[rgb(45,79,30)] underline underline-offset-2 hover:opacity-90"
+                          className="min-w-0 break-all text-brand-heading underline underline-offset-2 hover:opacity-90"
                           title={webseiteLink.href}
                         >
                           {webseiteLink.label}
@@ -745,7 +745,7 @@ export default function CampingplatzDetailPage() {
                       <Button
                         type="button"
                         variant="outline"
-                        className="h-7 gap-1.5 bg-white px-2.5 text-xs hover:bg-neutral-50"
+                        className="h-7 gap-1.5 bg-card px-2.5 text-xs hover:bg-neutral-50"
                         onClick={() => void openInAdacMaps(campingplatz)}
                       >
                         <Route className="h-3.5 w-3.5 shrink-0" />
@@ -764,13 +764,13 @@ export default function CampingplatzDetailPage() {
                   </section>
 
                   <section className="space-y-2">
-                    <h2 className="text-sm font-semibold text-[rgb(45,79,30)]">Platz-Typ</h2>
+                    <h2 className="text-sm font-semibold text-brand-heading">Platz-Typ</h2>
                     <p className="text-sm">{campingplatz.platz_typ}</p>
                   </section>
 
                   <section className="grid grid-cols-1 gap-6 md:grid-cols-2">
                     <div className="space-y-2">
-                      <h2 className="text-sm font-semibold text-[rgb(45,79,30)]">Pros</h2>
+                      <h2 className="text-sm font-semibold text-brand-heading">Pros</h2>
                       {campingplatz.pros.filter((p) => p.trim()).length === 0 ? (
                         <p className="text-sm text-muted-foreground">—</p>
                       ) : (
@@ -782,7 +782,7 @@ export default function CampingplatzDetailPage() {
                       )}
                     </div>
                     <div className="space-y-2">
-                      <h2 className="text-sm font-semibold text-[rgb(45,79,30)]">Cons</h2>
+                      <h2 className="text-sm font-semibold text-brand-heading">Cons</h2>
                       {campingplatz.cons.filter((c) => c.trim()).length === 0 ? (
                         <p className="text-sm text-muted-foreground">—</p>
                       ) : (

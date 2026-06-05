@@ -9,7 +9,7 @@ export default function PasswortVergessenPage() {
         <div className="flex flex-col items-center gap-3">
           <AppLogo size="default" variant="centered" />
           <div className="text-center">
-            <h2 className="text-xl font-semibold text-[rgb(45,79,30)]">Passwort vergessen</h2>
+            <h2 className="text-xl font-semibold text-brand-heading">Passwort vergessen</h2>
             <p className="text-gray-600 mt-2">
               Es ist keine Selbst-Service-Funktion für das Zurücksetzen des Passworts aktiv.
               Bitte wenden Sie sich an einen Administrator, damit dieser Ihr Passwort zurücksetzen kann.

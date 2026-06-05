@@ -489,7 +489,7 @@ export function CampingplatzAddressAutocomplete(props: CampingplatzAddressAutoco
       {showDropdown && (
         <div
           className={cn(
-            'absolute z-50 mt-1 w-full rounded-md border bg-white py-1 shadow-lg',
+            'absolute z-50 mt-1 w-full rounded-md border bg-card py-1 shadow-lg',
             'max-h-64 overflow-y-auto'
           )}
           role="listbox"
@@ -538,7 +538,7 @@ export function CampingplatzAddressAutocomplete(props: CampingplatzAddressAutoco
             <div className="pt-4">
               <button
                 type="button"
-                className="w-full text-left px-3 py-2 text-sm text-[rgb(45,79,30)] hover:bg-muted focus:bg-muted focus:outline-none font-medium"
+                className="w-full text-left px-3 py-2 text-sm text-brand-heading hover:bg-muted focus:bg-muted focus:outline-none font-medium"
                 onClick={() => {
                   handleExpandSearch()
                 }}
@@ -547,7 +547,7 @@ export function CampingplatzAddressAutocomplete(props: CampingplatzAddressAutoco
               </button>
               <button
                 type="button"
-                className="w-full text-left px-3 py-1.5 text-sm text-[rgb(45,79,30)] hover:bg-muted focus:bg-muted focus:outline-none"
+                className="w-full text-left px-3 py-1.5 text-sm text-brand-heading hover:bg-muted focus:bg-muted focus:outline-none"
                 onClick={() => {
                   setShowLinkImport((prev) => !prev)
                   if (!showLinkImport) {

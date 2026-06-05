@@ -32,7 +32,7 @@ import {
 import Image from 'next/image'
 import { cn } from '@/lib/utils'
 import { campingplatzListThumbnailSrc } from '@/lib/campingplatz-photo-url'
-import { countryFlagEmojiForLandName } from '@/lib/country-flag-emoji'
+import { CountryFlag } from '@/components/country-flag'
 
 interface CampingplaetzeTableProps {
   items: Campingplatz[]
@@ -373,7 +373,7 @@ export function CampingplaetzeTable({
       <div
         key={item.id}
         className={cn(
-          'bg-white rounded-xl border border-gray-200 shadow-sm px-4 py-3 flex items-start justify-between gap-3',
+          'bg-card rounded-xl border border-subtle shadow-sm px-4 py-3 flex items-start justify-between gap-3',
           item.is_archived && 'opacity-60 bg-muted/60'
         )}
       >
@@ -478,7 +478,7 @@ export function CampingplaetzeTable({
             </div>
             {route && (
               <div className="flex items-center gap-1 text-xs text-gray-600 mt-0.5">
-                <Route className="h-3.5 w-3.5 text-[rgb(45,79,30)]" />
+                <Route className="h-3.5 w-3.5 text-brand-heading" />
                 <span>
                   {Math.round(route.distanceKm)} km
                   {route.durationMinutes != null &&
@@ -561,7 +561,7 @@ export function CampingplaetzeTable({
 
   return (
     <div className="space-y-4">
-      <div className="space-y-4 bg-white border rounded-lg p-4 bg-muted/30">
+      <div className="space-y-4 rounded-lg border border-subtle bg-card p-4 shadow-sm">
         {lands.length > 0 && (
           <div
             className={cn(
@@ -578,7 +578,7 @@ export function CampingplaetzeTable({
                 'inline-flex items-center gap-1.5 px-3 py-1 rounded-full border text-xs whitespace-nowrap',
                 filterLand === 'all'
                   ? 'bg-[rgb(45,79,30)] text-white border-[rgb(45,79,30)]'
-                  : 'bg-white text-gray-700 hover:bg-muted'
+                  : 'bg-card text-gray-700 hover:bg-muted'
               )}
             >
               <span className="text-[1em] leading-none select-none" aria-hidden>
@@ -586,9 +586,7 @@ export function CampingplaetzeTable({
               </span>
               Alle Länder
             </button>
-            {lands.map((land) => {
-              const flag = countryFlagEmojiForLandName(land)
-              return (
+            {lands.map((land) => (
                 <button
                   key={land}
                   type="button"
@@ -597,18 +595,13 @@ export function CampingplaetzeTable({
                     'inline-flex items-center gap-1.5 px-3 py-1 rounded-full border text-xs whitespace-nowrap',
                     filterLand === land
                       ? 'bg-[rgb(45,79,30)] text-white border-[rgb(45,79,30)]'
-                      : 'bg-white text-gray-700 hover:bg-muted'
+                      : 'bg-card text-gray-700 hover:bg-muted'
                   )}
                 >
-                  {flag ? (
-                    <span className="text-[1em] leading-none select-none" aria-hidden>
-                      {flag}
-                    </span>
-                  ) : null}
+                  <CountryFlag land={land} width={20} />
                   {land}
                 </button>
-              )
-            })}
+              ))}
           </div>
         )}
         <div className="flex flex-row gap-2 items-center">
@@ -634,17 +627,17 @@ export function CampingplaetzeTable({
 
         {showFilters && (
           <div className="space-y-4 pt-2">
-            <div className="rounded-lg border border-[rgb(45,79,30)]/30 bg-[rgb(45,79,30)]/10 px-3 py-3 dark:border-[rgb(45,79,30)]/45 dark:bg-[rgb(45,79,30)]/20">
+            <div className="rounded-lg border border-[rgb(45,79,30)]/30 bg-[rgb(45,79,30)]/10 px-3 py-3 dark:border-green-900/50 dark:bg-green-950/40">
               <Label
                 htmlFor="cp-sort-mode"
-                className="text-xs font-semibold text-[rgb(45,79,30)] dark:text-[rgb(180,200,165)]"
+                className="text-xs font-semibold text-brand-heading"
               >
                 Sortierung
               </Label>
               <Select value={sortMode} onValueChange={(v) => setSortMode(v as SortMode)}>
                 <SelectTrigger
                   id="cp-sort-mode"
-                  className="mt-1.5 w-full sm:max-w-md border-[rgb(45,79,30)]/20 bg-white/95 dark:border-[rgb(45,79,30)]/35 dark:bg-slate-950/60"
+                  className="mt-1.5 w-full sm:max-w-md border-[rgb(45,79,30)]/20 bg-card/95 dark:border-white/10 dark:bg-card/90"
                 >
                   <SelectValue placeholder="Sortierung wählen" />
                 </SelectTrigger>
@@ -799,7 +792,7 @@ export function CampingplaetzeTable({
           <div className="space-y-4">
             {groupedByRegion.map((group) => (
               <div key={`${group.land}-${group.bundesland}`} className="space-y-2">
-                <div className="text-xs font-semibold tracking-wide text-[rgb(45,79,30)] px-1 mt-2">
+                <div className="text-xs font-semibold tracking-wide text-brand-heading px-1 mt-2">
                   {group.bundesland || 'Ohne Bundesland'}
                   <span className="text-muted-foreground"> · {group.land}</span>
                 </div>

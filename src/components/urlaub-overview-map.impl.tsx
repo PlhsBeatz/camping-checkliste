@@ -280,7 +280,7 @@ function MapPreviewFrame({
     <div className="urlaub-map-root w-full max-md:-mx-4 max-md:w-[calc(100%+2rem)] md:mx-0 md:w-full">
       <div
         className={cn(
-          'relative z-0 block w-full overflow-hidden border border-border bg-muted shadow-sm',
+          'map-embed relative z-0 block w-full overflow-hidden border border-subtle bg-muted shadow-sm',
           'aspect-[2/1] max-md:rounded-none md:aspect-[3/1] md:rounded-xl',
           hidden && 'invisible'
         )}
@@ -369,7 +369,7 @@ export function UrlaubOverviewMap({ home, campingplaetze, title }: UrlaubOvervie
 
       <Dialog open={interactiveOpen} onOpenChange={setInteractiveOpen}>
         <DialogContent className="flex h-[min(90dvh,760px)] min-h-0 w-[min(96vw,920px)] max-w-none flex-col gap-3 overflow-hidden p-4 sm:p-5">
-          <DialogTitle className="pr-8 text-base font-semibold text-[rgb(45,79,30)]">
+          <DialogTitle className="pr-8 text-base font-semibold text-brand-heading">
             {title ? `Route: ${title}` : 'Interaktive Karte'}
           </DialogTitle>
           <DialogDescription className="sr-only">
@@ -377,7 +377,7 @@ export function UrlaubOverviewMap({ home, campingplaetze, title }: UrlaubOvervie
             und Campingplätze.
           </DialogDescription>
           {interactiveOpen ? (
-            <div className="relative min-h-0 flex-1 overflow-hidden rounded-lg border border-border bg-muted">
+            <div className="map-embed relative min-h-0 flex-1 overflow-hidden rounded-lg border border-subtle bg-muted">
               <UrlaubLeafletMap
                 key={`dialog-${pointsKey}`}
                 mapKey={`dialog-${pointsKey}`}

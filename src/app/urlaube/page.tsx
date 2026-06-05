@@ -364,7 +364,7 @@ function UrlaubePageContent() {
       <div className={cn('flex-1 transition-all duration-300 min-w-0', 'lg:ml-[280px]')}>
         <div className="container mx-auto p-4 md:p-6 space-y-6 max-w-full">
           {/* Header - Sticky */}
-          <div className="sticky top-0 z-10 flex items-center justify-between gap-3 bg-white shadow pb-4 -mx-4 px-4 -mt-4 pt-4 md:-mx-6 md:px-6 md:-mt-6 md:pt-6 md:pb-4">
+          <div className="sticky top-0 z-10 flex items-center justify-between gap-3 bg-card shadow pb-4 -mx-4 px-4 -mt-4 pt-4 md:-mx-6 md:px-6 md:-mt-6 md:pt-6 md:pb-4">
             <div className="flex items-center gap-4 min-w-0">
               {/* Mobile Menu Toggle */}
               <Button
@@ -377,7 +377,7 @@ function UrlaubePageContent() {
               </Button>
               
               <div className="min-w-0">
-                <h1 className="text-lg sm:text-xl font-bold tracking-tight text-[rgb(45,79,30)]">
+                <h1 className="text-lg sm:text-xl font-bold tracking-tight text-brand-heading">
                   Meine Urlaube
                 </h1>
                 <p className="text-xs text-muted-foreground mt-0.5 truncate">
@@ -391,7 +391,7 @@ function UrlaubePageContent() {
                 </p>
               </div>
             </div>
-            <DropdownMenu>
+            <DropdownMenu modal={false}>
               <DropdownMenuTrigger asChild>
                 <Button
                   type="button"
@@ -403,7 +403,7 @@ function UrlaubePageContent() {
                   <MoreVertical className="h-5 w-5" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="min-w-[10rem]">
+              <DropdownMenuContent align="end" className="z-20 min-w-[10rem]">
                 {vacationsViewMode === 'archiv' ? (
                   <DropdownMenuItem
                     className="cursor-pointer gap-2"
@@ -472,7 +472,7 @@ function UrlaubePageContent() {
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="shrink-0 bg-white"
+                  className="shrink-0 bg-card"
                   onClick={() => router.replace('/urlaube')}
                 >
                   Alle Urlaube
@@ -528,7 +528,7 @@ function UrlaubePageContent() {
                           </div>
                         </div>
                       </div>
-                      <DropdownMenu open={openMenuId === vacation.id} onOpenChange={(o) => setOpenMenuId(o ? vacation.id : null)}>
+                      <DropdownMenu modal={false} open={openMenuId === vacation.id} onOpenChange={(o) => setOpenMenuId(o ? vacation.id : null)}>
                         <DropdownMenuTrigger asChild>
                           <Button
                             variant="ghost"
@@ -594,7 +594,7 @@ function UrlaubePageContent() {
                                 role="button"
                                 tabIndex={0}
                                 className={cn(
-                                  'bg-white rounded-xl border border-gray-200 shadow-sm px-3 py-2 flex items-start justify-between gap-3 cursor-pointer transition-colors hover:bg-neutral-50',
+                                  'bg-card rounded-xl border border-subtle shadow-sm px-3 py-2 flex items-start justify-between gap-3 cursor-pointer transition-colors hover:bg-muted',
                                   cp.is_archived && 'opacity-60 bg-muted/60'
                                 )}
                                 onClick={(e) => {
@@ -643,7 +643,7 @@ function UrlaubePageContent() {
                                     </div>
                                     {r && (
                                       <div className="flex items-center gap-1 text-xs text-gray-600 mt-0.5">
-                                        <Route className="h-3.5 w-3.5 text-[rgb(45,79,30)]" />
+                                        <Route className="h-3.5 w-3.5 text-brand-heading" />
                                         <span>
                                           {Math.round(r.distanceKm)} km
                                           {r.durationMinutes != null && (() => {

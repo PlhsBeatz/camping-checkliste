@@ -42,7 +42,7 @@ export function AppLogo({
   )
 
   const titleColor =
-    variant === 'centered' ? 'text-[rgb(45,79,30)]' : 'text-white'
+    variant === 'centered' ? 'text-brand-heading' : 'text-white'
 
   const textBlock = (
     <div className={variant === 'centered' ? 'text-center' : ''}>

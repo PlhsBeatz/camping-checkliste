@@ -7,7 +7,6 @@ import { ChevronDown, ChevronRight } from 'lucide-react'
 import { AppLogo } from '@/components/app-logo'
 import { useAuth } from '@/components/auth-provider'
 import { cn } from '@/lib/utils'
-import { subscribeToOnlineStatus } from '@/lib/offline-sync'
 
 interface NavigationSidebarProps {
   isOpen: boolean
@@ -19,11 +18,6 @@ export function NavigationSidebar({ isOpen, onClose }: NavigationSidebarProps) {
   const { canAccessConfig } = useAuth()
   const [configExpanded, setConfigExpanded] = useState(false)
   const [toolsExpanded, setToolsExpanded] = useState(false)
-  const [isOnline, setIsOnline] = useState(true)
-
-  useEffect(() => {
-    return subscribeToOnlineStatus(setIsOnline)
-  }, [])
 
   useEffect(() => {
     if (pathname.startsWith('/tools')) setToolsExpanded(true)
@@ -102,7 +96,7 @@ export function NavigationSidebar({ isOpen, onClose }: NavigationSidebarProps) {
       {/* Sidebar */}
       <aside
         className={cn(
-          "fixed top-0 left-0 h-screen w-[280px] bg-white z-50 transition-transform duration-300 ease-in-out flex flex-col",
+          "fixed top-0 left-0 h-screen w-[280px] bg-card z-50 transition-transform duration-300 ease-in-out flex flex-col",
           isOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
         )}
       >
@@ -124,13 +118,13 @@ export function NavigationSidebar({ isOpen, onClose }: NavigationSidebarProps) {
                   "flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-lg transition-colors",
                   item.active
                     ? "bg-[rgb(45,79,30)] text-white"
-                    : "text-gray-700 hover:bg-[rgb(250,250,249)]"
+                    : "text-muted-foreground hover:bg-muted"
                 )}
               >
                 <span className="material-icons text-xl">{item.icon}</span>
                 <span className="text-xs tracking-wide">{item.label}</span>
                 {item.active && (
-                  <div className="ml-auto w-2 h-2 bg-white rounded-full" />
+                  <div className="ml-auto w-2 h-2 bg-white rounded-full" data-keep-white />
                 )}
               </Link>
             ))}
@@ -140,7 +134,7 @@ export function NavigationSidebar({ isOpen, onClose }: NavigationSidebarProps) {
           <div className="mt-4 px-3">
             <button
               onClick={() => setToolsExpanded(!toolsExpanded)}
-              className="flex items-center justify-between w-full px-4 py-3 text-sm font-medium text-gray-700 hover:bg-[rgb(250,250,249)] rounded-lg transition-colors"
+              className="flex items-center justify-between w-full px-4 py-3 text-sm font-medium text-muted-foreground hover:bg-muted rounded-lg transition-colors"
             >
               <div className="flex items-center gap-3">
                 <span className="material-icons text-xl">build</span>
@@ -164,8 +158,8 @@ export function NavigationSidebar({ isOpen, onClose }: NavigationSidebarProps) {
                     className={cn(
                       "block px-4 py-2 text-xs tracking-wide rounded-lg transition-colors",
                       pathname === item.href || pathname.startsWith(item.href + '/')
-                        ? "text-[rgb(45,79,30)] font-medium bg-[rgb(250,250,249)]"
-                        : "text-gray-600 hover:bg-[rgb(250,250,249)] hover:text-gray-900"
+                        ? "text-brand-heading font-medium bg-muted"
+                        : "text-muted-foreground hover:bg-muted hover:text-foreground"
                     )}
                   >
                     {item.label}
@@ -180,7 +174,7 @@ export function NavigationSidebar({ isOpen, onClose }: NavigationSidebarProps) {
           <div className="mt-4 px-3">
             <button
               onClick={() => setConfigExpanded(!configExpanded)}
-              className="flex items-center justify-between w-full px-4 py-3 text-sm font-medium text-gray-700 hover:bg-[rgb(250,250,249)] rounded-lg transition-colors"
+              className="flex items-center justify-between w-full px-4 py-3 text-sm font-medium text-muted-foreground hover:bg-muted rounded-lg transition-colors"
             >
               <div className="flex items-center gap-3">
                 <span className="material-icons text-xl">settings</span>
@@ -212,8 +206,8 @@ export function NavigationSidebar({ isOpen, onClose }: NavigationSidebarProps) {
                       item.disabled
                         ? 'text-gray-400 cursor-not-allowed'
                         : pathname === item.href || pathname.startsWith(`${item.href}/`)
-                          ? 'text-[rgb(45,79,30)] font-medium bg-[rgb(250,250,249)]'
-                          : 'text-gray-600 hover:bg-[rgb(250,250,249)] hover:text-gray-900'
+                          ? 'text-brand-heading font-medium bg-muted'
+                          : 'text-muted-foreground hover:bg-muted hover:text-foreground'
                     )}
                   >
                     {item.label}
@@ -234,27 +228,12 @@ export function NavigationSidebar({ isOpen, onClose }: NavigationSidebarProps) {
               'flex items-center gap-3 w-full px-4 py-3 text-sm font-medium rounded-lg transition-colors',
               pathname.startsWith('/profil')
                 ? 'bg-[rgb(45,79,30)] text-white'
-                : 'text-gray-700 hover:bg-[rgb(250,250,249)]'
+                : 'text-muted-foreground hover:bg-muted'
             )}
           >
             <span className="material-icons text-xl">person</span>
             <span className="text-xs tracking-wide">MEIN PROFIL</span>
           </Link>
-        </div>
-
-        {/* Status Indicator */}
-        <div className="p-6 bg-[rgb(250,250,249)] border-t border-gray-200">
-          <div className="flex items-center gap-2 text-xs text-gray-600">
-            <div
-              className={cn(
-                'w-2 h-2 rounded-full',
-                isOnline ? 'bg-green-500' : 'bg-amber-500'
-              )}
-            />
-            <span className="tracking-wide">
-              {isOnline ? 'ONLINE & SYNCHRONISIERT' : 'OFFLINE – Daten aus Cache'}
-            </span>
-          </div>
         </div>
       </aside>
 

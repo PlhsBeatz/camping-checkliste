@@ -19,7 +19,10 @@ import {
   setPackingItemsMemory,
   snapshotPackingItemsToMemory,
 } from '@/lib/packing-items-memory'
-import { sortMitreisendenZeilenNachStammdaten } from '@/lib/mitreisenden-sort'
+import {
+  sortMitreisendeNachRolleUndName,
+  sortMitreisendenZeilenNachStammdaten,
+} from '@/lib/mitreisenden-sort'
 import { ResponsiveModal } from '@/components/ui/responsive-modal'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { MarkAllConfirmationDialog } from '@/components/mark-all-confirmation-dialog'
@@ -35,7 +38,7 @@ import {
 } from '@/components/ui/select'
 import { CategoryGroupedSelectField } from '@/components/category-select-grouped'
 import { cn, formatWeight, getInitials } from '@/lib/utils'
-import { USER_COLORS, DEFAULT_USER_COLOR_BG } from '@/lib/user-colors'
+import { getMitreisenderAvatarStyle } from '@/lib/user-colors'
 import { useAuth } from '@/components/auth-provider'
 import { useVacationSearchParam } from '@/hooks/use-vacation-search-param'
 import {
@@ -115,28 +118,19 @@ function HomeContent() {
   const { user, canSelectOtherProfiles, canAccessConfig, gepacktRequiresParentApproval, canEditPauschalEntries } = useAuth()
   const { mutate } = useOptimisticMutation()
 
-  const initialVacationIdForUi = resolveVacationIdForUi()
-  const initialPacklistUi = getInitialPacklistUiState(initialVacationIdForUi)
+  const defaultPacklistUi = getInitialPacklistUiState(null)
 
-  // Data state
+  // Data state – ohne sessionStorage beim ersten Render (SSR/Hydration-kompatibel)
+  const [storageHydrated, setStorageHydrated] = useState(false)
   const [vacations, setVacations] = useState<Vacation[]>([])
-  const [packingItems, setPackingItems] = useState<PackingItem[]>(() => {
-    if (!initialVacationIdForUi) return []
-    return getPackingItemsMemory(initialVacationIdForUi) ?? []
-  })
+  const [packingItems, setPackingItems] = useState<PackingItem[]>([])
   const packingItemsRef = useRef(packingItems)
   packingItemsRef.current = packingItems
   /** Einmal Inhalt für diesen Urlaub gehabt – leere Meldung nur dann, nicht während Hintergrund-Sync. */
-  const packingHadContentRef = useRef(
-    (initialVacationIdForUi
-      ? (getPackingItemsMemory(initialVacationIdForUi)?.length ?? 0)
-      : 0) > 0
-  )
+  const packingHadContentRef = useRef(false)
   const [transportVehicles, setTransportVehicles] = useState<TransportVehicle[]>([])
   const [vacationMitreisende, setVacationMitreisende] = useState<Mitreisender[]>([])
-  const [selectedVacationId, setSelectedVacationId] = useState<string | null>(
-    initialVacationIdForUi
-  )
+  const [selectedVacationId, setSelectedVacationId] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   
   // Equipment data for FAB modal
@@ -153,19 +147,11 @@ function HomeContent() {
   const [editingPackingItemId, setEditingPackingItemId] = useState<string | null>(null)
   const [editingForMitreisenderId, setEditingForMitreisenderId] = useState<string | null>(null)
   const [_equipmentSearchTerm, _setEquipmentSearchTerm] = useState('')
-  const [selectedPackProfile, setSelectedPackProfile] = useState<string | null>(
-    initialPacklistUi.selectedPackProfile
-  )
+  const [selectedPackProfile, setSelectedPackProfile] = useState<string | null>(null)
   // Für Admins: merken, für welchen Urlaub das Standard-Packprofil bereits automatisch gesetzt wurde
-  const [autoProfileInitializedVacationId, setAutoProfileInitializedVacationId] = useState<string | null>(
-    initialPacklistUi.selectedPackProfile !== null && initialVacationIdForUi
-      ? initialVacationIdForUi
-      : null
-  )
-  const [hidePackedItems, setHidePackedItems] = useState(initialPacklistUi.hidePackedItems)
-  const [activeMainCategory, setActiveMainCategory] = useState(
-    initialPacklistUi.activeMainCategory
-  )
+  const [autoProfileInitializedVacationId, setAutoProfileInitializedVacationId] = useState<string | null>(null)
+  const [hidePackedItems, setHidePackedItems] = useState(defaultPacklistUi.hidePackedItems)
+  const [activeMainCategory, setActiveMainCategory] = useState(defaultPacklistUi.activeMainCategory)
   const [deletePackingItemConfirm, setDeletePackingItemConfirm] = useState<{
     id: string
     forMitreisenderId?: string | null
@@ -177,12 +163,32 @@ function HomeContent() {
     travelers: Array<{ id: string; name: string; gepackt?: boolean; gepackt_vorgemerkt?: boolean }>
   } | null>(null)
   const [listDisplayMode, setListDisplayMode] = useState<'alles' | 'packliste'>(
-    initialPacklistUi.listDisplayMode
+    defaultPacklistUi.listDisplayMode
   )
   /** Beim Wechsel des Urlaubs: UI aus Storage oder Urlaubs-Standard (einmal pro Urlaub). */
-  const lastAppliedDefaultVacationIdRef = useRef<string | null>(
-    initialVacationIdForUi
-  )
+  const lastAppliedDefaultVacationIdRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    const vid = resolveVacationIdForUi()
+    if (vid) {
+      const ui = getInitialPacklistUiState(vid)
+      setSelectedVacationId(vid)
+      setSelectedPackProfile(ui.selectedPackProfile)
+      setHidePackedItems(ui.hidePackedItems)
+      setListDisplayMode(ui.listDisplayMode)
+      setActiveMainCategory(ui.activeMainCategory)
+      if (ui.selectedPackProfile !== null) {
+        setAutoProfileInitializedVacationId(vid)
+      }
+      lastAppliedDefaultVacationIdRef.current = vid
+      const mem = getPackingItemsMemory(vid)
+      if (mem?.length) {
+        setPackingItems(mem)
+        packingHadContentRef.current = true
+      }
+    }
+    setStorageHydrated(true)
+  }, [])
 
   const persistPacklistUi = useCallback(
     (patch: Parameters<typeof writePacklistUiSettings>[1]) => {
@@ -1566,6 +1572,10 @@ function HomeContent() {
 
   const travelerNames = vacationMitreisende.map((m) => m.name)
   const getTravelerInitials = (name: string) => getInitials(name, travelerNames)
+  const sortedVacationMitreisende = useMemo(
+    () => sortMitreisendeNachRolleUndName(vacationMitreisende),
+    [vacationMitreisende]
+  )
 
   // Add-Dialog: beim Öffnen zur aktuellen Kategorie scrollen (einmalig, sanft)
   useEffect(() => {
@@ -1601,6 +1611,26 @@ function HomeContent() {
     return () => clearTimeout(id)
   }, [showAddItemDialog])
 
+  if (!storageHydrated) {
+    return (
+      <div className="min-h-screen flex max-w-full overflow-x-clip">
+        <NavigationSidebar
+          isOpen={showNavSidebar}
+          onClose={() => setShowNavSidebar(false)}
+        />
+        <div className={cn('flex-1 transition-all duration-300 min-w-0', 'lg:ml-[280px]')}>
+          <div className="min-w-0 h-full">
+            <Card>
+              <CardContent className="pt-6">
+                <p className="text-muted-foreground text-center">Lädt…</p>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen flex max-w-full overflow-x-clip">
       {/* Navigation Sidebar (Links) */}
@@ -1619,7 +1649,7 @@ function HomeContent() {
           {currentVacation && (
             <div className="flex-1 min-h-0 flex flex-col min-w-0">
               {/* Header - fix oben, scrollt nicht (Flex-Layout: Header+Progress+Tabs bleiben sichtbar) */}
-              <div className="flex-shrink-0 z-20 bg-white min-w-0">
+              <div className="flex-shrink-0 z-20 bg-card min-w-0">
                 <div className="py-3 px-4 flex items-center justify-between gap-3 min-w-0 w-full">
                   <div className="flex items-center gap-3 min-w-0 flex-1">
                     {/* Mobile Menu Toggle - einheitlich mit Rahmen wie auf Urlaube */}
@@ -1633,7 +1663,7 @@ function HomeContent() {
                     </Button>
                     
                     <div className="min-w-0 flex-1">
-                      <h1 className="text-lg sm:text-xl font-bold text-[rgb(45,79,30)] truncate">
+                      <h1 className="text-lg sm:text-xl font-bold text-brand-heading truncate">
                         {currentVacation.titel}
                       </h1>
                       <p className="text-xs sm:text-sm text-muted-foreground truncate">
@@ -1654,12 +1684,19 @@ function HomeContent() {
                         style={
                           selectedPackProfile
                             ? (() => {
-                                const m = vacationMitreisende.find((x) => x.id === selectedPackProfile)
-                                const preset = m?.farbe ? USER_COLORS.find((c) => c.bg === m.farbe) : null
-                                return {
-                                  backgroundColor: m?.farbe ?? DEFAULT_USER_COLOR_BG,
-                                  color: preset?.fg ?? '#ffffff',
-                                }
+                                const index = sortedVacationMitreisende.findIndex(
+                                  (x) => x.id === selectedPackProfile
+                                )
+                                const m =
+                                  index >= 0
+                                    ? sortedVacationMitreisende[index]
+                                    : vacationMitreisende.find(
+                                        (x) => x.id === selectedPackProfile
+                                      )
+                                return getMitreisenderAvatarStyle(
+                                  m,
+                                  index >= 0 ? index : 0
+                                )
                               })()
                             : { backgroundColor: 'rgb(45,79,30)', color: '#ffffff' }
                         }
@@ -1711,7 +1748,7 @@ function HomeContent() {
 
               {/* Auto-generate button - Only when list is empty */}
               {packingItems.length === 0 && !packingHadContentRef.current && (
-                <div className="p-6 text-center bg-white">
+                <div className="p-6 text-center bg-card">
                   <p className="text-muted-foreground mb-4">
                     Ihre Packliste ist leer. Generieren Sie automatisch Vorschläge oder fügen Sie manuell Gegenstände hinzu.
                   </p>
@@ -2007,11 +2044,11 @@ function HomeContent() {
                         </div>
                         
                         {/* Items */}
-                        <div className="divide-y divide-gray-200 bg-white">
+                        <div className="divide-y divide-gray-200 bg-card">
                           {category.items.map(item => (
                             <div
                               key={item.id}
-                              className="flex items-center gap-3 px-4 py-3 bg-white hover:bg-gray-50 cursor-pointer min-w-0"
+                              className="flex items-center gap-3 px-4 py-3 bg-card hover:bg-gray-50 cursor-pointer min-w-0"
                               onClick={() => handleToggleEquipmentSelection(item.id)}
                             >
                               <Checkbox
@@ -2045,7 +2082,7 @@ function HomeContent() {
           </div>
 
           {/* Footer - Sticky */}
-          <div className="px-6 pt-4 pb-6 bg-white flex gap-2 flex-shrink-0">
+          <div className="px-6 pt-4 pb-6 bg-card flex gap-2 flex-shrink-0">
             <Button
               onClick={handleAddSelectedEquipment}
               disabled={selectedEquipmentIds.size === 0 || isLoading}

@@ -354,27 +354,27 @@ export function SonnenAusrichtungCompass({
       </div>
 
       {/* Data panel */}
-      <div className="w-full max-w-xs rounded-lg bg-[rgb(250,250,249)] border border-gray-200 p-4 space-y-2">
+      <div className="w-full max-w-xs rounded-lg bg-card border border-border p-4 space-y-2">
         <div className="flex justify-between text-sm">
-          <span className="text-gray-600">Sonnenaufgang</span>
-          <span className="font-medium">
+          <span className="text-muted-foreground">Sonnenaufgang</span>
+          <span className="font-medium text-foreground">
             {sunData.isPolarDay ? '—' : sunData.isPolarNight ? '—' : format(sunData.sunrise, 'HH:mm', { locale: de })}
           </span>
         </div>
         <div className="flex justify-between text-sm">
-          <span className="text-gray-600">Mittagssonne</span>
-          <span className="font-medium">{format(sunData.solarNoon, 'HH:mm', { locale: de })}</span>
+          <span className="text-muted-foreground">Mittagssonne</span>
+          <span className="font-medium text-foreground">{format(sunData.solarNoon, 'HH:mm', { locale: de })}</span>
         </div>
         <div className="flex justify-between text-sm">
-          <span className="text-gray-600">Sonnenuntergang</span>
-          <span className="font-medium">
+          <span className="text-muted-foreground">Sonnenuntergang</span>
+          <span className="font-medium text-foreground">
             {sunData.isPolarDay ? '—' : sunData.isPolarNight ? '—' : format(sunData.sunset, 'HH:mm', { locale: de })}
           </span>
         </div>
       </div>
 
       {(sunData.isPolarDay || sunData.isPolarNight) && (
-        <p className="text-sm text-gray-500">
+        <p className="text-sm text-muted-foreground">
           {sunData.isPolarDay ? 'Sonne 24h sichtbar (Polartag)' : 'Sonne nicht sichtbar (Polarnacht)'}
         </p>
       )}

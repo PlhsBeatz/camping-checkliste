@@ -40,9 +40,16 @@
     /* Orange accent for special highlights */
     --accent-orange: 28 80% 52%;
     --accent-orange-foreground: 0 0% 100%;
+
+    /* Markenfarben – in Light und Dark identisch */
+    --brand-green: 103 45% 21%;
+    --brand-orange: 28 80% 52%;
+    --brand-green-heading: 103 45% 21%;
     
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 100%;
+    /* Text/Icons (Löschen, Fehler) – Light wie destructive */
+    --destructive-text: 0 84.2% 60.2%;
     
     --border: 103 15% 85%;
     --input: 103 15% 85%;
@@ -68,45 +75,53 @@
   }
   
   .dark {
-    --background: 103 45% 10%;
-    --foreground: 0 0% 95%;
+    /* Neutrale dunkle Flächen – Grün nur als Akzent/Marke */
+    --background: 0 0% 7%;
+    --foreground: 0 0% 93%;
     
-    --card: 103 45% 15%;
-    --card-foreground: 0 0% 95%;
+    --card: 0 0% 11%;
+    --card-foreground: 0 0% 93%;
     
-    --popover: 103 45% 15%;
-    --popover-foreground: 0 0% 95%;
+    --popover: 0 0% 11%;
+    --popover-foreground: 0 0% 93%;
     
-    --primary: 160 84% 39%;
+    --primary: 103 45% 21%;
     --primary-foreground: 0 0% 100%;
     
-    --secondary: 103 30% 20%;
-    --secondary-foreground: 0 0% 95%;
+    --secondary: 0 0% 16%;
+    --secondary-foreground: 0 0% 93%;
     
-    --muted: 103 20% 25%;
-    --muted-foreground: 103 10% 65%;
+    --muted: 0 0% 18%;
+    --muted-foreground: 0 0% 62%;
     
     --accent: 160 84% 39%;
     --accent-foreground: 0 0% 100%;
     
     --accent-orange: 28 80% 52%;
     --accent-orange-foreground: 0 0% 100%;
+
+    --brand-green: 103 45% 21%;
+    --brand-orange: 28 80% 52%;
+    /* Überschriften mit Markengrün im Dark Mode: helles Grün */
+    --brand-green-heading: 103 32% 58%;
     
+    /* Buttons/Toasts: dunkles Rot; Text/Icons separat heller */
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 0 0% 100%;
+    --destructive-text: 0 84% 68%;
     
-    --border: 103 30% 25%;
-    --input: 103 30% 25%;
-    --field: 103 18% 20%;
-    --ring: 160 84% 39%;
+    --border: 0 0% 22%;
+    --input: 0 0% 22%;
+    --field: 0 0% 14%;
+    --ring: 103 45% 21%;
     
-    --sidebar-background: 103 45% 18%;
-    --sidebar-foreground: 0 0% 95%;
+    --sidebar-background: 0 0% 9%;
+    --sidebar-foreground: 0 0% 93%;
     --sidebar-primary: 160 84% 39%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 103 45% 25%;
+    --sidebar-accent: 0 0% 16%;
     --sidebar-accent-foreground: 0 0% 100%;
-    --sidebar-border: 103 45% 15%;
+    --sidebar-border: 0 0% 20%;
     --sidebar-ring: 160 84% 39%;
     
     --chart-1: 160 84% 45%;
@@ -126,6 +141,11 @@
     background-color: rgb(244, 241, 234);
     background-image: url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M11 18c3.866 0 7-3.134 7-7s-3.134-7-7-7-7 3.134-7 7 3.134 7 7 7zm48 25c3.866 0 7-3.134 7-7s-3.134-7-7-7-7 3.134-7 7 3.134 7 7 7zm-43-7c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zm63 31c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zM34 90c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zm56-76c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zM12 86c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zm28-65c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zm23-11c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zm-6 60c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zm29 22c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2z' fill='%232d4f1e' fill-opacity='0.03' fill-rule='evenodd'/%3E%3C/svg%3E");
     background-repeat: repeat;
+  }
+
+  .dark body {
+    background-color: hsl(var(--background));
+    background-image: url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M11 18c3.866 0 7-3.134 7-7s-3.134-7-7-7-7 3.134-7 7 3.134 7 7 7zm48 25c3.866 0 7-3.134 7-7s-3.134-7-7-7-7 3.134-7 7 3.134 7 7 7zm-43-7c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zm63 31c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zM34 90c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zm56-76c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zM12 86c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zm28-65c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zm23-11c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zm-6 60c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zm29 22c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2z' fill='%232d4f1e' fill-opacity='0.05' fill-rule='evenodd'/%3E%3C/svg%3E");
   }
 }
 
@@ -164,7 +184,11 @@ gmp-place-autocomplete {
   color: hsl(var(--foreground));
   font-size: 0.875rem;
   box-shadow: none;
-  color-scheme: light;
+  color-scheme: light dark;
+}
+
+.dark gmp-place-autocomplete {
+  color-scheme: dark;
 }
 
 gmp-place-autocomplete::part(input) {
@@ -220,6 +244,67 @@ gmp-place-autocomplete::part(prediction-item) {
     background-color: rgb(244, 241, 234);
     background-image: url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M11 18c3.866 0 7-3.134 7-7s-3.134-7-7-7-7 3.134-7 7 3.134 7 7 7zm48 25c3.866 0 7-3.134 7-7s-3.134-7-7-7-7 3.134-7 7 3.134 7 7 7zm-43-7c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zm63 31c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zM34 90c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zm56-76c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zM12 86c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zm28-65c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zm23-11c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zm-6 60c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zm29 22c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2z' fill='%232d4f1e' fill-opacity='0.03' fill-rule='evenodd'/%3E%3C/svg%3E");
     background-repeat: repeat;
+  }
+
+  .dark .bg-scroll-pattern {
+    background-color: hsl(var(--background));
+    background-image: url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M11 18c3.866 0 7-3.134 7-7s-3.134-7-7-7-7 3.134-7 7 3.134 7 7 7zm48 25c3.866 0 7-3.134 7-7s-3.134-7-7-7-7 3.134-7 7 3.134 7 7 7zm-43-7c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zm63 31c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zM34 90c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zm56-76c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zM12 86c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zm28-65c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zm23-11c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zm-6 60c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zm29 22c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2z' fill='%232d4f1e' fill-opacity='0.05' fill-rule='evenodd'/%3E%3C/svg%3E");
+  }
+
+  .dark .bg-white:not([data-keep-white]) {
+    @apply bg-card;
+  }
+
+  .text-brand-heading {
+    color: rgb(45, 79, 30);
+  }
+
+  .dark .text-brand-heading {
+    color: hsl(var(--brand-green-heading));
+  }
+
+  .text-destructive {
+    color: hsl(var(--destructive-text));
+  }
+
+  .focus\:text-destructive:focus {
+    color: hsl(var(--destructive-text));
+  }
+
+  .dark .text-red-600 {
+    @apply text-red-400;
+  }
+
+  .dark .text-red-800 {
+    @apply text-red-300;
+  }
+
+  .dark .bg-red-50 {
+    @apply bg-red-950/40;
+  }
+
+  .dark .border-red-200 {
+    @apply border-red-800/50;
+  }
+
+  .border-subtle {
+    @apply border-gray-200 dark:border-white/10;
+  }
+
+  .segment-toggle-track {
+    @apply flex rounded-lg border-2 border-border p-0.5 bg-muted overflow-hidden;
+  }
+
+  .dark .map-embed iframe,
+  .dark .map-embed .leaflet-tile-pane,
+  .dark .urlaub-leaflet-map .leaflet-tile-pane {
+    filter: brightness(0.82) contrast(1.08) saturate(0.8);
+  }
+
+  .dark .hover\:bg-neutral-50:hover,
+  .dark .hover\:bg-neutral-100:hover,
+  .dark .hover\:bg-gray-50:hover {
+    @apply bg-muted;
   }
 
   /* Daterangepicker (Touch-Geräte): mittig und voll sichtbar (überschreibt Radix-Position) */

@@ -104,7 +104,7 @@ export default function EinladungPage() {
         <div className="flex flex-col items-center gap-3">
           <AppLogo size="default" variant="centered" />
           <div className="text-center">
-            <h2 className="text-xl font-semibold text-[rgb(45,79,30)]">Einladung annehmen</h2>
+            <h2 className="text-xl font-semibold text-brand-heading">Einladung annehmen</h2>
             <p className="text-gray-600 mt-1">
               Konto erstellen für: <strong>{invitation?.mitreisender_name}</strong>
             </p>

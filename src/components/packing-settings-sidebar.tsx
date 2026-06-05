@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
 import { cn, getInitials } from '@/lib/utils'
-import { USER_COLORS } from '@/lib/user-colors'
+import { getMitreisenderAvatarStyle } from '@/lib/user-colors'
 import type { Mitreisender } from '@/lib/db'
 import { sortMitreisendeNachRolleUndName } from '@/lib/mitreisenden-sort'
 
@@ -44,15 +44,6 @@ export function PackingSettingsSidebar({
 
   const getTravelerInitials = (name: string) => getInitials(name, travelerNames)
 
-  const getAvatarStyle = (person: Mitreisender, index: number) => {
-    if (person.farbe) {
-      const preset = USER_COLORS.find((c) => c.bg === person.farbe)
-      return { backgroundColor: person.farbe, color: preset?.fg ?? '#ffffff' }
-    }
-    const c = USER_COLORS[index % USER_COLORS.length]!
-    return { backgroundColor: c.bg, color: c.fg }
-  }
-
   return (
     <>
       {/* Overlay */}
@@ -66,7 +57,7 @@ export function PackingSettingsSidebar({
       {/* Sidebar - Slide in from RIGHT */}
       <div 
         className={cn(
-          "fixed right-0 top-0 h-full w-80 bg-white shadow-xl z-50 transform transition-transform duration-300 ease-in-out flex flex-col",
+          "fixed right-0 top-0 h-full w-80 bg-card shadow-xl z-50 transform transition-transform duration-300 ease-in-out flex flex-col",
           isOpen ? 'translate-x-0' : 'translate-x-full'
         )}
       >
@@ -88,22 +79,22 @@ export function PackingSettingsSidebar({
           </p>
         </div>
 
-        {/* Content - White Background, scrollbar bei vielen Mitreisenden */}
-        <div className="p-6 space-y-4 overflow-y-auto overscroll-contain flex-1 min-h-0">
+        {/* Content */}
+        <div className="p-6 space-y-4 overflow-y-auto overscroll-contain flex-1 min-h-0 bg-card">
           {/* Anzeige-Modus: Alles / Packliste */}
           <div>
-            <div className="text-xs font-medium text-gray-600 uppercase tracking-wide mb-2">
+            <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
               Anzeige
             </div>
-            <div className="flex rounded-lg border-2 border-gray-200 p-0.5 bg-gray-100 overflow-hidden">
+            <div className="segment-toggle-track">
               <button
                 type="button"
                 onClick={() => onListDisplayModeChange('alles')}
                 className={cn(
                   'flex-1 py-2.5 text-sm font-medium transition-colors',
                   listDisplayMode === 'alles'
-                    ? 'bg-white text-[rgb(45,79,30)] shadow-sm rounded-md'
-                    : 'text-gray-600 hover:text-gray-900'
+                    ? 'bg-card text-brand-heading shadow-sm rounded-md'
+                    : 'text-muted-foreground hover:text-foreground'
                 )}
               >
                 Alles
@@ -114,14 +105,14 @@ export function PackingSettingsSidebar({
                 className={cn(
                   'flex-1 py-2.5 text-sm font-medium transition-colors',
                   listDisplayMode === 'packliste'
-                    ? 'bg-white text-[rgb(45,79,30)] shadow-sm rounded-md'
-                    : 'text-gray-600 hover:text-gray-900'
+                    ? 'bg-card text-brand-heading shadow-sm rounded-md'
+                    : 'text-muted-foreground hover:text-foreground'
                 )}
               >
                 Packliste
               </button>
             </div>
-            <p className="text-xs text-gray-500 mt-1.5 min-h-[2.5rem] leading-tight">
+            <p className="text-xs text-muted-foreground mt-1.5 min-h-[2.5rem] leading-tight">
               {listDisplayMode === 'alles'
                 ? 'Alle Einträge inkl. „Immer gepackt"'
                 : 'Ohne „Immer gepackt" (Wohnwagen-Dauerausstattung)'}
@@ -135,8 +126,8 @@ export function PackingSettingsSidebar({
             className={cn(
               "w-full p-4 rounded-xl border-2 transition-all",
               selectedProfile === null
-                ? 'border-[rgb(45,79,30)] bg-[rgb(45,79,30)]/5'
-                : 'border-gray-200 hover:border-gray-300'
+                ? 'border-[rgb(45,79,30)] bg-[rgb(45,79,30)]/5 dark:bg-[rgb(45,79,30)]/15'
+                : 'border-border hover:border-muted-foreground/40'
             )}
           >
                 <div className="flex items-center gap-3">
@@ -147,8 +138,8 @@ export function PackingSettingsSidebar({
                 <span className="material-icons">groups</span>
               </div>
               <div className="text-left">
-                <div className="font-semibold text-gray-900">Zentral / Alle</div>
-                <div className="text-xs text-gray-500 tracking-wide">Übersicht</div>
+                <div className="font-semibold text-foreground">Zentral / Alle</div>
+                <div className="text-xs text-muted-foreground tracking-wide">Übersicht</div>
               </div>
             </div>
           </button>
@@ -164,17 +155,17 @@ export function PackingSettingsSidebar({
                   className={cn(
                     "p-3 rounded-xl border-2 transition-all flex flex-col items-center gap-2",
                     selectedProfile === person.id
-                      ? 'border-[rgb(45,79,30)] bg-[rgb(45,79,30)]/5'
-                      : 'border-gray-200 hover:border-gray-300'
+                      ? 'border-[rgb(45,79,30)] bg-[rgb(45,79,30)]/5 dark:bg-[rgb(45,79,30)]/15'
+                      : 'border-border hover:border-muted-foreground/40'
                   )}
                 >
                   <div
                     className="w-12 h-12 rounded-full flex items-center justify-center text-lg font-bold"
-                    style={getAvatarStyle(person, index)}
+                    style={getMitreisenderAvatarStyle(person, index)}
                   >
                     {getTravelerInitials(person.name)}
                   </div>
-                  <span className="text-sm font-medium text-gray-900 text-center">
+                  <span className="text-sm font-medium text-foreground text-center">
                     {person.name}
                   </span>
                 </button>
@@ -187,7 +178,7 @@ export function PackingSettingsSidebar({
             <div className="flex items-center justify-between">
               <Label 
                 htmlFor="hide-packed" 
-                className="text-sm font-medium text-gray-700 uppercase tracking-wide cursor-pointer"
+                className="text-sm font-medium text-foreground uppercase tracking-wide cursor-pointer"
               >
                 GEPACKTES AUSBLENDEN
               </Label>

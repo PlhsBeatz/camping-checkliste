@@ -47,10 +47,10 @@ function TransportmittelRow({
   const nutzlast = vehicle.zul_gesamtgewicht - vehicle.eigengewicht
   const festgewichtTotal = 'festgewichtTotal' in vehicle ? vehicle.festgewichtTotal : 0
   return (
-    <div className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 bg-white">
+    <div className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 bg-card">
       <div className="flex items-center gap-3">
         <div className="h-10 w-10 rounded-lg bg-[rgb(45,79,30)]/10 flex items-center justify-center flex-shrink-0">
-          <TransportIcon icon={vehicle.icon} name={vehicle.name} className="text-[rgb(45,79,30)] [&_svg]:h-5 [&_svg]:w-5" />
+          <TransportIcon icon={vehicle.icon} name={vehicle.name} className="text-brand-heading [&_svg]:h-5 [&_svg]:w-5" />
         </div>
         <div>
           <p className="font-medium">{vehicle.name}</p>
@@ -443,13 +443,13 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
                   className={cn(
                     'flex flex-col items-center gap-1 rounded-lg border-2 px-3 py-2 min-w-[4.5rem] transition-colors',
                     form.icon === key
-                      ? 'border-[rgb(45,79,30)] bg-[rgb(45,79,30)]/5'
-                      : 'border-gray-200 hover:border-gray-300'
+                      ? 'border-[rgb(45,79,30)] bg-[rgb(45,79,30)]/5 dark:bg-[rgb(45,79,30)]/15'
+                      : 'border-subtle hover:border-gray-300 dark:hover:border-white/20'
                   )}
                   aria-pressed={form.icon === key}
                   title={label}
                 >
-                  <Icon className="h-5 w-5 text-[rgb(45,79,30)]" strokeWidth={1.75} />
+                  <Icon className="h-5 w-5 text-brand-heading" strokeWidth={1.75} />
                   <span className="text-[10px] font-medium text-muted-foreground">{label}</span>
                 </button>
               ))}

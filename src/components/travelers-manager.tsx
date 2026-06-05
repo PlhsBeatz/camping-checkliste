@@ -29,18 +29,13 @@ import { Trash2, Plus, Star, MoreVertical, Pencil, Mail, Copy, KeyRound, Share2 
 import { Mitreisender } from '@/lib/db'
 import { useAuth } from '@/components/auth-provider'
 import type { ApiResponse } from '@/lib/api-types'
-import { USER_COLORS, DEFAULT_USER_COLOR_BG } from '@/lib/user-colors'
+import {
+  USER_COLORS,
+  DEFAULT_USER_COLOR_BG,
+  getMitreisenderAvatarStyle,
+} from '@/lib/user-colors'
 import { getInitials } from '@/lib/utils'
 import { sortMitreisendeNachRolleUndName } from '@/lib/mitreisenden-sort'
-
-const getAvatarColor = (index: number, customColor?: string | null) => {
-  if (customColor) {
-    const preset = USER_COLORS.find((c) => c.bg === customColor)
-    return { backgroundColor: customColor, color: preset?.fg ?? '#ffffff' }
-  }
-  const c = USER_COLORS[index % USER_COLORS.length]!
-  return { backgroundColor: c.bg, color: c.fg }
-}
 
 function TravelerRow({
   traveler,
@@ -64,12 +59,12 @@ function TravelerRow({
   const [menuOpen, setMenuOpen] = useState(false)
   return (
     <div
-      className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 bg-white"
+      className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 bg-card"
     >
       <div className="flex items-center gap-3">
         <div
           className="h-10 w-10 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0"
-          style={getAvatarColor(index, traveler.farbe)}
+          style={getMitreisenderAvatarStyle(traveler, index)}
         >
           {initials}
         </div>

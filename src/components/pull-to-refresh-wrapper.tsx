@@ -42,14 +42,14 @@ export function PullToRefreshWrapper({
         }}
       >
         <div
-          className="mt-1 flex h-9 w-9 items-center justify-center rounded-full bg-white shadow-md ring-1 ring-gray-200"
+          className="mt-1 flex h-9 w-9 items-center justify-center rounded-full bg-card shadow-md ring-1 ring-gray-200"
           style={{
             transform: `translateY(${Math.max(0, pull - 18)}px)`,
             transition: isRefreshing ? 'transform 200ms ease-out' : undefined,
           }}
         >
           <RefreshCw
-            className={cn('h-4 w-4 text-[rgb(45,79,30)]', isRefreshing && 'animate-spin')}
+            className={cn('h-4 w-4 text-brand-heading', isRefreshing && 'animate-spin')}
             aria-hidden
             style={{
               transform: !isRefreshing ? `rotate(${indicatorRotate}deg)` : undefined,

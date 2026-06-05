@@ -58,6 +58,11 @@ export default {
   			input: 'hsl(var(--input))',
   			field: 'hsl(var(--field))',
   			ring: 'hsl(var(--ring))',
+  			brand: {
+  				green: 'hsl(var(--brand-green))',
+  				'green-heading': 'hsl(var(--brand-green-heading))',
+  				orange: 'hsl(var(--brand-orange))'
+  			},
   			chart: {
   				'1': 'hsl(var(--chart-1))',
   				'2': 'hsl(var(--chart-2))',

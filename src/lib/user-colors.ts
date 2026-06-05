@@ -61,6 +61,57 @@ export function isPresetColor(value: string | null | undefined): boolean {
   return USER_COLORS.some((c) => c.bg === value)
 }
 
+function normalizeColorKey(value: string): string {
+  return value.trim().replace(/\s+/g, ' ')
+}
+
+/** CSS-Hintergrundfarbe für Mitreisenden-Avatar/Fortschrittsbalken */
+export function resolveMitreisenderColor(value: string | null | undefined): string {
+  if (!value) return DEFAULT_USER_COLOR_BG
+  const trimmed = normalizeColorKey(value)
+  if (trimmed.startsWith('#')) return trimmed
+  if (trimmed.startsWith('rgb')) return trimmed
+  if (trimmed.startsWith('hsl')) return trimmed
+  const byBg = USER_COLORS.find((c) => normalizeColorKey(c.bg) === trimmed)
+  if (byBg) return byBg.bg
+  const byId = USER_COLORS.find(
+    (c) => c.id === trimmed || c.id === trimmed.toLowerCase()
+  )
+  if (byId) return byId.bg
+  const byLabel = USER_COLORS.find(
+    (c) => c.label.toLowerCase() === trimmed.toLowerCase()
+  )
+  if (byLabel) return byLabel.bg
+  return trimmed
+}
+
+/** Hintergrundfarbe inkl. Index-Fallback (wie Avatare in der Packprofil-Sidebar). */
+export function getMitreisenderBackgroundColor(
+  person: { farbe?: string | null } | null | undefined,
+  index = 0
+): string {
+  if (person?.farbe) return resolveMitreisenderColor(person.farbe)
+  return USER_COLORS[((index % USER_COLORS.length) + USER_COLORS.length) % USER_COLORS.length]!.bg
+}
+
+export function getMitreisenderForegroundColor(backgroundColor: string): string {
+  const preset = USER_COLORS.find(
+    (c) => normalizeColorKey(c.bg) === normalizeColorKey(backgroundColor)
+  )
+  return preset?.fg ?? '#ffffff'
+}
+
+export function getMitreisenderAvatarStyle(
+  person: { farbe?: string | null } | null | undefined,
+  index = 0
+): { backgroundColor: string; color: string } {
+  const backgroundColor = getMitreisenderBackgroundColor(person, index)
+  return {
+    backgroundColor,
+    color: getMitreisenderForegroundColor(backgroundColor),
+  }
+}
+
 /** Gibt Hex für Color-Input zurück: Preset → konvertiert, sonst unverändert (falls schon Hex) */
 export function toColorInputValue(value: string | null | undefined): string {
   if (!value) return hslToHex(DEFAULT_USER_COLOR_BG)

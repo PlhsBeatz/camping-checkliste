@@ -22,7 +22,11 @@ import { MarkAllConfirmationDialog, type TravelerForMarkAll } from "./mark-all-c
 import { UndoToast } from "./undo-toast";
 import { cn, getInitials } from "@/lib/utils";
 import { TransportIcon } from "@/lib/transport-icons";
-import { DEFAULT_USER_COLOR_BG, USER_COLORS } from "@/lib/user-colors";
+import {
+  DEFAULT_USER_COLOR_BG,
+  getMitreisenderBackgroundColor,
+  USER_COLORS,
+} from "@/lib/user-colors";
 import { sortMitreisendeNachRolleUndName, sortMitreisendenZeilenNachStammdaten } from "@/lib/mitreisenden-sort";
 
 type VisibleItemsFilterOpts = {
@@ -474,7 +478,7 @@ const PackingItem: React.FC<PackingItemProps> = ({
     <>
       <div
         className={cn(
-          "p-4 mb-3 bg-white rounded-xl border border-gray-200 shadow-sm transition-all duration-200 overflow-hidden",
+          "p-4 mb-3 bg-card rounded-xl border border-subtle dark:border-white/10 shadow-sm transition-all duration-200 overflow-hidden",
           isExiting && "animate-pack-item-out",
           !isExiting && (isPackedForOpacity ? 'opacity-60' : 'hover:shadow-md')
         )}
@@ -1063,9 +1067,43 @@ export function PackingList({
       ? (progressBarMode === 'all' ? progressForAllVisible : progressForOwnOnly)
       : progressForOwnOnly;
   const displayProgressPercentage = displayProgress.total > 0 ? Math.round((displayProgress.packed / displayProgress.total) * 100) : 0;
-  const progressBarColor = !selectedProfile || (canEditPauschalEntries && progressBarMode === 'all')
-    ? 'rgb(45,79,30)'
-    : (selectedProfileColor || DEFAULT_USER_COLOR_BG);
+
+  const sortedPackProfileMitreisende = useMemo(
+    () =>
+      sortMitreisendeNachRolleUndName(
+        visiblePackProfileMitreisende ?? vacationMitreisende
+      ),
+    [visiblePackProfileMitreisende, vacationMitreisende]
+  )
+
+  const activeProfileColor = useMemo(() => {
+    if (!selectedProfile) return null
+    const index = sortedPackProfileMitreisende.findIndex(
+      (m) => m.id === selectedProfile
+    )
+    const person =
+      index >= 0 ? sortedPackProfileMitreisende[index] : undefined
+    if (person) {
+      return getMitreisenderBackgroundColor(person, index >= 0 ? index : 0)
+    }
+    if (selectedProfileColor) {
+      return getMitreisenderBackgroundColor({ farbe: selectedProfileColor }, 0)
+    }
+    return null
+  }, [
+    selectedProfile,
+    sortedPackProfileMitreisende,
+    selectedProfileColor,
+  ])
+
+  /** Markengrün standardmäßig; Personenfarbe nur im Modus „nur eigene Einträge“ (Klick auf Balken). */
+  const progressBarColor =
+    selectedProfile &&
+    canEditPauschalEntries &&
+    progressBarMode === 'own'
+      ? (activeProfileColor ?? DEFAULT_USER_COLOR_BG)
+      : 'rgb(45,79,30)'
+
   const isProgressBarClickable = !!(selectedProfile && canEditPauschalEntries);
 
   const hasItems = visibleItems.length > 0;
@@ -1166,11 +1204,11 @@ export function PackingList({
   return (
     <Tabs value={activeMainCategory} onValueChange={setActiveMainCategory} className="flex flex-col flex-1 min-h-0 min-w-0 w-full max-w-full">
       {/* Sticky-Bereich: Progress + Tabs – scrollt nie. Schatten liegt nun sicher über dem Inhalt. */}
-      <div className="flex-shrink-0 bg-white shadow relative z-10">
-        <div className="px-4 bg-white">
+      <div className="flex-shrink-0 bg-card shadow relative z-10">
+        <div className="px-4 bg-card">
           {/* Progress Bar */}
           {displayProgress.total > 0 && (
-            <div className="space-y-2 bg-white px-1">
+            <div className="space-y-2 bg-card px-1">
               <div className="flex items-center gap-2">
                 <div
                   role={isProgressBarClickable ? 'button' : undefined}
@@ -1178,7 +1216,7 @@ export function PackingList({
                   onClick={isProgressBarClickable ? () => setProgressBarMode(m => m === 'all' ? 'own' : 'all') : undefined}
                   onKeyDown={isProgressBarClickable ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setProgressBarMode(m => m === 'all' ? 'own' : 'all'); } } : undefined}
                   className={cn(
-                    "flex-1 min-w-0 h-2.5 bg-gray-200 rounded-full overflow-hidden",
+                    "flex-1 min-w-0 h-2.5 bg-muted rounded-full overflow-hidden",
                     isProgressBarClickable && "cursor-pointer focus:outline-none focus:ring-0 focus:ring-offset-0 rounded-full"
                   )}
                   title={isProgressBarClickable ? (progressBarMode === 'all' ? 'Klicken: Fortschritt nur eigene Einträge' : 'Klicken: Fortschritt alle berechtigten Einträge') : undefined}
@@ -1186,10 +1224,13 @@ export function PackingList({
                 >
                   <div
                     className="h-full transition-all duration-500 ease-out"
-                    style={{ width: `${displayProgressPercentage}%`, backgroundColor: progressBarColor }}
+                    style={{
+                      width: `${displayProgressPercentage}%`,
+                      backgroundColor: progressBarColor,
+                    }}
                   />
                 </div>
-                <span className="text-xs font-medium text-accent flex-shrink-0">
+                <span className="text-xs font-medium text-muted-foreground flex-shrink-0">
                   {displayProgressPercentage}%
                 </span>
               </div>
@@ -1199,7 +1240,7 @@ export function PackingList({
         <div
           ref={tabsScrollContainerRef}
           className={cn(
-            "tabs-scrollbar-auto bg-white overflow-x-auto overflow-y-hidden -mx-4 sm:-mx-6 pl-4 pr-4 sm:pl-6 sm:pr-6 pb-2",
+            "tabs-scrollbar-auto bg-card overflow-x-auto overflow-y-hidden -mx-4 sm:-mx-6 pl-4 pr-4 sm:pl-6 sm:pr-6 pb-2",
             tabsScrollbarVisible && "tabs-scrollbar-visible"
           )}
           style={{ WebkitOverflowScrolling: 'touch' }}
@@ -1217,7 +1258,7 @@ export function PackingList({
               <TabsTrigger
                 key={mainCat}
                 value={mainCat}
-                className="flex-shrink-0 uppercase text-xs font-semibold tracking-wide px-6 py-3 rounded-none border-b-4 border-transparent data-[state=active]:border-[#e67e22] data-[state=active]:text-[rgb(45,79,30)] data-[state=inactive]:text-[rgb(168,162,158)] hover:text-gray-900 transition-colors relative data-[state=active]:bg-transparent data-[state=inactive]:bg-transparent data-[state=active]:after:content-[''] data-[state=active]:after:absolute data-[state=active]:after:bottom-0 data-[state=active]:after:left-1/2 data-[state=active]:after:-translate-x-1/2 data-[state=active]:after:w-[50px] data-[state=active]:after:h-1 data-[state=active]:after:bg-[#e67e22] data-[state=active]:after:rounded-full data-[state=active]:border-b-transparent data-[state=active]:shadow-none"
+                className="flex-shrink-0 uppercase text-xs font-semibold tracking-wide px-6 py-3 rounded-none border-b-4 border-transparent data-[state=active]:border-[#e67e22] data-[state=active]:text-brand-heading data-[state=inactive]:text-[rgb(168,162,158)] dark:data-[state=inactive]:text-muted-foreground hover:text-gray-900 dark:hover:text-foreground transition-colors relative data-[state=active]:bg-transparent data-[state=inactive]:bg-transparent data-[state=active]:after:content-[''] data-[state=active]:after:absolute data-[state=active]:after:bottom-0 data-[state=active]:after:left-1/2 data-[state=active]:after:-translate-x-1/2 data-[state=active]:after:w-[50px] data-[state=active]:after:h-1 data-[state=active]:after:bg-[#e67e22] data-[state=active]:after:rounded-full data-[state=active]:border-b-transparent data-[state=active]:shadow-none"
               >
                 {mainCat}
               </TabsTrigger>
@@ -1257,13 +1298,13 @@ export function PackingList({
         >
         {showTeamPackOverview ? (
           <div className="flex flex-col items-center justify-center min-h-[50vh] py-8">
-            <Card className="max-w-md w-full border-[rgb(45,79,30)]/20 shadow-lg bg-white/95">
+            <Card className="max-w-md w-full border-[rgb(45,79,30)]/20 shadow-lg bg-card/95">
               <CardContent className="pt-8 pb-6 px-6 sm:px-8">
                 <div className="text-center mb-6">
                   <div className="mx-auto w-14 h-14 rounded-full bg-[rgb(45,79,30)]/10 flex items-center justify-center mb-4">
-                    <CheckCheck className="h-8 w-8 text-[rgb(45,79,30)]" />
+                    <CheckCheck className="h-8 w-8 text-brand-heading" />
                   </div>
-                  <h2 className="text-xl font-semibold text-[rgb(45,79,30)] mb-2">
+                  <h2 className="text-xl font-semibold text-brand-heading mb-2">
                     {currentProfileName
                       ? `Alles gepackt für ${currentProfileName}!`
                       : 'Alles gepackt!'}
@@ -1272,7 +1313,7 @@ export function PackingList({
                     Andere Mitreisende haben noch offene Einträge.
                   </p>
                 </div>
-                <p className="text-xs font-medium text-gray-600 uppercase tracking-wide mb-3 px-1">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-3 px-1">
                   Mitreisende
                 </p>
                 <ul className="space-y-2">
@@ -1291,7 +1332,7 @@ export function PackingList({
                           {getInitials(person.name, travelerNames)}
                         </div>
                         <div className="flex-1 min-w-0 text-left">
-                          <div className="font-medium text-gray-900 truncate">
+                          <div className="font-medium text-foreground truncate">
                             {person.name}
                             {isCurrent && (
                               <span className="text-xs font-normal text-muted-foreground ml-1">(aktiv)</span>
@@ -1299,7 +1340,7 @@ export function PackingList({
                           </div>
                           <div className={cn(
                             'text-xs flex items-center gap-1 mt-0.5',
-                            allPacked ? 'text-[rgb(45,79,30)]' : 'text-[#e67e22]'
+                            allPacked ? 'text-brand-heading' : 'text-[#e67e22]'
                           )}>
                             {allPacked ? (
                               <>
@@ -1337,7 +1378,7 @@ export function PackingList({
                           <button
                             type="button"
                             onClick={() => onProfileChange(person.id)}
-                            className="w-full flex items-center gap-3 p-3 rounded-xl border-2 border-gray-200 hover:border-[rgb(45,79,30)]/40 hover:bg-[rgb(45,79,30)]/5 transition-colors"
+                            className="w-full flex items-center gap-3 p-3 rounded-xl border-2 border-subtle hover:border-[rgb(45,79,30)]/40 hover:bg-[rgb(45,79,30)]/5 transition-colors"
                           >
                             {rowContent}
                           </button>
@@ -1347,7 +1388,7 @@ export function PackingList({
                     return (
                       <li
                         key={person.id}
-                        className="flex items-center gap-3 p-3 rounded-xl border-2 border-gray-100 bg-gray-50/80"
+                        className="flex items-center gap-3 p-3 rounded-xl border-2 border-subtle bg-muted/80"
                       >
                         {rowContent}
                       </li>
@@ -1359,12 +1400,12 @@ export function PackingList({
           </div>
         ) : showAllPackedCelebration ? (
           <div className="flex flex-col items-center justify-center min-h-[50vh] py-12">
-            <Card className="max-w-md w-full border-[rgb(45,79,30)]/20 shadow-lg bg-white/95">
+            <Card className="max-w-md w-full border-[rgb(45,79,30)]/20 shadow-lg bg-card/95">
               <CardContent className="pt-8 pb-8 px-8 text-center">
                 <div className="mx-auto w-16 h-16 rounded-full bg-[rgb(45,79,30)]/10 flex items-center justify-center mb-6">
-                  <CheckCheck className="h-9 w-9 text-[rgb(45,79,30)]" />
+                  <CheckCheck className="h-9 w-9 text-brand-heading" />
                 </div>
-                <h2 className="text-xl font-semibold text-[rgb(45,79,30)] mb-2">
+                <h2 className="text-xl font-semibold text-brand-heading mb-2">
                   Alles gepackt!
                 </h2>
                 <p className="text-muted-foreground mb-6">
@@ -1372,7 +1413,7 @@ export function PackingList({
                     ? 'Alle Mitreisenden haben ihre Einträge abgehakt.'
                     : 'Aus Ihrer aktuellen Sicht sind alle Einträge abgehakt.'}
                 </p>
-                <p className="text-lg font-medium text-[rgb(45,79,30)]">
+                <p className="text-lg font-medium text-brand-heading">
                   Schönen Urlaub!
                 </p>
               </CardContent>

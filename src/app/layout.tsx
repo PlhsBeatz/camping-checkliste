@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
 import { PwaUpdatePrompt } from '@/components/pwa-update-prompt'
+import { ThemeProvider } from '@/components/theme-provider'
 import { AuthProvider } from '@/components/auth-provider'
 import { MustChangePasswordGuard } from '@/components/must-change-password-guard'
 import { OfflineBanner } from '@/components/offline-banner'
@@ -47,7 +48,7 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="de" className="scroll-smooth overflow-x-clip">
+    <html lang="de" className="scroll-smooth overflow-x-clip" suppressHydrationWarning>
       <head>
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -58,15 +59,17 @@ export default function RootLayout({
         />
       </head>
       <body className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased text-foreground overflow-x-clip`}>
-        <AuthProvider>
-          <OfflineBanner />
-          <MustChangePasswordGuard>
-            <div className="w-full max-w-full overflow-x-clip">
-              {children}
-            </div>
-          </MustChangePasswordGuard>
-          <PwaUpdatePrompt />
-        </AuthProvider>
+        <ThemeProvider>
+          <AuthProvider>
+            <OfflineBanner />
+            <MustChangePasswordGuard>
+              <div className="w-full max-w-full overflow-x-clip">
+                {children}
+              </div>
+            </MustChangePasswordGuard>
+            <PwaUpdatePrompt />
+          </AuthProvider>
+        </ThemeProvider>
       </body>
     </html>
   )

@@ -182,7 +182,7 @@ export default function KategorienPage() {
       )}>
         <div className="container mx-auto p-4 md:p-6 space-y-6 max-w-full">
           {/* Header - Sticky */}
-          <div className="sticky top-0 z-10 flex items-center justify-between bg-white shadow pb-4 -mx-4 px-4 -mt-4 pt-4 md:-mx-6 md:px-6 md:-mt-6 md:pt-6">
+          <div className="sticky top-0 z-10 flex items-center justify-between bg-card shadow pb-4 -mx-4 px-4 -mt-4 pt-4 md:-mx-6 md:px-6 md:-mt-6 md:pt-6">
             <div className="flex items-center gap-4">
               {/* Mobile Menu Toggle */}
               <Button
@@ -195,7 +195,7 @@ export default function KategorienPage() {
               </Button>
               
               <div>
-                <h1 className="text-lg sm:text-xl font-bold tracking-tight text-[rgb(45,79,30)]">
+                <h1 className="text-lg sm:text-xl font-bold tracking-tight text-brand-heading">
                   Kategorien
                 </h1>
               </div>

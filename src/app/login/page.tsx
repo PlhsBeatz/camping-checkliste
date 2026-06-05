@@ -104,7 +104,7 @@ function LoginForm() {
         <p className="text-center text-sm text-gray-600">
           <Link
             href="/passwort-vergessen"
-            className="text-[rgb(45,79,30)] hover:underline"
+            className="text-brand-heading hover:underline"
           >
             Passwort vergessen?
           </Link>

@@ -203,7 +203,7 @@ export function OfflineBanner() {
           {entries.map((e) => (
             <div
               key={e.id}
-              className="flex items-center gap-2 text-xs py-1.5 px-2 rounded bg-white/70 border border-gray-200"
+              className="flex items-center gap-2 text-xs py-1.5 px-2 rounded bg-card/70 border border-subtle"
             >
               <div className="flex-1 min-w-0">
                 <div className="font-medium truncate">

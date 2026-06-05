@@ -147,7 +147,7 @@ function ChecklisteRunnerEintrag({
   return (
     <div
       className={cn(
-        'mb-2 py-2 px-3 bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden transition-all duration-200',
+        'mb-2 py-2 px-3 bg-card rounded-xl border border-subtle shadow-sm overflow-hidden transition-all duration-200',
         tickAnim && 'animate-checklist-row-tick',
         isExiting && 'animate-pack-item-out',
         !isExiting && (entry.erledigt ? 'opacity-60' : 'hover:shadow-md')
@@ -263,7 +263,7 @@ function SortableChecklistCard({
             <GripVertical className="h-5 w-5" />
           </button>
           <div className="flex-1 min-w-0 flex flex-col justify-center gap-0.5 py-0.5">
-            <CardTitle className="text-base font-semibold text-[rgb(45,79,30)] leading-tight">
+            <CardTitle className="text-base font-semibold text-brand-heading leading-tight">
               {checklist.titel}
             </CardTitle>
             <p className="text-xs text-muted-foreground">
@@ -312,7 +312,7 @@ function SortableEditorCategoryBlock({
   }
   const [menuOpen, setMenuOpen] = useState(false)
   return (
-    <div ref={setNodeRef} style={style} className="rounded-lg border bg-white overflow-hidden">
+    <div ref={setNodeRef} style={style} className="rounded-lg border bg-card overflow-hidden">
       <div className="flex items-center gap-2 p-3 border-b bg-muted/50">
         <button
           type="button"
@@ -324,7 +324,7 @@ function SortableEditorCategoryBlock({
         >
           <GripVertical className="h-5 w-5" />
         </button>
-        <p className="font-semibold text-[rgb(45,79,30)] flex-1 min-w-0 truncate">{titel}</p>
+        <p className="font-semibold text-brand-heading flex-1 min-w-0 truncate">{titel}</p>
         <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
@@ -984,7 +984,7 @@ export function ChecklistenTool({ onHeaderContextChange, headerTrailingRef }: Ch
               <MoreVertical className="h-5 w-5" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="z-[110] min-w-[10rem]">
+          <DropdownMenuContent align="end" className="z-40 min-w-[10rem]">
             <DropdownMenuItem
               className="cursor-pointer gap-2"
               onSelect={() => setHideErledigteEinträge(v => !v)}
@@ -1037,7 +1037,7 @@ export function ChecklistenTool({ onHeaderContextChange, headerTrailingRef }: Ch
                 variant="outline"
                 size="sm"
                 onClick={goToChecklistenOverview}
-                className="bg-white hover:bg-neutral-50"
+                className="bg-card hover:bg-neutral-50"
               >
                 <ArrowLeft className="h-4 w-4 mr-1 shrink-0" />
                 Zur Übersicht
@@ -1118,7 +1118,7 @@ export function ChecklistenTool({ onHeaderContextChange, headerTrailingRef }: Ch
                           <Button
                             variant="ghost"
                             size="sm"
-                            className="text-[rgb(45,79,30)]"
+                            className="text-brand-heading"
                             onClick={() => {
                               setEntryModal({
                                 checklistId: detailId,
@@ -1146,7 +1146,7 @@ export function ChecklistenTool({ onHeaderContextChange, headerTrailingRef }: Ch
                 variant="outline"
                 size="sm"
                 onClick={goToChecklistenOverview}
-                className="bg-white hover:bg-neutral-50"
+                className="bg-card hover:bg-neutral-50"
               >
                 <ArrowLeft className="h-4 w-4 mr-1 shrink-0" />
                 Zur Übersicht
@@ -1155,12 +1155,12 @@ export function ChecklistenTool({ onHeaderContextChange, headerTrailingRef }: Ch
             <div className="space-y-6">
               {allRunnerErledigt && hideErledigteEinträge ? (
                 <div className="flex flex-col items-center justify-center min-h-[50vh] py-12">
-                  <Card className="max-w-md w-full border-[rgb(45,79,30)]/20 shadow-lg bg-white/95">
+                  <Card className="max-w-md w-full border-[rgb(45,79,30)]/20 shadow-lg bg-card/95">
                     <CardContent className="pt-8 pb-8 px-8 text-center">
                       <div className="mx-auto w-16 h-16 rounded-full bg-[rgb(45,79,30)]/10 flex items-center justify-center mb-6">
-                        <CheckCheck className="h-9 w-9 text-[rgb(45,79,30)]" />
+                        <CheckCheck className="h-9 w-9 text-brand-heading" />
                       </div>
-                      <h2 className="text-xl font-semibold text-[rgb(45,79,30)] mb-2">Alles erledigt!</h2>
+                      <h2 className="text-xl font-semibold text-brand-heading mb-2">Alles erledigt!</h2>
                       <p className="text-muted-foreground">
                         Alle Einträge dieser Checkliste sind abgehakt.
                       </p>
@@ -1312,7 +1312,7 @@ export function ChecklistenTool({ onHeaderContextChange, headerTrailingRef }: Ch
               >
                 <CardHeader className="flex flex-row items-center gap-2 space-y-0 p-3">
                   <div className="flex-1 min-w-0 flex flex-col justify-center gap-0.5 py-0.5">
-                    <CardTitle className="text-base font-semibold text-[rgb(45,79,30)] leading-tight">
+                    <CardTitle className="text-base font-semibold text-brand-heading leading-tight">
                       {c.titel}
                     </CardTitle>
                     <p className="text-xs text-muted-foreground">

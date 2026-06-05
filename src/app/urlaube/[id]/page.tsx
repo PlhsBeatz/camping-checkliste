@@ -122,7 +122,7 @@ function CountdownHeader({ vacation }: { vacation: Vacation }) {
       className={cn(
         'rounded-t-lg px-4 py-2.5 text-center md:py-4',
         isPast
-          ? 'bg-[hsl(103,32%,88%)] text-[rgb(45,79,30)]'
+          ? 'bg-[hsl(103,32%,88%)] text-brand-heading dark:bg-green-950/50 dark:text-brand-heading'
           : 'bg-[rgb(45,79,30)] text-white'
       )}
     >
@@ -155,7 +155,7 @@ function RouteLeg({
     <div className="flex items-center gap-2 py-1.5 pl-4 pr-1 text-xs text-muted-foreground">
       <div className="flex flex-col items-center self-stretch">
         <span className="w-px flex-1 bg-border" />
-        <Route className="my-0.5 h-3.5 w-3.5 shrink-0 text-[rgb(45,79,30)]" />
+        <Route className="my-0.5 h-3.5 w-3.5 shrink-0 text-brand-heading" />
         <span className="w-px flex-1 bg-border" />
       </div>
       <div className="min-w-0 flex-1">
@@ -169,7 +169,7 @@ function RouteLeg({
         )}
       </div>
       {onOpenAdac && (
-        <DropdownMenu>
+        <DropdownMenu modal={false}>
           <DropdownMenuTrigger asChild>
             <Button
               type="button"
@@ -181,7 +181,7 @@ function RouteLeg({
               <MoreVertical className="h-4 w-4" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
+          <DropdownMenuContent align="end" className="z-30">
             <DropdownMenuItem onSelect={() => onOpenAdac()}>
               <Route className="h-4 w-4 mr-2" />
               ADAC Routenplanung öffnen
@@ -453,7 +453,7 @@ export default function UrlaubDetailPage() {
 
       <div className={cn('flex-1 transition-all duration-300 min-w-0', 'lg:ml-[280px]')}>
         <div className="container mx-auto p-4 md:p-6 space-y-6 max-w-full">
-          <div className="sticky top-0 z-20 shrink-0 flex items-center justify-between gap-3 bg-white shadow pb-4 -mx-4 px-4 -mt-4 pt-4 md:-mx-6 md:px-6 md:-mt-6 md:pt-6 md:pb-4">
+          <div className="sticky top-0 z-20 shrink-0 flex items-center justify-between gap-3 bg-card shadow pb-4 -mx-4 px-4 -mt-4 pt-4 md:-mx-6 md:px-6 md:-mt-6 md:pt-6 md:pb-4">
             <div className="flex min-w-0 flex-1 items-center gap-4">
               <Button
                 variant="outline"
@@ -464,14 +464,14 @@ export default function UrlaubDetailPage() {
                 <Menu className="h-5 w-5" />
               </Button>
               <div className="min-w-0">
-                <h1 className="text-xl font-bold text-[rgb(45,79,30)] truncate">
+                <h1 className="text-xl font-bold text-brand-heading truncate">
                   {vacation?.titel ?? 'Urlaub'}
                 </h1>
                 <p className="text-sm text-muted-foreground truncate">{subtitle}</p>
               </div>
             </div>
             {canAccessConfig && vacation && (
-              <DropdownMenu>
+              <DropdownMenu modal={false}>
                 <DropdownMenuTrigger asChild>
                   <Button
                     type="button"
@@ -483,7 +483,7 @@ export default function UrlaubDetailPage() {
                     <MoreVertical className="h-5 w-5" />
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="min-w-[10rem]">
+                <DropdownMenuContent align="end" className="z-30 min-w-[10rem]">
                   <DropdownMenuItem
                     className="cursor-pointer gap-2"
                     onClick={() => setEditOpen(true)}
@@ -517,7 +517,7 @@ export default function UrlaubDetailPage() {
           {vacation && (
             <>
               <div className="hidden flex-wrap gap-2 md:flex">
-                <Button variant="outline" size="sm" className="bg-white hover:bg-neutral-50" asChild>
+                <Button variant="outline" size="sm" className="bg-card hover:bg-muted" asChild>
                   <Link
                     href="/urlaube"
                     className="inline-flex items-center gap-2 whitespace-nowrap"
@@ -528,11 +528,11 @@ export default function UrlaubDetailPage() {
                 </Button>
               </div>
 
-              <Card className="overflow-hidden rounded-lg border shadow-sm bg-white">
+              <Card className="overflow-hidden rounded-lg border shadow-sm bg-card">
                 <CountdownHeader vacation={vacation} />
                 <CardContent className="space-y-6 p-4 pt-4 md:p-6 md:pt-6">
                   <section className="space-y-3">
-                    <h2 className="text-sm font-semibold text-[rgb(45,79,30)]">Reisedaten</h2>
+                    <h2 className="text-sm font-semibold text-brand-heading">Reisedaten</h2>
                     <dl className="space-y-2 text-sm">
                       <div className="flex flex-wrap gap-x-2">
                         <dt className="text-muted-foreground shrink-0">Reisezeitraum:</dt>
@@ -552,7 +552,7 @@ export default function UrlaubDetailPage() {
                   </section>
 
                   <section className="space-y-3">
-                    <h2 className="text-sm font-semibold text-[rgb(45,79,30)] flex items-center gap-2">
+                    <h2 className="text-sm font-semibold text-brand-heading flex items-center gap-2">
                       <Users className="h-4 w-4 shrink-0" aria-hidden />
                       Mitreisende
                     </h2>
@@ -563,7 +563,7 @@ export default function UrlaubDetailPage() {
                         {sortedMitreisende.map((m) => (
                           <li
                             key={m.id}
-                            className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1 text-sm shadow-sm"
+                            className="inline-flex items-center gap-2 rounded-full border border-subtle bg-card px-3 py-1 text-sm shadow-sm"
                           >
                             {m.farbe && (
                               <span
@@ -580,7 +580,7 @@ export default function UrlaubDetailPage() {
                   </section>
 
                   <section className="space-y-3">
-                    <h2 className="text-sm font-semibold text-[rgb(45,79,30)]">Campingplätze</h2>
+                    <h2 className="text-sm font-semibold text-brand-heading">Campingplätze</h2>
                     {stays.length === 0 ? (
                       <p className="text-sm text-muted-foreground">
                         Noch keine Campingplätze zugeordnet.
@@ -617,7 +617,7 @@ export default function UrlaubDetailPage() {
                               <Link
                                 href={`/campingplaetze/${cp.id}`}
                                 className={cn(
-                                  'bg-white rounded-xl border border-gray-200 shadow-sm px-3 py-2 flex gap-3 items-start transition-colors hover:bg-neutral-50',
+                                  'bg-card rounded-xl border border-subtle shadow-sm px-3 py-2 flex gap-3 items-start transition-colors hover:bg-muted',
                                   cp.is_archived && 'opacity-60 bg-muted/60'
                                 )}
                               >
@@ -645,7 +645,7 @@ export default function UrlaubDetailPage() {
                                     {cp.ort}, {cp.land}
                                     {cp.bundesland && ` (${cp.bundesland})`}
                                   </div>
-                                  <div className="text-xs font-medium text-[rgb(45,79,30)]">
+                                  <div className="text-xs font-medium text-brand-heading">
                                     {formatStayDateRange(stay.start_datum, stay.end_datum)}
                                     {nights > 0 &&
                                       ` · ${nights} ${nights === 1 ? 'Nacht' : 'Nächte'}`}
@@ -705,7 +705,7 @@ export default function UrlaubDetailPage() {
                   </section>
 
                   <section className="space-y-3">
-                    <h2 className="text-sm font-semibold text-[rgb(45,79,30)] flex items-center gap-2">
+                    <h2 className="text-sm font-semibold text-brand-heading flex items-center gap-2">
                       <ListChecks className="h-4 w-4 shrink-0" aria-hidden />
                       Packliste
                     </h2>
@@ -718,7 +718,7 @@ export default function UrlaubDetailPage() {
                     <Button
                       variant="outline"
                       size="sm"
-                      className="bg-white hover:bg-neutral-50"
+                      className="bg-card hover:bg-muted"
                       onClick={() => {
                         if (typeof window !== 'undefined') {
                           sessionStorage.setItem('packlistVacationId', vacation.id)

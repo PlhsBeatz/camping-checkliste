@@ -5,7 +5,13 @@ import * as PopoverPrimitive from "@radix-ui/react-popover"
 
 import { cn } from "@/lib/utils"
 
-const Popover = PopoverPrimitive.Root
+/** modal={false}: kein Scroll-Lock – sticky Seiten-Header bleibt sichtbar. */
+const Popover = ({
+  modal = false,
+  ...props
+}: React.ComponentProps<typeof PopoverPrimitive.Root>) => (
+  <PopoverPrimitive.Root modal={modal} {...props} />
+)
 
 const PopoverTrigger = PopoverPrimitive.Trigger
 

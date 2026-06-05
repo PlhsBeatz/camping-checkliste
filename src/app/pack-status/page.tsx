@@ -171,7 +171,7 @@ function PackStatusContent() {
         <PullToRefreshWrapper onRefresh={fetchPackStatus} disabled={showNavSidebar}>
         <div className="container mx-auto p-4 md:p-6 space-y-6 max-w-full">
           {/* Header - Sticky, gleiche Größe wie andere Seiten */}
-          <div className="sticky top-0 z-10 flex items-center justify-between bg-white shadow pb-4 -mx-4 px-4 -mt-4 pt-4 md:-mx-6 md:px-6 md:-mt-6 md:pt-6 md:pb-4">
+          <div className="sticky top-0 z-10 flex items-center justify-between bg-card shadow pb-4 -mx-4 px-4 -mt-4 pt-4 md:-mx-6 md:px-6 md:-mt-6 md:pt-6 md:pb-4">
             <div className="flex items-center gap-4">
             <Button
               variant="outline"
@@ -182,7 +182,7 @@ function PackStatusContent() {
               <Menu className="h-5 w-5" />
             </Button>
             <div className="min-w-0">
-              <h1 className="text-xl font-bold text-[rgb(45,79,30)]">Pack-Status</h1>
+              <h1 className="text-xl font-bold text-brand-heading">Pack-Status</h1>
               <p className="text-sm text-muted-foreground truncate">
                 {currentVacation?.titel ?? '—'}
               </p>
@@ -293,12 +293,12 @@ function TransportWeightCard({ data }: { data: PackStatusTransportOverview }) {
   const isLow = !isNegative && reservePct < 10 && reservePct >= 0
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-4 sm:p-5">
-      <h3 className="font-semibold text-[rgb(45,79,30)] mb-4">{transportName}</h3>
+    <div className="rounded-xl border border-border bg-card p-4 sm:p-5">
+      <h3 className="font-semibold text-brand-heading mb-4">{transportName}</h3>
 
       {/* Stacked bar – visuelle Darstellung */}
       <div className="space-y-3 mb-4">
-        <div className="h-8 rounded-lg overflow-hidden flex bg-gray-100">
+        <div className="h-8 rounded-lg overflow-hidden flex bg-muted">
           <div
             className="bg-amber-200 min-w-0 transition-all"
             style={{
@@ -397,8 +397,8 @@ function EntriesOhneGewichtList({ entries }: { entries: PackStatusEntryOhneGewic
         )
         return (
           <div key={transportName}>
-            <h3 className="text-sm font-semibold text-[rgb(45,79,30)] mb-3">{transportName}</h3>
-            <div className="space-y-4 pl-2 border-l-2 border-gray-200">
+            <h3 className="text-sm font-semibold text-brand-heading mb-3">{transportName}</h3>
+            <div className="space-y-4 pl-2 border-l-2 border-border">
               {Object.entries(byHauptkategorie).map(([kategorie, items]) => (
                 <div key={`${transportName}-${kategorie}`}>
                   <h4 className="text-xs font-medium text-muted-foreground mb-1.5">{kategorie}</h4>
@@ -406,7 +406,7 @@ function EntriesOhneGewichtList({ entries }: { entries: PackStatusEntryOhneGewic
                     {items.map((e) => (
                       <li
                         key={e.id}
-                        className="flex items-center justify-between text-sm py-1 px-2 rounded bg-gray-50"
+                        className="flex items-center justify-between text-sm py-1 px-2 rounded bg-muted"
                       >
                         <span>{e.was}</span>
                         <span className="text-muted-foreground tabular-nums">× {e.anzahl}</span>

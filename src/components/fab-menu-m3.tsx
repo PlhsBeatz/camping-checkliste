@@ -121,9 +121,9 @@ export function FabMenuM3({ open, onOpenChange, actions, ariaLabel, className }:
                   }}
                   className={cn(
                     'flex max-w-[min(90vw,18rem)] flex-row items-stretch gap-0 overflow-hidden rounded-full border border-black/[0.08]',
-                    'bg-white text-left text-[rgb(45,79,30)] shadow-[0_3px_4px_0_rgba(0,0,0,0.15),0_1px_3px_0_rgba(0,0,0,0.3)]',
+                    'bg-card text-left text-brand-heading shadow-[0_3px_4px_0_rgba(0,0,0,0.15),0_1px_3px_0_rgba(0,0,0,0.3)]',
                     'transition-[box-shadow,transform,background-color] duration-200 ease-out',
-                    'hover:bg-neutral-50 hover:shadow-[0_4px_8px_3px_rgba(0,0,0,0.12)]',
+                    'hover:bg-neutral-50 dark:hover:bg-muted hover:shadow-[0_4px_8px_3px_rgba(0,0,0,0.12)]',
                     'active:scale-[0.98]',
                     'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[rgb(45,79,30)]',
                     'disabled:pointer-events-none disabled:opacity-[0.38]'
@@ -138,7 +138,7 @@ export function FabMenuM3({ open, onOpenChange, actions, ariaLabel, className }:
                     {action.label}
                   </span>
                   <span
-                    className="flex w-10 min-w-10 shrink-0 items-center justify-center border-l border-black/[0.06] bg-[rgb(45,79,30)]/[0.08] text-[rgb(45,79,30)]"
+                    className="flex w-10 min-w-10 shrink-0 items-center justify-center border-l border-black/[0.06] dark:border-white/10 bg-[rgb(45,79,30)]/[0.08] dark:bg-[rgb(45,79,30)]/20 text-brand-heading"
                     aria-hidden
                   >
                     <span className="flex h-6 w-6 items-center justify-center [&>svg]:h-[22px] [&>svg]:w-[22px]">

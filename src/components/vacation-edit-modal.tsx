@@ -376,7 +376,7 @@ function StayRow({
                 {triggerLabel}
               </Button>
             </PopoverTrigger>
-            <PopoverContent className="w-auto p-0 bg-white max-h-[80vh] overflow-y-auto" align="start">
+            <PopoverContent className="w-auto p-0 bg-card max-h-[80vh] overflow-y-auto" align="start">
               <Calendar
                 mode="range"
                 className="p-2"
@@ -1023,7 +1023,7 @@ export function VacationEditModal({
                         Ändern
                       </Button>
                     </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0 bg-white" align="start">
+                    <PopoverContent className="w-auto p-0 bg-card" align="start">
                       <Calendar
                         mode="single"
                         defaultMonth={new Date(newVacationForm.abfahrtdatum)}
@@ -1074,7 +1074,7 @@ export function VacationEditModal({
                       Reisebeginn wählen
                     </button>
                   </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0 bg-white" align="start">
+                  <PopoverContent className="w-auto p-0 bg-card" align="start">
                     <Calendar
                       mode="single"
                       defaultMonth={
@@ -1250,7 +1250,7 @@ export function VacationEditModal({
             <p className="text-xs text-muted-foreground mt-0.5 mb-2">
               Welche Ansicht beim Öffnen der Packliste standardmäßig angezeigt wird.
             </p>
-            <div className="flex rounded-lg border border-gray-200 p-0.5 bg-gray-50 overflow-hidden">
+            <div className="segment-toggle-track">
               <button
                 type="button"
                 onClick={() =>
@@ -1260,10 +1260,10 @@ export function VacationEditModal({
                   }))
                 }
                 className={cn(
-                  'flex-1 py-2 text-sm transition-colors',
+                  'flex-1 py-2 text-sm font-medium transition-colors',
                   newVacationForm.packliste_default_ansicht === 'packliste'
-                    ? 'bg-white text-[rgb(45,79,30)] shadow-sm rounded-md font-medium'
-                    : 'text-gray-600 hover:text-gray-900'
+                    ? 'bg-card text-brand-heading shadow-sm rounded-md'
+                    : 'text-muted-foreground hover:text-foreground'
                 )}
               >
                 Packliste
@@ -1277,10 +1277,10 @@ export function VacationEditModal({
                   }))
                 }
                 className={cn(
-                  'flex-1 py-2 text-sm transition-colors',
+                  'flex-1 py-2 text-sm font-medium transition-colors',
                   newVacationForm.packliste_default_ansicht === 'alles'
-                    ? 'bg-white text-[rgb(45,79,30)] shadow-sm rounded-md font-medium'
-                    : 'text-gray-600 hover:text-gray-900'
+                    ? 'bg-card text-brand-heading shadow-sm rounded-md'
+                    : 'text-muted-foreground hover:text-foreground'
                 )}
               >
                 Alles

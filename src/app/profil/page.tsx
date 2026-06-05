@@ -11,6 +11,7 @@ import { useState, useEffect } from 'react'
 import { cn } from '@/lib/utils'
 import type { ApiResponse } from '@/lib/api-types'
 import { HomeAddressAutocomplete } from '@/components/home-address-autocomplete'
+import { ThemeToggle } from '@/components/theme-toggle'
 import { getCachedHomeLocation } from '@/lib/offline-sync'
 import { cacheHomeLocation } from '@/lib/offline-db'
 import { useReconnectRefetch } from '@/hooks/use-reconnect-refetch'
@@ -137,7 +138,7 @@ export default function ProfilPage() {
       <NavigationSidebar isOpen={showNavSidebar} onClose={() => setShowNavSidebar(false)} />
       <div className={cn('flex-1 transition-all duration-300 min-w-0 overflow-x-hidden', 'lg:ml-[280px]')}>
         <div className="container mx-auto p-4 md:p-6 space-y-6 max-w-full">
-          <div className="sticky top-0 z-10 flex items-center justify-between bg-white shadow pb-4 -mx-4 px-4 -mt-4 pt-4 md:-mx-6 md:px-6 md:-mt-6 md:pt-6">
+          <div className="sticky top-0 z-10 flex items-center justify-between bg-card shadow pb-4 -mx-4 px-4 -mt-4 pt-4 md:-mx-6 md:px-6 md:-mt-6 md:pt-6">
             <div className="flex items-center gap-4">
               <Button
                 variant="outline"
@@ -148,12 +149,24 @@ export default function ProfilPage() {
                 <Menu className="h-5 w-5" />
               </Button>
               <div>
-                <h1 className="text-lg sm:text-xl font-bold tracking-tight text-[rgb(45,79,30)]">
+                <h1 className="text-lg sm:text-xl font-bold tracking-tight text-brand-heading">
                   Mein Profil
                 </h1>
               </div>
             </div>
           </div>
+
+          <Card className="min-w-0 overflow-hidden">
+            <CardHeader>
+              <CardTitle>Darstellung</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground mb-3">
+                Wähle Hell, Dunkel oder die Einstellung deines Systems.
+              </p>
+              <ThemeToggle className="max-w-xs" />
+            </CardContent>
+          </Card>
 
           <Card className="min-w-0 overflow-hidden">
             <CardHeader>
@@ -230,7 +243,7 @@ export default function ProfilPage() {
             </CardContent>
           </Card>
 
-          <Card className="min-w-0 overflow-hidden border-gray-200">
+          <Card className="min-w-0 overflow-hidden border-subtle">
             <CardHeader>
               <CardTitle>Sitzung</CardTitle>
             </CardHeader>

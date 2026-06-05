@@ -24,6 +24,7 @@ import { regelKurzLabel } from '@/lib/packing-quantity'
 import { cn } from '@/lib/utils'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { Checkbox } from '@/components/ui/checkbox'
+import { CategorySelectGroupedItems } from '@/components/category-select-grouped'
 
 interface EquipmentTableProps {
   equipmentItems: EquipmentItem[]
@@ -79,6 +80,29 @@ export const EquipmentTable = React.memo(({
     const category = categories.find(c => c.id === categoryId)
     return category?.hauptkategorie_id || null
   }, [categories])
+
+  const filterCategoriesWithMain = useMemo(() => {
+    const mainById = new Map(mainCategories.map((m) => [m.id, m.titel]))
+    return categories
+      .filter(
+        (c) => filterMainCategory === 'all' || c.hauptkategorie_id === filterMainCategory
+      )
+      .map((c) => ({
+        id: c.id,
+        titel: c.titel,
+        hauptkategorie_id: c.hauptkategorie_id,
+        hauptkategorie_titel: mainById.get(c.hauptkategorie_id) ?? 'Unbekannt',
+        reihenfolge: c.reihenfolge,
+      }))
+  }, [categories, mainCategories, filterMainCategory])
+
+  useEffect(() => {
+    if (filterCategory === 'all' || filterMainCategory === 'all') return
+    const cat = categories.find((c) => c.id === filterCategory)
+    if (!cat || cat.hauptkategorie_id !== filterMainCategory) {
+      setFilterCategory('all')
+    }
+  }, [filterMainCategory, filterCategory, categories])
 
   // Get transport name by ID
   const getTransportName = (transportId: string | null) => {
@@ -451,11 +475,16 @@ export const EquipmentTable = React.memo(({
   // Status badge colors
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'Normal': return 'bg-gray-100 text-gray-800'
-      case 'Immer gepackt': return 'bg-green-100 text-green-800'
-      case 'Fest Installiert': return 'bg-purple-100 text-purple-800'
-      case 'Ausgemustert': return 'bg-red-100 text-red-800'
-      default: return 'bg-gray-100 text-gray-800'
+      case 'Normal':
+        return 'bg-gray-100 text-gray-800 dark:bg-muted dark:text-foreground'
+      case 'Immer gepackt':
+        return 'bg-green-100 text-green-800 dark:bg-green-950/70 dark:text-green-200'
+      case 'Fest Installiert':
+        return 'bg-purple-100 text-purple-800 dark:bg-purple-950/70 dark:text-purple-200'
+      case 'Ausgemustert':
+        return 'bg-red-100 text-red-800 dark:bg-red-950/70 dark:text-red-200'
+      default:
+        return 'bg-gray-100 text-gray-800 dark:bg-muted dark:text-foreground'
     }
   }
 
@@ -471,7 +500,7 @@ export const EquipmentTable = React.memo(({
     )}>
       {/* Search and Filters - overflow-x-auto auf Mobile falls Filter zu breit */}
       <div className={cn(
-        "space-y-4 bg-white border rounded-lg p-4 min-w-0 overflow-x-auto shadow-sm",
+        "space-y-4 bg-card border rounded-lg p-4 min-w-0 overflow-x-auto shadow-sm",
         dynamicHeight && "flex-shrink-0"
       )}>
         {/* Search Bar */}
@@ -497,8 +526,8 @@ export const EquipmentTable = React.memo(({
         {/* Filter Dropdowns */}
         {showFilters && (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <Label>Hauptkategorie</Label>
+            <div className="flex flex-col gap-2">
+              <Label className="h-5 flex items-center">Hauptkategorie</Label>
               <Select value={filterMainCategory} onValueChange={setFilterMainCategory}>
                 <SelectTrigger>
                   <SelectValue placeholder="Alle" />
@@ -514,8 +543,24 @@ export const EquipmentTable = React.memo(({
               </Select>
             </div>
 
-            <div>
-              <Label>Transport</Label>
+            <div className="flex flex-col gap-2">
+              <Label className="h-5 flex items-center">Kategorie</Label>
+              <Select value={filterCategory} onValueChange={setFilterCategory}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Alle" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Alle</SelectItem>
+                  <CategorySelectGroupedItems
+                    categories={filterCategoriesWithMain}
+                    mainCategories={mainCategories}
+                  />
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <Label className="h-5 flex items-center">Transport</Label>
               <Select value={filterTransport} onValueChange={setFilterTransport}>
                 <SelectTrigger>
                   <SelectValue placeholder="Alle" />
@@ -532,27 +577,8 @@ export const EquipmentTable = React.memo(({
               </Select>
             </div>
 
-            <div>
-              <Label>Kategorie</Label>
-              <Select value={filterCategory} onValueChange={setFilterCategory}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Alle" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Alle</SelectItem>
-                  {categories
-                    .filter(c => filterMainCategory === 'all' || c.hauptkategorie_id === filterMainCategory)
-                    .map(c => (
-                      <SelectItem key={c.id} value={c.id}>
-                        {c.titel}
-                      </SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
-              <Label>Tags</Label>
+            <div className="flex flex-col gap-2">
+              <Label className="h-5 flex items-center">Tags</Label>
               <Select value={filterTag} onValueChange={setFilterTag}>
                 <SelectTrigger>
                   <SelectValue placeholder="Alle" />
@@ -568,13 +594,13 @@ export const EquipmentTable = React.memo(({
               </Select>
             </div>
 
-            <div>
-              <Label className="flex items-center gap-2">
+            <div className="flex flex-col gap-2">
+              <Label className="h-5 flex items-center gap-1.5">
                 <Star
-                  className="h-4 w-4"
+                  className="h-3.5 w-3.5 shrink-0"
                   style={{ color: 'rgb(230,126,34)', fill: 'rgb(230,126,34)' }}
                 />
-                <span>Standard</span>
+                Standard
               </Label>
               <Select value={filterStandard} onValueChange={setFilterStandard}>
                 <SelectTrigger>
@@ -588,9 +614,9 @@ export const EquipmentTable = React.memo(({
               </Select>
             </div>
 
-            <div className="md:col-span-3">
-              <Label>Status (Mehrfachauswahl)</Label>
-              <div className="flex flex-wrap gap-3 mt-2">
+            <div className="md:col-span-3 flex flex-col gap-2">
+              <Label className="h-5 flex items-center">Status (Mehrfachauswahl)</Label>
+              <div className="flex flex-wrap gap-3">
                 {['Normal', 'Immer gepackt', 'Fest Installiert', 'Ausgemustert'].map(status => (
                   <label key={status} className="flex items-center gap-2 cursor-pointer text-sm bg-background border rounded-md px-3 py-1.5 hover:bg-muted/50">
                     <Checkbox
@@ -646,7 +672,7 @@ export const EquipmentTable = React.memo(({
 
       {/* Tabelle - virtualisiert, weißer Hintergrund. overflow-x-auto für horizontales Scrollen auf Mobile */}
       <div className={cn(
-        "border rounded-lg min-w-0 bg-white overflow-x-auto overflow-y-hidden",
+        "border rounded-lg min-w-0 bg-card overflow-x-auto overflow-y-hidden",
         dynamicHeight && "flex-1 min-h-0 flex flex-col"
       )}>
         <div className="flex-1 min-h-0 min-w-0 flex flex-col min-w-[1400px]">
@@ -663,7 +689,7 @@ export const EquipmentTable = React.memo(({
               {/* Tabellenkopf – bleibt beim vertikalen Scrollen sichtbar (im selben Scroll-Container) */}
               <div
                 ref={columnHeaderRef}
-                className="grid gap-px bg-border border-b bg-gray-50 sticky top-0 z-20"
+                className="grid gap-px bg-border border-b bg-muted sticky top-0 z-20"
                 style={{ gridTemplateColumns: gridCols }}
               >
                 <div className={`px-4 py-3 font-medium text-sm ${colAlign.was}`}>Was</div>
@@ -676,7 +702,7 @@ export const EquipmentTable = React.memo(({
                 <div className={`px-4 py-3 font-medium text-sm ${colAlign.details}`}>Details</div>
                 <div className={`px-4 py-3 font-medium text-sm ${colAlign.tags}`}>Tags</div>
                 <div className={`px-4 py-3 font-medium text-sm ${colAlign.links}`}>Links</div>
-                <div className={`px-1 py-3 font-medium text-sm sticky right-0 z-25 bg-gray-50 ${colAlign.actions}`}></div>
+                <div className={`px-1 py-3 font-medium text-sm sticky right-0 z-25 bg-muted ${colAlign.actions}`}></div>
               </div>
               {flatRows.length === 0 ? (
                 <div className="py-16 text-center text-muted-foreground">
@@ -762,7 +788,7 @@ export const EquipmentTable = React.memo(({
                     return (
                       <div
                         key={row.id}
-                        className="absolute left-0 right-0 grid gap-px bg-white hover:bg-muted/30 border-b border-border/50 isolate"
+                        className="absolute left-0 right-0 grid gap-px bg-card hover:bg-muted/30 border-b border-border/50 isolate"
                         style={{
                           height: size,
                           top: 0,
