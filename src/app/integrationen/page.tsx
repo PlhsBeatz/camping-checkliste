@@ -1,12 +1,10 @@
 'use client'
 
-import { useAuth } from '@/components/auth-provider'
-import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { NavigationSidebar } from '@/components/navigation-sidebar'
+import { ConfigPageLayout } from '@/components/config-page-layout'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Badge } from '@/components/ui/badge'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
@@ -31,7 +29,6 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import {
-  Menu,
   Copy,
   Plus,
   Webhook,
@@ -131,9 +128,6 @@ function ListRow({
 }
 
 export default function IntegrationenPage() {
-  const { canAccessConfig, loading } = useAuth()
-  const router = useRouter()
-  const [showNavSidebar, setShowNavSidebar] = useState(false)
   const [tokens, setTokens] = useState<TokenRow[]>([])
   const [webhooks, setWebhooks] = useState<WebhookRow[]>([])
   const [message, setMessage] = useState<string | null>(null)
@@ -160,10 +154,6 @@ export default function IntegrationenPage() {
   const [previewJson, setPreviewJson] = useState<string | null>(null)
   const [previewLoading, setPreviewLoading] = useState(false)
 
-  useEffect(() => {
-    if (!loading && !canAccessConfig) router.replace('/')
-  }, [loading, canAccessConfig, router])
-
   const loadData = useCallback(async () => {
     try {
       const [tokRes, whRes] = await Promise.all([
@@ -180,20 +170,8 @@ export default function IntegrationenPage() {
   }, [])
 
   useEffect(() => {
-    if (!canAccessConfig) return
     void loadData()
-  }, [canAccessConfig, loadData])
-
-  useEffect(() => {
-    if (showNavSidebar) {
-      document.body.style.overflow = 'hidden'
-    } else {
-      document.body.style.overflow = ''
-    }
-    return () => {
-      document.body.style.overflow = ''
-    }
-  }, [showNavSidebar])
+  }, [loadData])
 
   const loadPreview = useCallback(async (endpoint: PreviewEndpoint) => {
     setPreviewLoading(true)
@@ -422,38 +400,10 @@ export default function IntegrationenPage() {
     </DropdownMenu>
   )
 
-  if (loading || !canAccessConfig) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <p className="text-muted-foreground">Laden…</p>
-      </div>
-    )
-  }
-
   return (
-    <div className="min-h-screen flex max-w-full overflow-x-clip">
-      <NavigationSidebar isOpen={showNavSidebar} onClose={() => setShowNavSidebar(false)} />
-
-      <div className={cn('flex-1 min-w-0 transition-all duration-300', 'lg:ml-[280px]')}>
-        <div className="container mx-auto p-4 md:p-6 space-y-6 max-w-full">
-          <div className="sticky top-0 z-10 flex items-center justify-between bg-card shadow pb-4 -mx-4 px-4 -mt-4 pt-4 md:-mx-6 md:px-6 md:-mt-6 md:pt-6">
-            <div className="flex items-center gap-4">
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={() => setShowNavSidebar(true)}
-                className="lg:hidden"
-                aria-label="Menü"
-              >
-                <Menu className="h-5 w-5" />
-              </Button>
-              <h1 className="text-lg sm:text-xl font-bold tracking-tight text-brand-heading">
-                Integrationen
-              </h1>
-            </div>
-          </div>
-
-          <div className="space-y-6 pb-6">
+    <>
+      <ConfigPageLayout>
+        <div className="space-y-6 pb-6">
             {message && (
               <div className="rounded-md border bg-card px-4 py-3 text-sm flex items-start justify-between gap-2">
                 <span>{message}</span>
@@ -622,9 +572,8 @@ export default function IntegrationenPage() {
                 </CollapsibleContent>
               </Card>
             </Collapsible>
-          </div>
         </div>
-      </div>
+      </ConfigPageLayout>
 
       {/* Token erstellen */}
       <ResponsiveModal
@@ -836,6 +785,6 @@ export default function IntegrationenPage() {
         onConfirm={handleConfirmDelete}
         isLoading={busy}
       />
-    </div>
+    </>
   )
 }

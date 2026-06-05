@@ -7,6 +7,7 @@ import { ChevronDown, ChevronRight } from 'lucide-react'
 import { AppLogo } from '@/components/app-logo'
 import { useAuth } from '@/components/auth-provider'
 import { cn } from '@/lib/utils'
+import { isConfigRoute } from '@/lib/config-navigation'
 
 interface NavigationSidebarProps {
   isOpen: boolean
@@ -16,24 +17,10 @@ interface NavigationSidebarProps {
 export function NavigationSidebar({ isOpen, onClose }: NavigationSidebarProps) {
   const pathname = usePathname()
   const { canAccessConfig } = useAuth()
-  const [configExpanded, setConfigExpanded] = useState(false)
   const [toolsExpanded, setToolsExpanded] = useState(false)
 
   useEffect(() => {
     if (pathname.startsWith('/tools')) setToolsExpanded(true)
-  }, [pathname])
-
-  useEffect(() => {
-    if (
-      pathname.startsWith('/kategorien') ||
-      pathname.startsWith('/tags') ||
-      pathname.startsWith('/mitreisende') ||
-      pathname.startsWith('/transportmittel') ||
-      pathname.startsWith('/datensicherung') ||
-      pathname.startsWith('/integrationen')
-    ) {
-      setConfigExpanded(true)
-    }
   }, [pathname])
 
   const menuItems = [
@@ -72,15 +59,6 @@ export function NavigationSidebar({ isOpen, onClose }: NavigationSidebarProps) {
   const toolsItems: { label: string; href: string }[] = [
     { label: 'SONNEN-AUSRICHTUNG', href: '/tools/sonnen-ausrichtung' },
     { label: 'CHECKLISTEN', href: '/tools/checklisten' },
-  ]
-
-  const configItems: { label: string; href: string; disabled?: boolean }[] = [
-    { label: 'KATEGORIEN', href: '/kategorien' },
-    { label: 'TAGS & LABELS', href: '/tags' },
-    { label: 'MITREISENDE', href: '/mitreisende' },
-    { label: 'TRANSPORTMITTEL', href: '/transportmittel' },
-    { label: 'DATENSICHERUNG', href: '/datensicherung' },
-    { label: 'INTEGRATIONEN', href: '/integrationen' },
   ]
 
   return (
@@ -169,55 +147,25 @@ export function NavigationSidebar({ isOpen, onClose }: NavigationSidebarProps) {
             )}
           </div>
 
-          {/* Configuration Dropdown – nur für Admin */}
-          {canAccessConfig && (
-          <div className="mt-4 px-3">
-            <button
-              onClick={() => setConfigExpanded(!configExpanded)}
-              className="flex items-center justify-between w-full px-4 py-3 text-sm font-medium text-muted-foreground hover:bg-muted rounded-lg transition-colors"
-            >
-              <div className="flex items-center gap-3">
-                <span className="material-icons text-xl">settings</span>
-                <span className="text-xs tracking-wide">KONFIGURATION</span>
-              </div>
-              {configExpanded ? (
-                <ChevronDown className="w-4 h-4" />
-              ) : (
-                <ChevronRight className="w-4 h-4" />
-              )}
-            </button>
-
-            {/* Config Submenu */}
-            {configExpanded && (
-              <div className="mt-1 ml-11 space-y-1">
-                {configItems.map((item) => (
-                  <Link
-                    key={item.href}
-                    href={item.disabled ? '#' : item.href}
-                    onClick={(e) => {
-                      if (item.disabled) {
-                        e.preventDefault()
-                        return
-                      }
-                      onClose()
-                    }}
-                    className={cn(
-                      'block px-4 py-2 text-xs tracking-wide rounded-lg transition-colors',
-                      item.disabled
-                        ? 'text-gray-400 cursor-not-allowed'
-                        : pathname === item.href || pathname.startsWith(`${item.href}/`)
-                          ? 'text-brand-heading font-medium bg-muted'
-                          : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-                    )}
-                  >
-                    {item.label}
-                  </Link>
-                ))}
-              </div>
-            )}
-          </div>
-          )}
         </nav>
+
+        {canAccessConfig && (
+          <div className="px-3 py-2">
+            <Link
+              href="/konfiguration"
+              onClick={() => onClose()}
+              className={cn(
+                'flex items-center gap-3 w-full px-4 py-3 text-sm font-medium rounded-lg transition-colors',
+                isConfigRoute(pathname)
+                  ? 'bg-[rgb(45,79,30)] text-white'
+                  : 'text-muted-foreground hover:bg-muted'
+              )}
+            >
+              <span className="material-icons text-xl">settings</span>
+              <span className="text-xs tracking-wide">KONFIGURATION</span>
+            </Link>
+          </div>
+        )}
 
         {/* Mein Profil */}
         <div className="px-3 py-2">

@@ -1,11 +1,9 @@
 'use client'
 
-import { useAuth } from '@/components/auth-provider'
-import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { NavigationSidebar } from '@/components/navigation-sidebar'
-import { Menu, Download, Upload, AlertTriangle, ChevronDown } from 'lucide-react'
+import { ConfigPageLayout } from '@/components/config-page-layout'
+import { Download, Upload, AlertTriangle, ChevronDown } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { cn } from '@/lib/utils'
 import type { BackupPreset } from '@/lib/data-backup'
@@ -80,9 +78,6 @@ async function parseExportFailureResponse(res: Response): Promise<string> {
 }
 
 export default function DatensicherungPage() {
-  const { canAccessConfig, loading } = useAuth()
-  const router = useRouter()
-  const [showNavSidebar, setShowNavSidebar] = useState(false)
   const [vacations, setVacations] = useState<Vacation[]>([])
   const [presetState, setPresetState] = useState<Record<UiPresetKey, boolean>>(emptyUiPresetState)
   /* auth-Preset nur per API; UI nutzt includeAuth */
@@ -97,11 +92,6 @@ export default function DatensicherungPage() {
   const [importReport, setImportReport] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!loading && !canAccessConfig) router.replace('/')
-  }, [loading, canAccessConfig, router])
-
-  useEffect(() => {
-    if (!canAccessConfig) return
     void (async () => {
       try {
         const res = await fetch('/api/vacations')
@@ -111,21 +101,7 @@ export default function DatensicherungPage() {
         setVacations([])
       }
     })()
-  }, [canAccessConfig])
-
-  useEffect(() => {
-    if (showNavSidebar) {
-      document.body.style.overflow = 'hidden'
-      document.documentElement.style.overflow = 'hidden'
-    } else {
-      document.body.style.overflow = ''
-      document.documentElement.style.overflow = ''
-    }
-    return () => {
-      document.body.style.overflow = ''
-      document.documentElement.style.overflow = ''
-    }
-  }, [showNavSidebar])
+  }, [])
 
   const selectedPresets = useMemo((): BackupPreset[] | undefined => {
     if (fullExport) return undefined
@@ -318,39 +294,10 @@ export default function DatensicherungPage() {
     }
   }
 
-  if (loading || !canAccessConfig) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <p className="text-muted-foreground text-sm">Wird geladen…</p>
-      </div>
-    )
-  }
-
   return (
-    <div className="min-h-screen flex max-w-full overflow-x-clip">
-      <NavigationSidebar isOpen={showNavSidebar} onClose={() => setShowNavSidebar(false)} />
-      <div
-        className={cn('flex-1 min-w-0 transition-all duration-300', 'lg:ml-[280px]')}
-      >
-        <div className="container mx-auto p-4 md:p-6 space-y-6 max-w-full">
-          <div className="sticky top-0 z-10 flex items-center justify-between bg-card shadow pb-4 -mx-4 px-4 -mt-4 pt-4 md:-mx-6 md:px-6 md:-mt-6 md:pt-6">
-            <div className="flex items-center gap-4">
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={() => setShowNavSidebar(true)}
-                className="lg:hidden"
-                aria-label="Menü"
-              >
-                <Menu className="h-5 w-5" />
-              </Button>
-              <h1 className="text-lg sm:text-xl font-bold tracking-tight text-brand-heading">
-                Datensicherung
-              </h1>
-            </div>
-          </div>
-
-          <Card>
+    <ConfigPageLayout>
+      <div className="space-y-6">
+      <Card>
             <CardHeader>
               <CardTitle>Export</CardTitle>
             </CardHeader>
@@ -578,12 +525,11 @@ export default function DatensicherungPage() {
             </CardContent>
           </Card>
 
-          {message && (
-            <p className="text-sm text-muted-foreground border rounded-md p-3 bg-muted/30">{message}</p>
-          )}
-        </div>
+      {message && (
+        <p className="text-sm text-muted-foreground border rounded-md p-3 bg-muted/30">{message}</p>
+      )}
       </div>
-    </div>
+    </ConfigPageLayout>
   )
 }
 

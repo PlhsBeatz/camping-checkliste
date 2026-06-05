@@ -1,16 +1,12 @@
 'use client'
 
-import { useAuth } from '@/components/auth-provider'
-import { useRouter } from 'next/navigation'
-import { Button } from '@/components/ui/button'
-import { NavigationSidebar } from '@/components/navigation-sidebar'
 import { CategoryManager } from '@/components/category-manager'
+import { ConfigPageLayout } from '@/components/config-page-layout'
 import { FabMenuM3 } from '@/components/fab-menu-m3'
-import { FolderPlus, Layers, Menu } from 'lucide-react'
+import { FolderPlus, Layers } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { Category, MainCategory, TransportVehicle } from '@/lib/db'
 import type { ApiResponse } from '@/lib/api-types'
-import { cn } from '@/lib/utils'
 import {
   getCachedCategories,
   getCachedMainCategories,
@@ -28,34 +24,12 @@ interface CategoryWithMain extends Category {
 }
 
 export default function KategorienPage() {
-  const { canAccessConfig, loading } = useAuth()
-  const router = useRouter()
-  const [showNavSidebar, setShowNavSidebar] = useState(false)
-
-  useEffect(() => {
-    if (!loading && !canAccessConfig) router.replace('/')
-  }, [loading, canAccessConfig, router])
   const [categories, setCategories] = useState<CategoryWithMain[]>([])
   const [mainCategories, setMainCategories] = useState<MainCategory[]>([])
   const [transportVehicles, setTransportVehicles] = useState<TransportVehicle[]>([])
   const [fabMenuOpen, setFabMenuOpen] = useState(false)
   const [openNewMainCategoryTrigger, setOpenNewMainCategoryTrigger] = useState(false)
   const [openNewCategoryTrigger, setOpenNewCategoryTrigger] = useState(false)
-
-  // Sidebar offen: Body-Scroll sperren
-  useEffect(() => {
-    if (showNavSidebar) {
-      document.body.style.overflow = 'hidden'
-      document.documentElement.style.overflow = 'hidden'
-    } else {
-      document.body.style.overflow = ''
-      document.documentElement.style.overflow = ''
-    }
-    return () => {
-      document.body.style.overflow = ''
-      document.documentElement.style.overflow = ''
-    }
-  }, [showNavSidebar])
 
   // Fetch Transport Vehicles
   useEffect(() => {
@@ -168,76 +142,41 @@ export default function KategorienPage() {
   const canCreateSubcategory = mainCategories.length > 0
 
   return (
-    <div className="min-h-screen flex max-w-full overflow-x-clip">
-      {/* Navigation Sidebar */}
-      <NavigationSidebar
-        isOpen={showNavSidebar}
-        onClose={() => setShowNavSidebar(false)}
+    <ConfigPageLayout
+      afterContent={
+        <FabMenuM3
+          open={fabMenuOpen}
+          onOpenChange={setFabMenuOpen}
+          ariaLabel="Neue Hauptkategorie oder neue Kategorie"
+          actions={[
+            {
+              id: 'subcategory',
+              label: 'Neue Kategorie',
+              icon: <FolderPlus className="h-[22px] w-[22px]" strokeWidth={2} aria-hidden />,
+              onSelect: () => setOpenNewCategoryTrigger(true),
+              disabled: !canCreateSubcategory,
+              disabledHint: 'Zuerst eine Hauptkategorie anlegen.',
+            },
+            {
+              id: 'main',
+              label: 'Neue Hauptkategorie',
+              icon: <Layers className="h-[22px] w-[22px]" strokeWidth={2} aria-hidden />,
+              onSelect: () => setOpenNewMainCategoryTrigger(true),
+            },
+          ]}
+        />
+      }
+    >
+      <CategoryManager
+        categories={categories}
+        mainCategories={mainCategories}
+        transportVehicles={transportVehicles}
+        onRefresh={handleRefresh}
+        openNewMainCategoryTrigger={openNewMainCategoryTrigger}
+        onOpenNewMainCategoryConsumed={() => setOpenNewMainCategoryTrigger(false)}
+        openNewCategoryTrigger={openNewCategoryTrigger}
+        onOpenNewCategoryConsumed={() => setOpenNewCategoryTrigger(false)}
       />
-
-      {/* Main Content Area */}
-      <div className={cn(
-        "flex-1 min-w-0 transition-all duration-300",
-        "lg:ml-[280px]"
-      )}>
-        <div className="container mx-auto p-4 md:p-6 space-y-6 max-w-full">
-          {/* Header - Sticky */}
-          <div className="sticky top-0 z-10 flex items-center justify-between bg-card shadow pb-4 -mx-4 px-4 -mt-4 pt-4 md:-mx-6 md:px-6 md:-mt-6 md:pt-6">
-            <div className="flex items-center gap-4">
-              {/* Mobile Menu Toggle */}
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={() => setShowNavSidebar(true)}
-                className="lg:hidden"
-              >
-                <Menu className="h-5 w-5" />
-              </Button>
-              
-              <div>
-                <h1 className="text-lg sm:text-xl font-bold tracking-tight text-brand-heading">
-                  Kategorien
-                </h1>
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-4 md:mt-6">
-            <CategoryManager
-              categories={categories}
-              mainCategories={mainCategories}
-              transportVehicles={transportVehicles}
-              onRefresh={handleRefresh}
-              openNewMainCategoryTrigger={openNewMainCategoryTrigger}
-              onOpenNewMainCategoryConsumed={() => setOpenNewMainCategoryTrigger(false)}
-              openNewCategoryTrigger={openNewCategoryTrigger}
-              onOpenNewCategoryConsumed={() => setOpenNewCategoryTrigger(false)}
-            />
-          </div>
-        </div>
-      </div>
-
-      <FabMenuM3
-        open={fabMenuOpen}
-        onOpenChange={setFabMenuOpen}
-        ariaLabel="Neue Hauptkategorie oder neue Kategorie"
-        actions={[
-          {
-            id: 'subcategory',
-            label: 'Neue Kategorie',
-            icon: <FolderPlus className="h-[22px] w-[22px]" strokeWidth={2} aria-hidden />,
-            onSelect: () => setOpenNewCategoryTrigger(true),
-            disabled: !canCreateSubcategory,
-            disabledHint: 'Zuerst eine Hauptkategorie anlegen.',
-          },
-          {
-            id: 'main',
-            label: 'Neue Hauptkategorie',
-            icon: <Layers className="h-[22px] w-[22px]" strokeWidth={2} aria-hidden />,
-            onSelect: () => setOpenNewMainCategoryTrigger(true),
-          },
-        ]}
-      />
-    </div>
+    </ConfigPageLayout>
   )
 }
