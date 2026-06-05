@@ -178,13 +178,14 @@ export async function processIntegrationCron(db: D1Database): Promise<number> {
   return processed
 }
 
-export function notifyIntegrationChange(env: CloudflareEnv, vacationId: string): void {
-  void (async () => {
-    try {
-      const db = await getDB(env)
-      await processIntegrationEventsForVacation(db, vacationId)
-    } catch (err) {
-      console.warn('notifyIntegrationChange failed:', err)
-    }
-  })()
+export async function notifyIntegrationChange(
+  env: CloudflareEnv,
+  vacationId: string
+): Promise<void> {
+  try {
+    const db = await getDB(env)
+    await processIntegrationEventsForVacation(db, vacationId)
+  } catch (err) {
+    console.warn('notifyIntegrationChange failed:', err)
+  }
 }

@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
 
     const cfEnv = (await getCloudflareContext({ async: true })).env as unknown as CloudflareEnv
     await notifyPackingSyncChange(cfEnv, vacationId)
-    notifyIntegrationChange(cfEnv, vacationId)
+    await notifyIntegrationChange(cfEnv, vacationId)
 
     const successCount = results.filter(r => r.success).length
     return NextResponse.json({

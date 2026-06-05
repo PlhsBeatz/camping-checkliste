@@ -106,7 +106,7 @@ export async function PUT(request: NextRequest) {
     }
 
     const cfEnv = (await getCloudflareContext({ async: true })).env as unknown as CloudflareEnv
-    notifyIntegrationChange(cfEnv, id)
+    await notifyIntegrationChange(cfEnv, id)
 
     return NextResponse.json({ success: true, data: vacation })
   } catch (error: unknown) {

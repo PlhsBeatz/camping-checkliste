@@ -113,7 +113,7 @@ export async function POST(request: NextRequest) {
 
     const cfEnv = (await getCloudflareContext({ async: true })).env as unknown as CloudflareEnv
     await notifyPackingSyncChange(cfEnv, vacationId)
-    notifyIntegrationChange(cfEnv, vacationId)
+    await notifyIntegrationChange(cfEnv, vacationId)
 
     return NextResponse.json({ success: true }, { status: 201 })
   } catch (error: unknown) {
@@ -226,7 +226,7 @@ export async function PUT(request: NextRequest) {
     if (success && vacationId) {
       const cfEnv = (await getCloudflareContext({ async: true })).env as unknown as CloudflareEnv
       await notifyPackingSyncChange(cfEnv, vacationId)
-      notifyIntegrationChange(cfEnv, vacationId)
+      await notifyIntegrationChange(cfEnv, vacationId)
     }
 
     return NextResponse.json({ success: true, data: success })
@@ -265,7 +265,7 @@ export async function DELETE(request: NextRequest) {
     if (vacationId) {
       const env = (await getCloudflareContext({ async: true })).env as unknown as CloudflareEnv
       await notifyPackingSyncChange(env, vacationId)
-      notifyIntegrationChange(env, vacationId)
+      await notifyIntegrationChange(env, vacationId)
     }
 
     return NextResponse.json({ success: true })

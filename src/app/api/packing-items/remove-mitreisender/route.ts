@@ -49,7 +49,7 @@ export async function DELETE(request: NextRequest) {
     if (vacationId) {
       const cfEnv = (await getCloudflareContext({ async: true })).env as unknown as CloudflareEnv
       await notifyPackingSyncChange(cfEnv, vacationId)
-      notifyIntegrationChange(cfEnv, vacationId)
+      await notifyIntegrationChange(cfEnv, vacationId)
     }
 
     return NextResponse.json({ success: true })
