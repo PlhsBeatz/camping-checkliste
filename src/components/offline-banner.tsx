@@ -128,18 +128,31 @@ export function OfflineBanner() {
   }
 
   const visible = !isOnline || queueCount > 0
-  if (!visible) return null
 
   return (
     <div
       className={cn(
-        'sticky top-0 z-40 w-full border-b shadow-sm',
-        !isOnline ? 'bg-amber-100 border-amber-300' : 'bg-blue-50 border-blue-200'
+        // Platz rechts (pr) reservieren, damit der schwebende FAB-Button frei bleibt.
+        // Nur die Karte selbst ist klickbar (pointer-events-none hier, -auto auf der Karte).
+        'pointer-events-none fixed inset-x-0 bottom-0 z-50 flex justify-center pl-3 pr-[5.5rem] pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-1',
+        // Schwebendes Overlay – verschiebt nie den Seiteninhalt; sanftes Ein-/Ausblenden.
+        'transition-all duration-300 ease-out',
+        visible
+          ? 'translate-y-0 opacity-100'
+          : 'translate-y-[calc(100%+1rem)] opacity-0'
       )}
       role="status"
       aria-live="polite"
+      aria-hidden={!visible}
     >
-      <div className="container mx-auto px-3 py-2 flex items-center gap-2 text-sm">
+    <div
+      className={cn(
+        'w-full max-w-2xl rounded-xl border shadow-lg backdrop-blur',
+        visible && 'pointer-events-auto',
+        !isOnline ? 'bg-amber-100/95 border-amber-300' : 'bg-blue-50/95 border-blue-200'
+      )}
+    >
+      <div className="px-3 py-2 flex items-center gap-2 text-sm">
         {!isOnline ? (
           <CloudOff className="h-4 w-4 text-amber-700 flex-shrink-0" aria-hidden />
         ) : (
@@ -199,7 +212,7 @@ export function OfflineBanner() {
       </div>
 
       {showDetails && entries.length > 0 && (
-        <div className="container mx-auto px-3 pb-3 pt-1 space-y-1.5 max-h-64 overflow-y-auto">
+        <div className="px-3 pb-3 pt-1 space-y-1.5 max-h-64 overflow-y-auto">
           {entries.map((e) => (
             <div
               key={e.id}
@@ -229,6 +242,7 @@ export function OfflineBanner() {
           ))}
         </div>
       )}
+    </div>
     </div>
   )
 }

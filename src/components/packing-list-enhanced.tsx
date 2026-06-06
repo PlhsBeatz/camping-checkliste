@@ -171,6 +171,28 @@ const PackingItem: React.FC<PackingItemProps> = ({
   const [menuOpen, setMenuOpen] = useState(false);
   const previousShouldHideRef = useRef<boolean | 'init'>('init');
 
+  // Sanftes Hervorheben, wenn sich der Status dieser Zeile ändert (eigene Aktion oder Remote-Sync).
+  const statusSignature = useMemo(() => {
+    const mit = (mitreisende ?? [])
+      .map((m) => `${m.mitreisender_id}:${m.gepackt ? 1 : 0}:${m.gepackt_vorgemerkt ? 1 : 0}:${m.anzahl ?? ''}`)
+      .sort()
+      .join('|');
+    return `${gepackt ? 1 : 0}:${gepackt_vorgemerkt ? 1 : 0}:${anzahl}:${mit}`;
+  }, [gepackt, gepackt_vorgemerkt, anzahl, mitreisende]);
+  const prevStatusSignatureRef = useRef<string | null>(null);
+  const [justUpdated, setJustUpdated] = useState(false);
+  useEffect(() => {
+    if (prevStatusSignatureRef.current === null) {
+      prevStatusSignatureRef.current = statusSignature;
+      return;
+    }
+    if (prevStatusSignatureRef.current === statusSignature) return;
+    prevStatusSignatureRef.current = statusSignature;
+    setJustUpdated(true);
+    const t = setTimeout(() => setJustUpdated(false), 1100);
+    return () => clearTimeout(t);
+  }, [statusSignature]);
+
   const effectivePacked = (g: boolean, v?: boolean) => g || !!v;
   const isFullyPacked = useMemo(() => {
     if (mitreisenden_typ === 'pauschal') {
@@ -480,6 +502,7 @@ const PackingItem: React.FC<PackingItemProps> = ({
         className={cn(
           "p-4 mb-3 bg-card rounded-xl border border-subtle dark:border-white/10 shadow-sm transition-all duration-200 overflow-hidden",
           isExiting && "animate-pack-item-out",
+          !isExiting && justUpdated && "animate-pack-item-update",
           !isExiting && (isPackedForOpacity ? 'opacity-60' : 'hover:shadow-md')
         )}
       >

@@ -128,6 +128,11 @@ export default {
 				'0%': { transform: 'scale(1)' },
 				'40%': { transform: 'scale(0.985)' },
 				'100%': { transform: 'scale(1)' }
+			},
+			/** Sanftes Hervorheben einer Zeile, deren Status sich extern geändert hat (z. B. Sync). */
+			'pack-item-update': {
+				'0%': { boxShadow: '0 0 0 2px hsl(var(--brand-green) / 0.5), 0 1px 2px 0 rgb(0 0 0 / 0.05)' },
+				'100%': { boxShadow: '0 0 0 0 hsl(var(--brand-green) / 0), 0 1px 2px 0 rgb(0 0 0 / 0.05)' }
 			}
 		},
 		animation: {
@@ -136,7 +141,8 @@ export default {
 			'pack-item-out': 'pack-item-out 0.25s ease-out forwards',
 			'tab-swipe-in-from-right': 'tab-swipe-in-from-right 0.22s ease-out forwards',
 			'tab-swipe-in-from-left': 'tab-swipe-in-from-left 0.22s ease-out forwards',
-			'checklist-row-tick': 'checklist-row-tick 0.32s ease-out'
+			'checklist-row-tick': 'checklist-row-tick 0.32s ease-out',
+			'pack-item-update': 'pack-item-update 1.1s ease-out'
 		}
   	}
   },

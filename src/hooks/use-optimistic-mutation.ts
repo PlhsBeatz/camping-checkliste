@@ -69,7 +69,9 @@ export function useOptimisticMutation() {
     void refreshCount()
   }, [refreshCount])
 
-  // Bei Reconnect Outbox abarbeiten und Zähler aktualisieren.
+  // Bei Reconnect nur den Outbox-Zähler aktualisieren.
+  // Das eigentliche `processSyncQueue()` besitzt ausschließlich der global gerenderte
+  // `OfflineBanner` (single owner) – verhindert doppeltes Senden/Refreshen beim Wechsel online.
   useEffect(() => {
     let initial = true
     let lastOnline =
@@ -82,10 +84,7 @@ export function useOptimisticMutation() {
         return
       }
       if (online && !lastOnline) {
-        void (async () => {
-          await processSyncQueue()
-          await refreshCount()
-        })()
+        void refreshCount()
       }
       lastOnline = online
     })
