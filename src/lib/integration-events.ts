@@ -5,6 +5,7 @@ import {
   upsertIntegrationVacationState,
   type IntegrationEventType,
 } from '@/lib/integration-db'
+import { addCalendarDays, normalizeCalendarDate, todayInAppTimezone } from '@/lib/app-timezone'
 import {
   buildTripStatusPayload,
   PROGRESS_THRESHOLDS,
@@ -161,15 +162,11 @@ export async function processIntegrationEventsForVacation(
 
 export async function processIntegrationCron(db: D1Database): Promise<number> {
   const vacations = await getVacations(db)
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  const cutoff = new Date(today)
-  cutoff.setDate(cutoff.getDate() - 14)
+  const cutoff = addCalendarDays(todayInAppTimezone(), -14)
 
   let processed = 0
   for (const v of vacations) {
-    const end = new Date(v.enddatum)
-    end.setHours(0, 0, 0, 0)
+    const end = normalizeCalendarDate(v.enddatum)
     if (end < cutoff) continue
 
     await processIntegrationEventsForVacation(db, v.id, { cronMode: true })

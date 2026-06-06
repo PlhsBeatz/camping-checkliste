@@ -1,4 +1,10 @@
-import { differenceInCalendarDays } from 'date-fns'
+import {
+  APP_TIMEZONE,
+  addCalendarDays,
+  differenceCalendarDays,
+  normalizeCalendarDate,
+  todayInAppTimezone,
+} from '@/lib/app-timezone'
 import type { PackingItem, Vacation } from '@/lib/db'
 
 export type TripPhase =
@@ -11,13 +17,7 @@ export type TripPhase =
 export const PROGRESS_THRESHOLDS = [25, 50, 75, 90] as const
 
 export function toYYYYMMDD(d: string | Date): string {
-  const date = typeof d === 'string' ? new Date(d) : d
-  if (Number.isNaN(date.getTime())) return ''
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
-}
-
-function todayDateStr(): string {
-  return toYYYYMMDD(new Date())
+  return normalizeCalendarDate(d)
 }
 
 export function getDepartureDate(vacation: Vacation): string {
@@ -26,11 +26,15 @@ export function getDepartureDate(vacation: Vacation): string {
 }
 
 /** Packliste-Modus: welche Items zählen für Integrations-Fortschritt */
-export function shouldCountPackingItem(item: PackingItem, departureDate: string): boolean {
+export function shouldCountPackingItem(
+  item: PackingItem,
+  departureDate: string,
+  now = new Date()
+): boolean {
   if (String(item.status || '').trim() === 'Immer gepackt') return false
   if (item.erst_abreisetag_gepackt && departureDate) {
-    const abreiseStr = toYYYYMMDD(departureDate)
-    if (abreiseStr && todayDateStr() !== abreiseStr) return false
+    const abreiseStr = normalizeCalendarDate(departureDate)
+    if (abreiseStr && todayInAppTimezone(now) !== abreiseStr) return false
   }
   return true
 }
@@ -53,14 +57,15 @@ export type PackingProgress = {
 
 export function computePackingProgress(
   items: PackingItem[],
-  departureDate: string
+  departureDate: string,
+  now = new Date()
 ): PackingProgress {
   let total = 0
   let packed = 0
   const openItems: OpenPackingItem[] = []
 
   for (const item of items) {
-    if (!shouldCountPackingItem(item, departureDate)) continue
+    if (!shouldCountPackingItem(item, departureDate, now)) continue
 
     if (item.mitreisenden_typ === 'pauschal') {
       total += 1
@@ -109,17 +114,15 @@ export function computePackingProgress(
 
 export function getTripPhase(
   vacation: Vacation,
-  departureApproachingDays = 3
+  departureApproachingDays = 3,
+  now = new Date()
 ): TripPhase {
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  const departure = new Date(getDepartureDate(vacation))
-  departure.setHours(0, 0, 0, 0)
-  const end = new Date(vacation.enddatum)
-  end.setHours(0, 0, 0, 0)
+  const today = todayInAppTimezone(now)
+  const departure = normalizeCalendarDate(getDepartureDate(vacation))
+  const end = normalizeCalendarDate(vacation.enddatum)
 
-  const daysUntilDeparture = differenceInCalendarDays(departure, today)
-  const daysUntilEnd = differenceInCalendarDays(end, today)
+  const daysUntilDeparture = differenceCalendarDays(departure, today)
+  const daysUntilEnd = differenceCalendarDays(end, today)
 
   if (daysUntilEnd < 0) return 'returned'
   if (daysUntilDeparture > departureApproachingDays) return 'planning'
@@ -130,31 +133,31 @@ export function getTripPhase(
 }
 
 /** Nächster relevanter Urlaub (wie pack-status/page.tsx) */
-export function findRelevantVacation(vacations: Vacation[]): Vacation | null {
+export function findRelevantVacation(vacations: Vacation[], now = new Date()): Vacation | null {
   if (vacations.length === 0) return null
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  const cutoffDate = new Date(today)
-  cutoffDate.setDate(cutoffDate.getDate() - 7)
+  const today = todayInAppTimezone(now)
+  const cutoffDate = addCalendarDays(today, -7)
 
   const valid = vacations.filter((v) => {
-    const endDate = new Date(v.enddatum)
-    endDate.setHours(0, 0, 0, 0)
+    const endDate = normalizeCalendarDate(v.enddatum)
     return endDate >= cutoffDate
   })
   if (valid.length === 0) return null
 
-  const upcoming = valid.filter((v) => new Date(v.startdatum) >= today)
+  const upcoming = valid.filter((v) => normalizeCalendarDate(v.startdatum) >= today)
   const toUse = upcoming.length > 0 ? upcoming : valid
   return (
     toUse.sort(
-      (a, b) => new Date(a.startdatum).getTime() - new Date(b.startdatum).getTime()
+      (a, b) =>
+        normalizeCalendarDate(a.startdatum).localeCompare(normalizeCalendarDate(b.startdatum))
     )[0] ?? null
   )
 }
 
 export type TripStatusPayload = {
   schema_version: 1
+  /** Kalendertag-Basis für phase und days_until_departure */
+  calendar_timezone: typeof APP_TIMEZONE
   vacation: {
     id: string
     titel: string
@@ -180,19 +183,19 @@ export type TripStatusPayload = {
 
 export function buildTripStatusPayload(
   vacation: Vacation,
-  items: PackingItem[]
+  items: PackingItem[],
+  now = new Date()
 ): TripStatusPayload {
   const departure_date = getDepartureDate(vacation)
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  const departure = new Date(departure_date)
-  departure.setHours(0, 0, 0, 0)
-  const days_until_departure = differenceInCalendarDays(departure, today)
-  const progress = computePackingProgress(items, departure_date)
-  const phase = getTripPhase(vacation)
+  const today = todayInAppTimezone(now)
+  const departure = normalizeCalendarDate(departure_date)
+  const days_until_departure = differenceCalendarDays(departure, today)
+  const progress = computePackingProgress(items, departure_date, now)
+  const phase = getTripPhase(vacation, 3, now)
 
   return {
     schema_version: 1,
+    calendar_timezone: APP_TIMEZONE,
     vacation: {
       id: vacation.id,
       titel: vacation.titel,

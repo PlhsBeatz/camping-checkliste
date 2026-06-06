@@ -140,7 +140,7 @@ automation:
 | `de.camping-packliste.trip.started` | Reise läuft |
 | `de.camping-packliste.trip.ended` | Reise beendet |
 
-Payload enthält immer den vollständigen Trip-Status unter `data` (siehe Live-Vorschau in der App).
+Payload enthält immer den vollständigen Trip-Status unter `data` (siehe Live-Vorschau in der App). Kalendertage (`days_until_departure`, `phase`) basieren auf `calendar_timezone: Europe/Berlin` — nicht auf UTC des Servers.
 
 ## Signatur prüfen (optional)
 
