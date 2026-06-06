@@ -12,6 +12,9 @@ export function PwaUpdatePrompt() {
   const [isUpdating, setIsUpdating] = useState(false)
   const [showFallback, setShowFallback] = useState(false)
   const fallbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  /** Reload NUR nach einem bewusst angestoßenen Update – nicht bei jedem Controller-Wechsel
+   *  (z. B. erste SW-Übernahme nach „Website-Daten löschen" oder Reconnect). */
+  const userTriggeredUpdateRef = useRef(false)
 
   useEffect(() => {
     if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return
@@ -64,6 +67,7 @@ export function PwaUpdatePrompt() {
 
   const handleUpdate = useCallback(() => {
     if (!waitingWorker) return
+    userTriggeredUpdateRef.current = true
     setIsUpdating(true)
     waitingWorker.postMessage({ type: 'SKIP_WAITING' })
 
@@ -74,6 +78,9 @@ export function PwaUpdatePrompt() {
 
   useEffect(() => {
     const handleControllerChange = () => {
+      // Nur reloaden, wenn der User aktiv „Jetzt aktualisieren" geklickt hat.
+      // Sonst (erste SW-Übernahme, Reconnect-Claim) würde die Seite ungewollt neu laden.
+      if (!userTriggeredUpdateRef.current) return
       if (fallbackTimerRef.current) {
         clearTimeout(fallbackTimerRef.current)
         fallbackTimerRef.current = null

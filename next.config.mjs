@@ -42,6 +42,8 @@ const withSerwist = withSerwistInit({
   swSrc: 'src/app/sw.ts',
   swDest: 'public/sw.js',
   register: false,
+  // Niemals automatisch neu laden, wenn die Verbindung zurückkehrt (verhindert „Seite baut sich neu auf").
+  reloadOnOnline: false,
   additionalPrecacheEntries,
 });
 
