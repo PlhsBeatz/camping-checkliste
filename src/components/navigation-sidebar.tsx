@@ -61,6 +61,10 @@ export function NavigationSidebar({ isOpen, onClose }: NavigationSidebarProps) {
     { label: 'CHECKLISTEN', href: '/tools/checklisten' },
   ]
 
+  /** Light Mode: deutlich dunkler als text-muted-foreground; Dark Mode unverändert */
+  const navItemIdle =
+    'text-foreground dark:text-muted-foreground hover:bg-muted hover:text-foreground'
+
   return (
     <>
       {/* Mobile Overlay */}
@@ -96,7 +100,7 @@ export function NavigationSidebar({ isOpen, onClose }: NavigationSidebarProps) {
                   "flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-lg transition-colors",
                   item.active
                     ? "bg-[rgb(45,79,30)] text-white"
-                    : "text-muted-foreground hover:bg-muted"
+                    : navItemIdle
                 )}
               >
                 <span className="material-icons text-xl">{item.icon}</span>
@@ -112,7 +116,10 @@ export function NavigationSidebar({ isOpen, onClose }: NavigationSidebarProps) {
           <div className="mt-4 px-3">
             <button
               onClick={() => setToolsExpanded(!toolsExpanded)}
-              className="flex items-center justify-between w-full px-4 py-3 text-sm font-medium text-muted-foreground hover:bg-muted rounded-lg transition-colors"
+              className={cn(
+                'flex items-center justify-between w-full px-4 py-3 text-sm font-medium rounded-lg transition-colors',
+                navItemIdle
+              )}
             >
               <div className="flex items-center gap-3">
                 <span className="material-icons text-xl">build</span>
@@ -137,7 +144,7 @@ export function NavigationSidebar({ isOpen, onClose }: NavigationSidebarProps) {
                       "block px-4 py-2 text-xs tracking-wide rounded-lg transition-colors",
                       pathname === item.href || pathname.startsWith(item.href + '/')
                         ? "text-brand-heading font-medium bg-muted"
-                        : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                        : navItemIdle
                     )}
                   >
                     {item.label}
@@ -158,7 +165,7 @@ export function NavigationSidebar({ isOpen, onClose }: NavigationSidebarProps) {
                 'flex items-center gap-3 w-full px-4 py-3 text-sm font-medium rounded-lg transition-colors',
                 isConfigRoute(pathname)
                   ? 'bg-[rgb(45,79,30)] text-white'
-                  : 'text-muted-foreground hover:bg-muted'
+                  : navItemIdle
               )}
             >
               <span className="material-icons text-xl">settings</span>
@@ -176,7 +183,7 @@ export function NavigationSidebar({ isOpen, onClose }: NavigationSidebarProps) {
               'flex items-center gap-3 w-full px-4 py-3 text-sm font-medium rounded-lg transition-colors',
               pathname.startsWith('/profil')
                 ? 'bg-[rgb(45,79,30)] text-white'
-                : 'text-muted-foreground hover:bg-muted'
+                : navItemIdle
             )}
           >
             <span className="material-icons text-xl">person</span>
