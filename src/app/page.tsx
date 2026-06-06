@@ -58,7 +58,6 @@ import {
   getCachedMainCategories,
   getCachedTransportVehicles,
   getCachedVacationMitreisende,
-  getSyncQueueCount,
   subscribeToOnlineStatus,
   OUTBOX_SYNCED_EVENT_NAME,
 } from '@/lib/offline-sync'
@@ -365,19 +364,16 @@ function HomeContent() {
     [selectedVacationId]
   )
 
-  /** Beim Offline-Wechsel: sichtbare Liste sofort in Memory/IDB sichern, bevor async Fetches enden. */
-  const preservePackingSnapshot = useCallback(
-    (vacationId: string): boolean => {
-      const current = packingItemsRef.current
-      if (current.length === 0) return false
-      packingHadContentRef.current = true
-      snapshotPackingItemsToMemory(vacationId, current)
-      void cachePackingItems(vacationId, current)
-      applyPackingItemsFromFetch(current)
-      return true
-    },
-    [applyPackingItemsFromFetch]
-  )
+  /** Beim Offline-Wechsel: sichtbare Liste sofort in Memory/IDB sichern, bevor async Fetches enden.
+   *  Kein `setPackingItems` – die UI zeigt die Liste bereits, ein erneutes Setzen ist überflüssig. */
+  const preservePackingSnapshot = useCallback((vacationId: string): boolean => {
+    const current = packingItemsRef.current
+    if (current.length === 0) return false
+    packingHadContentRef.current = true
+    snapshotPackingItemsToMemory(vacationId, current)
+    void cachePackingItems(vacationId, current)
+    return true
+  }, [])
 
   const restorePackingFromLocal = useCallback(
     async (vacationId: string, version: number) => {
@@ -529,15 +525,15 @@ function HomeContent() {
         }
       }
       if (online && !lastOnline) {
+        // Kein Refetch beim reinen Online-Wechsel: Das löst sonst einen sichtbaren
+        // Neuaufbau aus, obwohl sich nichts geändert hat.
+        // - Ausstehende eigene Änderungen → Refresh kommt nach dem Sync über OUTBOX_SYNCED.
+        // - Änderungen anderer Geräte → liefert der WebSocket (packing-list-changed).
         wsRefreshSuppressUntilRef.current = Date.now() + WS_FETCH_COOLDOWN_MS
-        void getSyncQueueCount().then((count) => {
-          // Mit Outbox: Refresh nur über OUTBOX_SYNCED (OfflineBanner)
-          if (count === 0) schedulePostReconnectRefresh()
-        })
       }
       lastOnline = online
     })
-  }, [schedulePostReconnectRefresh, selectedVacationId, restorePackingFromLocal])
+  }, [selectedVacationId, restorePackingFromLocal])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
