@@ -93,21 +93,41 @@ export const EquipmentTable = React.memo(({
     itemId: string
     startX: number
     startY: number
-    startTime: number
     moved: boolean
   } | null>(null)
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const longPressSuppressBackdropCloseUntilRef = useRef(0)
+
+  const clearLongPressTimer = useCallback(() => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current)
+      longPressTimerRef.current = null
+    }
+  }, [])
+
+  const openLongPressMenuAt = useCallback((itemId: string, x: number, y: number) => {
+    longPressSuppressBackdropCloseUntilRef.current = Date.now() + 350
+    setLongPressMenu({ itemId, x, y })
+  }, [])
 
   const getLongPressHandlers = useCallback(
     (itemId: string) => ({
       onPointerDown: (e: React.PointerEvent) => {
         if (readOnly || e.pointerType !== 'touch') return
+        clearLongPressTimer()
         longPressGestureRef.current = {
           itemId,
           startX: e.clientX,
           startY: e.clientY,
-          startTime: Date.now(),
           moved: false,
         }
+        longPressTimerRef.current = setTimeout(() => {
+          const gesture = longPressGestureRef.current
+          if (!gesture || gesture.itemId !== itemId || gesture.moved) return
+          openLongPressMenuAt(itemId, gesture.startX, gesture.startY)
+          longPressGestureRef.current = null
+          clearLongPressTimer()
+        }, LONG_PRESS_MS)
       },
       onPointerMove: (e: React.PointerEvent) => {
         const gesture = longPressGestureRef.current
@@ -116,30 +136,27 @@ export const EquipmentTable = React.memo(({
         const dy = Math.abs(e.clientY - gesture.startY)
         if (dx > LONG_PRESS_MOVE_THRESHOLD || dy > LONG_PRESS_MOVE_THRESHOLD) {
           gesture.moved = true
+          clearLongPressTimer()
         }
       },
       onPointerUp: (e: React.PointerEvent) => {
-        const gesture = longPressGestureRef.current
-        if (!gesture || e.pointerType !== 'touch' || gesture.itemId !== itemId) return
-        const duration = Date.now() - gesture.startTime
-        if (!gesture.moved && duration >= LONG_PRESS_MS) {
-          e.preventDefault()
-          setLongPressMenu({
-            itemId,
-            x: gesture.startX,
-            y: gesture.startY,
-          })
+        if (e.pointerType !== 'touch') return
+        clearLongPressTimer()
+        if (longPressGestureRef.current?.itemId === itemId) {
+          longPressGestureRef.current = null
         }
-        longPressGestureRef.current = null
       },
       onPointerCancel: () => {
+        clearLongPressTimer()
         if (longPressGestureRef.current?.itemId === itemId) {
           longPressGestureRef.current = null
         }
       },
     }),
-    [readOnly]
+    [readOnly, clearLongPressTimer, openLongPressMenuAt]
   )
+
+  useEffect(() => () => clearLongPressTimer(), [clearLongPressTimer])
 
   // Get category name by ID
   const getCategoryName = useCallback((categoryId: string) => {
@@ -1043,7 +1060,10 @@ export const EquipmentTable = React.memo(({
                 <div
                   className="fixed inset-0 z-50"
                   aria-hidden
-                  onClick={() => setLongPressMenu(null)}
+                  onClick={() => {
+                    if (Date.now() < longPressSuppressBackdropCloseUntilRef.current) return
+                    setLongPressMenu(null)
+                  }}
                   onContextMenu={(e) => e.preventDefault()}
                 />
                 <div
