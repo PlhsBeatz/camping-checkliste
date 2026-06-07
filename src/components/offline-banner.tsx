@@ -10,6 +10,7 @@ import {
   processSyncQueue,
   subscribeToOnlineStatus,
   OUTBOX_SYNCED_EVENT_NAME,
+  OUTBOX_CHANGED_EVENT_NAME,
 } from '@/lib/offline-sync'
 import type { SyncQueueEntry } from '@/lib/offline-db'
 import { cn } from '@/lib/utils'
@@ -50,9 +51,22 @@ export function OfflineBanner() {
     void refresh()
     return subscribeToOnlineStatus((online) => {
       setIsOnline(online)
+      // Ergebnis des letzten Syncs ("… synchronisiert.") nicht in eine neue Offline-Phase
+      // mitschleppen – sonst steht dort fälschlich eine Erfolgsmeldung, obwohl noch
+      // gar nichts gesendet wurde.
+      if (!online) setResultMsg(null)
       void refresh()
     })
   }, [refresh])
+
+  // Outbox-Änderungen (Eintrag hinzugefügt/entfernt) → Zähler live aktualisieren,
+  // auch während man offline mehrere Einträge abhakt.
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const handler = () => void refreshRef.current()
+    window.addEventListener(OUTBOX_CHANGED_EVENT_NAME, handler)
+    return () => window.removeEventListener(OUTBOX_CHANGED_EVENT_NAME, handler)
+  }, [])
 
   /** Sobald wieder online und Outbox nicht leer: automatisch synchronisieren (wie erwartete „wird synchronisiert“). */
   useEffect(() => {
@@ -166,7 +180,7 @@ export function OfflineBanner() {
                 <>
                   {' '}
                   – {queueCount} ausstehende{' '}
-                  Änderung{queueCount === 1 ? '' : 'en'} werden bei Wiederverbindung gesendet.
+                  Änderung{queueCount === 1 ? ' wird' : 'en werden'} bei Wiederverbindung synchronisiert.
                 </>
               )}
             </span>
@@ -178,7 +192,7 @@ export function OfflineBanner() {
                 : `${queueCount} ausstehende Änderung${queueCount === 1 ? '' : 'en'}. Bei Problemen bitte „Erneut versuchen“ verwenden.`}
             </span>
           )}
-          {resultMsg && (
+          {isOnline && resultMsg && (
             <span className="ml-2 text-xs text-muted-foreground">{resultMsg}</span>
           )}
         </div>

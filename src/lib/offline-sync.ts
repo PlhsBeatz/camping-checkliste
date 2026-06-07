@@ -381,6 +381,7 @@ export async function enqueueSync(
     timestamp: Date.now(),
     attempts: 0,
   })
+  notifyOutboxChanged()
   // Dexie liefert bei auto-incrementing Tabellen die generierte ID; Typ ist `number | undefined`.
   return typeof id === 'number' ? id : Number(id ?? 0)
 }
@@ -398,10 +399,19 @@ export async function getSyncQueueEntries(): Promise<SyncQueueEntry[]> {
 /** Einzelnen Eintrag entfernen (UI: "Verwerfen") */
 export async function deleteSyncQueueEntry(id: number): Promise<void> {
   await offlineDb.syncQueue.delete(id)
+  notifyOutboxChanged()
 }
 
 /** Nach erfolgreicher Outbox-Sync: Hauptseite kann Packliste ohne veralteten SW-GET-Cache laden. */
 export const OUTBOX_SYNCED_EVENT_NAME = 'camping:outbox-synced' as const
+
+/** Outbox-Inhalt hat sich geändert (Eintrag hinzugefügt/entfernt) → UI-Zähler aktualisieren. */
+export const OUTBOX_CHANGED_EVENT_NAME = 'camping:outbox-changed' as const
+
+function notifyOutboxChanged(): void {
+  if (typeof window === 'undefined') return
+  window.dispatchEvent(new CustomEvent(OUTBOX_CHANGED_EVENT_NAME))
+}
 
 /**
  * Sync-Queue abarbeiten (bei Reconnect / manuell). Bricht bei einem Netzwerkfehler ab,
