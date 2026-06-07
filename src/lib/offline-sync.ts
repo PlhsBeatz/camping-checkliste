@@ -470,6 +470,7 @@ export async function processSyncQueue(): Promise<{
       }
 
       const remaining = await offlineDb.syncQueue.count()
+      if (ok > 0 || failed > 0) notifyOutboxChanged()
       return { ok, failed, remaining }
     } finally {
       processSyncQueueInFlight = null
