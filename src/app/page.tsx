@@ -59,6 +59,7 @@ import {
   getCachedTransportVehicles,
   getCachedVacationMitreisende,
   subscribeToOnlineStatus,
+  getSyncQueueCount,
   OUTBOX_SYNCED_EVENT_NAME,
 } from '@/lib/offline-sync'
 import {
@@ -525,15 +526,21 @@ function HomeContent() {
         }
       }
       if (online && !lastOnline) {
-        // Kein Refetch beim reinen Online-Wechsel: Das löst sonst einen sichtbaren
-        // Neuaufbau aus, obwohl sich nichts geändert hat.
-        // - Ausstehende eigene Änderungen → Refresh kommt nach dem Sync über OUTBOX_SYNCED.
-        // - Änderungen anderer Geräte → liefert der WebSocket (packing-list-changed).
         wsRefreshSuppressUntilRef.current = Date.now() + WS_FETCH_COOLDOWN_MS
+        // Während der Offline-Zeit verpasst der WebSocket Änderungen anderer Geräte.
+        // Deshalb beim Reconnect einmal gebündelt nachladen – der Merge über
+        // applyPackingItemsFromFetch ersetzt die Liste nur bei echten Änderungen und
+        // animiert ausschließlich die geänderten Einträge (kein Neuaufbau).
+        // Ausnahme: Stehen eigene Änderungen aus, kommt der Refresh erst NACH dem
+        // Outbox-Sync (OUTBOX_SYNCED) – sonst würde der Server kurz den alten Stand
+        // zurückspielen, bevor die eigenen Mutationen gepusht sind.
+        void getSyncQueueCount().then((count) => {
+          if (count === 0) schedulePostReconnectRefresh()
+        })
       }
       lastOnline = online
     })
-  }, [selectedVacationId, restorePackingFromLocal])
+  }, [selectedVacationId, restorePackingFromLocal, schedulePostReconnectRefresh])
 
   useEffect(() => {
     if (typeof window === 'undefined') return

@@ -64,12 +64,27 @@ automation:
         local_only: false
     condition:
       - condition: template
-        value_template: "{{ trigger.json.type == 'de.camping-packliste.packing.complete' }}"
+        value_template: "{{ trigger.json['event_type'] == 'de.camping-packliste.packing.complete' }}"
     action:
       - service: input_boolean.turn_on
         target:
           entity_id: input_boolean.packliste_abfahrbereit
 ```
+
+### Webhook-Payload in Templates
+
+Die App sendet **JSON** (CloudEvents-Format). In Home Assistant:
+
+| Feld | Template |
+|------|----------|
+| Event-Typ | `{{ trigger.json['event_type'] }}` |
+| Fortschritt % | `{{ trigger.json.data.packing.percent }}` |
+| Abfahrbereit | `{{ trigger.json.data.readiness.ready_to_depart }}` |
+| Debug (ganzer Body) | `{{ trigger.json \| tojson }}` |
+
+**Wichtig:** `trigger.json.type` funktioniert oft **nicht** (leerer Wert) — immer **`trigger.json['event_type']`** oder **`trigger.json['type']`** mit eckigen Klammern verwenden. Der Key `type` kollidiert in HA-Templates mit der Punkt-Notation.
+
+Zum Testen eine Benachrichtigung mit `message: "{{ trigger.json \| tojson }}"` — dann siehst du den kompletten empfangenen Body.
 
 Helper anlegen:
 
@@ -130,7 +145,9 @@ automation:
 
 ## Event-Typen (CloudEvents)
 
-| type | Bedeutung |
+Jedes Webhook-Event enthält `type` und `event_type` (gleicher Wert).
+
+| event_type | Bedeutung |
 |------|-----------|
 | `de.camping-packliste.packing.complete` | 100 % gepackt → `ready_to_depart: true` |
 | `de.camping-packliste.packing.incomplete` | wieder unter 100 % |

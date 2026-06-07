@@ -10,6 +10,8 @@ import type { TripStatusPayload } from '@/lib/trip-readiness'
 export type CloudEventPayload = {
   specversion: '1.0'
   type: IntegrationEventType
+  /** Alias für Home Assistant: trigger.json['event_type'] (Key type ist in Templates unzuverlässig). */
+  event_type: IntegrationEventType
   source: string
   id: string
   time: string
@@ -25,6 +27,7 @@ export function buildCloudEvent(
   return {
     specversion: '1.0',
     type: eventType,
+    event_type: eventType,
     source: vacationId ? `/vacations/${vacationId}` : '/integrations',
     id: crypto.randomUUID(),
     time: new Date().toISOString(),
@@ -55,7 +58,8 @@ export async function deliverWebhookEvent(
     const res = await fetch(webhook.url, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/cloudevents+json',
+        // application/json: Home Assistant füllt trigger.json nur bei diesem Content-Type zuverlässig
+        'Content-Type': 'application/json',
         'X-Webhook-Signature': `sha256=${signature}`,
       },
       body,
