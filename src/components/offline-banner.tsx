@@ -143,12 +143,20 @@ export function OfflineBanner() {
 
   const visible = !isOnline || queueCount > 0
 
+  const changeCountLabel = formatChangeCount(queueCount)
+  const statusAriaLabel = buildStatusAriaLabel({
+    isOnline,
+    queueCount,
+    isProcessing,
+    resultMsg,
+  })
+
   return (
     <div
       className={cn(
         // Platz rechts (pr) reservieren, damit der schwebende FAB-Button frei bleibt.
         // Nur die Karte selbst ist klickbar (pointer-events-none hier, -auto auf der Karte).
-        'pointer-events-none fixed inset-x-0 bottom-0 z-50 flex justify-center pl-3 pr-[5.5rem] pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-1',
+        'pointer-events-none fixed inset-x-0 bottom-0 z-50 flex justify-center pl-2 pr-[4.25rem] sm:pl-3 sm:pr-[5.5rem] pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-1',
         // Schwebendes Overlay – verschiebt nie den Seiteninhalt; sanftes Ein-/Ausblenden.
         'transition-all duration-300 ease-out',
         visible
@@ -158,6 +166,7 @@ export function OfflineBanner() {
       role="status"
       aria-live="polite"
       aria-hidden={!visible}
+      aria-label={visible ? statusAriaLabel : undefined}
     >
     <div
       className={cn(
@@ -166,34 +175,47 @@ export function OfflineBanner() {
         !isOnline ? 'bg-amber-100/95 border-amber-300' : 'bg-blue-50/95 border-blue-200'
       )}
     >
-      <div className="px-3 py-2 flex items-center gap-2 text-sm">
+      <div className="px-2.5 py-1.5 sm:px-3 sm:py-2 flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm">
         {!isOnline ? (
-          <CloudOff className="h-4 w-4 text-amber-700 flex-shrink-0" aria-hidden />
+          <CloudOff className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-amber-700 flex-shrink-0" aria-hidden />
         ) : (
-          <AlertCircle className="h-4 w-4 text-blue-700 flex-shrink-0" aria-hidden />
+          <AlertCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-blue-700 flex-shrink-0" aria-hidden />
         )}
         <div className="flex-1 min-w-0">
           {!isOnline && (
-            <span className="font-medium text-amber-900">
-              Offline-Modus
-              {queueCount > 0 && (
-                <>
-                  {' '}
-                  – {queueCount} ausstehende{' '}
-                  Änderung{queueCount === 1 ? ' wird' : 'en werden'} bei Wiederverbindung synchronisiert.
-                </>
-              )}
+            <span className="font-medium text-amber-900 truncate block">
+              <span className="sm:hidden">
+                {queueCount > 0 ? changeCountLabel : 'Offline'}
+              </span>
+              <span className="hidden sm:inline">
+                Offline-Modus
+                {queueCount > 0 && (
+                  <>
+                    {' '}
+                    – {queueCount} ausstehende{' '}
+                    Änderung{queueCount === 1 ? ' wird' : 'en werden'} bei Wiederverbindung
+                    synchronisiert.
+                  </>
+                )}
+              </span>
             </span>
           )}
           {isOnline && queueCount > 0 && (
-            <span className="font-medium text-blue-900">
-              {isProcessing
-                ? `Synchronisiere ${queueCount} ausstehende Änderung${queueCount === 1 ? '' : 'en'}…`
-                : `${queueCount} ausstehende Änderung${queueCount === 1 ? '' : 'en'}. Bei Problemen bitte „Erneut versuchen“ verwenden.`}
+            <span className="font-medium text-blue-900 truncate block">
+              <span className="sm:hidden">
+                {isProcessing ? 'Synchronisiere…' : changeCountLabel}
+              </span>
+              <span className="hidden sm:inline">
+                {isProcessing
+                  ? `Synchronisiere ${queueCount} ausstehende Änderung${queueCount === 1 ? '' : 'en'}…`
+                  : `${queueCount} ausstehende Änderung${queueCount === 1 ? '' : 'en'}. Bei Problemen bitte „Erneut versuchen“ verwenden.`}
+              </span>
             </span>
           )}
           {isOnline && resultMsg && (
-            <span className="ml-2 text-xs text-muted-foreground">{resultMsg}</span>
+            <span className="hidden sm:inline ml-2 text-xs text-muted-foreground">
+              {resultMsg}
+            </span>
           )}
         </div>
         {queueCount > 0 && (
@@ -202,24 +224,26 @@ export function OfflineBanner() {
               type="button"
               size="sm"
               variant="outline"
-              className="h-7 px-2"
+              className="h-7 w-7 sm:w-auto px-0 sm:px-2 flex-shrink-0"
               onClick={handleResync}
               disabled={isProcessing || !isOnline}
+              aria-label="Erneut versuchen"
             >
               <RefreshCw
-                className={cn('h-3.5 w-3.5 mr-1', isProcessing && 'animate-spin')}
+                className={cn('h-3.5 w-3.5 sm:mr-1', isProcessing && 'animate-spin')}
                 aria-hidden
               />
-              Erneut versuchen
+              <span className="hidden sm:inline">Erneut versuchen</span>
             </Button>
             <Button
               type="button"
               size="sm"
               variant="ghost"
-              className="h-7 px-2 text-xs"
+              className="h-7 px-2 text-xs flex-shrink-0"
               onClick={() => setShowDetails((v) => !v)}
             >
-              {showDetails ? 'Schließen' : 'Details'}
+              <span className="sm:hidden">{showDetails ? '×' : '…'}</span>
+              <span className="hidden sm:inline">{showDetails ? 'Schließen' : 'Details'}</span>
             </Button>
           </>
         )}
@@ -259,6 +283,32 @@ export function OfflineBanner() {
     </div>
     </div>
   )
+}
+
+function formatChangeCount(count: number): string {
+  return count === 1 ? '1 Änderung' : `${count} Änderungen`
+}
+
+function buildStatusAriaLabel(opts: {
+  isOnline: boolean
+  queueCount: number
+  isProcessing: boolean
+  resultMsg: string | null
+}): string {
+  const { isOnline, queueCount, isProcessing, resultMsg } = opts
+  if (!isOnline) {
+    if (queueCount > 0) {
+      return `Offline-Modus, ${formatChangeCount(queueCount)} werden bei Wiederverbindung synchronisiert.`
+    }
+    return 'Offline-Modus.'
+  }
+  if (queueCount > 0) {
+    if (isProcessing) {
+      return `Synchronisiere ${formatChangeCount(queueCount)}.`
+    }
+    return `${formatChangeCount(queueCount)} ausstehend.`
+  }
+  return resultMsg ?? ''
 }
 
 function humanLabel(e: SyncQueueEntry): string {
