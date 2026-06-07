@@ -45,6 +45,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { CampingplatzEditModal } from '@/components/campingplatz-edit-modal'
 import { CampingplatzOverviewMap } from '@/components/campingplatz-overview-map'
+import { buildAdacRouteUrl, formatAdacPlace } from '@/lib/adac-maps'
 import {
   getCachedCampingplatz,
   getCachedCampingplatzFotos,
@@ -435,20 +436,16 @@ export default function CampingplatzDetailPage() {
     }
 
     if (!coords) {
-      const targetOnly = `${cp.lat.toFixed(5)}_${cp.lng.toFixed(5)}_6_0`
       window.open(
-        `https://maps.adac.de/route?vehicle-type=trailer&places=${targetOnly}`,
+        buildAdacRouteUrl(formatAdacPlace(cp.lat, cp.lng, 6)),
         '_blank'
       )
       return
     }
 
-    const start = `${coords.lat.toFixed(5)}_${coords.lng.toFixed(5)}_1_0`
-    const target = `${cp.lat.toFixed(5)}_${cp.lng.toFixed(5)}_6_0`
-    window.open(
-      `https://maps.adac.de/route?vehicle-type=trailer&places=${start},${target}`,
-      '_blank'
-    )
+    const start = formatAdacPlace(coords.lat, coords.lng, 1)
+    const target = formatAdacPlace(cp.lat, cp.lng, 6)
+    window.open(buildAdacRouteUrl(`${start},${target}`), '_blank')
   }
 
   const executeDelete = async () => {

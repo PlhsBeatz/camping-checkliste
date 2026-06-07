@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -45,6 +46,21 @@ interface EquipmentTableProps {
   dynamicHeight?: boolean
 }
 
+const LONG_PRESS_MS = 500
+const LONG_PRESS_MOVE_THRESHOLD = 24
+const LONG_PRESS_MENU_WIDTH = 168
+const LONG_PRESS_MENU_HEIGHT = 80
+const LONG_PRESS_MENU_PADDING = 8
+
+function clampLongPressMenuPosition(x: number, y: number) {
+  const maxX = window.innerWidth - LONG_PRESS_MENU_WIDTH - LONG_PRESS_MENU_PADDING
+  const maxY = window.innerHeight - LONG_PRESS_MENU_HEIGHT - LONG_PRESS_MENU_PADDING
+  return {
+    x: Math.min(Math.max(LONG_PRESS_MENU_PADDING, x), maxX),
+    y: Math.min(Math.max(LONG_PRESS_MENU_PADDING, y), maxY),
+  }
+}
+
 export const EquipmentTable = React.memo(({
   equipmentItems,
   categories,
@@ -68,6 +84,62 @@ export const EquipmentTable = React.memo(({
   const [showFilters, setShowFilters] = useState(false)
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
   const [openLinksMenuId, setOpenLinksMenuId] = useState<string | null>(null)
+  const [longPressMenu, setLongPressMenu] = useState<{
+    itemId: string
+    x: number
+    y: number
+  } | null>(null)
+  const longPressGestureRef = useRef<{
+    itemId: string
+    startX: number
+    startY: number
+    startTime: number
+    moved: boolean
+  } | null>(null)
+
+  const getLongPressHandlers = useCallback(
+    (itemId: string) => ({
+      onPointerDown: (e: React.PointerEvent) => {
+        if (readOnly || e.pointerType !== 'touch') return
+        longPressGestureRef.current = {
+          itemId,
+          startX: e.clientX,
+          startY: e.clientY,
+          startTime: Date.now(),
+          moved: false,
+        }
+      },
+      onPointerMove: (e: React.PointerEvent) => {
+        const gesture = longPressGestureRef.current
+        if (!gesture || e.pointerType !== 'touch' || gesture.itemId !== itemId) return
+        const dx = Math.abs(e.clientX - gesture.startX)
+        const dy = Math.abs(e.clientY - gesture.startY)
+        if (dx > LONG_PRESS_MOVE_THRESHOLD || dy > LONG_PRESS_MOVE_THRESHOLD) {
+          gesture.moved = true
+        }
+      },
+      onPointerUp: (e: React.PointerEvent) => {
+        const gesture = longPressGestureRef.current
+        if (!gesture || e.pointerType !== 'touch' || gesture.itemId !== itemId) return
+        const duration = Date.now() - gesture.startTime
+        if (!gesture.moved && duration >= LONG_PRESS_MS) {
+          e.preventDefault()
+          setLongPressMenu({
+            itemId,
+            x: gesture.startX,
+            y: gesture.startY,
+          })
+        }
+        longPressGestureRef.current = null
+      },
+      onPointerCancel: () => {
+        if (longPressGestureRef.current?.itemId === itemId) {
+          longPressGestureRef.current = null
+        }
+      },
+    }),
+    [readOnly]
+  )
 
   // Get category name by ID
   const getCategoryName = useCallback((categoryId: string) => {
@@ -320,6 +392,19 @@ export const EquipmentTable = React.memo(({
     if (el) el.scrollTop = 0
     virtualizer.measure()
   }, [filterKey, virtualizer])
+
+  useEffect(() => {
+    if (!longPressMenu) return
+    const el = parentRef.current
+    if (!el) return
+    const close = () => setLongPressMenu(null)
+    el.addEventListener('scroll', close, { passive: true })
+    return () => el.removeEventListener('scroll', close)
+  }, [longPressMenu])
+
+  const longPressMenuItem = longPressMenu
+    ? equipmentItems.find((i) => i.id === longPressMenu.itemId)
+    : null
 
   // Vorberechnete Zeilen-Startpositionen (deterministisch, da estimateSize fix ist)
   const rowStarts = useMemo(() => {
@@ -785,16 +870,24 @@ export const EquipmentTable = React.memo(({
                       )
                     }
                     const item = row.item
-                    return (
+                    const longPressHandlers = !readOnly ? getLongPressHandlers(item.id) : {}
+
+                    const rowInner = (
                       <div
-                        key={row.id}
-                        className="absolute left-0 right-0 grid gap-px bg-card hover:bg-muted/30 border-b border-border/50 isolate"
+                        className="absolute left-0 right-0 grid gap-px bg-card hover:bg-muted/30 border-b border-border/50 isolate select-none touch-manipulation [touch-callout:none]"
                         style={{
                           height: size,
                           top: 0,
                           transform: `translate3d(0,${translateY}px,0)`,
-                          gridTemplateColumns: gridCols
+                          gridTemplateColumns: gridCols,
+                          WebkitTouchCallout: 'none',
                         }}
+                        title={!readOnly ? 'Gedrückt halten zum Bearbeiten' : undefined}
+                        onContextMenu={(e) => {
+                          if (readOnly) return
+                          e.preventDefault()
+                        }}
+                        {...longPressHandlers}
                       >
                         <div className={`px-4 py-2 text-sm flex items-center gap-2 ${colAlign.was}`}>
                           {item.is_standard ? (
@@ -862,7 +955,10 @@ export const EquipmentTable = React.memo(({
                             ))}
                           </div>
                         </div>
-                        <div className={`px-4 py-2 flex items-center ${colAlign.links}`}>
+                        <div
+                          className={`px-4 py-2 flex items-center ${colAlign.links}`}
+                          onPointerDown={(e) => e.stopPropagation()}
+                        >
                           {item.links && item.links.length > 0 ? (
                             <DropdownMenu open={openLinksMenuId === item.id} onOpenChange={(o) => setOpenLinksMenuId(o ? item.id : null)}>
                               <DropdownMenuTrigger asChild>
@@ -888,7 +984,10 @@ export const EquipmentTable = React.memo(({
                             </DropdownMenu>
                           ) : null}
                         </div>
-                        <div className={`px-1 py-2 sticky right-0 z-25 flex items-center justify-center ${colAlign.actions}`}>
+                        <div
+                          className={`px-1 py-2 sticky right-0 z-25 flex items-center justify-center bg-card ${colAlign.actions}`}
+                          onPointerDown={(e) => e.stopPropagation()}
+                        >
                           {!readOnly && (
                           <DropdownMenu open={openMenuId === item.id} onOpenChange={(o) => setOpenMenuId(o ? item.id : null)}>
                             <DropdownMenuTrigger asChild>
@@ -922,6 +1021,8 @@ export const EquipmentTable = React.memo(({
                         </div>
                       </div>
                     )
+
+                    return <React.Fragment key={row.id}>{rowInner}</React.Fragment>
                   })}
                   </div>
                 </>
@@ -930,6 +1031,56 @@ export const EquipmentTable = React.memo(({
           </div>
         </div>
       </div>
+
+      {longPressMenu &&
+        longPressMenuItem &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          (() => {
+            const { x, y } = clampLongPressMenuPosition(longPressMenu.x, longPressMenu.y)
+            return (
+              <>
+                <div
+                  className="fixed inset-0 z-50"
+                  aria-hidden
+                  onClick={() => setLongPressMenu(null)}
+                  onContextMenu={(e) => e.preventDefault()}
+                />
+                <div
+                  className="fixed z-50 min-w-[8rem] overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md animate-in fade-in-0 zoom-in-95"
+                  style={{ left: x, top: y }}
+                  role="menu"
+                >
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="relative flex w-full cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground"
+                    onClick={() => {
+                      setLongPressMenu(null)
+                      onEdit(longPressMenuItem)
+                    }}
+                  >
+                    <Pencil className="h-4 w-4 mr-2" />
+                    Bearbeiten
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="relative flex w-full cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none text-destructive hover:bg-accent hover:text-destructive"
+                    onClick={() => {
+                      setLongPressMenu(null)
+                      onDelete(longPressMenuItem.id)
+                    }}
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Löschen
+                  </button>
+                </div>
+              </>
+            )
+          })(),
+          document.body
+        )}
     </div>
   )
 })
