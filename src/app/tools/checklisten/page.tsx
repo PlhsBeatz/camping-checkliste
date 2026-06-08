@@ -86,7 +86,7 @@ export default function ChecklistenPage() {
             {headerContext.progress && headerContext.progress.total > 0 ? (
               <div className="mt-3 space-y-2 px-1">
                 <div className="flex items-center gap-2">
-                  <div className="flex-1 min-w-0 h-2.5 bg-gray-200 rounded-full overflow-hidden">
+                  <div className="flex-1 min-w-0 h-2.5 bg-muted rounded-full overflow-hidden">
                     <div
                       className="h-full transition-all duration-500 ease-out"
                       style={{
@@ -95,7 +95,7 @@ export default function ChecklistenPage() {
                       }}
                     />
                   </div>
-                  <span className="text-xs font-medium text-accent flex-shrink-0">
+                  <span className="text-xs font-medium text-muted-foreground flex-shrink-0">
                     {progressPct}%
                   </span>
                 </div>

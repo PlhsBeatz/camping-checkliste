@@ -472,12 +472,12 @@ export function CampingplaetzeTable({
                 </div>
               )}
             </div>
-            <div className="text-xs text-gray-600">
+            <div className="text-xs text-muted-foreground">
               {item.ort}, {item.land}
               {item.bundesland && ` (${item.bundesland})`}
             </div>
             {route && (
-              <div className="flex items-center gap-1 text-xs text-gray-600 mt-0.5">
+              <div className="flex items-center gap-1 text-xs text-muted-foreground mt-0.5">
                 <Route className="h-3.5 w-3.5 text-brand-heading" />
                 <span>
                   {Math.round(route.distanceKm)} km
@@ -497,7 +497,7 @@ export function CampingplaetzeTable({
         </div>
         <div className="flex flex-col items-end gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
           {item.is_archived && (
-            <span className="inline-flex items-center rounded-full bg-gray-200 text-gray-700 px-2 py-0.5 text-xs">
+            <span className="inline-flex items-center rounded-full bg-muted text-muted-foreground px-2 py-0.5 text-xs">
               Archiviert
             </span>
           )}
@@ -578,7 +578,7 @@ export function CampingplaetzeTable({
                 'inline-flex items-center gap-1.5 px-3 py-1 rounded-full border text-xs whitespace-nowrap',
                 filterLand === 'all'
                   ? 'bg-[rgb(45,79,30)] text-white border-[rgb(45,79,30)]'
-                  : 'bg-card text-gray-700 hover:bg-muted'
+                  : 'bg-card text-foreground hover:bg-muted'
               )}
             >
               <span className="text-[1em] leading-none select-none" aria-hidden>
@@ -595,7 +595,7 @@ export function CampingplaetzeTable({
                     'inline-flex items-center gap-1.5 px-3 py-1 rounded-full border text-xs whitespace-nowrap',
                     filterLand === land
                       ? 'bg-[rgb(45,79,30)] text-white border-[rgb(45,79,30)]'
-                      : 'bg-card text-gray-700 hover:bg-muted'
+                      : 'bg-card text-foreground hover:bg-muted'
                   )}
                 >
                   <CountryFlag land={land} width={20} />

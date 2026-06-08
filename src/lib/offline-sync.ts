@@ -408,9 +408,17 @@ export const OUTBOX_SYNCED_EVENT_NAME = 'camping:outbox-synced' as const
 /** Outbox-Inhalt hat sich geändert (Eintrag hinzugefügt/entfernt) → UI-Zähler aktualisieren. */
 export const OUTBOX_CHANGED_EVENT_NAME = 'camping:outbox-changed' as const
 
+/** Ausrüstungs-Stammdaten haben sich geändert (z. B. Löschen auf /ausruestung). */
+export const EQUIPMENT_CHANGED_EVENT_NAME = 'camping:equipment-changed' as const
+
 function notifyOutboxChanged(): void {
   if (typeof window === 'undefined') return
   window.dispatchEvent(new CustomEvent(OUTBOX_CHANGED_EVENT_NAME))
+}
+
+export function notifyEquipmentChanged(): void {
+  if (typeof window === 'undefined') return
+  window.dispatchEvent(new CustomEvent(EQUIPMENT_CHANGED_EVENT_NAME))
 }
 
 /**

@@ -22,6 +22,8 @@ interface PackingSettingsSidebarProps {
   onListDisplayModeChange: (mode: 'alles' | 'packliste') => void
   /** False für Kinder: „Zentral/Alle“-Option ausblenden */
   showAlleOption?: boolean
+  /** Mitreisende werden noch geladen (Cache/Netzwerk) */
+  profilesLoading?: boolean
 }
 
 export function PackingSettingsSidebar({
@@ -34,7 +36,8 @@ export function PackingSettingsSidebar({
   onHidePackedChange,
   listDisplayMode,
   onListDisplayModeChange,
-  showAlleOption = true
+  showAlleOption = true,
+  profilesLoading = false,
 }: PackingSettingsSidebarProps) {
   const travelerNames = mitreisende.map((m) => m.name)
   const sortedMitreisende = useMemo(
@@ -146,6 +149,11 @@ export function PackingSettingsSidebar({
           )}
 
           {/* Mitreisende Grid */}
+          {profilesLoading && sortedMitreisende.length === 0 && (
+            <p className="text-sm text-muted-foreground text-center py-2">
+              Profile werden geladen…
+            </p>
+          )}
           {sortedMitreisende.length > 0 && (
             <div className="grid grid-cols-2 gap-3">
               {sortedMitreisende.map((person, index) => (

@@ -20,6 +20,11 @@ import {
   snapshotPackingItemsToMemory,
 } from '@/lib/packing-items-memory'
 import {
+  getVacationMitreisendeMemory,
+  loadLocalVacationMitreisende,
+  setVacationMitreisendeMemory,
+} from '@/lib/vacation-mitreisende-memory'
+import {
   sortMitreisendeNachRolleUndName,
   sortMitreisendenZeilenNachStammdaten,
 } from '@/lib/mitreisenden-sort'
@@ -61,6 +66,7 @@ import {
   subscribeToOnlineStatus,
   getSyncQueueCount,
   OUTBOX_SYNCED_EVENT_NAME,
+  EQUIPMENT_CHANGED_EVENT_NAME,
 } from '@/lib/offline-sync'
 import {
   cachePackingItems,
@@ -185,6 +191,10 @@ function HomeContent() {
       if (mem?.length) {
         setPackingItems(mem)
         packingHadContentRef.current = true
+      }
+      const memMit = getVacationMitreisendeMemory(vid)
+      if (memMit?.length) {
+        setVacationMitreisende(memMit)
       }
     }
     setStorageHydrated(true)
@@ -448,6 +458,33 @@ function HomeContent() {
     [runPackingRefresh]
   )
 
+  const refreshEquipmentItems = useCallback(async () => {
+    try {
+      const res = await fetch('/api/equipment-items', { cache: 'no-store' })
+      const data = (await res.json()) as ApiResponse<EquipmentItem[]>
+      if (data.success && data.data) {
+        setEquipmentItems(data.data)
+        await cacheEquipment(data.data)
+      }
+    } catch (error) {
+      console.error('Failed to fetch equipment items:', error)
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        const cached = await getCachedEquipment()
+        if (cached.length > 0) setEquipmentItems(cached)
+      }
+    }
+  }, [])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const onEquipmentChanged = () => {
+      void refreshEquipmentItems()
+      schedulePackingRefresh()
+    }
+    window.addEventListener(EQUIPMENT_CHANGED_EVENT_NAME, onEquipmentChanged)
+    return () => window.removeEventListener(EQUIPMENT_CHANGED_EVENT_NAME, onEquipmentChanged)
+  }, [refreshEquipmentItems, schedulePackingRefresh])
+
   /** Nach Reconnect/Outbox höchstens ein gebündelter Packlisten-Refresh. */
   const schedulePostReconnectRefresh = useCallback(() => {
     if (typeof navigator !== 'undefined' && !navigator.onLine) return
@@ -553,23 +590,46 @@ function HomeContent() {
     return () => window.removeEventListener(OUTBOX_SYNCED_EVENT_NAME, onOutboxSynced)
   }, [schedulePostReconnectRefresh])
 
-  // Fetch Mitreisende for vacation (mit Offline-Cache pro Urlaub)
+  // Mitreisende / Packprofile: Cache zuerst (sofort), dann Netzwerk (aktuell halten).
+  // Ohne Cache-first wartet die UI auf den API-Call – selectedPackProfile steht dann
+  // schon aus dem Storage, aber Namen/Avatare fehlen („??", leere Profil-Auswahl).
   useEffect(() => {
-    if (!selectedVacationId) return
+    if (!selectedVacationId) {
+      setVacationMitreisende([])
+      return
+    }
+    const vacationId = selectedVacationId
+    let cancelled = false
 
-    const fetchVacationMitreisende = async () => {
+    void (async () => {
+      const local = await loadLocalVacationMitreisende(vacationId)
+      if (!cancelled && local) {
+        setVacationMitreisende(local)
+      }
+
       const { data } = await fetchAndCache<Mitreisender[]>(
-        `/api/mitreisende?vacationId=${selectedVacationId}`,
-        (items) => cacheVacationMitreisende(selectedVacationId, items),
-        () => getCachedVacationMitreisende(selectedVacationId),
+        `/api/mitreisende?vacationId=${vacationId}`,
+        (items) => cacheVacationMitreisende(vacationId, items),
+        () => getCachedVacationMitreisende(vacationId),
         { cache: 'no-store' }
       )
-      if (data !== null) {
+      if (!cancelled && data !== null) {
         setVacationMitreisende(data)
+        if (data.length > 0) {
+          setVacationMitreisendeMemory(vacationId, data)
+        }
       }
+    })()
+
+    return () => {
+      cancelled = true
     }
-    fetchVacationMitreisende()
   }, [selectedVacationId])
+
+  useEffect(() => {
+    if (!selectedVacationId || vacationMitreisende.length === 0) return
+    setVacationMitreisendeMemory(selectedVacationId, vacationMitreisende)
+  }, [selectedVacationId, vacationMitreisende])
 
   // Standard-Packprofil je nach Rolle setzen:
   // - Kind/Gast: immer eigenes Profil
@@ -613,24 +673,8 @@ function HomeContent() {
 
   // Fetch Equipment Items for FAB modal
   useEffect(() => {
-    const fetchEquipmentItems = async () => {
-      try {
-        const res = await fetch('/api/equipment-items')
-        const data = (await res.json()) as ApiResponse<EquipmentItem[]>
-        if (data.success && data.data) {
-          setEquipmentItems(data.data)
-          await cacheEquipment(data.data)
-        }
-      } catch (error) {
-        console.error('Failed to fetch equipment items:', error)
-        if (typeof navigator !== 'undefined' && !navigator.onLine) {
-          const cached = await getCachedEquipment()
-          if (cached.length > 0) setEquipmentItems(cached)
-        }
-      }
-    }
-    fetchEquipmentItems()
-  }, [refetchTick])
+    void refreshEquipmentItems()
+  }, [refetchTick, refreshEquipmentItems])
 
   // Fetch Categories
   useEffect(() => {
@@ -1579,8 +1623,20 @@ function HomeContent() {
     () => sortMitreisendeNachRolleUndName(vacationMitreisende),
     [vacationMitreisende]
   )
+  const selectedProfileMitreisender = useMemo(
+    () =>
+      selectedPackProfile
+        ? vacationMitreisende.find((m) => m.id === selectedPackProfile)
+        : undefined,
+    [vacationMitreisende, selectedPackProfile]
+  )
 
   // Add-Dialog: beim Öffnen zur aktuellen Kategorie scrollen (einmalig, sanft)
+  useEffect(() => {
+    if (!showAddItemDialog) return
+    void refreshEquipmentItems()
+  }, [showAddItemDialog, refreshEquipmentItems])
+
   useEffect(() => {
     if (!showAddItemDialog) return
     const ctx = addDialogScrollContextRef.current
@@ -1685,19 +1741,13 @@ function HomeContent() {
                       <div
                         className="h-8 w-8 rounded-full text-white flex items-center justify-center text-xs font-bold"
                         style={
-                          selectedPackProfile
+                          selectedPackProfile && selectedProfileMitreisender
                             ? (() => {
                                 const index = sortedVacationMitreisende.findIndex(
                                   (x) => x.id === selectedPackProfile
                                 )
-                                const m =
-                                  index >= 0
-                                    ? sortedVacationMitreisende[index]
-                                    : vacationMitreisende.find(
-                                        (x) => x.id === selectedPackProfile
-                                      )
                                 return getMitreisenderAvatarStyle(
-                                  m,
+                                  selectedProfileMitreisender,
                                   index >= 0 ? index : 0
                                 )
                               })()
@@ -1705,7 +1755,14 @@ function HomeContent() {
                         }
                       >
                         {selectedPackProfile ? (
-                          getTravelerInitials(vacationMitreisende.find((m) => m.id === selectedPackProfile)?.name ?? '?')
+                          selectedProfileMitreisender ? (
+                            getTravelerInitials(selectedProfileMitreisender.name)
+                          ) : (
+                            <span
+                              className="inline-block h-3 w-3 rounded-full bg-white/40 animate-pulse"
+                              aria-hidden
+                            />
+                          )
                         ) : (
                           <Users className="h-4 w-4" />
                         )}
@@ -1730,7 +1787,7 @@ function HomeContent() {
                   selectedProfile={selectedPackProfile}
                   hidePackedItems={hidePackedItems}
                   canEditPauschalEntries={canEditPauschalEntries}
-                  selectedProfileColor={vacationMitreisende.find(m => m.id === selectedPackProfile)?.farbe ?? undefined}
+                  selectedProfileColor={selectedProfileMitreisender?.farbe ?? undefined}
                   isChildView={!canSelectOtherProfiles}
                   listDisplayMode={listDisplayMode}
                   onOpenSettings={() => setShowPackSettings(true)}
@@ -1940,6 +1997,9 @@ function HomeContent() {
         listDisplayMode={listDisplayMode}
         onListDisplayModeChange={handleListDisplayModeChange}
         showAlleOption={canSelectOtherProfiles}
+        profilesLoading={
+          !!selectedVacationId && vacationMitreisende.length === 0
+        }
       />
 
       {/* FAB Button für Gegenstand hinzufügen - Kreisrund mit weißem Plus */}

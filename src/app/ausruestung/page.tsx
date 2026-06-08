@@ -38,6 +38,7 @@ import {
   getCachedTags,
   getCachedTagKategorien,
   getCachedMitreisende,
+  notifyEquipmentChanged,
 } from '@/lib/offline-sync'
 import {
   cacheEquipment,
@@ -241,6 +242,14 @@ export default function AusruestungPage() {
   const handleEquipmentVisibleSection = useCallback((ctx: { mainTitle: string | null; categoryId: string | null }) => {
     equipmentVisibleSectionRef.current = ctx
   }, [])
+  const syncEquipmentSnapshot = useCallback(async (items: EquipmentItem[]) => {
+    setEquipmentItems(items)
+    await cacheEquipment(items)
+    notifyEquipmentChanged()
+  }, [])
+  const deleteEquipmentTarget = deleteEquipmentId
+    ? equipmentItems.find((item) => item.id === deleteEquipmentId)
+    : null
   const [addEquipmentCategoryScrollTarget, setAddEquipmentCategoryScrollTarget] =
     useState<CategorySelectScrollTarget | null>(null)
   
@@ -548,7 +557,7 @@ export default function AusruestungPage() {
         })
         const itemsData = (await itemsRes.json()) as ApiResponse<EquipmentItem[]>
         if (itemsData.success && itemsData.data) {
-          setEquipmentItems(itemsData.data)
+          await syncEquipmentSnapshot(itemsData.data)
         }
       } else {
         alert('Fehler beim Speichern: ' + (data.error ?? 'Unbekannt'))
@@ -604,7 +613,7 @@ export default function AusruestungPage() {
         })
         const itemsData = (await itemsRes.json()) as ApiResponse<EquipmentItem[]>
         if (itemsData.success && itemsData.data) {
-          setEquipmentItems(itemsData.data)
+          await syncEquipmentSnapshot(itemsData.data)
         }
       } else {
         alert('Fehler beim Aktualisieren: ' + (data.error ?? 'Unbekannt'))
@@ -632,7 +641,7 @@ export default function AusruestungPage() {
       })
       const data = (await res.json()) as ApiResponse<boolean>
       if (data.success) {
-        setEquipmentItems(equipmentItems.filter(item => item.id !== equipmentId))
+        await syncEquipmentSnapshot(equipmentItems.filter((item) => item.id !== equipmentId))
       } else {
         alert('Fehler beim Löschen des Gegenstands: ' + (data.error ?? 'Unbekannt'))
       }
@@ -997,7 +1006,11 @@ export default function AusruestungPage() {
         open={!!deleteEquipmentId}
         onOpenChange={(open) => !open && setDeleteEquipmentId(null)}
         title="Gegenstand löschen"
-        description="Sind Sie sicher, dass Sie diesen Gegenstand löschen möchten?"
+        description={
+          deleteEquipmentTarget
+            ? `Möchten Sie „${deleteEquipmentTarget.was}" wirklich löschen? Der Gegenstand wird auch aus allen Packlisten entfernt.`
+            : 'Möchten Sie diesen Gegenstand wirklich löschen?'
+        }
         onConfirm={executeDeleteEquipment}
         isLoading={isLoading}
       />
