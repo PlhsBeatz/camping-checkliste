@@ -132,14 +132,14 @@ export function berechneReiseTage(vacation: {
 }
 
 /**
- * Ist ein Mitreisender als Kind zu behandeln?
- *
- * Ableitung aus `user_role`: Wer als `kind` am User-Account hinterlegt ist,
- * gilt als Kind. Alle anderen (admin, gast, kein Account) → Erwachsener.
+ * Ist ein Mitreisender als Kind zu behandeln? (Personentyp, nicht Nutzerrolle)
  */
 export function istKind(mitreisender: {
-  user_role?: 'admin' | 'kind' | 'gast' | null
+  personentyp?: 'erwachsen' | 'kind' | null
+  user_role?: string | null
 }): boolean {
+  if (mitreisender.personentyp === 'kind') return true
+  // Fallback während Migration ohne personentyp-Spalte
   return mitreisender.user_role === 'kind'
 }
 

@@ -1,6 +1,8 @@
 export type ConfigNavItem = {
   label: string
   href: string
+  /** Nur für System-Admin sichtbar */
+  systemAdminOnly?: boolean
 }
 
 export type ConfigNavGroup = {
@@ -21,8 +23,8 @@ export const CONFIG_NAV_GROUPS: ConfigNavGroup[] = [
   {
     label: 'System',
     items: [
-      { label: 'Datensicherung', href: '/datensicherung' },
-      { label: 'Integrationen', href: '/integrationen' },
+      { label: 'Datensicherung', href: '/datensicherung', systemAdminOnly: true },
+      { label: 'Integrationen', href: '/integrationen', systemAdminOnly: true },
     ],
   },
 ]

@@ -3,8 +3,10 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { ConfigPageLayout } from '@/components/config-page-layout'
+import { useAuth } from '@/components/auth-provider'
 import { Download, Upload, AlertTriangle, ChevronDown } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import type { BackupPreset } from '@/lib/data-backup'
 import type { Vacation } from '@/lib/db'
@@ -78,6 +80,8 @@ async function parseExportFailureResponse(res: Response): Promise<string> {
 }
 
 export default function DatensicherungPage() {
+  const { canAccessSystemAdmin, loading } = useAuth()
+  const router = useRouter()
   const [vacations, setVacations] = useState<Vacation[]>([])
   const [presetState, setPresetState] = useState<Record<UiPresetKey, boolean>>(emptyUiPresetState)
   /* auth-Preset nur per API; UI nutzt includeAuth */
@@ -90,6 +94,12 @@ export default function DatensicherungPage() {
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [importReport, setImportReport] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!loading && !canAccessSystemAdmin) {
+      router.replace('/konfiguration')
+    }
+  }, [loading, canAccessSystemAdmin, router])
 
   useEffect(() => {
     void (async () => {
@@ -292,6 +302,14 @@ export default function DatensicherungPage() {
     } finally {
       setBusy(false)
     }
+  }
+
+  if (loading || !canAccessSystemAdmin) {
+    return (
+      <ConfigPageLayout>
+        <p className="text-sm text-muted-foreground">Wird geladen…</p>
+      </ConfigPageLayout>
+    )
   }
 
   return (

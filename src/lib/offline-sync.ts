@@ -13,6 +13,7 @@ import {
   cacheTags,
   cacheTagKategorien,
   cacheMitreisende,
+  cacheMitreisendenGruppen,
   cacheVacationMitreisende,
   cacheTransportVehicles,
   cachePackingItems,
@@ -36,6 +37,7 @@ import type {
   Tag,
   TagKategorie,
   Mitreisender,
+  MitreisendenGruppe,
   TransportVehicle,
   PackingItem,
   ChecklisteMitStruktur,
@@ -207,6 +209,13 @@ export async function getCachedMitreisende(): Promise<Mitreisender[]> {
   return rows.map(stripMeta)
 }
 
+export async function getCachedMitreisendenGruppen(): Promise<MitreisendenGruppe[]> {
+  const rows = await offlineDb.mitreisendenGruppen.toArray()
+  return rows
+    .map(stripMeta)
+    .sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name, 'de'))
+}
+
 /** Mitreisende eines konkreten Urlaubs */
 export async function getCachedVacationMitreisende(
   vacationId: string
@@ -312,8 +321,10 @@ export async function getCachedHomeLocation(): Promise<{
 export async function getCachedAuthUser(): Promise<{
   id: string
   email: string
-  role: 'admin' | 'kind' | 'gast'
+  role: 'system_admin' | 'admin' | 'standard'
   mitreisender_id: string | null
+  personentyp?: 'erwachsen' | 'kind' | null
+  gruppe_id?: string | null
   permissions: string[]
   must_change_password?: boolean
 } | null> {
@@ -324,6 +335,8 @@ export async function getCachedAuthUser(): Promise<{
     email: row.email,
     role: row.role,
     mitreisender_id: row.mitreisender_id,
+    personentyp: row.personentyp ?? null,
+    gruppe_id: row.gruppe_id ?? null,
     permissions: row.permissions,
     must_change_password: row.must_change_password,
   }

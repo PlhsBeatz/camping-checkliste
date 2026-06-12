@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
-import { getDB, getUserById, getMitreisendeBerechtigungen, CloudflareEnv } from '@/lib/db'
+import { isAdminRole, isSystemAdminRole } from '@/lib/auth'
+import { getDB, getUserById, getMitreisendeBerechtigungen, getMitreisenderStammdaten, CloudflareEnv } from '@/lib/db'
 
 export async function GET(request: NextRequest) {
   try {
@@ -17,8 +18,16 @@ export async function GET(request: NextRequest) {
     }
 
     let permissions: string[] = []
+    let personentyp: 'erwachsen' | 'kind' | null = null
+    let gruppe_id: string | null = null
+
     if (user.mitreisender_id) {
       permissions = await getMitreisendeBerechtigungen(db, user.mitreisender_id)
+      const stamm = await getMitreisenderStammdaten(db, user.mitreisender_id)
+      if (stamm) {
+        personentyp = stamm.personentyp
+        gruppe_id = stamm.gruppe_id
+      }
     }
 
     return NextResponse.json({
@@ -28,9 +37,13 @@ export async function GET(request: NextRequest) {
         email: user.email,
         role: user.role,
         mitreisender_id: user.mitreisender_id,
+        personentyp,
+        gruppe_id,
         permissions,
-        must_change_password: !!(user as { must_change_password?: number }).must_change_password
-      }
+        must_change_password: !!(user as { must_change_password?: number }).must_change_password,
+        is_system_admin: isSystemAdminRole(user.role),
+        is_admin: isAdminRole(user.role),
+      },
     })
   } catch (error) {
     console.error('Me error:', error)

@@ -28,6 +28,8 @@ import {
   USER_COLORS,
 } from "@/lib/user-colors";
 import { sortMitreisendeNachRolleUndName, sortMitreisendenZeilenNachStammdaten } from "@/lib/mitreisenden-sort";
+import { buildPackProfileGroups } from '@/lib/pack-profile-groups';
+import { PackProfileGroupOverviewList } from '@/components/pack-profile-person-groups';
 
 type VisibleItemsFilterOpts = {
   listDisplayMode: 'alles' | 'packliste';
@@ -35,32 +37,51 @@ type VisibleItemsFilterOpts = {
   toYYYYMMDD: (d: string) => string;
   canEditPauschalEntries: boolean;
   vacationMitreisende: Mitreisender[];
+  /** Im Modus „Alle“: nur Einträge dieser Personen (null = alle am Urlaub) */
+  alleScopeIds?: Set<string> | null;
 };
+
+function passesBaseVisibleFilters(
+  item: DBPackingItem,
+  opts: Pick<VisibleItemsFilterOpts, 'listDisplayMode' | 'abreiseDatum' | 'toYYYYMMDD'>
+): boolean {
+  const { listDisplayMode, abreiseDatum, toYYYYMMDD } = opts;
+  if (listDisplayMode === 'packliste' && String(item.status || '').trim() === 'Immer gepackt') return false;
+  const isErstAbreisetag = !!item.erst_abreisetag_gepackt;
+  if (listDisplayMode === 'packliste' && isErstAbreisetag && abreiseDatum) {
+    const now = new Date();
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const abreiseStr = toYYYYMMDD(abreiseDatum);
+    if (abreiseStr && todayStr !== abreiseStr) return false;
+  }
+  return true;
+}
 
 function filterVisibleItemsForProfile(
   items: DBPackingItem[],
   selectedProfile: string | null,
   opts: VisibleItemsFilterOpts
 ): DBPackingItem[] {
-  const { listDisplayMode, abreiseDatum, toYYYYMMDD, canEditPauschalEntries, vacationMitreisende } = opts;
-  const now = new Date();
-  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  const { canEditPauschalEntries, vacationMitreisende, alleScopeIds } = opts;
 
   return items.filter(item => {
-    if (listDisplayMode === 'packliste' && String(item.status || '').trim() === 'Immer gepackt') return false;
-    const isErstAbreisetag = !!item.erst_abreisetag_gepackt;
-    if (listDisplayMode === 'packliste' && isErstAbreisetag && abreiseDatum) {
-      const abreiseStr = toYYYYMMDD(abreiseDatum);
-      if (abreiseStr && todayStr !== abreiseStr) return false;
+    if (!passesBaseVisibleFilters(item, opts)) return false;
+
+    if (!selectedProfile) {
+      if (alleScopeIds === null || alleScopeIds === undefined) return true;
+      if (item.mitreisenden_typ === 'pauschal') return canEditPauschalEntries;
+      if (item.mitreisende?.length) {
+        return item.mitreisende.some(m => alleScopeIds.has(m.mitreisender_id));
+      }
+      if (item.mitreisenden_typ === 'alle') return alleScopeIds.size > 0;
+      return false;
     }
-    if (!selectedProfile) return true;
     if (item.mitreisenden_typ === 'pauschal') {
       return canEditPauschalEntries;
     }
     const personAssigned = item.mitreisende?.some(m => m.mitreisender_id === selectedProfile);
     if (personAssigned) return true;
     if (item.mitreisenden_typ === 'alle' && (!item.mitreisende || item.mitreisende.length === 0)) {
-      // Offline: Mitreisenden-Stammdaten evtl. noch nicht geladen – „alle“ nicht ausblenden
       if (vacationMitreisende.length === 0) return true;
       return vacationMitreisende.some(m => m.id === selectedProfile);
     }
@@ -126,6 +147,8 @@ interface PackingItemProps {
   selectedProfile: string | null;
   hidePackedItems: boolean;
   vacationMitreisende?: Mitreisender[];
+  /** Eigene Reisegruppe – im Modus „Alle“ nur deren Haken an Einträgen anzeigen */
+  ownGroupMitreisende?: Mitreisender[];
   transportVehicles?: TransportVehicle[];
   onMarkAllConfirm?: (selectedTravelerIds: string[]) => void;
   onShowToast?: (itemName: string, travelerName: string | undefined, undoAction: () => void) => void;
@@ -158,6 +181,7 @@ const PackingItem: React.FC<PackingItemProps> = ({
   selectedProfile,
   hidePackedItems,
   vacationMitreisende = [],
+  ownGroupMitreisende = [],
   transportVehicles = [],
   onMarkAllConfirm,
   onShowToast,
@@ -194,56 +218,99 @@ const PackingItem: React.FC<PackingItemProps> = ({
   }, [statusSignature]);
 
   const effectivePacked = (g: boolean, v?: boolean) => g || !!v;
+
+  type MitreisendeRow = NonNullable<typeof mitreisende>[number];
+
+  /** Im Modus „Alle“: nur Personen der eigenen Gruppe in der Zeilen-UI */
+  const mitreisendeRowsForUi = useMemo((): MitreisendeRow[] => {
+    if (selectedProfile !== null) return mitreisende ?? [];
+    const ownIds = new Set(ownGroupMitreisende.map((m) => m.id));
+    const base = mitreisende ?? [];
+    if (base.length === 0 && mitreisenden_typ === 'alle' && ownGroupMitreisende.length > 0) {
+      return ownGroupMitreisende.map((m) => ({
+        mitreisender_id: m.id,
+        mitreisender_name: m.name,
+        gepackt: false,
+      }));
+    }
+    return base.filter((m) => ownIds.has(m.mitreisender_id));
+  }, [selectedProfile, mitreisende, mitreisenden_typ, ownGroupMitreisende]);
+
+  /** Scope-Zeilen für „Alles abhaken“-Dialog (voller Packprofil-Scope) */
+  const mitreisendeRowsForScope = useMemo((): MitreisendeRow[] => {
+    const base = mitreisende ?? [];
+    if (base.length === 0 && mitreisenden_typ === 'alle' && vacationMitreisende.length > 0) {
+      return vacationMitreisende.map((m) => ({
+        mitreisender_id: m.id,
+        mitreisender_name: m.name,
+        gepackt: false,
+      }));
+    }
+    const scopeIds = new Set(vacationMitreisende.map((m) => m.id));
+    return base.filter((m) => scopeIds.has(m.mitreisender_id));
+  }, [mitreisende, mitreisenden_typ, vacationMitreisende]);
+
   const isFullyPacked = useMemo(() => {
     if (mitreisenden_typ === 'pauschal') {
       return effectivePacked(gepackt, gepackt_vorgemerkt);
     }
-    return (mitreisende?.length ?? 0) > 0 && mitreisende?.every(m => effectivePacked(m.gepackt, m.gepackt_vorgemerkt));
-  }, [mitreisenden_typ, gepackt, gepackt_vorgemerkt, mitreisende]);
+    const rows = selectedProfile === null ? mitreisendeRowsForUi : (mitreisende ?? []);
+    return rows.length > 0 && rows.every((m) => effectivePacked(m.gepackt, m.gepackt_vorgemerkt));
+  }, [mitreisenden_typ, gepackt, gepackt_vorgemerkt, mitreisende, selectedProfile, mitreisendeRowsForUi]);
 
   /** Nur final gepackt (gepackt=true), nicht vorgemerkt – für Eltern bei „Gepacktes ausblenden“ */
   const isFullyPackedFinal = useMemo(() => {
     if (mitreisenden_typ === 'pauschal') return gepackt;
-    return (mitreisende?.length ?? 0) > 0 && mitreisende?.every(m => m.gepackt);
-  }, [mitreisenden_typ, gepackt, mitreisende]);
+    const rows = selectedProfile === null ? mitreisendeRowsForUi : (mitreisende ?? []);
+    return rows.length > 0 && rows.every((m) => m.gepackt);
+  }, [mitreisenden_typ, gepackt, mitreisende, selectedProfile, mitreisendeRowsForUi]);
+
+  const isScopeFullyPackedFinal = useMemo(() => {
+    if (mitreisenden_typ === 'pauschal') return gepackt;
+    return mitreisendeRowsForScope.length > 0 && mitreisendeRowsForScope.every((m) => m.gepackt);
+  }, [mitreisenden_typ, gepackt, mitreisendeRowsForScope]);
 
   // Calculate packed count for individual items (gepackt OR vorgemerkt zählt als gepackt für Anzeige)
   const packedCount = useMemo(() => {
     if (mitreisenden_typ === 'pauschal') return effectivePacked(gepackt, gepackt_vorgemerkt) ? 1 : 0;
-    return mitreisende?.filter(m => effectivePacked(m.gepackt, m.gepackt_vorgemerkt)).length ?? 0;
-  }, [mitreisenden_typ, gepackt, gepackt_vorgemerkt, mitreisende]);
+    const rows = selectedProfile === null ? mitreisendeRowsForUi : (mitreisende ?? []);
+    return rows.filter((m) => effectivePacked(m.gepackt, m.gepackt_vorgemerkt)).length;
+  }, [mitreisenden_typ, gepackt, gepackt_vorgemerkt, mitreisende, selectedProfile, mitreisendeRowsForUi]);
 
   /** Nur final gepackt – für Admin-Anzeige x/4 Personen */
   const packedCountFinal = useMemo(() => {
     if (mitreisenden_typ === 'pauschal') return gepackt ? 1 : 0;
-    return mitreisende?.filter(m => m.gepackt).length ?? 0;
-  }, [mitreisenden_typ, gepackt, mitreisende]);
+    const rows = selectedProfile === null ? mitreisendeRowsForUi : (mitreisende ?? []);
+    return rows.filter((m) => m.gepackt).length;
+  }, [mitreisenden_typ, gepackt, mitreisende, selectedProfile, mitreisendeRowsForUi]);
 
   /** Namen der Mitreisenden mit Vormerkung – für Admin-Anzeige "(Prüfen: …)" */
   const vorgemerktNames = useMemo(() => {
-    if (mitreisenden_typ === 'pauschal' || !mitreisende) return [];
-    return mitreisende
-      .filter(m => !!m.gepackt_vorgemerkt && !m.gepackt)
-      .map(m => m.mitreisender_name);
-  }, [mitreisenden_typ, mitreisende]);
+    if (mitreisenden_typ === 'pauschal') return [];
+    const rows = selectedProfile === null ? mitreisendeRowsForUi : (mitreisende ?? []);
+    return rows
+      .filter((m) => !!m.gepackt_vorgemerkt && !m.gepackt)
+      .map((m) => m.mitreisender_name);
+  }, [mitreisenden_typ, mitreisende, selectedProfile, mitreisendeRowsForUi]);
 
   const totalCount = useMemo(() => {
     if (mitreisenden_typ === 'pauschal') return 1;
-    return mitreisende?.length ?? 0;
-  }, [mitreisenden_typ, mitreisende]);
+    const rows = selectedProfile === null ? mitreisendeRowsForUi : (mitreisende ?? []);
+    return rows.length;
+  }, [mitreisenden_typ, mitreisende, selectedProfile, mitreisendeRowsForUi]);
 
   /** Reihenfolge „Admin → Kind → …“ wie in Packprofil-Sidebar (Stammdaten aus Urlaub) */
   const mitreisendeFuerPopover = useMemo(() => {
-    const list = mitreisende ?? [];
+    const list = selectedProfile === null ? mitreisendeRowsForUi : (mitreisende ?? []);
     if (!list.length) return list;
     const order = sortMitreisendenZeilenNachStammdaten(
       list.map((m) => ({ id: m.mitreisender_id, name: m.mitreisender_name })),
-      vacationMitreisende
+      ownGroupMitreisende.length > 0 ? ownGroupMitreisende : vacationMitreisende
     ).map((r) => r.id);
     const byId = new Map(list.map((m) => [m.mitreisender_id, m]));
     const ordered = order.map((tid) => byId.get(tid)).filter(Boolean) as typeof list;
     return ordered.length > 0 ? ordered : list;
-  }, [mitreisende, vacationMitreisende]);
+  }, [mitreisende, selectedProfile, mitreisendeRowsForUi, ownGroupMitreisende, vacationMitreisende]);
 
   // Determine if checkbox should be enabled
   const canTogglePauschal = mitreisenden_typ === 'pauschal';
@@ -383,13 +450,10 @@ const PackingItem: React.FC<PackingItemProps> = ({
       const currentStatus = currentEffective;
       onToggleMitreisender(itemId, profileId, currentStatus);
       if (hidePackedItems && wasUnpacked && onShowToast) {
-        // Create undo action - use setTimeout to ensure state has updated
         const undoAction = () => {
-          setTimeout(() => {
-            onToggleMitreisender(itemId, profileId, !currentStatus);
-          }, 0);
-        };
-        onShowToast(was, selectedTravelerItem?.mitreisender_name, undoAction);
+          onToggleMitreisender(itemId, profileId, true)
+        }
+        onShowToast(was, selectedTravelerItem?.mitreisender_name, undoAction)
       }
     }
   };
@@ -461,23 +525,15 @@ const PackingItem: React.FC<PackingItemProps> = ({
   );
 
   const travelersForMarkAll: TravelerForMarkAll[] = useMemo(() => {
-    let list = mitreisende ?? [];
-    if (list.length === 0 && mitreisenden_typ === 'alle' && vacationMitreisende.length > 0) {
-      const sortedVacation = sortMitreisendeNachRolleUndName(vacationMitreisende);
-      list = sortedVacation.map((m) => ({
-        mitreisender_id: m.id,
-        mitreisender_name: m.name,
-        gepackt: false
-      }));
-    }
+    let list = mitreisendeRowsForScope;
     let rows: TravelerForMarkAll[];
-    if (isFullyPackedFinal) {
+    if (isScopeFullyPackedFinal) {
       rows = list
         .filter((m) => m.gepackt)
         .map((m) => ({
           id: m.mitreisender_id,
           name: m.mitreisender_name,
-          isCurrentlyPacked: true
+          isCurrentlyPacked: true,
         }));
     } else {
       rows = list
@@ -485,11 +541,11 @@ const PackingItem: React.FC<PackingItemProps> = ({
         .map((m) => ({
           id: m.mitreisender_id,
           name: m.mitreisender_name,
-          isCurrentlyPacked: false
+          isCurrentlyPacked: false,
         }));
     }
     return sortMitreisendenZeilenNachStammdaten(rows, vacationMitreisende);
-  }, [mitreisende, mitreisenden_typ, vacationMitreisende, isFullyPackedFinal]);
+  }, [mitreisendeRowsForScope, vacationMitreisende, isScopeFullyPackedFinal]);
 
   // Hide if packed – nach Exit-Animation
   if (hasExited) {
@@ -599,7 +655,7 @@ const PackingItem: React.FC<PackingItemProps> = ({
                     Für {selectedTravelerItem.mitreisender_name}
                   </span>
                 )}
-                {selectedProfile === null && mitreisende && mitreisende.length > 0 && (
+                {selectedProfile === null && mitreisendeRowsForUi.length > 0 && (
                   <Popover open={personListPopoverOpen} onOpenChange={setPersonListPopoverOpen}>
                     {showPersonStatusAsPopover ? (
                       <>
@@ -768,6 +824,10 @@ interface PackingListProps {
   transportVehicles?: TransportVehicle[];
   /** Im Packprofil sichtbare Mitreisende (Berechtigungen) – für Schwellwert Inline vs. Popup */
   visiblePackProfileMitreisende?: Mitreisender[];
+  /** Eigene Reisegruppe – für gruppierte Personen-Übersicht */
+  ownGruppeId?: string | null;
+  /** Scope für Modus „Zentral / Alle“ (Admin: alle am Urlaub) */
+  packProfileScopeMitreisende?: Mitreisender[];
   /** Farbe des gewählten Packprofils (Mitreisender) für Fortschrittsbalken „nur eigene“ */
   selectedProfileColor?: string | null;
   /** Urlaubs-Abreisedatum (abfahrtdatum ?? startdatum) – für erst_abreisetag_gepackt im Packliste-Modus */
@@ -802,6 +862,8 @@ export function PackingList({
   onOpenSettings: _onOpenSettings,
   vacationMitreisende = [],
   visiblePackProfileMitreisende,
+  ownGruppeId = null,
+  packProfileScopeMitreisende,
   transportVehicles = [],
   selectedProfileColor = null,
   abreiseDatum,
@@ -832,7 +894,35 @@ export function PackingList({
   const categoryRefsMap = useRef<Map<string, HTMLDivElement | null>>(new Map());
   const contentTouchStart = useRef<{ x: number; y: number } | null>(null);
 
-  const showPersonStatusAsPopover = (visiblePackProfileMitreisende ?? vacationMitreisende).length > 4;
+  const profileGroups = useMemo(
+    () => buildPackProfileGroups(vacationMitreisende, ownGruppeId),
+    [vacationMitreisende, ownGruppeId]
+  );
+
+  const ownGroupMitreisende = profileGroups.ownGroup;
+
+  /** Inline-Haken vs. „x/y Personen“-Popup: Schwellwert nach eigener Gruppe (Modus „Alle“) */
+  const showPersonStatusAsPopover = ownGroupMitreisende.length > 4;
+
+  const effectiveScopeMitreisende = useMemo(
+    () =>
+      selectedProfile === null
+        ? (packProfileScopeMitreisende ?? vacationMitreisende)
+        : vacationMitreisende,
+    [selectedProfile, packProfileScopeMitreisende, vacationMitreisende]
+  );
+
+  const alleScopeIds = useMemo((): Set<string> | null | undefined => {
+    if (selectedProfile !== null) return undefined;
+    if (!packProfileScopeMitreisende) return null;
+    if (
+      packProfileScopeMitreisende.length >= vacationMitreisende.length &&
+      vacationMitreisende.length > 0
+    ) {
+      return null;
+    }
+    return new Set(packProfileScopeMitreisende.map((m) => m.id));
+  }, [selectedProfile, packProfileScopeMitreisende, vacationMitreisende]);
 
   useEffect(() => {
     return () => {
@@ -867,8 +957,9 @@ export function PackingList({
     abreiseDatum,
     toYYYYMMDD,
     canEditPauschalEntries,
-    vacationMitreisende
-  }), [listDisplayMode, abreiseDatum, toYYYYMMDD, canEditPauschalEntries, vacationMitreisende]);
+    vacationMitreisende: effectiveScopeMitreisende,
+    alleScopeIds,
+  }), [listDisplayMode, abreiseDatum, toYYYYMMDD, canEditPauschalEntries, effectiveScopeMitreisende, alleScopeIds]);
 
   const visibleItems = useMemo(
     () => filterVisibleItemsForProfile(items, selectedProfile, visibleItemsFilterOpts),
@@ -926,13 +1017,17 @@ export function PackingList({
             if (countedAsPacked(mine.gepackt, mine.gepackt_vorgemerkt)) acc.packedCount += 1;
           }
         } else {
-          acc.totalCount += item.mitreisende.length;
-          acc.packedCount += item.mitreisende.filter(m => countedAsPacked(m.gepackt, m.gepackt_vorgemerkt)).length;
+          const scopeSet = alleScopeIds;
+          const relevant = scopeSet
+            ? item.mitreisende.filter((m) => scopeSet.has(m.mitreisender_id))
+            : item.mitreisende;
+          acc.totalCount += relevant.length;
+          acc.packedCount += relevant.filter(m => countedAsPacked(m.gepackt, m.gepackt_vorgemerkt)).length;
         }
       }
       return acc;
     }, { packedCount: 0, totalCount: 0 });
-  }, [visibleItems, selectedProfile, countedAsPacked]);
+  }, [visibleItems, selectedProfile, countedAsPacked, alleScopeIds]);
 
   // IntersectionObserver: erste sichtbare Kategorie im aktiven Tab ermitteln
   useEffect(() => {
@@ -974,8 +1069,8 @@ export function PackingList({
     if (selectedTravelerIds.length === 0) return;
 
     let mitreisendeToProcess = item.mitreisende || [];
-    if (mitreisendeToProcess.length === 0 && item.mitreisenden_typ === 'alle' && vacationMitreisende.length > 0) {
-      mitreisendeToProcess = vacationMitreisende.map(m => ({
+    if (mitreisendeToProcess.length === 0 && item.mitreisenden_typ === 'alle' && effectiveScopeMitreisende.length > 0) {
+      mitreisendeToProcess = effectiveScopeMitreisende.map(m => ({
         mitreisender_id: m.id,
         mitreisender_name: m.name,
         gepackt: false
@@ -1005,9 +1100,9 @@ export function PackingList({
         visible: true,
         itemName: `${item.was} (${travelerNames.join(', ')})`,
         action: () => {
-          const undoUpdates = updates.map(u => ({ ...u, newStatus: !u.newStatus }));
-          setTimeout(() => onToggleMultipleMitreisende(itemId, undoUpdates), 100);
-        }
+          const undoUpdates = updates.map((u) => ({ ...u, newStatus: !u.newStatus }))
+          onToggleMultipleMitreisende(itemId, undoUpdates)
+        },
       });
     }
   };
@@ -1036,9 +1131,24 @@ export function PackingList({
     [sortedProfileMitreisende]
   );
 
+  const statusMitreisende = useMemo(() => {
+    if (!canSelectOtherProfiles) {
+      return sortedProfileMitreisende;
+    }
+    const scoped = packProfileScopeMitreisende ?? vacationMitreisende;
+    const isFullVacationScope =
+      scoped.length >= vacationMitreisende.length && vacationMitreisende.length > 0;
+    return sortMitreisendeNachRolleUndName(isFullVacationScope ? vacationMitreisende : scoped);
+  }, [
+    canSelectOtherProfiles,
+    sortedProfileMitreisende,
+    packProfileScopeMitreisende,
+    vacationMitreisende,
+  ]);
+
   const personPackStatuses = useMemo(() => {
     const isAdmin = !!canConfirmVorgemerkt;
-    return sortedProfileMitreisende.map(person => {
+    return statusMitreisende.map(person => {
       const profileVisible = filterVisibleItemsForProfile(items, person.id, visibleItemsFilterOpts);
       const personItems = filterPersonAssignedItems(profileVisible, person.id);
       let packed = 0;
@@ -1061,7 +1171,108 @@ export function PackingList({
       const allPacked = total === 0 || (open === 0 && pendingConfirmation === 0);
       return { person, allPacked, packed, pendingConfirmation, open, total };
     });
-  }, [sortedProfileMitreisende, items, visibleItemsFilterOpts, canConfirmVorgemerkt]);
+  }, [statusMitreisende, items, visibleItemsFilterOpts, canConfirmVorgemerkt]);
+
+  const personStatusById = useMemo(
+    () => new Map(personPackStatuses.map((s) => [s.person.id, s])),
+    [personPackStatuses]
+  );
+
+  const renderTeamOverviewRow = (
+    person: Mitreisender,
+    index: number,
+    opts: { isCurrent: boolean; subdued: boolean }
+  ) => {
+    const status = personStatusById.get(person.id);
+    if (!status) return null;
+    const { allPacked, packed, pendingConfirmation, total } = status;
+    const preset = person.farbe ? USER_COLORS.find((c) => c.bg === person.farbe) : null;
+    const avatarStyle = person.farbe
+      ? { backgroundColor: person.farbe, color: preset?.fg ?? '#ffffff' }
+      : {
+          backgroundColor: USER_COLORS[index % USER_COLORS.length]!.bg,
+          color: USER_COLORS[index % USER_COLORS.length]!.fg,
+        };
+    const rowContent = (
+      <>
+        <div
+          className={cn(
+            'w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0',
+            opts.subdued && 'opacity-80'
+          )}
+          style={avatarStyle}
+        >
+          {getInitials(person.name, travelerNames)}
+        </div>
+        <div className="flex-1 min-w-0 text-left">
+          <div className="font-medium text-foreground truncate">
+            {person.name}
+            {opts.isCurrent && (
+              <span className="text-xs font-normal text-muted-foreground ml-1">(aktiv)</span>
+            )}
+          </div>
+          <div
+            className={cn(
+              'text-xs flex items-center gap-1 mt-0.5',
+              allPacked ? 'text-brand-heading' : 'text-[#e67e22]'
+            )}
+          >
+            {allPacked ? (
+              <>
+                <CheckCheck className="h-3.5 w-3.5 flex-shrink-0" />
+                Alles gepackt
+              </>
+            ) : (
+              <>
+                <Clock className="h-3.5 w-3.5 flex-shrink-0" />
+                <span>
+                  {total > 0 ? `${packed} von ${total} erledigt` : 'Noch offen'}
+                  {pendingConfirmation > 0 && (
+                    <>
+                      {total > 0 ? ' · ' : ''}
+                      {pendingConfirmation === 1
+                        ? '1 zu kontrollieren'
+                        : `${pendingConfirmation} zu kontrollieren`}
+                    </>
+                  )}
+                </span>
+              </>
+            )}
+          </div>
+        </div>
+        {!allPacked && onProfileChange && (
+          <ChevronRight className="h-5 w-5 text-gray-400 flex-shrink-0" />
+        )}
+      </>
+    );
+    if (!allPacked && onProfileChange) {
+      return (
+        <li key={person.id}>
+          <button
+            type="button"
+            onClick={() => onProfileChange(person.id)}
+            className={cn(
+              'w-full flex items-center gap-3 p-3 rounded-xl border-2 border-subtle hover:border-[rgb(45,79,30)]/40 hover:bg-[rgb(45,79,30)]/5 transition-colors',
+              opts.subdued && 'opacity-90'
+            )}
+          >
+            {rowContent}
+          </button>
+        </li>
+      );
+    }
+    return (
+      <li
+        key={person.id}
+        className={cn(
+          'flex items-center gap-3 p-3 rounded-xl border-2 border-subtle bg-muted/20',
+          opts.subdued && 'opacity-90'
+        )}
+      >
+        {rowContent}
+      </li>
+    );
+  };
 
   const allPersonsFullyPacked = personPackStatuses.every(s => s.allPacked);
 
@@ -1339,85 +1550,33 @@ export function PackingList({
                 <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-3 px-1">
                   Mitreisende
                 </p>
-                <ul className="space-y-2">
-                  {personPackStatuses.map(({ person, allPacked, packed, pendingConfirmation, total }, index) => {
-                    const preset = person.farbe ? USER_COLORS.find(c => c.bg === person.farbe) : null;
-                    const avatarStyle = person.farbe
-                      ? { backgroundColor: person.farbe, color: preset?.fg ?? '#ffffff' }
-                      : { backgroundColor: USER_COLORS[index % USER_COLORS.length]!.bg, color: USER_COLORS[index % USER_COLORS.length]!.fg };
-                    const isCurrent = selectedProfile === person.id;
-                    const rowContent = (
-                      <>
-                        <div
-                          className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0"
-                          style={avatarStyle}
-                        >
-                          {getInitials(person.name, travelerNames)}
-                        </div>
-                        <div className="flex-1 min-w-0 text-left">
-                          <div className="font-medium text-foreground truncate">
-                            {person.name}
-                            {isCurrent && (
-                              <span className="text-xs font-normal text-muted-foreground ml-1">(aktiv)</span>
-                            )}
-                          </div>
-                          <div className={cn(
-                            'text-xs flex items-center gap-1 mt-0.5',
-                            allPacked ? 'text-brand-heading' : 'text-[#e67e22]'
-                          )}>
-                            {allPacked ? (
-                              <>
-                                <CheckCheck className="h-3.5 w-3.5 flex-shrink-0" />
-                                Alles gepackt
-                              </>
-                            ) : (
-                              <>
-                                <Clock className="h-3.5 w-3.5 flex-shrink-0" />
-                                <span>
-                                  {total > 0
-                                    ? `${packed} von ${total} erledigt`
-                                    : 'Noch offen'}
-                                  {pendingConfirmation > 0 && (
-                                    <>
-                                      {total > 0 ? ' · ' : ''}
-                                      {pendingConfirmation === 1
-                                        ? '1 zu kontrollieren'
-                                        : `${pendingConfirmation} zu kontrollieren`}
-                                    </>
-                                  )}
-                                </span>
-                              </>
-                            )}
-                          </div>
-                        </div>
-                        {!allPacked && onProfileChange && (
-                          <ChevronRight className="h-5 w-5 text-gray-400 flex-shrink-0" />
-                        )}
-                      </>
-                    );
-                    if (!allPacked && onProfileChange) {
-                      return (
-                        <li key={person.id}>
-                          <button
-                            type="button"
-                            onClick={() => onProfileChange(person.id)}
-                            className="w-full flex items-center gap-3 p-3 rounded-xl border-2 border-subtle hover:border-[rgb(45,79,30)]/40 hover:bg-[rgb(45,79,30)]/5 transition-colors"
-                          >
-                            {rowContent}
-                          </button>
-                        </li>
-                      );
+                {profileGroups.otherGroups.length > 0 ? (
+                  <PackProfileGroupOverviewList
+                    ownGroup={profileGroups.ownGroup.filter((p) =>
+                      personStatusById.has(p.id)
+                    )}
+                    otherGroups={profileGroups.otherGroups
+                      .map((g) => ({
+                        ...g,
+                        members: g.members.filter((p) => personStatusById.has(p.id)),
+                      }))
+                      .filter((g) => g.members.length > 0)}
+                    selectedProfile={selectedProfile}
+                    onProfileSelect={onProfileChange}
+                    renderRow={(person, index, opts) =>
+                      renderTeamOverviewRow(person, index, opts)
                     }
-                    return (
-                      <li
-                        key={person.id}
-                        className="flex items-center gap-3 p-3 rounded-xl border-2 border-subtle bg-muted/80"
-                      >
-                        {rowContent}
-                      </li>
-                    );
-                  })}
-                </ul>
+                  />
+                ) : (
+                  <ul className="space-y-2">
+                    {personPackStatuses.map(({ person }, index) =>
+                      renderTeamOverviewRow(person, index, {
+                        isCurrent: selectedProfile === person.id,
+                        subdued: false,
+                      })
+                    )}
+                  </ul>
+                )}
               </CardContent>
             </Card>
           </div>
@@ -1491,7 +1650,8 @@ export function PackingList({
                               fullItem={item}
                               selectedProfile={selectedProfile}
                               hidePackedItems={hidePackedItems}
-                              vacationMitreisende={vacationMitreisende}
+                              vacationMitreisende={effectiveScopeMitreisende}
+                              ownGroupMitreisende={ownGroupMitreisende}
                               transportVehicles={transportVehicles}
                               showPersonStatusAsPopover={showPersonStatusAsPopover}
                               onMarkAllConfirm={(ids) => handleMarkAllForItem(item, ids)}
@@ -1507,17 +1667,16 @@ export function PackingList({
           ))}
         </>
         )}
-        {/* Undo Toast */}
-        {undoToast && (
-          <UndoToast
-            isVisible={undoToast.visible}
-            itemName={undoToast.itemName}
-            onUndo={undoToast.action}
-            onDismiss={() => setUndoToast(null)}
-          />
-        )}
         </div>
       </div>
+      {undoToast && (
+        <UndoToast
+          isVisible={undoToast.visible}
+          itemName={undoToast.itemName}
+          onUndo={undoToast.action}
+          onDismiss={() => setUndoToast(null)}
+        />
+      )}
     </Tabs>
   );
 }

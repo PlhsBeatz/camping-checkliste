@@ -7,18 +7,19 @@ import {
   confirmVorgemerktForMitreisender,
   getVacationIdFromPackingItem,
   getMitreisendeForVacation,
+  getMitreisenderStammdaten,
+  getMitreisendeBerechtigungen,
 } from '@/lib/db'
 import { notifyPackingSyncChange } from '@/lib/packing-sync'
 import { notifyIntegrationChange } from '@/lib/integration-events'
-import { requireAuth, requireAdmin } from '@/lib/api-auth'
-import { canAccessVacation } from '@/lib/permissions'
+import { requireAuth } from '@/lib/api-auth'
+import { isAdminRole } from '@/lib/auth'
+import { canAccessVacation, canConfirmVorgemerktForChild } from '@/lib/permissions'
 
 export async function POST(request: NextRequest) {
   try {
     const auth = await requireAuth(request)
     if (auth instanceof NextResponse) return auth
-    const adminCheck = requireAdmin(auth.userContext)
-    if (adminCheck) return adminCheck
 
     const env = process.env as unknown as CloudflareEnv
     const db = await getDB(env)
@@ -38,9 +39,22 @@ export async function POST(request: NextRequest) {
     const vacationId = await getVacationIdFromPackingItem(db, packingItemId)
     if (vacationId) {
       const mitreisende = await getMitreisendeForVacation(db, vacationId)
-      if (!canAccessVacation(auth.userContext, mitreisende.map(m => m.id))) {
+      if (!canAccessVacation(auth.userContext, mitreisende.map((m) => m.id))) {
         return NextResponse.json({ error: 'Keine Berechtigung' }, { status: 403 })
       }
+    }
+
+    if (mitreisenderId) {
+      const stamm = await getMitreisenderStammdaten(db, mitreisenderId)
+      if (!stamm) {
+        return NextResponse.json({ error: 'Mitreisender nicht gefunden' }, { status: 404 })
+      }
+      const childPerms = await getMitreisendeBerechtigungen(db, mitreisenderId)
+      if (!canConfirmVorgemerktForChild(auth.userContext, stamm, childPerms)) {
+        return NextResponse.json({ error: 'Keine Berechtigung' }, { status: 403 })
+      }
+    } else if (!isAdminRole(auth.userContext.role)) {
+      return NextResponse.json({ error: 'Keine Berechtigung' }, { status: 403 })
     }
 
     let success: boolean

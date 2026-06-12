@@ -402,7 +402,7 @@ export default function IntegrationenPage() {
 
   return (
     <>
-      <ConfigPageLayout>
+      <ConfigPageLayout requireSystemAdmin>
         <div className="space-y-6 pb-6">
             {message && (
               <div className="rounded-md border bg-card px-4 py-3 text-sm flex items-start justify-between gap-2">

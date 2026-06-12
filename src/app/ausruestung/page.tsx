@@ -69,19 +69,20 @@ type TagGroupForEquipment = { kat: TagKategorie; tags: Tag[] }
 type MitreisendenZeile = {
   id: string
   name: string
-  is_default_member: boolean
+  urlaub_standard_mitnehmen: boolean
   user_id?: string | null
   user_role?: Mitreisender['user_role']
+  personentyp?: Mitreisender['personentyp']
 }
 
 function mitreisendenZeileAusApi(m: Mitreisender): MitreisendenZeile {
-  const v = m.is_default_member as boolean | number | undefined
   return {
     id: m.id,
     name: m.name,
-    is_default_member: v === true || v === 1,
+    urlaub_standard_mitnehmen: m.urlaub_standard_mitnehmen === true,
     user_id: m.user_id ?? null,
     user_role: m.user_role ?? null,
+    personentyp: m.personentyp,
   }
 }
 
@@ -100,12 +101,12 @@ function IndividuelleMitreisendeAuswahl({
 }) {
   const standardMit = useMemo(
     () =>
-      sortMitreisendeNachRolleUndName(mitreisende.filter((m) => m.is_default_member)),
+      sortMitreisendeNachRolleUndName(mitreisende.filter((m) => m.urlaub_standard_mitnehmen)),
     [mitreisende]
   )
   const weitereMit = useMemo(
     () =>
-      sortMitreisendeNachRolleUndName(mitreisende.filter((m) => !m.is_default_member)),
+      sortMitreisendeNachRolleUndName(mitreisende.filter((m) => !m.urlaub_standard_mitnehmen)),
     [mitreisende]
   )
   const kannEinklappen = standardMit.length > 0 && weitereMit.length > 0
@@ -458,7 +459,7 @@ export default function AusruestungPage() {
     if (!showEditDialog || !editingItem) return
     const picks = editingItem.standard_mitreisende ?? []
     const brauchtWeitere = picks.some((id) =>
-      mitreisende.some((m) => m.id === id && !m.is_default_member)
+      mitreisende.some((m) => m.id === id && !m.urlaub_standard_mitnehmen)
     )
     if (brauchtWeitere) setIndividuelleMitreisendeExtraOffen(true)
   }, [showEditDialog, editingItem, mitreisende])

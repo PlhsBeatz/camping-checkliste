@@ -1,9 +1,13 @@
 /**
  * Authentifizierung mit PBKDF2 (Cloudflare Workers-kompatibel) und JWT
+ * Kein next/headers — Client Components nutzen @/lib/user-roles.
  */
 
 import * as jose from 'jose'
-import { cookies } from 'next/headers'
+import type { SessionUser, UserRole } from '@/lib/user-roles'
+
+export type { SessionUser, UserRole } from '@/lib/user-roles'
+export { isAdminRole, isSystemAdminRole } from '@/lib/user-roles'
 
 const SALT_LENGTH = 16
 const ITERATIONS = 100_000
@@ -15,15 +19,6 @@ const TOKEN_AGE_SEC = 365 * 24 * 60 * 60 // 1 Jahr
 
 /** Wenn die verbleibende JWT-Lebensdauer darunter fällt, wird in der Middleware neu ausgestellt */
 export const TOKEN_ROTATE_IF_REMAINING_SEC = 14 * 24 * 60 * 60 // 14 Tage
-
-export type UserRole = 'admin' | 'kind' | 'gast'
-
-export interface SessionUser {
-  id: string
-  email: string
-  role: UserRole
-  mitreisender_id: string | null
-}
 
 export interface JWTPayload {
   sub: string // user id
@@ -196,23 +191,6 @@ export async function getSession(request: Request): Promise<SessionUser | null> 
     role: payload.role,
     mitreisender_id: payload.mitreisender_id ?? null
   }
-}
-
-/** Session aus Next.js cookies (Server Components) */
-export async function getSessionFromCookies(): Promise<SessionUser | null> {
-  const cookieStore = await cookies()
-  const token = cookieStore.get(COOKIE_NAME)?.value
-  if (!token) return null
-  return verifyToken(token).then(p =>
-    p
-      ? {
-          id: p.sub,
-          email: p.email,
-          role: p.role,
-          mitreisender_id: p.mitreisender_id ?? null
-        }
-      : null
-  )
 }
 
 export { COOKIE_NAME, TOKEN_AGE_SEC }

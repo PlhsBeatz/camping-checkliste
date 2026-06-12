@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDB, getVacations, getPackingItems, type CloudflareEnv } from '@/lib/db'
-import { requireAuth, requireAdmin } from '@/lib/api-auth'
+import { requireAuth, requireSystemAdmin } from '@/lib/api-auth'
 import { buildTripStatusPayload, findRelevantVacation } from '@/lib/trip-readiness'
 import { processIntegrationCron } from '@/lib/integration-events'
 
@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
   try {
     const auth = await requireAuth(request)
     if (auth instanceof NextResponse) return auth
-    const adminErr = requireAdmin(auth.userContext)
+    const adminErr = requireSystemAdmin(auth.userContext)
     if (adminErr) return adminErr
 
     const env = process.env as unknown as CloudflareEnv

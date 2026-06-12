@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDB, getCampingPhotosR2, type CloudflareEnv } from '@/lib/db'
-import { requireAuth, requireAdmin } from '@/lib/api-auth'
+import { requireAuth, requireSystemAdmin } from '@/lib/api-auth'
 import { buildBackupBundle, type BackupPreset, type ExportOptions } from '@/lib/data-backup'
 import { buildBackupZipBuffer } from '@/lib/data-backup/backup-zip'
 
@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
   try {
     const auth = await requireAuth(request)
     if (auth instanceof NextResponse) return auth
-    const adminErr = requireAdmin(auth.userContext)
+    const adminErr = requireSystemAdmin(auth.userContext)
     if (adminErr) return adminErr
 
     let body: Record<string, unknown>

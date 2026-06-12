@@ -6,8 +6,8 @@ export default function KonfigurationPage() {
   return (
     <ConfigPageLayout>
       <p className="text-sm text-muted-foreground max-w-2xl">
-        Hier verwalten Sie Stammdaten, Personen, Transportmittel sowie Datensicherung und
-        Integrationen. Wählen Sie einen Bereich in der Navigation.
+        Hier verwalten Sie Stammdaten, Personen und Transportmittel. Datensicherung und
+        Integrationen sind nur für System-Administratoren verfügbar.
       </p>
     </ConfigPageLayout>
   )

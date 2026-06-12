@@ -43,8 +43,10 @@ import { notifyVacationSearchParamChanged } from '@/hooks/use-vacation-search-pa
 import { format, isSameMonth, isSameYear } from 'date-fns'
 import { de } from 'date-fns/locale'
 import Image from 'next/image'
+import { useAuth } from '@/components/auth-provider'
 
 function UrlaubePageContent() {
+  const { canAccessConfig } = useAuth()
   const router = useRouter()
   const searchParams = useSearchParams()
   const filterCampingplatzId = searchParams.get('campingplatz')
@@ -492,7 +494,9 @@ function UrlaubePageContent() {
                   <p className="text-center text-muted-foreground">
                     {filterCampingplatzId
                       ? 'Keine Urlaube mit diesem Campingplatz.'
-                      : 'Keine Urlaube vorhanden. Erstellen Sie einen neuen Urlaub!'}
+                      : canAccessConfig
+                        ? 'Keine Urlaube vorhanden. Erstellen Sie einen neuen Urlaub!'
+                        : 'Keine Urlaube vorhanden.'}
                   </p>
                 </CardContent>
               </Card>
@@ -528,6 +532,7 @@ function UrlaubePageContent() {
                           </div>
                         </div>
                       </div>
+                      {canAccessConfig && (
                       <DropdownMenu modal={false} open={openMenuId === vacation.id} onOpenChange={(o) => setOpenMenuId(o ? vacation.id : null)}>
                         <DropdownMenuTrigger asChild>
                           <Button
@@ -563,6 +568,7 @@ function UrlaubePageContent() {
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
+                      )}
                     </div>
                   </CardHeader>
                   <CardContent>
@@ -673,7 +679,8 @@ function UrlaubePageContent() {
           </div>
         </div>
 
-        {/* FAB: Neuer Urlaub - Plus-Symbol, runder Kreis wie Ausrüstung und Packliste */}
+        {/* FAB: Neuer Urlaub – nur Admin */}
+        {canAccessConfig && (
         <div className="fixed bottom-6 right-6 z-30">
           <Button
             size="icon"
@@ -686,6 +693,7 @@ function UrlaubePageContent() {
             <Plus className="h-6 w-6" strokeWidth={2.5} />
           </Button>
         </div>
+        )}
       </div>
 
     </div>

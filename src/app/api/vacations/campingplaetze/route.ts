@@ -10,6 +10,7 @@ import {
   type CampingStayInput,
 } from '@/lib/db'
 import { requireAuth, requireAdmin } from '@/lib/api-auth'
+import { isAdminRole } from '@/lib/auth'
 
 export async function GET(request: NextRequest) {
   try {
@@ -23,7 +24,10 @@ export async function GET(request: NextRequest) {
     const db = await getDB(env)
 
     if (!vacationId) {
-      const mitreisenderFilter = userContext.role === 'gast' ? userContext.mitreisenderId : undefined
+      const mitreisenderFilter =
+        !isAdminRole(userContext.role) && userContext.mitreisenderId
+          ? userContext.mitreisenderId
+          : undefined
       const vacations = await getVacations(db, mitreisenderFilter)
       const ids = vacations.map((v) => v.id)
       const byVacation = await getCampingplaetzeForVacationsBatch(db, ids)

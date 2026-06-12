@@ -76,9 +76,28 @@ export interface Mitreisender {
   /** E-Mail des zugeordneten Users (nur wenn user_id gesetzt) */
   user_email?: string | null
   /** Rolle des zugeordneten Users (nur wenn user_id gesetzt) */
-  user_role?: 'admin' | 'kind' | 'gast' | null
+  user_role?: UserRole | null
+  /** @deprecated Nutze gruppe_id / Reisegruppe */
   is_default_member: boolean
+  /** Reisegruppe */
+  gruppe_id?: string | null
+  gruppe_name?: string | null
+  /** Personentyp für Pack-Logik */
+  personentyp?: Personentyp
+  /** Gruppe wird bei neuen Urlauben vorausgewählt */
+  urlaub_standard_mitnehmen?: boolean
   farbe?: string | null
+  created_at: string
+}
+
+export type Personentyp = 'erwachsen' | 'kind'
+
+export interface MitreisendenGruppe {
+  id: string
+  name: string
+  sort_order: number
+  ist_standard_familie: boolean
+  urlaub_standard_mitnehmen: boolean
   created_at: string
 }
 
@@ -262,7 +281,7 @@ export interface VacationCampingStay {
   campingplatz: Campingplatz
 }
 
-export type UserRole = 'admin' | 'kind' | 'gast'
+export type UserRole = import('./user-roles').UserRole
 
 export interface User {
   id: string
@@ -286,7 +305,7 @@ export interface Einladung {
   id: string
   token: string
   mitreisender_id: string
-  role: 'kind' | 'gast'
+  role: 'admin' | 'standard'
   erstellt_von: string | null
   eingeladen_am: string
   angenommen_am: string | null
@@ -2169,21 +2188,218 @@ export async function getPacklisteId(db: D1Database, vacationId: string): Promis
 /**
  * Abrufen aller Mitreisenden
  */
-export async function getMitreisende(db: D1Database): Promise<Mitreisender[]> {
+function sqliteBool(v: unknown): boolean {
+  return v === true || v === 1
+}
+
+type MitreisenderRowRaw = {
+  id: string
+  name: string
+  user_id?: string | null
+  user_email?: string | null
+  user_role?: string | null
+  gruppe_name?: string | null
+  gruppe_id?: string | null
+  urlaub_standard_mitnehmen?: number | boolean | null
+  is_default_member?: number | boolean
+  personentyp?: string | null
+  farbe?: string | null
+  created_at: string
+}
+
+function mapMitreisenderRow(r: MitreisenderRowRaw): Mitreisender {
+  return {
+    id: r.id,
+    name: r.name,
+    user_id: r.user_id ?? null,
+    user_email: r.user_email ?? null,
+    user_role: (r.user_role as UserRole | null) ?? null,
+    is_default_member: sqliteBool(r.is_default_member),
+    personentyp: (r.personentyp === 'kind' ? 'kind' : 'erwachsen') as Personentyp,
+    gruppe_id: r.gruppe_id ?? null,
+    gruppe_name: r.gruppe_name ?? null,
+    urlaub_standard_mitnehmen: sqliteBool(r.urlaub_standard_mitnehmen),
+    farbe: r.farbe ?? null,
+    created_at: r.created_at,
+  }
+}
+
+const MITREISENDE_SELECT = `
+  SELECT m.*, u.email as user_email, u.role as user_role,
+         g.name as gruppe_name, g.urlaub_standard_mitnehmen
+  FROM mitreisende m
+  LEFT JOIN users u ON m.user_id = u.id
+  LEFT JOIN mitreisenden_gruppe g ON m.gruppe_id = g.id
+`
+
+export async function getMitreisendenGruppen(db: D1Database): Promise<MitreisendenGruppe[]> {
   try {
     const result = await db
-      .prepare(`
-        SELECT m.*, u.email as user_email, u.role as user_role
-        FROM mitreisende m
-        LEFT JOIN users u ON m.user_id = u.id
-        ORDER BY m.name
-      `)
-      .all<Mitreisender & { user_email?: string | null; user_role?: string }>()
-    return (result.results || []).map((r) => ({
-      ...r,
-      user_email: r.user_email ?? null,
-      user_role: r.user_role as Mitreisender['user_role'] | undefined
+      .prepare(
+        'SELECT * FROM mitreisenden_gruppe ORDER BY sort_order ASC, name ASC'
+      )
+      .all<{
+        id: string
+        name: string
+        sort_order: number
+        ist_standard_familie: number
+        urlaub_standard_mitnehmen: number
+        created_at: string
+      }>()
+    return (result.results || []).map((g) => ({
+      id: g.id,
+      name: g.name,
+      sort_order: g.sort_order,
+      created_at: g.created_at,
+      ist_standard_familie: g.ist_standard_familie === 1,
+      urlaub_standard_mitnehmen: g.urlaub_standard_mitnehmen === 1,
     }))
+  } catch (error) {
+    console.error('Error fetching mitreisenden_gruppe:', error)
+    return []
+  }
+}
+
+export async function countMitreisendeInGruppe(db: D1Database, gruppeId: string): Promise<number> {
+  const row = await db
+    .prepare('SELECT COUNT(*) AS c FROM mitreisende WHERE gruppe_id = ?')
+    .bind(gruppeId)
+    .first<{ c: number }>()
+  return row?.c ?? 0
+}
+
+export async function createMitreisendenGruppe(
+  db: D1Database,
+  name: string,
+  options: { urlaubStandardMitnehmen?: boolean; sortOrder?: number } = {}
+): Promise<string | null> {
+  try {
+    const trimmed = name.trim()
+    if (!trimmed) return null
+    const id = crypto.randomUUID()
+    let sortOrder = options.sortOrder
+    if (sortOrder === undefined) {
+      const maxRow = await db
+        .prepare('SELECT COALESCE(MAX(sort_order), -1) AS m FROM mitreisenden_gruppe')
+        .first<{ m: number }>()
+      sortOrder = (maxRow?.m ?? -1) + 1
+    }
+    await db
+      .prepare(
+        `INSERT INTO mitreisenden_gruppe (id, name, sort_order, ist_standard_familie, urlaub_standard_mitnehmen)
+         VALUES (?, ?, ?, 0, ?)`
+      )
+      .bind(id, trimmed, sortOrder, options.urlaubStandardMitnehmen ? 1 : 0)
+      .run()
+    return id
+  } catch (error) {
+    console.error('Error creating mitreisenden_gruppe:', error)
+    return null
+  }
+}
+
+export async function updateMitreisendenGruppe(
+  db: D1Database,
+  id: string,
+  options: {
+    name?: string
+    urlaubStandardMitnehmen?: boolean
+    sortOrder?: number
+  }
+): Promise<boolean> {
+  try {
+    const fields: string[] = []
+    const values: (string | number)[] = []
+    if (options.name !== undefined) {
+      const trimmed = options.name.trim()
+      if (!trimmed) return false
+      fields.push('name = ?')
+      values.push(trimmed)
+    }
+    if (options.urlaubStandardMitnehmen !== undefined) {
+      fields.push('urlaub_standard_mitnehmen = ?')
+      values.push(options.urlaubStandardMitnehmen ? 1 : 0)
+    }
+    if (options.sortOrder !== undefined) {
+      fields.push('sort_order = ?')
+      values.push(options.sortOrder)
+    }
+    if (fields.length === 0) return true
+    values.push(id)
+    const result = await db
+      .prepare(`UPDATE mitreisenden_gruppe SET ${fields.join(', ')} WHERE id = ?`)
+      .bind(...values)
+      .run()
+    return (result.meta.changes ?? 0) > 0
+  } catch (error) {
+    console.error('Error updating mitreisenden_gruppe:', error)
+    return false
+  }
+}
+
+export async function deleteMitreisendenGruppe(db: D1Database, id: string): Promise<boolean> {
+  try {
+    const count = await countMitreisendeInGruppe(db, id)
+    if (count > 0) return false
+    const result = await db
+      .prepare('DELETE FROM mitreisenden_gruppe WHERE id = ?')
+      .bind(id)
+      .run()
+    return (result.meta.changes ?? 0) > 0
+  } catch (error) {
+    console.error('Error deleting mitreisenden_gruppe:', error)
+    return false
+  }
+}
+
+async function resolveDefaultGruppeId(db: D1Database, preferStandard: boolean): Promise<string> {
+  if (preferStandard) {
+    const row = await db
+      .prepare(
+        `SELECT id FROM mitreisenden_gruppe
+         WHERE urlaub_standard_mitnehmen = 1
+         ORDER BY sort_order ASC, name ASC LIMIT 1`
+      )
+      .first<{ id: string }>()
+    if (row?.id) return row.id
+  }
+  const fallback = await db
+    .prepare(
+      `SELECT id FROM mitreisenden_gruppe ORDER BY sort_order ASC, name ASC LIMIT 1`
+    )
+    .first<{ id: string }>()
+  return fallback?.id ?? (preferStandard ? 'grp-familie' : 'grp-weitere')
+}
+
+export async function mitreisendenGruppeExists(db: D1Database, id: string): Promise<boolean> {
+  const row = await db
+    .prepare('SELECT 1 AS ok FROM mitreisenden_gruppe WHERE id = ?')
+    .bind(id)
+    .first<{ ok: number }>()
+  return row != null
+}
+
+export async function getMitreisenderStammdaten(
+  db: D1Database,
+  id: string
+): Promise<{ personentyp: Personentyp; gruppe_id: string | null } | null> {
+  const row = await db
+    .prepare('SELECT personentyp, gruppe_id FROM mitreisende WHERE id = ?')
+    .bind(id)
+    .first<{ personentyp: string; gruppe_id: string | null }>()
+  if (!row) return null
+  return {
+    personentyp: row.personentyp === 'kind' ? 'kind' : 'erwachsen',
+    gruppe_id: row.gruppe_id,
+  }
+}
+
+export async function getMitreisende(db: D1Database): Promise<Mitreisender[]> {
+  try {
+    const result = await db.prepare(`${MITREISENDE_SELECT} ORDER BY m.name`).all()
+    return (result.results || []).map((r) =>
+      mapMitreisenderRow(r as unknown as MitreisenderRowRaw)
+    )
   } catch (error) {
     console.error('Error fetching mitreisende:', error)
     return []
@@ -2195,24 +2411,18 @@ export async function getMitreisende(db: D1Database): Promise<Mitreisender[]> {
  */
 export async function getMitreisendeForVacation(db: D1Database, vacationId: string): Promise<Mitreisender[]> {
   try {
-    // user_email/user_role per LEFT JOIN mitladen – wichtig für die Auswertung
-    // von Mengenregeln (Kind-Erkennung über user_role === 'kind').
     const result = await db
       .prepare(`
-        SELECT m.*, u.email as user_email, u.role as user_role
-        FROM mitreisende m
+        ${MITREISENDE_SELECT}
         INNER JOIN urlaub_mitreisende um ON m.id = um.mitreisender_id
-        LEFT JOIN users u ON m.user_id = u.id
         WHERE um.urlaub_id = ?
         ORDER BY m.name
       `)
       .bind(vacationId)
-      .all<Mitreisender & { user_email?: string | null; user_role?: string }>()
-    return (result.results || []).map((r) => ({
-      ...r,
-      user_email: r.user_email ?? null,
-      user_role: r.user_role as Mitreisender['user_role'] | undefined,
-    }))
+      .all()
+    return (result.results || []).map((r) =>
+      mapMitreisenderRow(r as unknown as MitreisenderRowRaw)
+    )
   } catch (error) {
     console.error('Error fetching mitreisende for vacation:', error)
     return []
@@ -2225,20 +2435,43 @@ export async function getMitreisendeForVacation(db: D1Database, vacationId: stri
 export async function createMitreisender(
   db: D1Database,
   name: string,
-  userId?: string | null,
-  isDefaultMember: boolean = false,
-  farbe?: string | null
+  options: {
+    userId?: string | null
+    isDefaultMember?: boolean
+    gruppeId?: string | null
+    personentyp?: Personentyp
+    farbe?: string | null
+  } = {}
 ): Promise<string | null> {
   try {
     const id = crypto.randomUUID()
+    let gruppeId = options.gruppeId ?? null
+    if (!gruppeId) {
+      gruppeId = await resolveDefaultGruppeId(db, options.isDefaultMember !== false)
+    } else if (!(await mitreisendenGruppeExists(db, gruppeId))) {
+      throw new Error('Die gewählte Reisegruppe existiert nicht.')
+    }
+    const personentyp = options.personentyp ?? 'erwachsen'
+    const defaultGruppe = await resolveDefaultGruppeId(db, true)
+    const isDefault = options.isDefaultMember ?? gruppeId === defaultGruppe
     await db
-      .prepare('INSERT INTO mitreisende (id, name, user_id, is_default_member, farbe) VALUES (?, ?, ?, ?, ?)')
-      .bind(id, name, userId || null, isDefaultMember ? 1 : 0, farbe || null)
+      .prepare(
+        'INSERT INTO mitreisende (id, name, user_id, is_default_member, farbe, gruppe_id, personentyp) VALUES (?, ?, ?, ?, ?, ?, ?)'
+      )
+      .bind(
+        id,
+        name,
+        options.userId || null,
+        isDefault ? 1 : 0,
+        options.farbe || null,
+        gruppeId,
+        personentyp
+      )
       .run()
     return id
   } catch (error) {
     console.error('Error creating mitreisender:', error)
-    return null
+    throw error instanceof Error ? error : new Error(String(error))
   }
 }
 
@@ -2249,26 +2482,47 @@ export async function updateMitreisender(
   db: D1Database,
   id: string,
   name: string,
-  userId?: string | null,
-  isDefaultMember?: boolean,
-  farbe?: string | null
+  options: {
+    userId?: string | null
+    isDefaultMember?: boolean
+    gruppeId?: string | null
+    personentyp?: Personentyp
+    farbe?: string | null
+  } = {}
 ): Promise<boolean> {
   try {
-    if (isDefaultMember !== undefined) {
-      await db
-        .prepare('UPDATE mitreisende SET name = ?, user_id = ?, is_default_member = ?, farbe = ? WHERE id = ?')
-        .bind(name, userId || null, isDefaultMember ? 1 : 0, farbe ?? null, id)
-        .run()
-    } else {
-      await db
-        .prepare('UPDATE mitreisende SET name = ?, user_id = ?, farbe = ? WHERE id = ?')
-        .bind(name, userId || null, farbe ?? null, id)
-        .run()
+    const fields: string[] = ['name = ?', 'user_id = ?', 'farbe = ?']
+    const values: (string | number | null)[] = [
+      name,
+      options.userId ?? null,
+      options.farbe ?? null,
+    ]
+
+    if (options.isDefaultMember !== undefined) {
+      fields.push('is_default_member = ?')
+      values.push(options.isDefaultMember ? 1 : 0)
     }
+    if (options.gruppeId !== undefined) {
+      if (options.gruppeId !== null && !(await mitreisendenGruppeExists(db, options.gruppeId))) {
+        throw new Error('Die gewählte Reisegruppe existiert nicht.')
+      }
+      fields.push('gruppe_id = ?')
+      values.push(options.gruppeId)
+    }
+    if (options.personentyp !== undefined) {
+      fields.push('personentyp = ?')
+      values.push(options.personentyp)
+    }
+
+    values.push(id)
+    await db
+      .prepare(`UPDATE mitreisende SET ${fields.join(', ')} WHERE id = ?`)
+      .bind(...values)
+      .run()
     return true
   } catch (error) {
     console.error('Error updating mitreisender:', error)
-    return false
+    throw error instanceof Error ? error : new Error(String(error))
   }
 }
 
@@ -2823,14 +3077,20 @@ export async function deleteCategory(db: D1Database, id: string): Promise<boolea
 }
 
 /**
- * Abrufen aller Standard-Mitreisenden (is_default_member = true)
+ * Mitreisende der Gruppen mit urlaub_standard_mitnehmen (Vorauswahl neuer Urlaube)
  */
 export async function getDefaultMitreisende(db: D1Database): Promise<Mitreisender[]> {
   try {
     const result = await db
-      .prepare('SELECT * FROM mitreisende WHERE is_default_member = 1 ORDER BY name')
-      .all<Mitreisender>()
-    return result.results || []
+      .prepare(`
+        ${MITREISENDE_SELECT}
+        WHERE g.urlaub_standard_mitnehmen = 1
+        ORDER BY m.name
+      `)
+      .all()
+    return (result.results || []).map((r) =>
+      mapMitreisenderRow(r as unknown as MitreisenderRowRaw)
+    )
   } catch (error) {
     console.error('Error fetching default mitreisende:', error)
     return []
@@ -4400,7 +4660,7 @@ export async function getInvitationByToken(
 export async function createInvitation(
   db: D1Database,
   mitreisenderId: string,
-  role: 'admin' | 'kind' | 'gast',
+  role: 'admin' | 'standard',
   createdByUserId: string
 ): Promise<{ id: string; token: string } | null> {
   try {

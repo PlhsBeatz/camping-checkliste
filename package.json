@@ -10,7 +10,11 @@
     "build:worker": "opennextjs-cloudflare build",
     "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
     "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
-    "cf-typegen": "wrangler types --env-interface CloudflareEnv env.d.ts"
+    "cf-typegen": "wrangler types --env-interface CloudflareEnv env.d.ts",
+    "db:migrate:0026": "powershell -ExecutionPolicy Bypass -File ./scripts/migrate-0026.ps1",
+    "db:migrate:0026:remote": "powershell -ExecutionPolicy Bypass -File ./scripts/migrate-0026.ps1 -Remote",
+    "db:repair:mitreisende": "powershell -ExecutionPolicy Bypass -File ./scripts/repair-mitreisende-schema.ps1",
+    "db:repair:mitreisende:remote": "powershell -ExecutionPolicy Bypass -File ./scripts/repair-mitreisende-schema.ps1 -Remote"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

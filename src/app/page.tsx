@@ -45,6 +45,11 @@ import { CategoryGroupedSelectField } from '@/components/category-select-grouped
 import { cn, formatWeight, getInitials } from '@/lib/utils'
 import { getMitreisenderAvatarStyle } from '@/lib/user-colors'
 import { useAuth } from '@/components/auth-provider'
+import { isAdminRole } from '@/lib/user-roles'
+import {
+  getPackProfileScopeMitreisende,
+  resolveOwnGruppeId,
+} from '@/lib/pack-profile-groups'
 import { useVacationSearchParam } from '@/hooks/use-vacation-search-param'
 import {
   getInitialPacklistUiState,
@@ -136,6 +141,44 @@ function HomeContent() {
   const packingHadContentRef = useRef(false)
   const [transportVehicles, setTransportVehicles] = useState<TransportVehicle[]>([])
   const [vacationMitreisende, setVacationMitreisende] = useState<Mitreisender[]>([])
+  const packProfileMitreisende = useMemo(() => {
+    if (!canSelectOtherProfiles) {
+      return user?.mitreisender_id
+        ? vacationMitreisende.filter((m) => m.id === user.mitreisender_id)
+        : []
+    }
+    if (user && isAdminRole(user.role)) {
+      return vacationMitreisende
+    }
+    if (user?.gruppe_id) {
+      return vacationMitreisende.filter((m) => m.gruppe_id === user.gruppe_id)
+    }
+    return user?.mitreisender_id
+      ? vacationMitreisende.filter((m) => m.id === user.mitreisender_id)
+      : []
+  }, [canSelectOtherProfiles, user, vacationMitreisende])
+  const ownGruppeId = useMemo(
+    () => resolveOwnGruppeId(user?.gruppe_id, vacationMitreisende),
+    [user?.gruppe_id, vacationMitreisende]
+  )
+  const packProfileScopeMitreisende = useMemo(
+    () =>
+      getPackProfileScopeMitreisende(vacationMitreisende, {
+        canSelectOtherProfiles,
+        isAdmin: !!user && isAdminRole(user.role),
+        ownGruppeId,
+        ownMitreisenderId: user?.mitreisender_id ?? null,
+      }),
+    [vacationMitreisende, canSelectOtherProfiles, user, ownGruppeId]
+  )
+  const alleOptionHint = useMemo(() => {
+    if (user && isAdminRole(user.role)) return 'Übersicht aller Mitreisenden'
+    return 'Übersicht Ihrer Reisegruppe'
+  }, [user])
+  const sidebarVacationMitreisende = useMemo(() => {
+    if (user && isAdminRole(user.role)) return vacationMitreisende
+    return packProfileMitreisende
+  }, [user, vacationMitreisende, packProfileMitreisende])
   const [selectedVacationId, setSelectedVacationId] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   
@@ -1783,7 +1826,7 @@ function HomeContent() {
                   onDelete={handleDeletePackingItem}
                   onConfirmVorgemerkt={handleConfirmVorgemerkt}
                   onRemoveVorgemerkt={handleRemoveVorgemerkt}
-                  canConfirmVorgemerkt={canAccessConfig}
+                  canConfirmVorgemerkt={canSelectOtherProfiles}
                   selectedProfile={selectedPackProfile}
                   hidePackedItems={hidePackedItems}
                   canEditPauschalEntries={canEditPauschalEntries}
@@ -1793,11 +1836,9 @@ function HomeContent() {
                   onOpenSettings={() => setShowPackSettings(true)}
                   vacationMitreisende={vacationMitreisende}
                   transportVehicles={transportVehicles}
-                  visiblePackProfileMitreisende={
-                    canSelectOtherProfiles || !user?.mitreisender_id
-                      ? vacationMitreisende
-                      : vacationMitreisende.filter((m) => m.id === user.mitreisender_id)
-                  }
+                  visiblePackProfileMitreisende={packProfileMitreisende}
+                  ownGruppeId={ownGruppeId}
+                  packProfileScopeMitreisende={packProfileScopeMitreisende}
                   abreiseDatum={currentVacation?.abfahrtdatum?.trim() || currentVacation?.startdatum || null}
                   onScrollContextChange={handleScrollContextChange}
                   canSelectOtherProfiles={canSelectOtherProfiles}
@@ -1806,12 +1847,15 @@ function HomeContent() {
                   onProfileChange={handlePackProfileChange}
               />
 
-              {/* Auto-generate button - Only when list is empty */}
+              {/* Auto-generate button - Only when list is empty (Admin/Erwachsene) */}
               {packingItems.length === 0 && !packingHadContentRef.current && (
                 <div className="p-6 text-center bg-card">
                   <p className="text-muted-foreground mb-4">
-                    Ihre Packliste ist leer. Generieren Sie automatisch Vorschläge oder fügen Sie manuell Gegenstände hinzu.
+                    {canSelectOtherProfiles
+                      ? 'Ihre Packliste ist leer. Generieren Sie automatisch Vorschläge oder fügen Sie manuell Gegenstände hinzu.'
+                      : 'Ihre Packliste ist leer.'}
                   </p>
+                  {canSelectOtherProfiles && (
                   <Button 
                     onClick={() => setShowGeneratorDialog(true)}
                     size="lg"
@@ -1820,6 +1864,7 @@ function HomeContent() {
                     <Sparkles className="h-4 w-4 mr-2" />
                     Automatisch generieren
                   </Button>
+                  )}
                 </div>
               )}
             </div>
@@ -1985,11 +2030,8 @@ function HomeContent() {
       <PackingSettingsSidebar
         isOpen={showPackSettings}
         onClose={() => setShowPackSettings(false)}
-        mitreisende={
-          canSelectOtherProfiles || !user?.mitreisender_id
-            ? vacationMitreisende
-            : vacationMitreisende.filter((m) => m.id === user.mitreisender_id)
-        }
+        vacationMitreisende={sidebarVacationMitreisende}
+        ownGruppeId={ownGruppeId}
         selectedProfile={selectedPackProfile}
         onProfileChange={handlePackProfileChange}
         hidePackedItems={hidePackedItems}
@@ -1997,13 +2039,14 @@ function HomeContent() {
         listDisplayMode={listDisplayMode}
         onListDisplayModeChange={handleListDisplayModeChange}
         showAlleOption={canSelectOtherProfiles}
+        alleOptionHint={alleOptionHint}
         profilesLoading={
           !!selectedVacationId && vacationMitreisende.length === 0
         }
       />
 
-      {/* FAB Button für Gegenstand hinzufügen - Kreisrund mit weißem Plus */}
-      {currentVacation && (
+      {/* FAB: Gegenstände hinzufügen – Admin/Erwachsene (Kinder: nur abhaken, nicht Struktur ändern) */}
+      {currentVacation && canSelectOtherProfiles && (
         <div className="fixed bottom-6 right-6 z-30">
           <Button
             size="icon"
@@ -2025,7 +2068,7 @@ function HomeContent() {
             setSearchTerm('')
           }
         }}
-        title=""
+        title="Gegenstände hinzufügen"
         customContent
         hideCloseButton
         contentClassName="max-w-4xl max-h-[90vh] sm:max-h-[90vh] h-[85vh] sm:h-auto flex flex-col"
@@ -2189,6 +2232,7 @@ function HomeContent() {
         }
         categories={categories}
         transportVehicles={transportVehicles}
+        canEditEquipment={canAccessConfig}
         onSuccess={async () => {
           // Nach dem Hinzufügen (insbesondere temporär) beide Dialoge schließen:
           // den „Neu“-Dialog und die ursprüngliche Auswahl-Liste.

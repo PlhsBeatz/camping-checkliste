@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSession } from '@/lib/auth'
+import { getSession, isAdminRole } from '@/lib/auth'
 import { getDB, getUserById, updateUserPassword, CloudflareEnv } from '@/lib/db'
 import { hashPassword } from '@/lib/auth'
 
@@ -14,7 +14,7 @@ function generateTemporaryPassword(): string {
 export async function POST(request: NextRequest) {
   try {
     const session = await getSession(request)
-    if (!session || session.role !== 'admin') {
+    if (!session || !isAdminRole(session.role)) {
       return NextResponse.json(
         { success: false, error: 'Nur Administratoren können Passwörter zurücksetzen' },
         { status: 403 }

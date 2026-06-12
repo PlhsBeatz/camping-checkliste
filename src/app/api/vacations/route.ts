@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getCloudflareContext } from '@opennextjs/cloudflare'
 import { getDB, getVacations, createVacation, updateVacation, deleteVacation, CloudflareEnv } from '@/lib/db'
 import { requireAuth, requireAdmin } from '@/lib/api-auth'
+import { isAdminRole } from '@/lib/auth'
 import { notifyIntegrationChange } from '@/lib/integration-events'
 
 export async function GET(request: NextRequest) {
@@ -11,7 +12,10 @@ export async function GET(request: NextRequest) {
     const { userContext } = auth
     const env = process.env as unknown as CloudflareEnv
     const db = await getDB(env)
-    const mitreisenderFilter = userContext.role === 'gast' ? userContext.mitreisenderId : undefined
+    const mitreisenderFilter =
+      !isAdminRole(userContext.role) && userContext.mitreisenderId
+        ? userContext.mitreisenderId
+        : undefined
     const vacations = await getVacations(db, mitreisenderFilter)
     return NextResponse.json({ success: true, data: vacations })
   } catch (error: unknown) {

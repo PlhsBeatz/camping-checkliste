@@ -1,7 +1,9 @@
 'use client'
 
+import { useMemo } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { useAuth } from '@/components/auth-provider'
 import {
   CONFIG_NAV_GROUPS,
   isConfigNavItemActive,
@@ -30,7 +32,19 @@ export function ConfigSubnav({
   onNavigate,
 }: ConfigSubnavProps) {
   const pathname = usePathname()
+  const { canAccessSystemAdmin } = useAuth()
   const isSidebar = variant === 'sidebar'
+
+  const visibleGroups = useMemo(
+    () =>
+      CONFIG_NAV_GROUPS.map((group) => ({
+        ...group,
+        items: group.items.filter(
+          (item) => !item.systemAdminOnly || canAccessSystemAdmin
+        ),
+      })).filter((group) => group.items.length > 0),
+    [canAccessSystemAdmin]
+  )
 
   return (
     <nav
@@ -40,7 +54,7 @@ export function ConfigSubnav({
         className
       )}
     >
-      {CONFIG_NAV_GROUPS.map((group, groupIndex) => (
+      {visibleGroups.map((group, groupIndex) => (
         <div key={group.label}>
           {groupIndex > 0 && (
             <div

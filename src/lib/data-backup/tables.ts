@@ -4,6 +4,7 @@ import type { BackupPreset } from './types'
 export const BACKUP_TABLE_ORDER: string[] = [
   'hauptkategorien',
   'transportmittel',
+  'mitreisenden_gruppe',
   'mitreisende',
   'tag_kategorien',
   'users',
@@ -43,6 +44,7 @@ const REFERENCE_CORE = new Set([
   'transportmittel_festgewicht_manuell',
   'tag_kategorien',
   'tags',
+  'mitreisenden_gruppe',
   'mitreisende',
   'ausruestungsgegenstaende',
   'ausruestungsgegenstaende_links',
@@ -68,6 +70,7 @@ const REFERENCE_STAMMDATEN = new Set([
   'transportmittel_festgewicht_manuell',
   'tag_kategorien',
   'tags',
+  'mitreisenden_gruppe',
   'mitreisende',
   'packlisten_vorlagen',
   'vorlagen_eintraege',
@@ -102,6 +105,7 @@ export const AUTH_TABLES = new Set([
 export const PK_PARTS: Record<string, string[]> = {
   hauptkategorien: ['id'],
   transportmittel: ['id'],
+  mitreisenden_gruppe: ['id'],
   mitreisende: ['id'],
   tag_kategorien: ['id'],
   users: ['id'],

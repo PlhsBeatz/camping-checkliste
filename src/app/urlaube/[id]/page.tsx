@@ -42,7 +42,7 @@ import {
 import { useReconnectRefetch } from '@/hooks/use-reconnect-refetch'
 import { openCampingplatzInAdacMaps } from '@/lib/adac-maps'
 import { getVacationCountdown } from '@/lib/vacation-helpers'
-import { sortMitreisendeNachRolleUndName } from '@/lib/mitreisenden-sort'
+import { groupAllMitreisendeByGruppe } from '@/lib/pack-profile-groups'
 
 type CampingplatzRouteInfo = {
   distanceKm: number
@@ -404,8 +404,8 @@ export default function UrlaubDetailPage() {
     }
   }, [stays])
 
-  const sortedMitreisende = useMemo(
-    () => sortMitreisendeNachRolleUndName(mitreisende),
+  const mitreisendeByGruppe = useMemo(
+    () => groupAllMitreisendeByGruppe(mitreisende),
     [mitreisende]
   )
 
@@ -559,23 +559,34 @@ export default function UrlaubDetailPage() {
                     {mitreisende.length === 0 ? (
                       <p className="text-sm text-muted-foreground">Keine Mitreisenden zugeordnet.</p>
                     ) : (
-                      <ul className="flex flex-wrap gap-2">
-                        {sortedMitreisende.map((m) => (
-                          <li
-                            key={m.id}
-                            className="inline-flex items-center gap-2 rounded-full border border-subtle bg-card px-3 py-1 text-sm shadow-sm"
-                          >
-                            {m.farbe && (
-                              <span
-                                className="h-2.5 w-2.5 shrink-0 rounded-full"
-                                style={{ backgroundColor: m.farbe }}
-                                aria-hidden
-                              />
+                      <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-start sm:gap-x-8 sm:gap-y-4">
+                        {mitreisendeByGruppe.map((group) => (
+                          <div key={group.id} className="flex flex-col gap-2 min-w-0">
+                            {mitreisendeByGruppe.length > 1 && (
+                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                {group.name}
+                              </p>
                             )}
-                            {m.name}
-                          </li>
+                            <ul className="flex flex-wrap gap-2">
+                              {group.members.map((m) => (
+                                <li
+                                  key={m.id}
+                                  className="inline-flex items-center gap-2 rounded-full border border-subtle bg-card px-3 py-1 text-sm shadow-sm"
+                                >
+                                  {m.farbe && (
+                                    <span
+                                      className="h-2.5 w-2.5 shrink-0 rounded-full"
+                                      style={{ backgroundColor: m.farbe }}
+                                      aria-hidden
+                                    />
+                                  )}
+                                  {m.name}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
                         ))}
-                      </ul>
+                      </div>
                     )}
                   </section>
 

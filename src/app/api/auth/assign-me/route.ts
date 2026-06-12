@@ -44,6 +44,16 @@ export async function POST(request: NextRequest) {
     }
 
     const userId = auth.userContext.userId
+    if (auth.userContext.mitreisenderId) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Ihr Benutzerkonto ist bereits einem Mitreisenden zugeordnet',
+        },
+        { status: 400 }
+      )
+    }
+
     await updateUserMitreisender(db, userId, mitreisenderId)
     await updateMitreisenderUserId(db, mitreisenderId, userId)
 

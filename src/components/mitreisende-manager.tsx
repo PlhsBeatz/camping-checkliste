@@ -16,6 +16,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { sortMitreisendeNachRolleUndName } from '@/lib/mitreisenden-sort'
+import { groupAllMitreisendeByGruppe } from '@/lib/pack-profile-groups'
 
 interface MitreisendeManagerProps {
   vacationId: string | null
@@ -41,11 +42,11 @@ export function MitreisendeManager({ vacationId, onMitreisendeChange }: Mitreise
           // Wenn kein vacationId (= Erstell-Modus), wähle Standard-Mitreisende vor
           if (!vacationId && !initialLoadDone && data.data) {
             const defaultIds = data.data
-              .filter((m) => m.is_default_member)
+              .filter((m) => m.urlaub_standard_mitnehmen)
               .map((m) => m.id)
             setVacationMitreisende(defaultIds)
             if (onMitreisendeChange) {
-              const defaultMitreisende = data.data.filter((m) => m.is_default_member)
+              const defaultMitreisende = data.data.filter((m) => m.urlaub_standard_mitnehmen)
               onMitreisendeChange(defaultMitreisende)
             }
             setInitialLoadDone(true)
@@ -58,10 +59,10 @@ export function MitreisendeManager({ vacationId, onMitreisendeChange }: Mitreise
           if (cached.length > 0) {
             setAllMitreisende(cached)
             if (!vacationId && !initialLoadDone) {
-              const defaultIds = cached.filter((m) => m.is_default_member).map((m) => m.id)
+              const defaultIds = cached.filter((m) => m.urlaub_standard_mitnehmen).map((m) => m.id)
               setVacationMitreisende(defaultIds)
               if (onMitreisendeChange) {
-                onMitreisendeChange(cached.filter((m) => m.is_default_member))
+                onMitreisendeChange(cached.filter((m) => m.urlaub_standard_mitnehmen))
               }
               setInitialLoadDone(true)
             }
@@ -130,15 +131,15 @@ export function MitreisendeManager({ vacationId, onMitreisendeChange }: Mitreise
   }
 
   const weiterOhneStd = useMemo(
-    () => allMitreisende.filter((m) => !m.is_default_member),
+    () => allMitreisende.filter((m) => !m.urlaub_standard_mitnehmen),
     [allMitreisende]
   )
   const standardMitreisendeSortiert = useMemo(
-    () => sortMitreisendeNachRolleUndName(allMitreisende.filter((m) => m.is_default_member)),
+    () => sortMitreisendeNachRolleUndName(allMitreisende.filter((m) => m.urlaub_standard_mitnehmen)),
     [allMitreisende]
   )
-  const weitereMitSortiert = useMemo(
-    () => sortMitreisendeNachRolleUndName(weiterOhneStd),
+  const weitereByGruppe = useMemo(
+    () => groupAllMitreisendeByGruppe(weiterOhneStd),
     [weiterOhneStd]
   )
 
@@ -155,38 +156,47 @@ export function MitreisendeManager({ vacationId, onMitreisendeChange }: Mitreise
               type="button"
               variant="outline"
               size="sm"
-              disabled={weitereMitSortiert.length === 0}
+              disabled={weiterOhneStd.length === 0}
             >
               Weitere auswählen
               <ChevronDown className="h-3 w-3 ml-1" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-56">
-            {weitereMitSortiert.length === 0 ? (
+          <DropdownMenuContent align="end" className="w-56 max-h-72 overflow-y-auto">
+            {weiterOhneStd.length === 0 ? (
               <div className="px-2 py-1 text-xs text-muted-foreground">
                 Keine weiteren Mitreisenden vorhanden.
               </div>
             ) : (
-              weitereMitSortiert.map((m) => {
-                  const checked = vacationMitreisende.includes(m.id)
-                  return (
-                    <DropdownMenuItem
-                      key={m.id}
-                      onSelect={(e) => {
-                        e.preventDefault()
-                        void handleToggleMitreisender(m.id)
-                      }}
-                      className="flex items-center gap-2"
-                    >
-                      <Checkbox
-                        checked={checked}
-                        onCheckedChange={() => void handleToggleMitreisender(m.id)}
-                        className="h-3 w-3"
-                      />
-                      <span className="text-sm">{m.name}</span>
-                    </DropdownMenuItem>
-                  )
-                })
+              weitereByGruppe.map((group) => (
+                <div key={group.id}>
+                  {weitereByGruppe.length > 1 && (
+                    <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground sticky top-0 bg-popover">
+                      {group.name}
+                    </div>
+                  )}
+                  {group.members.map((m) => {
+                    const checked = vacationMitreisende.includes(m.id)
+                    return (
+                      <DropdownMenuItem
+                        key={m.id}
+                        onSelect={(e) => {
+                          e.preventDefault()
+                          void handleToggleMitreisender(m.id)
+                        }}
+                        className="flex items-center gap-2"
+                      >
+                        <Checkbox
+                          checked={checked}
+                          onCheckedChange={() => void handleToggleMitreisender(m.id)}
+                          className="h-3 w-3"
+                        />
+                        <span className="text-sm">{m.name}</span>
+                      </DropdownMenuItem>
+                    )
+                  })}
+                </div>
+              ))
             )}
           </DropdownMenuContent>
         </DropdownMenu>

@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { getDB, type CloudflareEnv } from '@/lib/db'
 import { findIntegrationTokenByBearer } from '@/lib/integration-db'
-import { requireAuth, requireAdmin } from '@/lib/api-auth'
+import { requireAuth, requireSystemAdmin } from '@/lib/api-auth'
 
 function extractBearerToken(request: NextRequest): string | null {
   const auth = request.headers.get('authorization')
@@ -38,7 +38,7 @@ export async function requireAdminOrIntegrationAuth(
   }
   const auth = await requireAuth(request)
   if (auth instanceof NextResponse) return auth
-  const adminErr = requireAdmin(auth.userContext)
+  const adminErr = requireSystemAdmin(auth.userContext)
   if (adminErr) return adminErr
   return { mode: 'admin' }
 }

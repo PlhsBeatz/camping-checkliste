@@ -1,23 +1,27 @@
 import type { Mitreisender } from '@/lib/db'
+import type { UserRole } from '@/lib/user-roles'
 
 /**
- * Reihenfolge für Mitreisenden-Anzeigen: Admin (Eltern) → Kind → weitere mit Konto (z. B. Gast) → ohne Account.
- * Bei fehlenden Stammdaten (undefined) wird wie „ohne Kontext“ am Ende gruppiert.
+ * Reihenfolge: System/Admin → Kind (Personentyp) → Standard mit Konto → ohne Account
  */
 export function mitreisendenAnzeigeGruppe(
-  person: Partial<Pick<Mitreisender, 'user_id' | 'user_role'>> | null | undefined
+  person: Partial<Pick<Mitreisender, 'user_id' | 'user_role' | 'personentyp'>> | null | undefined
 ): number {
   if (!person) return 4
-  if (person.user_role === 'admin') return 0
-  if (person.user_role === 'kind') return 1
+  if (person.user_role === 'system_admin' || person.user_role === 'admin') return 0
+  if (person.personentyp === 'kind') return 1
   const verknuepft = !!(person.user_id && String(person.user_id).trim())
   if (!verknuepft) return 3
   return 2
 }
 
-/** Volle Stammdaten: nach Rolle, dann Name */
 export function sortMitreisendeNachRolleUndName<
-  T extends { name: string; user_id?: string | null; user_role?: Mitreisender['user_role'] | null },
+  T extends {
+    name: string
+    user_id?: string | null
+    user_role?: UserRole | null
+    personentyp?: Mitreisender['personentyp']
+  },
 >(rows: readonly T[]): T[] {
   return [...rows].sort((a, b) => {
     const g = mitreisendenAnzeigeGruppe(a) - mitreisendenAnzeigeGruppe(b)
@@ -26,9 +30,6 @@ export function sortMitreisendeNachRolleUndName<
   })
 }
 
-/**
- * Nur `id` + `name` (z. B. Dialoge aus Packliste); Rolle wird über `stammdaten` je `id` aufgelöst.
- */
 export function sortMitreisendenZeilenNachStammdaten<T extends { id: string; name: string }>(
   zeilen: readonly T[],
   stammdaten: readonly Mitreisender[]

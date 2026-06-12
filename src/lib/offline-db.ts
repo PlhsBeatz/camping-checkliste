@@ -16,6 +16,8 @@ import type {
   Tag,
   TagKategorie,
   Mitreisender,
+  MitreisendenGruppe,
+  Personentyp,
   TransportVehicle,
   PackingItem,
   ChecklisteMitStruktur,
@@ -51,6 +53,11 @@ export interface CachedTag extends Tag {
 }
 
 export interface CachedTagKategorie extends TagKategorie {
+  _cachedAt: number
+  _updatedAt: number
+}
+
+export interface CachedMitreisendenGruppe extends MitreisendenGruppe {
   _cachedAt: number
   _updatedAt: number
 }
@@ -142,8 +149,10 @@ export interface CachedAuthUser {
   id: string
   user_id: string
   email: string
-  role: 'admin' | 'kind' | 'gast'
+  role: 'system_admin' | 'admin' | 'standard'
   mitreisender_id: string | null
+  personentyp?: 'erwachsen' | 'kind' | null
+  gruppe_id?: string | null
   permissions: string[]
   must_change_password?: boolean
   _cachedAt: number
@@ -175,6 +184,7 @@ export class OfflineDB extends Dexie {
   tags!: EntityTable<CachedTag, 'id'>
   tagKategorien!: EntityTable<CachedTagKategorie, 'id'>
   mitreisende!: EntityTable<CachedMitreisender, 'id'>
+  mitreisendenGruppen!: EntityTable<CachedMitreisendenGruppe, 'id'>
   vacationMitreisende!: EntityTable<CachedVacationMitreisender, 'id_compound'>
   transportVehicles!: EntityTable<CachedTransportVehicle, 'id'>
   packingItems!: EntityTable<CachedPackingItem, 'id'>
@@ -225,6 +235,29 @@ export class OfflineDB extends Dexie {
       tags: 'id, _cachedAt, _updatedAt',
       tagKategorien: 'id, reihenfolge, _cachedAt, _updatedAt',
       mitreisende: 'id, _cachedAt, _updatedAt',
+      vacationMitreisende: 'id_compound, _vacationId, _cachedAt, _updatedAt',
+      transportVehicles: 'id, _cachedAt, _updatedAt',
+      packingItems: 'id, packliste_id, _vacationId, _cachedAt, _updatedAt',
+      checklisten: 'id, reihenfolge, _cachedAt, _updatedAt',
+      lastPosition: 'id, _cachedAt',
+      packStatus: 'id, _cachedAt, _updatedAt',
+      campingplaetze: 'id, _cachedAt, _updatedAt',
+      campingplaetzeFotos: 'id, campingplatz_id, _cachedAt, _updatedAt',
+      routes: 'id, _cachedAt',
+      homeLocation: 'id, _cachedAt, _updatedAt',
+      authUser: 'id, _cachedAt',
+      syncQueue: '++id, table, timestamp, attempts',
+    })
+    // Version 4: Reisegruppen (mitreisenden_gruppe)
+    this.version(4).stores({
+      vacations: 'id, _cachedAt, _updatedAt',
+      equipment: 'id, _cachedAt, _updatedAt',
+      categories: 'id, _cachedAt, _updatedAt',
+      mainCategories: 'id, _cachedAt, _updatedAt',
+      tags: 'id, _cachedAt, _updatedAt',
+      tagKategorien: 'id, reihenfolge, _cachedAt, _updatedAt',
+      mitreisende: 'id, _cachedAt, _updatedAt',
+      mitreisendenGruppen: 'id, sort_order, _cachedAt, _updatedAt',
       vacationMitreisende: 'id_compound, _vacationId, _cachedAt, _updatedAt',
       transportVehicles: 'id, _cachedAt, _updatedAt',
       packingItems: 'id, packliste_id, _vacationId, _cachedAt, _updatedAt',
@@ -304,6 +337,11 @@ export async function cacheTagKategorien(items: TagKategorie[]): Promise<void> {
 export async function cacheMitreisende(items: Mitreisender[]): Promise<void> {
   const withMetaItems = items.map((v) => withMeta(v)) as CachedMitreisender[]
   await snapshotReplace(offlineDb.mitreisende, withMetaItems)
+}
+
+export async function cacheMitreisendenGruppen(items: MitreisendenGruppe[]): Promise<void> {
+  const withMetaItems = items.map((v) => withMeta(v)) as CachedMitreisendenGruppe[]
+  await snapshotReplace(offlineDb.mitreisendenGruppen, withMetaItems)
 }
 
 /** Mitreisende, die einem konkreten Urlaub zugeordnet sind */
@@ -453,8 +491,10 @@ export async function cacheHomeLocation(loc: {
 export async function cacheAuthUser(user: {
   id: string
   email: string
-  role: 'admin' | 'kind' | 'gast'
+  role: 'system_admin' | 'admin' | 'standard'
   mitreisender_id: string | null
+  personentyp?: Personentyp | null
+  gruppe_id?: string | null
   permissions: string[]
   must_change_password?: boolean
 }): Promise<void> {
@@ -464,6 +504,8 @@ export async function cacheAuthUser(user: {
     email: user.email,
     role: user.role,
     mitreisender_id: user.mitreisender_id,
+    personentyp: user.personentyp ?? null,
+    gruppe_id: user.gruppe_id ?? null,
     permissions: user.permissions,
     must_change_password: user.must_change_password,
     _cachedAt: now(),

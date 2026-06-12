@@ -6,33 +6,38 @@ import {
   useState,
   useEffect,
   useCallback,
+  useMemo,
   type ReactNode
 } from 'react'
+import type { UserRole } from '@/lib/user-roles'
+import { isAdminRole, isSystemAdminRole } from '@/lib/user-roles'
 import { getCachedAuthUser, scheduleChecklistenPrefetch, subscribeToOnlineStatus } from '@/lib/offline-sync'
 import { cacheAuthUser, clearAuthUser } from '@/lib/offline-db'
+import type { Personentyp } from '@/lib/db'
 
 export interface AuthUser {
   id: string
   email: string
-  role: 'admin' | 'kind' | 'gast'
+  role: UserRole
   mitreisender_id: string | null
+  personentyp?: Personentyp | null
+  gruppe_id?: string | null
   permissions: string[]
-  /** Nach Admin-Passwort-Reset: Passwort muss geändert werden */
   must_change_password?: boolean
+  is_system_admin?: boolean
+  is_admin?: boolean
 }
 
 interface AuthContextValue {
   user: AuthUser | null
   loading: boolean
-  /** Wird true gesetzt, wenn `user` aus dem Offline-Cache stammt und nicht frisch vom Server. */
   fromCache: boolean
   logout: () => Promise<void>
   refetch: () => Promise<void>
   canAccessConfig: boolean
+  canAccessSystemAdmin: boolean
   canSelectOtherProfiles: boolean
-  /** Kind mit Berechtigung: Gepackt-Anzeige erfordert Eltern-Bestätigung */
   gepacktRequiresParentApproval: boolean
-  /** Kind/Gast darf pauschale Einträge bearbeiten/sehen (wenn Berechtigung gesetzt) */
   canEditPauschalEntries: boolean
 }
 
@@ -45,8 +50,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const fetchUser = useCallback(async () => {
     let cacheLoaded = false
-    // 1) Optimistisch aus IndexedDB-Cache laden, damit die App offline sofort
-    //    den letzten bekannten User hat.
     try {
       const cached = await getCachedAuthUser()
       if (cached) {
@@ -55,17 +58,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         cacheLoaded = true
       }
     } catch {
-      // egal, Server ist Quelle der Wahrheit
+      /* ignore */
     }
 
-    // 2) Im Hintergrund vom Server holen.
     try {
       const res = await fetch('/api/auth/me')
       const data = (await res.json()) as { success?: boolean; user?: AuthUser }
       if (res.ok && data.success && data.user) {
         setUser(data.user)
         setFromCache(false)
-        // 3) Cache aktualisieren.
         try {
           await cacheAuthUser(data.user)
         } catch (err) {
@@ -73,7 +74,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
         scheduleChecklistenPrefetch()
       } else if (res.ok) {
-        // Server sagt explizit "nicht eingeloggt" → Cache leeren.
         setUser(null)
         setFromCache(false)
         try {
@@ -82,10 +82,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           /* ignore */
         }
       }
-      // Bei !res.ok behalten wir den Cache-User, da das auf einen Server-Fehler hindeuten kann.
     } catch {
-      // Netzwerkfehler → wenn wir einen Cache-User haben, behalten wir ihn.
-      // Ohne Cache: bleibt user=null.
       if (!cacheLoaded) {
         setUser(null)
         setFromCache(false)
@@ -99,7 +96,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     fetchUser()
   }, [fetchUser])
 
-  // Nach Netzwerk-Wiederherstellung Tools-Checklisten erneut in den Offline-Cache legen (best effort).
   useEffect(() => {
     let init = true
     let lastOnline = typeof navigator !== 'undefined' ? navigator.onLine : true
@@ -117,11 +113,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const logout = useCallback(async () => {
-    // Best-effort Logout: auch wenn der Server-Call fehlschlägt, lokal ausloggen.
     try {
       await fetch('/api/auth/logout', { method: 'POST' })
     } catch {
-      /* ignore – Cookie kann offline nicht serverseitig gelöscht werden */
+      /* ignore */
     }
     try {
       await clearAuthUser()
@@ -133,10 +128,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     window.location.href = '/login'
   }, [])
 
-  const canAccessConfig = user?.role === 'admin'
-  const canSelectOtherProfiles = user?.role === 'admin'
-  const gepacktRequiresParentApproval = !canAccessConfig && (user?.permissions?.includes('gepackt_erfordert_elternkontrolle') ?? false)
-  const canEditPauschalEntries = canAccessConfig || (user?.permissions?.includes('can_edit_pauschal_entries') ?? false)
+  const canAccessConfig = isAdminRole(user?.role ?? 'standard')
+  const canAccessSystemAdmin = isSystemAdminRole(user?.role ?? 'standard')
+  const canSelectOtherProfiles = useMemo(() => {
+    if (!user) return false
+    if (isAdminRole(user.role)) return true
+    return user.role === 'standard' && user.personentyp === 'erwachsen'
+  }, [user])
+
+  const gepacktRequiresParentApproval = useMemo(() => {
+    if (!user || isAdminRole(user.role)) return false
+    if (user.personentyp !== 'kind') return false
+    return user.permissions?.includes('gepackt_erfordert_elternkontrolle') ?? false
+  }, [user])
+
+  const canEditPauschalEntries =
+    canAccessConfig || (user?.permissions?.includes('can_edit_pauschal_entries') ?? false)
 
   return (
     <AuthContext.Provider
@@ -147,9 +154,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         logout,
         refetch: fetchUser,
         canAccessConfig,
+        canAccessSystemAdmin,
         canSelectOtherProfiles,
         gepacktRequiresParentApproval,
-        canEditPauschalEntries
+        canEditPauschalEntries,
       }}
     >
       {children}
@@ -159,8 +167,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 export function useAuth() {
   const ctx = useContext(AuthContext)
-  if (!ctx) {
-    throw new Error('useAuth must be used within AuthProvider')
-  }
+  if (!ctx) throw new Error('useAuth must be used within AuthProvider')
   return ctx
 }

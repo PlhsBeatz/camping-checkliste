@@ -108,10 +108,12 @@ export function ResponsiveModal({
   }, [open, isMobile])
 
   if (customContent) {
+    const accessibleTitle = title || 'Dialog'
     if (isMobile) {
       return (
         <Drawer open={open} onOpenChange={handleOpenChange}>
           <DrawerContent className={cn('max-h-[90vh] flex flex-col p-0', contentClassName)}>
+            <DrawerTitle className="sr-only">{accessibleTitle}</DrawerTitle>
             {children}
           </DrawerContent>
         </Drawer>
@@ -120,6 +122,7 @@ export function ResponsiveModal({
     return (
       <Dialog open={open} onOpenChange={handleOpenChange}>
         <DialogContent className={cn('p-0', contentClassName)} hideCloseButton={hideCloseButton}>
+          <DialogTitle className="sr-only">{accessibleTitle}</DialogTitle>
           {children}
         </DialogContent>
       </Dialog>

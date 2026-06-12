@@ -64,6 +64,7 @@ export function UndoToast({
 
   const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     if (event.pointerType === 'mouse' && event.button !== 0) return
+    if ((event.target as HTMLElement).closest('[data-undo-action]')) return
 
     event.stopPropagation()
     startXRef.current = event.clientX
@@ -152,8 +153,10 @@ export function UndoToast({
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => {
-            if (didSwipeRef.current) return
+          data-undo-action
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={(event) => {
+            event.stopPropagation()
             onUndo()
             onDismiss()
           }}

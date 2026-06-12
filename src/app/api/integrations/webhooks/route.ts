@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDB, getVacations, getPackingItems, type CloudflareEnv } from '@/lib/db'
-import { requireAuth, requireAdmin } from '@/lib/api-auth'
+import { requireAuth, requireSystemAdmin } from '@/lib/api-auth'
 import {
   ALL_INTEGRATION_EVENT_TYPES,
   createIntegrationWebhook,
@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
   try {
     const auth = await requireAuth(request)
     if (auth instanceof NextResponse) return auth
-    const adminErr = requireAdmin(auth.userContext)
+    const adminErr = requireSystemAdmin(auth.userContext)
     if (adminErr) return adminErr
 
     const env = process.env as unknown as CloudflareEnv
@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
   try {
     const auth = await requireAuth(request)
     if (auth instanceof NextResponse) return auth
-    const adminErr = requireAdmin(auth.userContext)
+    const adminErr = requireSystemAdmin(auth.userContext)
     if (adminErr) return adminErr
 
     const body = (await request.json()) as {
@@ -91,7 +91,7 @@ export async function PUT(request: NextRequest) {
   try {
     const auth = await requireAuth(request)
     if (auth instanceof NextResponse) return auth
-    const adminErr = requireAdmin(auth.userContext)
+    const adminErr = requireSystemAdmin(auth.userContext)
     if (adminErr) return adminErr
 
     const body = (await request.json()) as {
@@ -128,7 +128,7 @@ export async function DELETE(request: NextRequest) {
   try {
     const auth = await requireAuth(request)
     if (auth instanceof NextResponse) return auth
-    const adminErr = requireAdmin(auth.userContext)
+    const adminErr = requireSystemAdmin(auth.userContext)
     if (adminErr) return adminErr
 
     const { searchParams } = new URL(request.url)
@@ -155,7 +155,7 @@ export async function PATCH(request: NextRequest) {
   try {
     const auth = await requireAuth(request)
     if (auth instanceof NextResponse) return auth
-    const adminErr = requireAdmin(auth.userContext)
+    const adminErr = requireSystemAdmin(auth.userContext)
     if (adminErr) return adminErr
 
     const body = (await request.json()) as { id?: string; action?: string }

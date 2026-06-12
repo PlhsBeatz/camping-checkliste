@@ -4,7 +4,7 @@
 
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
-import { getSession } from '@/lib/auth'
+import { getSession, isAdminRole, isSystemAdminRole } from '@/lib/auth'
 import { getDB, CloudflareEnv } from '@/lib/db'
 import { buildUserContext, type UserContext } from '@/lib/permissions'
 
@@ -21,9 +21,18 @@ export async function requireAuth(
   return { session, userContext }
 }
 
+/** Haushalt-Admin oder System-Admin */
 export function requireAdmin(userContext: UserContext): NextResponse | null {
-  if (userContext.role !== 'admin') {
+  if (!isAdminRole(userContext.role)) {
     return NextResponse.json({ error: 'Keine Berechtigung' }, { status: 403 })
+  }
+  return null
+}
+
+/** Nur System-Admin (Import/Export, Rollenvergabe system_admin) */
+export function requireSystemAdmin(userContext: UserContext): NextResponse | null {
+  if (!isSystemAdminRole(userContext.role)) {
+    return NextResponse.json({ error: 'Keine Berechtigung (System-Admin erforderlich)' }, { status: 403 })
   }
   return null
 }

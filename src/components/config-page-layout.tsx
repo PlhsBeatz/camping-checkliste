@@ -14,22 +14,32 @@ interface ConfigPageLayoutProps {
   children: ReactNode
   headerActions?: ReactNode
   afterContent?: ReactNode
+  /** Nur System-Admin (z. B. Integrationen) */
+  requireSystemAdmin?: boolean
 }
 
 export function ConfigPageLayout({
   children,
   headerActions,
   afterContent,
+  requireSystemAdmin = false,
 }: ConfigPageLayoutProps) {
-  const { canAccessConfig, loading } = useAuth()
+  const { canAccessConfig, canAccessSystemAdmin, loading } = useAuth()
   const router = useRouter()
   const pathname = usePathname()
   const [showNavSidebar, setShowNavSidebar] = useState(false)
   const isConfigHub = pathname === '/konfiguration'
 
   useEffect(() => {
-    if (!loading && !canAccessConfig) router.replace('/')
-  }, [loading, canAccessConfig, router])
+    if (loading) return
+    if (!canAccessConfig) {
+      router.replace('/')
+      return
+    }
+    if (requireSystemAdmin && !canAccessSystemAdmin) {
+      router.replace('/konfiguration')
+    }
+  }, [loading, canAccessConfig, canAccessSystemAdmin, requireSystemAdmin, router])
 
   useEffect(() => {
     if (showNavSidebar) {
@@ -45,7 +55,7 @@ export function ConfigPageLayout({
     }
   }, [showNavSidebar])
 
-  if (loading || !canAccessConfig) {
+  if (loading || !canAccessConfig || (requireSystemAdmin && !canAccessSystemAdmin)) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <p className="text-muted-foreground text-sm">Wird geladen…</p>

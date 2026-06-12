@@ -239,6 +239,20 @@ gmp-place-autocomplete::part(prediction-item) {
     border-radius: 3px;
   }
 
+  /* Packprofil-Sidebar: Radix-Overlay-Scroll, nur beim Scrollen sichtbar */
+  .pack-settings-sidebar-scroll [data-radix-scroll-area-viewport] > div {
+    display: block !important;
+  }
+  .pack-settings-sidebar-scroll [data-radix-scroll-area-scrollbar] {
+    width: 8px;
+    padding: 2px 0;
+    border: none;
+    background: transparent;
+  }
+  .pack-settings-sidebar-scroll [data-radix-scroll-area-thumb] {
+    background: hsl(var(--muted-foreground) / 0.35);
+  }
+
   /* Hintergrund-Muster das mit dem Inhalt mitscrollt (z.B. Packliste) */
   .bg-scroll-pattern {
     background-color: rgb(244, 241, 234);

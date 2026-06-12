@@ -212,6 +212,50 @@ Die App stellt folgende Endpoints zur Verfügung:
 ### Initialization
 - `POST /api/init` - Datenbank initialisieren
 
+## Migration 0026: Reisegruppen und Rollenmodell
+
+Die Migration ist in **drei Schritte** aufgeteilt (Schritt 1 ist nicht wiederholbar — sonst Fehler `duplicate column name: gruppe_id`).
+
+**Empfohlen** — idempotent, prüft automatisch was noch nötig ist:
+
+```bash
+npm run db:migrate:0026
+npm run db:migrate:0026:remote
+```
+
+**Manuell** (nur wenn nötig):
+
+```bash
+# 1. Spalten (nur wenn gruppe_id noch fehlt)
+npx wrangler d1 execute camping-db --local --file=./migrations/0026_mitreisende_spalten.sql
+
+# 2. Gruppen + Daten (mehrfach ausführbar)
+npx wrangler d1 execute camping-db --local --file=./migrations/0026_mitreisenden_gruppen_rollen.sql
+
+# 3. Nutzer/Einladungen (nur wenn noch role kind/gast vorkommt)
+npx wrangler d1 execute camping-db --local --file=./migrations/0026_users_einladungen_rollen.sql
+```
+
+Für Production `--local` durch `--remote` ersetzen.
+
+Die Migration legt u. a. an:
+
+- Tabelle `mitreisenden_gruppe` (Standard: „Familie“, „Weitere“)
+- Spalten `gruppe_id` und `personentyp` an `mitreisende`
+- Nutzerrollen `system_admin`, `admin`, `standard` (bisherige `kind`/`gast` → `standard`)
+
+### Ersten System-Administrator setzen
+
+Nach der Migration hat noch **kein** Konto die Rolle `system_admin`. Setzen Sie **einmalig** per SQL (lokal oder remote):
+
+```bash
+npx wrangler d1 execute camping-db --remote --command="UPDATE users SET role = 'system_admin' WHERE email = 'ihre-email@example.com';"
+```
+
+Ersetzen Sie die E-Mail durch Ihr Admin-Konto. **System-Admin** darf Import/Export und die Vergabe weiterer `system_admin`-Rollen (unter Personen → Benutzer-Rolle). **Haushalt-Admins** (`admin`) behalten alle Konfigurationsrechte, aber **ohne** Import/Export.
+
+Alternativ: Als bestehender `system_admin` in der Personen-Verwaltung die Rolle „System-Admin“ einem verknüpften Benutzer zuweisen.
+
 ## Sicherheit
 
 ### Best Practices

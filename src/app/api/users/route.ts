@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDB, getUsers, CloudflareEnv } from '@/lib/db'
-import { getSession } from '@/lib/auth'
+import { getSession, isAdminRole } from '@/lib/auth'
 
 export async function GET(request: NextRequest) {
   try {
     const session = await getSession(request)
-    if (!session || session.role !== 'admin') {
+    if (!session || !isAdminRole(session.role)) {
       return NextResponse.json(
         { success: false, error: 'Nur Administratoren können Benutzer auflisten' },
         { status: 403 }

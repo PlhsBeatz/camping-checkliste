@@ -49,6 +49,8 @@ interface AddSingleItemDialogProps {
   transportVehicles: Array<{ id: string; name: string }>
   tags?: Array<{ id: string; titel: string }>
   mitreisende?: Mitreisender[]
+  /** Admin: Eintrag zusätzlich in Ausrüstungs-Stammdaten anlegen */
+  canEditEquipment?: boolean
   onSuccess: () => void
 }
 
@@ -85,6 +87,7 @@ export function AddSingleItemDialog({
   transportVehicles,
   tags: tagsProp = [],
   mitreisende: mitreisendeProp = [],
+  canEditEquipment = false,
   onSuccess,
 }: AddSingleItemDialogProps) {
   const vacationMitSortiert = useMemo(
@@ -173,7 +176,7 @@ export function AddSingleItemDialog({
 
     setIsSaving(true)
     try {
-      if (form.saveToEquipment) {
+      if (form.saveToEquipment && canEditEquipment) {
         const payload = {
           was,
           kategorie_id: form.kategorie_id,
@@ -583,6 +586,7 @@ export function AddSingleItemDialog({
           </>
         )}
 
+        {canEditEquipment && (
         <div className="flex items-center gap-2 pt-4">
           <Checkbox
             id="add-save-to-equipment"
@@ -593,6 +597,7 @@ export function AddSingleItemDialog({
             In Ausrüstung speichern
           </Label>
         </div>
+        )}
 
         <div className="flex gap-2 pt-4">
           <Button onClick={handleSubmit} disabled={isSaving} className="flex-1 bg-[rgb(45,79,30)] hover:bg-[rgb(45,79,30)]/90">
