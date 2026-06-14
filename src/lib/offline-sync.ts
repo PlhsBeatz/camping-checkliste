@@ -560,8 +560,13 @@ function resolveRoute(e: SyncQueueEntry): ResolvedRoute | null {
       return null
     }
     case 'packing-items-toggle-mitreisender': {
-      // payload = { packingItemId, mitreisenderId, gepackt }
       return { method: 'PUT', url: '/api/packing-items/toggle-mitreisender', body: e.payload }
+    }
+    case 'packing-items-toggle-gruppe': {
+      return { method: 'PUT', url: '/api/packing-items/toggle-gruppe', body: e.payload }
+    }
+    case 'packing-items-pauschal-gruppen': {
+      return { method: 'PUT', url: '/api/packing-items/pauschal-gruppen', body: e.payload }
     }
     case 'packing-items-set-mitreisender-anzahl': {
       return {

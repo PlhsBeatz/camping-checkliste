@@ -54,6 +54,11 @@ export interface PackingItem {
   /** Intern für Sortierung (hauptkategorie/kategorie Reihenfolge) */
   orderHk?: number
   orderK?: number
+  /** Gruppen-Zuordnung für pauschale Einträge (Mehrgruppen-Urlaube) */
+  pauschal_gruppen_modus?: PauschalGruppenModus
+  verantwortliche_gruppe_id?: string | null
+  verantwortliche_gruppe_name?: string | null
+  gruppen?: PackingItemGruppe[]
 }
 
 export interface PackingItemMitreisender {
@@ -67,6 +72,18 @@ export interface PackingItemMitreisender {
   /** Pro-Person-Transport; bei undefined wird item.transport_id verwendet */
   transport_id?: string | null
   transport_name?: string
+}
+
+export type PauschalGruppenModus = 'offen' | 'einmal' | 'pro_gruppe' | 'ausgewaehlte_gruppen'
+
+export interface PackingItemGruppe {
+  id: string
+  gruppe_id: string
+  gruppe_name?: string
+  gepackt: boolean
+  gepackt_vorgemerkt?: boolean
+  gepackt_vorgemerkt_durch?: string | null
+  anzahl?: number
 }
 
 export interface Mitreisender {
@@ -677,6 +694,226 @@ async function getD1TableColumnNames(db: D1Database, table: string): Promise<Set
  * Abrufen aller Packartikel für eine Urlaubsreise
  * Batch-Loading für Mitreisende via Subquery (nur 1 Parameter – D1-Limit 100)
  */
+function parsePauschalGruppenModus(raw: unknown): PauschalGruppenModus {
+  const s = raw != null ? String(raw) : 'einmal'
+  if (s === 'offen' || s === 'pro_gruppe' || s === 'ausgewaehlte_gruppen') return s
+  return 'einmal'
+}
+
+async function loadPackingItemGruppenForVacation(
+  db: D1Database,
+  vacationId: string,
+  tempOnly: boolean
+): Promise<Map<string, PackingItemGruppe[]>> {
+  const map = new Map<string, PackingItemGruppe[]>()
+  try {
+    const table = tempOnly ? 'packlisten_eintrag_gruppen_temporaer' : 'packlisten_eintrag_gruppen'
+    const eintragTable = tempOnly ? 'packlisten_eintraege_temporaer' : 'packlisten_eintraege'
+    const joinClause = tempOnly
+      ? `JOIN packlisten p ON pe.packliste_id = p.id AND p.urlaub_id = ?`
+      : `JOIN packlisten p ON pe.packliste_id = p.id AND p.urlaub_id = ?`
+
+    const q = `
+      SELECT peg.id, peg.packlisten_eintrag_id, peg.gruppe_id, mg.name AS gruppe_name,
+             peg.gepackt, peg.gepackt_vorgemerkt, peg.gepackt_vorgemerkt_durch, peg.anzahl
+      FROM ${table} peg
+      JOIN ${eintragTable} pe ON peg.packlisten_eintrag_id = pe.id
+      ${joinClause}
+      JOIN mitreisenden_gruppe mg ON peg.gruppe_id = mg.id
+      ORDER BY peg.packlisten_eintrag_id, mg.name
+    `
+    const result = await db.prepare(q).bind(vacationId).all<Record<string, unknown>>()
+    for (const row of result.results ?? []) {
+      const eid = String(row.packlisten_eintrag_id)
+      const arr = map.get(eid) ?? []
+      arr.push({
+        id: String(row.id),
+        gruppe_id: String(row.gruppe_id),
+        gruppe_name: row.gruppe_name ? String(row.gruppe_name) : undefined,
+        gepackt: !!row.gepackt,
+        gepackt_vorgemerkt: !!row.gepackt_vorgemerkt,
+        gepackt_vorgemerkt_durch: row.gepackt_vorgemerkt_durch as string | null | undefined,
+        anzahl: row.anzahl != null ? Number(row.anzahl) : 1,
+      })
+      map.set(eid, arr)
+    }
+  } catch {
+    /* Tabelle noch nicht migriert */
+  }
+  return map
+}
+
+export interface SetPauschalGruppenInput {
+  pauschalGruppenModus: PauschalGruppenModus
+  verantwortlicheGruppeId?: string | null
+  gruppeIds?: string[]
+}
+
+export async function setPauschalGruppenAssignment(
+  db: D1Database,
+  packlistenEintragId: string,
+  input: SetPauschalGruppenInput,
+  vacationGruppeIds: string[]
+): Promise<boolean> {
+  try {
+    const temp = await isTemporaryPackingEintrag(db, packlistenEintragId)
+    const peTable = temp ? 'packlisten_eintraege_temporaer' : 'packlisten_eintraege'
+    const pegTable = temp ? 'packlisten_eintrag_gruppen_temporaer' : 'packlisten_eintrag_gruppen'
+
+    const modus = input.pauschalGruppenModus
+    let verantwortliche: string | null = null
+    let gruppeIds: string[] = []
+
+    if (modus === 'einmal') {
+      verantwortliche = input.verantwortlicheGruppeId ?? null
+    } else if (modus === 'pro_gruppe') {
+      gruppeIds = [...vacationGruppeIds]
+    } else if (modus === 'ausgewaehlte_gruppen') {
+      gruppeIds = (input.gruppeIds ?? []).filter((id) => vacationGruppeIds.includes(id))
+    }
+
+    await db
+      .prepare(
+        `UPDATE ${peTable} SET pauschal_gruppen_modus = ?, verantwortliche_gruppe_id = ?, updated_at = datetime('now') WHERE id = ?`
+      )
+      .bind(modus, verantwortliche, packlistenEintragId)
+      .run()
+
+    let itemRow: { gepackt: number; gepackt_vorgemerkt: number; status: string | null } | null = null
+    let existingByGruppe = new Map<
+      string,
+      { gruppe_id: string; gepackt: number; gepackt_vorgemerkt: number }
+    >()
+
+    if (modus === 'pro_gruppe' || modus === 'ausgewaehlte_gruppen') {
+      itemRow = await db
+        .prepare(
+          temp
+            ? `SELECT pe.gepackt, pe.gepackt_vorgemerkt, CAST(NULL AS TEXT) AS status FROM ${peTable} pe WHERE pe.id = ?`
+            : `SELECT pe.gepackt, pe.gepackt_vorgemerkt, ag.status FROM ${peTable} pe LEFT JOIN ausruestungsgegenstaende ag ON pe.gegenstand_id = ag.id WHERE pe.id = ?`
+        )
+        .bind(packlistenEintragId)
+        .first<{ gepackt: number; gepackt_vorgemerkt: number; status: string | null }>()
+
+      const existingRows = await db
+        .prepare(
+          `SELECT gruppe_id, gepackt, gepackt_vorgemerkt FROM ${pegTable} WHERE packlisten_eintrag_id = ?`
+        )
+        .bind(packlistenEintragId)
+        .all<{ gruppe_id: string; gepackt: number; gepackt_vorgemerkt: number }>()
+
+      existingByGruppe = new Map(
+        (existingRows.results ?? []).map((r) => [String(r.gruppe_id), r])
+      )
+    }
+
+    await db.prepare(`DELETE FROM ${pegTable} WHERE packlisten_eintrag_id = ?`).bind(packlistenEintragId).run()
+
+    if (modus === 'pro_gruppe' || modus === 'ausgewaehlte_gruppen') {
+      const inheritPacked = !!itemRow?.gepackt
+      const inheritVorgemerkt = !inheritPacked && !!itemRow?.gepackt_vorgemerkt
+
+      for (const gid of gruppeIds) {
+        const prev = existingByGruppe.get(gid)
+        const gepackt = prev ? !!prev.gepackt : inheritPacked
+        const vorgemerkt = prev ? !!prev.gepackt_vorgemerkt : inheritVorgemerkt
+        await db
+          .prepare(
+            `INSERT INTO ${pegTable} (id, packlisten_eintrag_id, gruppe_id, gepackt, gepackt_vorgemerkt, anzahl) VALUES (?, ?, ?, ?, ?, 1)`
+          )
+          .bind(
+            crypto.randomUUID(),
+            packlistenEintragId,
+            gid,
+            gepackt ? 1 : 0,
+            vorgemerkt ? 1 : 0
+          )
+          .run()
+      }
+    }
+
+    return true
+  } catch (error) {
+    console.error('Error setPauschalGruppenAssignment:', error)
+    return false
+  }
+}
+
+export async function togglePackingItemForGruppe(
+  db: D1Database,
+  packlistenEintragId: string,
+  gruppeId: string,
+  gepackt: boolean
+): Promise<boolean> {
+  try {
+    const temp = await isTemporaryPackingEintrag(db, packlistenEintragId)
+    const pegTable = temp ? 'packlisten_eintrag_gruppen_temporaer' : 'packlisten_eintrag_gruppen'
+
+    const existing = await db
+      .prepare(`SELECT gepackt FROM ${pegTable} WHERE packlisten_eintrag_id = ? AND gruppe_id = ?`)
+      .bind(packlistenEintragId, gruppeId)
+      .first<{ gepackt: number }>()
+
+    if (existing) {
+      await db
+        .prepare(
+          `UPDATE ${pegTable} SET gepackt = ?, gepackt_vorgemerkt = 0, updated_at = datetime('now') WHERE packlisten_eintrag_id = ? AND gruppe_id = ?`
+        )
+        .bind(gepackt ? 1 : 0, packlistenEintragId, gruppeId)
+        .run()
+    } else {
+      await db
+        .prepare(
+          `INSERT INTO ${pegTable} (id, packlisten_eintrag_id, gruppe_id, gepackt, gepackt_vorgemerkt, anzahl) VALUES (?, ?, ?, ?, 0, 1)`
+        )
+        .bind(crypto.randomUUID(), packlistenEintragId, gruppeId, gepackt ? 1 : 0)
+        .run()
+    }
+    return true
+  } catch (error) {
+    console.error('Error togglePackingItemForGruppe:', error)
+    return false
+  }
+}
+
+export async function togglePackingItemVorgemerktForGruppe(
+  db: D1Database,
+  packlistenEintragId: string,
+  gruppeId: string,
+  vorgemerkt: boolean,
+  durch?: string | null
+): Promise<boolean> {
+  try {
+    const temp = await isTemporaryPackingEintrag(db, packlistenEintragId)
+    const pegTable = temp ? 'packlisten_eintrag_gruppen_temporaer' : 'packlisten_eintrag_gruppen'
+
+    const existing = await db
+      .prepare(`SELECT gepackt FROM ${pegTable} WHERE packlisten_eintrag_id = ? AND gruppe_id = ?`)
+      .bind(packlistenEintragId, gruppeId)
+      .first<{ gepackt: number }>()
+
+    if (existing) {
+      await db
+        .prepare(
+          `UPDATE ${pegTable} SET gepackt_vorgemerkt = ?, gepackt_vorgemerkt_durch = ?, updated_at = datetime('now') WHERE packlisten_eintrag_id = ? AND gruppe_id = ?`
+        )
+        .bind(vorgemerkt ? 1 : 0, durch ?? null, packlistenEintragId, gruppeId)
+        .run()
+    } else {
+      await db
+        .prepare(
+          `INSERT INTO ${pegTable} (id, packlisten_eintrag_id, gruppe_id, gepackt, gepackt_vorgemerkt, gepackt_vorgemerkt_durch, anzahl) VALUES (?, ?, ?, 0, ?, ?, 1)`
+        )
+        .bind(crypto.randomUUID(), packlistenEintragId, gruppeId, vorgemerkt ? 1 : 0, durch ?? null)
+        .run()
+    }
+    return true
+  } catch (error) {
+    console.error('Error togglePackingItemVorgemerktForGruppe:', error)
+    return false
+  }
+}
+
 export async function getPackingItems(db: D1Database, vacationId: string): Promise<PackingItem[]> {
   try {
     /**
@@ -687,6 +924,8 @@ export async function getPackingItems(db: D1Database, vacationId: string): Promi
     const query = `
       SELECT 
         pe.id, pe.packliste_id, pe.gegenstand_id, pe.anzahl, pe.gepackt, pe.gepackt_vorgemerkt, pe.gepackt_vorgemerkt_durch, pe.bemerkung, pe.transport_id,
+        pe.pauschal_gruppen_modus, pe.verantwortliche_gruppe_id,
+        vg.name AS verantwortliche_gruppe_name,
         CASE WHEN ag.id IS NULL
           THEN '(Gegenstand fehlt in Ausrüstung — Zeile ' || pe.id || ', Ausrüstung ' || pe.gegenstand_id || ')'
           ELSE ag.was END AS was,
@@ -706,6 +945,7 @@ export async function getPackingItems(db: D1Database, vacationId: string): Promi
       LEFT JOIN kategorien k ON ag.kategorie_id = k.id
       LEFT JOIN hauptkategorien hk ON k.hauptkategorie_id = hk.id
       LEFT JOIN transportmittel t ON pe.transport_id = t.id
+      LEFT JOIN mitreisenden_gruppe vg ON pe.verantwortliche_gruppe_id = vg.id
       WHERE p.urlaub_id = ?
         AND (
           ag.id IS NULL
@@ -759,6 +999,8 @@ export async function getPackingItems(db: D1Database, vacationId: string): Promi
       mitreisendeByEintrag.set(eid, arr)
     }
 
+    const gruppenByEintrag = await loadPackingItemGruppenForVacation(db, vacationId, false)
+
     const items: PackingItem[] = []
     for (const item of rows) {
       const id = String(item.id)
@@ -791,6 +1033,16 @@ export async function getPackingItems(db: D1Database, vacationId: string): Promi
         created_at: String(item.created_at || ''),
         orderHk: item.hk_reihenfolge != null ? Number(item.hk_reihenfolge) : undefined,
         orderK: item.k_reihenfolge != null ? Number(item.k_reihenfolge) : undefined,
+        pauschal_gruppen_modus: parsePauschalGruppenModus(
+          (item as Record<string, unknown>).pauschal_gruppen_modus
+        ),
+        verantwortliche_gruppe_id: (item as Record<string, unknown>).verantwortliche_gruppe_id
+          ? String((item as Record<string, unknown>).verantwortliche_gruppe_id)
+          : null,
+        verantwortliche_gruppe_name: (item as Record<string, unknown>).verantwortliche_gruppe_name
+          ? String((item as Record<string, unknown>).verantwortliche_gruppe_name)
+          : null,
+        gruppen: gruppenByEintrag.get(id) ?? [],
       })
     }
 
@@ -852,17 +1104,21 @@ export async function getPackingItems(db: D1Database, vacationId: string): Promi
 
       const tempQuery = `
         SELECT pet.id, pet.packliste_id, pet.was, pet.kategorie_id, pet.anzahl, pet.gepackt, pet.gepackt_vorgemerkt, pet.gepackt_vorgemerkt_durch, pet.bemerkung, pet.transport_id,
+               pet.pauschal_gruppen_modus, pet.verantwortliche_gruppe_id,
+               vg.name AS verantwortliche_gruppe_name,
                k.titel as kategorie, hk.titel as hauptkategorie, hk.reihenfolge as hk_reihenfolge, k.reihenfolge as k_reihenfolge,
                t.name as transport_name, pet.created_at
         FROM packlisten_eintraege_temporaer pet
         JOIN kategorien k ON pet.kategorie_id = k.id
         JOIN hauptkategorien hk ON k.hauptkategorie_id = hk.id
         LEFT JOIN transportmittel t ON pet.transport_id = t.id
+        LEFT JOIN mitreisenden_gruppe vg ON pet.verantwortliche_gruppe_id = vg.id
         WHERE pet.packliste_id = ?
         ORDER BY hk.reihenfolge, k.reihenfolge, pet.was
       `
       const tempResult = await db.prepare(tempQuery).bind(packlisteId).all<Record<string, unknown>>()
       const tempRows = tempResult.results || []
+      const tempGruppenByEintrag = await loadPackingItemGruppenForVacation(db, vacationId, true)
       for (const row of tempRows) {
         const eid = String(row.id)
         const tempMit = tempMitreisendeByEintrag.get(eid) || []
@@ -887,6 +1143,16 @@ export async function getPackingItems(db: D1Database, vacationId: string): Promi
           is_temporaer: true,
           orderHk: row.hk_reihenfolge != null ? Number(row.hk_reihenfolge) : undefined,
           orderK: row.k_reihenfolge != null ? Number(row.k_reihenfolge) : undefined,
+          pauschal_gruppen_modus: parsePauschalGruppenModus(
+            (row as Record<string, unknown>).pauschal_gruppen_modus
+          ),
+          verantwortliche_gruppe_id: row.verantwortliche_gruppe_id
+            ? String(row.verantwortliche_gruppe_id)
+            : null,
+          verantwortliche_gruppe_name: row.verantwortliche_gruppe_name
+            ? String(row.verantwortliche_gruppe_name)
+            : null,
+          gruppen: tempGruppenByEintrag.get(eid) ?? [],
         })
       }
     }
@@ -2050,15 +2316,16 @@ export async function addPackingItem(
   anzahl: number,
   bemerkung?: string | null,
   transportId?: string | null,
-  mitreisende?: PackingItemMitreisenderInput[]
+  mitreisende?: PackingItemMitreisenderInput[],
+  pauschalGruppenModus: PauschalGruppenModus = 'einmal'
 ): Promise<string | null> {
   try {
     const id = crypto.randomUUID()
     await db
       .prepare(
-        'INSERT INTO packlisten_eintraege (id, packliste_id, gegenstand_id, anzahl, bemerkung, transport_id) VALUES (?, ?, ?, ?, ?, ?)'
+        'INSERT INTO packlisten_eintraege (id, packliste_id, gegenstand_id, anzahl, bemerkung, transport_id, pauschal_gruppen_modus) VALUES (?, ?, ?, ?, ?, ?, ?)'
       )
-      .bind(id, packlisteId, gegenstandId, anzahl, bemerkung || null, transportId || null)
+      .bind(id, packlisteId, gegenstandId, anzahl, bemerkung || null, transportId || null, pauschalGruppenModus)
       .run()
 
     // Add mitreisende associations if provided
@@ -2091,15 +2358,17 @@ export async function addTemporaryPackingItem(
   anzahl: number,
   bemerkung?: string | null,
   transportId?: string | null,
-  mitreisende?: string[]
+  mitreisende?: string[],
+  pauschalGruppenModus: PauschalGruppenModus = 'einmal'
 ): Promise<string | null> {
   try {
     const id = crypto.randomUUID()
+    const modus = mitreisende && mitreisende.length > 0 ? 'einmal' : pauschalGruppenModus
     await db
       .prepare(
-        `INSERT INTO packlisten_eintraege_temporaer (id, packliste_id, was, kategorie_id, anzahl, bemerkung, transport_id) VALUES (?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO packlisten_eintraege_temporaer (id, packliste_id, was, kategorie_id, anzahl, bemerkung, transport_id, pauschal_gruppen_modus) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
       )
-      .bind(id, packlisteId, was.trim(), kategorieId, anzahl, bemerkung || null, transportId || null)
+      .bind(id, packlisteId, was.trim(), kategorieId, anzahl, bemerkung || null, transportId || null, modus)
       .run()
     // optionale Mitreisende-Zuordnung für temporäre Einträge
     if (mitreisende && mitreisende.length > 0) {

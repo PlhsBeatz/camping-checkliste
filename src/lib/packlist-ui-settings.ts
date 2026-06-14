@@ -1,9 +1,12 @@
+import type { PauschalGruppenFilter } from '@/lib/pauschal-gruppen'
+
 /** Packlisten-UI pro Urlaub (sessionStorage – überlebt Reconnect/Remount). */
 export interface PacklistUiSettings {
   hidePackedItems?: boolean
   listDisplayMode?: 'alles' | 'packliste'
   selectedPackProfile?: string | null
   activeMainCategory?: string
+  pauschalGruppenFilter?: PauschalGruppenFilter
 }
 
 export interface PacklistUiState {
@@ -11,6 +14,7 @@ export interface PacklistUiState {
   listDisplayMode: 'alles' | 'packliste'
   selectedPackProfile: string | null
   activeMainCategory: string
+  pauschalGruppenFilter: PauschalGruppenFilter
 }
 
 const KEY_PREFIX = 'packlistUi:'
@@ -23,6 +27,7 @@ const DEFAULT_UI: PacklistUiState = {
   listDisplayMode: 'packliste',
   selectedPackProfile: null,
   activeMainCategory: '',
+  pauschalGruppenFilter: 'alle',
 }
 
 export function resolveVacationIdForUi(): string | null {
@@ -77,5 +82,7 @@ export function getInitialPacklistUiState(
         ? saved.selectedPackProfile
         : DEFAULT_UI.selectedPackProfile,
     activeMainCategory: saved?.activeMainCategory ?? DEFAULT_UI.activeMainCategory,
+    pauschalGruppenFilter:
+      saved?.pauschalGruppenFilter ?? DEFAULT_UI.pauschalGruppenFilter,
   }
 }

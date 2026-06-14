@@ -68,16 +68,33 @@ export function computePackingProgress(
     if (!shouldCountPackingItem(item, departureDate, now)) continue
 
     if (item.mitreisenden_typ === 'pauschal') {
-      total += 1
-      if (item.gepackt) {
-        packed += 1
+      const modus = item.pauschal_gruppen_modus ?? 'einmal'
+      if (modus === 'pro_gruppe' || modus === 'ausgewaehlte_gruppen') {
+        for (const g of item.gruppen ?? []) {
+          total += 1
+          if (g.gepackt) {
+            packed += 1
+          } else {
+            openItems.push({
+              id: item.id,
+              was: `${item.was} (${g.gruppe_name ?? g.gruppe_id})`,
+              hauptkategorie: item.hauptkategorie,
+              vorgemerkt: !!g.gepackt_vorgemerkt,
+            })
+          }
+        }
       } else {
-        openItems.push({
-          id: item.id,
-          was: item.was,
-          hauptkategorie: item.hauptkategorie,
-          vorgemerkt: !!item.gepackt_vorgemerkt,
-        })
+        total += 1
+        if (item.gepackt) {
+          packed += 1
+        } else {
+          openItems.push({
+            id: item.id,
+            was: item.was,
+            hauptkategorie: item.hauptkategorie,
+            vorgemerkt: !!item.gepackt_vorgemerkt,
+          })
+        }
       }
       continue
     }

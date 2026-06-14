@@ -57,6 +57,18 @@ import {
   resolveVacationIdForUi,
   writePacklistUiSettings,
 } from '@/lib/packlist-ui-settings'
+import {
+  getForeignGruppeNameForWarning,
+  getVacationGruppenMap,
+  hasMultipleVacationGroups,
+  isAdminForeignWarnSuppressed,
+  shouldWarnAdminForeignGruppe,
+  resolveDefaultPauschalGruppenFilter,
+  countUnassignedPauschalItems,
+  type PauschalGruppenFilter,
+  type PauschalGruppenAssignmentPayload,
+} from '@/lib/pauschal-gruppen'
+import { AdminFremdeGruppeWarningDialog } from '@/components/admin-fremde-gruppe-warning-dialog'
 import { usePackingSync } from '@/hooks/use-packing-sync'
 import { useOptimisticMutation } from '@/hooks/use-optimistic-mutation'
 import {
@@ -161,6 +173,14 @@ function HomeContent() {
     () => resolveOwnGruppeId(user?.gruppe_id, vacationMitreisende),
     [user?.gruppe_id, vacationMitreisende]
   )
+  const multiGroupVacation = useMemo(
+    () => hasMultipleVacationGroups(vacationMitreisende),
+    [vacationMitreisende]
+  )
+  const vacationGruppenMap = useMemo(
+    () => getVacationGruppenMap(vacationMitreisende),
+    [vacationMitreisende]
+  )
   const packProfileScopeMitreisende = useMemo(
     () =>
       getPackProfileScopeMitreisende(vacationMitreisende, {
@@ -214,8 +234,16 @@ function HomeContent() {
   const [listDisplayMode, setListDisplayMode] = useState<'alles' | 'packliste'>(
     defaultPacklistUi.listDisplayMode
   )
+  const [pauschalGruppenFilter, setPauschalGruppenFilter] = useState<PauschalGruppenFilter>(
+    defaultPacklistUi.pauschalGruppenFilter
+  )
+  const [adminForeignWarn, setAdminForeignWarn] = useState<{
+    gruppeName: string
+    proceed: () => void
+  } | null>(null)
   /** Beim Wechsel des Urlaubs: UI aus Storage oder Urlaubs-Standard (einmal pro Urlaub). */
   const lastAppliedDefaultVacationIdRef = useRef<string | null>(null)
+  const pauschalFilterDefaultAppliedRef = useRef<string | null>(null)
 
   useEffect(() => {
     const vid = resolveVacationIdForUi()
@@ -226,6 +254,7 @@ function HomeContent() {
       setHidePackedItems(ui.hidePackedItems)
       setListDisplayMode(ui.listDisplayMode)
       setActiveMainCategory(ui.activeMainCategory)
+      setPauschalGruppenFilter(ui.pauschalGruppenFilter)
       if (ui.selectedPackProfile !== null) {
         setAutoProfileInitializedVacationId(vid)
       }
@@ -279,6 +308,14 @@ function HomeContent() {
     (category: string) => {
       setActiveMainCategory(category)
       persistPacklistUi({ activeMainCategory: category })
+    },
+    [persistPacklistUi]
+  )
+
+  const handlePauschalGruppenFilterChange = useCallback(
+    (filter: PauschalGruppenFilter) => {
+      setPauschalGruppenFilter(filter)
+      persistPacklistUi({ pauschalGruppenFilter: filter })
     },
     [persistPacklistUi]
   )
@@ -857,6 +894,25 @@ function HomeContent() {
       })
   }, [availableEquipment, searchTerm, categories, mainCategories])
 
+  const unassignedPauschalCount = useMemo(
+    () => countUnassignedPauschalItems(packingItems),
+    [packingItems]
+  )
+
+  useEffect(() => {
+    if (pauschalGruppenFilter !== 'offen') return
+    if (unassignedPauschalCount > 0) return
+    setPauschalGruppenFilter('eigene')
+    if (selectedVacationId) {
+      persistPacklistUi({ pauschalGruppenFilter: 'eigene' })
+    }
+  }, [
+    pauschalGruppenFilter,
+    unassignedPauschalCount,
+    selectedVacationId,
+    persistPacklistUi,
+  ])
+
   const currentVacation = useMemo((): Vacation | null => {
     if (!selectedVacationId) return null
     const found = vacations.find((v) => v.id === selectedVacationId)
@@ -899,7 +955,30 @@ function HomeContent() {
       }
     }
     setActiveMainCategory(saved?.activeMainCategory ?? '')
-  }, [selectedVacationId, vacations])
+    if (saved?.pauschalGruppenFilter !== undefined) {
+      const savedFilter = saved.pauschalGruppenFilter
+      setPauschalGruppenFilter(
+        canEditPauschalEntries || savedFilter === 'eigene' ? savedFilter : 'eigene'
+      )
+      pauschalFilterDefaultAppliedRef.current = selectedVacationId
+    } else {
+      pauschalFilterDefaultAppliedRef.current = null
+    }
+  }, [selectedVacationId, vacations, canEditPauschalEntries])
+
+  useEffect(() => {
+    if (!selectedVacationId || !multiGroupVacation) return
+    if (!canEditPauschalEntries) {
+      setPauschalGruppenFilter('eigene')
+      return
+    }
+    const saved = readPacklistUiSettings(selectedVacationId)
+    if (saved?.pauschalGruppenFilter !== undefined) return
+    if (pauschalFilterDefaultAppliedRef.current === selectedVacationId) return
+    const def = resolveDefaultPauschalGruppenFilter(packingItems)
+    setPauschalGruppenFilter(def)
+    pauschalFilterDefaultAppliedRef.current = selectedVacationId
+  }, [selectedVacationId, multiGroupVacation, packingItems, canEditPauschalEntries])
 
   const handleGeneratePackingList = async (equipmentItems: EquipmentItem[]) => {
     if (!selectedVacationId || equipmentItems.length === 0) return
@@ -967,6 +1046,7 @@ function HomeContent() {
           anzahl: Math.max(anzahl, 0),
           transportId: item.transport_id || null,
           mitreisende: mitreisendeIds,
+          ...(typ === 'pauschal' && multiGroupVacation ? { pauschalGruppenModus: 'offen' as const } : {}),
         }
       })
 
@@ -1028,17 +1108,15 @@ function HomeContent() {
     }
   }
 
-  const handleTogglePacked = async (itemId: string) => {
+  const executeTogglePacked = async (itemId: string) => {
     pendingMutationsRef.current += 1
     const item = packingItems.find(p => p.id === itemId)
-    // Kind: effectivePacked (gepackt oder vorgemerkt) für korrekten Toggle – Vormerkung entfernen möglich
     const isPacked = item
       ? (gepacktRequiresParentApproval ? !!(item.gepackt || item.gepackt_vorgemerkt) : !!item.gepackt)
       : false
     const newPackedState = !isPacked
     const prevItems = packingItems
 
-    // Optimistic update: bei Kind mit vorgemerkt → gepackt_vorgemerkt
     setPackingItems(prev =>
       prev.map(p =>
         p.id === itemId
@@ -1050,8 +1128,6 @@ function HomeContent() {
     )
 
     try {
-      // Outbox: bei Offline / 5xx wird der Eintrag in syncQueue gelegt und beim Reconnect
-      // automatisch nachgeschickt. UI bleibt optimistisch.
       const result = await mutate({
         table: 'packing-items',
         action: 'put',
@@ -1069,6 +1145,30 @@ function HomeContent() {
     } finally {
       pendingMutationsRef.current -= 1
     }
+  }
+
+  const handleTogglePacked = (itemId: string) => {
+    const item = packingItems.find((p) => p.id === itemId)
+    const isAdmin = !!user && isAdminRole(user.role)
+    if (
+      item &&
+      item.mitreisenden_typ === 'pauschal' &&
+      isAdmin &&
+      multiGroupVacation &&
+      selectedVacationId &&
+      shouldWarnAdminForeignGruppe(item, ownGruppeId, true) &&
+      !isAdminForeignWarnSuppressed(selectedVacationId)
+    ) {
+      setAdminForeignWarn({
+        gruppeName: getForeignGruppeNameForWarning(item, vacationGruppenMap),
+        proceed: () => {
+          setAdminForeignWarn(null)
+          void executeTogglePacked(itemId)
+        },
+      })
+      return
+    }
+    void executeTogglePacked(itemId)
   }
 
   const handleToggleMitreisender = async (itemId: string, mitreisenderId: string, currentStatus: boolean) => {
@@ -1121,6 +1221,130 @@ function HomeContent() {
       }
     } catch (error) {
       console.error('Failed to toggle mitreisender:', error)
+      setPackingItems(prevItems)
+    } finally {
+      pendingMutationsRef.current -= 1
+    }
+  }
+
+  const handleSetPauschalGruppen = async (
+    packingItemId: string,
+    payload: PauschalGruppenAssignmentPayload
+  ) => {
+    pendingMutationsRef.current += 1
+    const prevItems = packingItems
+    setPackingItems((prev) =>
+      prev.map((p) => {
+        if (p.id !== packingItemId) return p
+        const gruppeNames = vacationGruppenMap
+        let gruppen = p.gruppen ?? []
+        if (payload.pauschalGruppenModus === 'pro_gruppe') {
+          gruppen = [...vacationGruppenMap.keys()].map((gid) => ({
+            id: `${packingItemId}-${gid}`,
+            gruppe_id: gid,
+            gruppe_name: gruppeNames.get(gid),
+            gepackt: gruppen.find((g) => g.gruppe_id === gid)?.gepackt ?? false,
+          }))
+        } else if (payload.pauschalGruppenModus === 'ausgewaehlte_gruppen') {
+          gruppen = (payload.gruppeIds ?? []).map((gid) => ({
+            id: `${packingItemId}-${gid}`,
+            gruppe_id: gid,
+            gruppe_name: gruppeNames.get(gid),
+            gepackt: gruppen.find((g) => g.gruppe_id === gid)?.gepackt ?? false,
+          }))
+        } else {
+          gruppen = []
+        }
+        return {
+          ...p,
+          pauschal_gruppen_modus: payload.pauschalGruppenModus,
+          verantwortliche_gruppe_id: payload.verantwortlicheGruppeId ?? null,
+          verantwortliche_gruppe_name: payload.verantwortlicheGruppeId
+            ? gruppeNames.get(payload.verantwortlicheGruppeId) ?? null
+            : null,
+          gruppen,
+        }
+      })
+    )
+    try {
+      const result = await mutate({
+        table: 'packing-items-pauschal-gruppen',
+        action: 'put',
+        key: packingItemId,
+        payload: { packingItemId, ...payload },
+      })
+      if (!result.ok && !result.queued) {
+        setPackingItems(prevItems)
+        alert(result.error ?? 'Zuordnung fehlgeschlagen')
+      }
+    } catch (error) {
+      console.error('Failed to set pauschal gruppen:', error)
+      setPackingItems(prevItems)
+    } finally {
+      pendingMutationsRef.current -= 1
+    }
+  }
+
+  const handleToggleGruppe = async (
+    itemId: string,
+    gruppeId: string,
+    currentStatus: boolean
+  ) => {
+    const item = packingItems.find((p) => p.id === itemId)
+    const isAdmin = !!user && isAdminRole(user.role)
+    if (
+      item &&
+      isAdmin &&
+      multiGroupVacation &&
+      selectedVacationId &&
+      shouldWarnAdminForeignGruppe(item, ownGruppeId, true, gruppeId) &&
+      !isAdminForeignWarnSuppressed(selectedVacationId)
+    ) {
+      setAdminForeignWarn({
+        gruppeName: getForeignGruppeNameForWarning(item, vacationGruppenMap, gruppeId),
+        proceed: () => {
+          setAdminForeignWarn(null)
+          void executeToggleGruppe(itemId, gruppeId, currentStatus)
+        },
+      })
+      return
+    }
+    void executeToggleGruppe(itemId, gruppeId, currentStatus)
+  }
+
+  const executeToggleGruppe = async (
+    itemId: string,
+    gruppeId: string,
+    currentStatus: boolean
+  ) => {
+    pendingMutationsRef.current += 1
+    const newStatus = !currentStatus
+    const prevItems = packingItems
+    setPackingItems((prev) =>
+      prev.map((p) => {
+        if (p.id !== itemId) return p
+        const gruppen = (p.gruppen ?? []).map((g) =>
+          g.gruppe_id === gruppeId
+            ? gepacktRequiresParentApproval
+              ? { ...g, gepackt_vorgemerkt: newStatus }
+              : { ...g, gepackt: newStatus, gepackt_vorgemerkt: false }
+            : g
+        )
+        return { ...p, gruppen }
+      })
+    )
+    try {
+      const result = await mutate({
+        table: 'packing-items-toggle-gruppe',
+        action: 'put',
+        key: `${itemId}|${gruppeId}`,
+        payload: { packingItemId: itemId, gruppeId, gepackt: newStatus },
+      })
+      if (!result.ok && !result.queued) {
+        setPackingItems(prevItems)
+      }
+    } catch (error) {
+      console.error('Failed to toggle gruppe:', error)
       setPackingItems(prevItems)
     } finally {
       pendingMutationsRef.current -= 1
@@ -1845,6 +2069,20 @@ function HomeContent() {
                   activeMainCategory={activeMainCategory}
                   onActiveMainCategoryChange={handleActiveMainCategoryChange}
                   onProfileChange={handlePackProfileChange}
+                  pauschalGruppenFilter={pauschalGruppenFilter}
+                  onSetPauschalGruppen={
+                    canEditPauschalEntries ? handleSetPauschalGruppen : undefined
+                  }
+                  onToggleGruppe={canEditPauschalEntries ? handleToggleGruppe : undefined}
+                  isAdmin={!!user && isAdminRole(user.role)}
+              />
+
+              <AdminFremdeGruppeWarningDialog
+                open={!!adminForeignWarn}
+                gruppeName={adminForeignWarn?.gruppeName ?? ''}
+                vacationId={selectedVacationId}
+                onConfirm={() => adminForeignWarn?.proceed()}
+                onCancel={() => setAdminForeignWarn(null)}
               />
 
               {/* Auto-generate button - Only when list is empty (Admin/Erwachsene) */}
@@ -2043,6 +2281,10 @@ function HomeContent() {
         profilesLoading={
           !!selectedVacationId && vacationMitreisende.length === 0
         }
+        showPauschalGruppenFilter={multiGroupVacation && canEditPauschalEntries}
+        pauschalGruppenFilter={pauschalGruppenFilter}
+        onPauschalGruppenFilterChange={handlePauschalGruppenFilterChange}
+        unassignedPauschalCount={unassignedPauschalCount}
       />
 
       {/* FAB: Gegenstände hinzufügen – Admin/Erwachsene (Kinder: nur abhaken, nicht Struktur ändern) */}

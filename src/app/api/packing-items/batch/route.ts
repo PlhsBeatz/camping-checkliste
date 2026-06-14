@@ -26,6 +26,7 @@ export async function POST(request: NextRequest) {
          * (verwendet `packlisten_eintrag_mitreisende.anzahl`).
          */
         mitreisende?: Array<string | { id: string; anzahl?: number | null }>
+        pauschalGruppenModus?: 'offen' | 'einmal' | 'pro_gruppe' | 'ausgewaehlte_gruppen'
       }>
     }
     const { vacationId, items } = body
@@ -49,8 +50,11 @@ export async function POST(request: NextRequest) {
 
     const results: { success: boolean; gegenstandId?: string }[] = []
     for (const item of items) {
-      const { gegenstandId, anzahl = 1, bemerkung, transportId, mitreisende } = item
+      const { gegenstandId, anzahl = 1, bemerkung, transportId, mitreisende, pauschalGruppenModus } = item
       if (!gegenstandId) continue
+      const modus =
+        pauschalGruppenModus ??
+        ((mitreisende?.length ?? 0) === 0 ? 'einmal' : 'einmal')
       const id = await addPackingItem(
         db,
         packlisteId,
@@ -58,7 +62,8 @@ export async function POST(request: NextRequest) {
         anzahl,
         bemerkung,
         transportId ?? null,
-        mitreisende ?? []
+        mitreisende ?? [],
+        modus
       )
       results.push({ success: !!id, gegenstandId })
     }

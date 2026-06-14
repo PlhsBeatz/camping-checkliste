@@ -103,3 +103,5 @@ export function getPackProfileScopeMitreisende(
 export function packProfileScopeIdSet(mitreisende: Mitreisender[]): Set<string> {
   return new Set(mitreisende.map((m) => m.id))
 }
+
+export { getVacationGruppeIds, hasMultipleVacationGroups } from '@/lib/pauschal-gruppen'
