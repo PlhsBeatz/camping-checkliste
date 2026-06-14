@@ -64,6 +64,7 @@ import {
   isAdminForeignWarnSuppressed,
   shouldWarnAdminForeignGruppe,
   resolveDefaultPauschalGruppenFilter,
+  resolveActiveGruppeIdForPacking,
   countUnassignedPauschalItems,
   type PauschalGruppenFilter,
   type PauschalGruppenAssignmentPayload,
@@ -101,6 +102,8 @@ const PACKABLE_STATUSES: readonly string[] = ['Normal', 'Immer gepackt']
 const PACKING_WS_SUPPRESS_MS = 4000
 /** Mehrere Refetch-Auslöser (Reconnect, Outbox, WS) zu einem UI-Update bündeln. */
 const PACKING_REFRESH_DEBOUNCE_MS = 400
+const PAUSCHAL_ASSIGN_FLUSH_MS = 350
+const PAUSCHAL_ASSIGN_BATCH_SIZE = 40
 /** Mindestabstand zwischen Post-Reconnect-Refreshes (verhindert doppeltes Laden). */
 const POST_RECONNECT_REFRESH_GAP_MS = 2500
 /** Nach manuellem Refresh: WS-Events ignorieren (Sync sendet viele packing-list-changed). */
@@ -437,6 +440,12 @@ function HomeContent() {
   // Zähler ausstehender eigener Mutationen: Refetch nur wenn 0 (Änderung von anderem Gerät
   // oder alle eigenen PUTs abgeschlossen – verhindert partielle Daten bei schnellem Abhaken)
   const pendingMutationsRef = useRef(0)
+  const pauschalAssignQueueRef = useRef<
+    Array<{ packingItemId: string; payload: PauschalGruppenAssignmentPayload }>
+  >([])
+  const pauschalAssignFlushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const pauschalAssignFlushInFlightRef = useRef<Promise<void> | null>(null)
+  const pauschalAssignRevertSnapshotRef = useRef<PackingItem[] | null>(null)
 
   const applyPackingItemsFromFetch = useCallback(
     (next: PackingItem[]) => {
@@ -1150,17 +1159,26 @@ function HomeContent() {
   const handleTogglePacked = (itemId: string) => {
     const item = packingItems.find((p) => p.id === itemId)
     const isAdmin = !!user && isAdminRole(user.role)
+    const activeGruppeId = resolveActiveGruppeIdForPacking(
+      selectedPackProfile,
+      vacationMitreisende,
+      ownGruppeId
+    )
     if (
       item &&
       item.mitreisenden_typ === 'pauschal' &&
       isAdmin &&
       multiGroupVacation &&
       selectedVacationId &&
-      shouldWarnAdminForeignGruppe(item, ownGruppeId, true) &&
+      shouldWarnAdminForeignGruppe(item, ownGruppeId, true, activeGruppeId ?? undefined) &&
       !isAdminForeignWarnSuppressed(selectedVacationId)
     ) {
       setAdminForeignWarn({
-        gruppeName: getForeignGruppeNameForWarning(item, vacationGruppenMap),
+        gruppeName: getForeignGruppeNameForWarning(
+          item,
+          vacationGruppenMap,
+          activeGruppeId ?? undefined
+        ),
         proceed: () => {
           setAdminForeignWarn(null)
           void executeTogglePacked(itemId)
@@ -1227,63 +1245,138 @@ function HomeContent() {
     }
   }
 
-  const handleSetPauschalGruppen = async (
-    packingItemId: string,
-    payload: PauschalGruppenAssignmentPayload
-  ) => {
-    pendingMutationsRef.current += 1
-    const prevItems = packingItems
-    setPackingItems((prev) =>
-      prev.map((p) => {
-        if (p.id !== packingItemId) return p
-        const gruppeNames = vacationGruppenMap
-        let gruppen = p.gruppen ?? []
-        if (payload.pauschalGruppenModus === 'pro_gruppe') {
-          gruppen = [...vacationGruppenMap.keys()].map((gid) => ({
-            id: `${packingItemId}-${gid}`,
-            gruppe_id: gid,
-            gruppe_name: gruppeNames.get(gid),
-            gepackt: gruppen.find((g) => g.gruppe_id === gid)?.gepackt ?? false,
-          }))
-        } else if (payload.pauschalGruppenModus === 'ausgewaehlte_gruppen') {
-          gruppen = (payload.gruppeIds ?? []).map((gid) => ({
-            id: `${packingItemId}-${gid}`,
-            gruppe_id: gid,
-            gruppe_name: gruppeNames.get(gid),
-            gepackt: gruppen.find((g) => g.gruppe_id === gid)?.gepackt ?? false,
-          }))
-        } else {
-          gruppen = []
-        }
-        return {
-          ...p,
-          pauschal_gruppen_modus: payload.pauschalGruppenModus,
-          verantwortliche_gruppe_id: payload.verantwortlicheGruppeId ?? null,
-          verantwortliche_gruppe_name: payload.verantwortlicheGruppeId
-            ? gruppeNames.get(payload.verantwortlicheGruppeId) ?? null
-            : null,
-          gruppen,
-        }
-      })
-    )
-    try {
-      const result = await mutate({
-        table: 'packing-items-pauschal-gruppen',
-        action: 'put',
-        key: packingItemId,
-        payload: { packingItemId, ...payload },
-      })
-      if (!result.ok && !result.queued) {
-        setPackingItems(prevItems)
-        alert(result.error ?? 'Zuordnung fehlgeschlagen')
+  const handleSetPauschalGruppen = useCallback(
+    (packingItemId: string, payload: PauschalGruppenAssignmentPayload) => {
+      if (pauschalAssignRevertSnapshotRef.current === null) {
+        pauschalAssignRevertSnapshotRef.current = packingItemsRef.current
       }
-    } catch (error) {
-      console.error('Failed to set pauschal gruppen:', error)
-      setPackingItems(prevItems)
-    } finally {
-      pendingMutationsRef.current -= 1
+
+      setPackingItems((prev) =>
+        prev.map((p) => {
+          if (p.id !== packingItemId) return p
+          const gruppeNames = vacationGruppenMap
+          let gruppen = p.gruppen ?? []
+          if (payload.pauschalGruppenModus === 'pro_gruppe') {
+            gruppen = [...vacationGruppenMap.keys()].map((gid) => ({
+              id: `${packingItemId}-${gid}`,
+              gruppe_id: gid,
+              gruppe_name: gruppeNames.get(gid),
+              gepackt: gruppen.find((g) => g.gruppe_id === gid)?.gepackt ?? false,
+            }))
+          } else if (payload.pauschalGruppenModus === 'ausgewaehlte_gruppen') {
+            gruppen = (payload.gruppeIds ?? []).map((gid) => ({
+              id: `${packingItemId}-${gid}`,
+              gruppe_id: gid,
+              gruppe_name: gruppeNames.get(gid),
+              gepackt: gruppen.find((g) => g.gruppe_id === gid)?.gepackt ?? false,
+            }))
+          } else {
+            gruppen = []
+          }
+          return {
+            ...p,
+            pauschal_gruppen_modus: payload.pauschalGruppenModus,
+            verantwortliche_gruppe_id: payload.verantwortlicheGruppeId ?? null,
+            verantwortliche_gruppe_name: payload.verantwortlicheGruppeId
+              ? gruppeNames.get(payload.verantwortlicheGruppeId) ?? null
+              : null,
+            gruppen,
+          }
+        })
+      )
+
+      pauschalAssignQueueRef.current.push({ packingItemId, payload })
+
+      if (pauschalAssignFlushTimerRef.current) {
+        clearTimeout(pauschalAssignFlushTimerRef.current)
+      }
+      pauschalAssignFlushTimerRef.current = setTimeout(() => {
+        pauschalAssignFlushTimerRef.current = null
+        void flushPauschalAssignmentQueueRef.current()
+      }, PAUSCHAL_ASSIGN_FLUSH_MS)
+    },
+    [vacationGruppenMap]
+  )
+
+  const flushPauschalAssignmentQueue = useCallback(async () => {
+    if (pauschalAssignFlushInFlightRef.current) {
+      return pauschalAssignFlushInFlightRef.current
     }
-  }
+
+    const run = (async () => {
+      if (!selectedVacationId) return
+      const chunk = pauschalAssignQueueRef.current.splice(0, PAUSCHAL_ASSIGN_BATCH_SIZE)
+      if (chunk.length === 0) return
+
+      pendingMutationsRef.current += 1
+      const revertSnapshot = pauschalAssignRevertSnapshotRef.current ?? packingItemsRef.current
+
+      try {
+        let success = false
+        if (chunk.length === 1) {
+          const { packingItemId, payload } = chunk[0]!
+          const result = await mutate({
+            table: 'packing-items-pauschal-gruppen',
+            action: 'put',
+            key: packingItemId,
+            payload: { packingItemId, ...payload },
+          })
+          success = result.ok || result.queued
+        } else {
+          const res = await fetch('/api/packing-items/pauschal-gruppen/batch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              vacationId: selectedVacationId,
+              assignments: chunk.map(({ packingItemId, payload }) => ({
+                packingItemId,
+                ...payload,
+              })),
+            }),
+          })
+          const data = (await res.json()) as ApiResponse<{ updated: number; failed: number }>
+          success = res.ok && !!data.success
+        }
+
+        if (!success) {
+          setPackingItems(revertSnapshot)
+          alert('Zuordnung fehlgeschlagen')
+        }
+      } catch (error) {
+        console.error('Failed to set pauschal gruppen:', error)
+        setPackingItems(revertSnapshot)
+        alert('Zuordnung fehlgeschlagen')
+      } finally {
+        pendingMutationsRef.current -= 1
+        if (pauschalAssignQueueRef.current.length === 0) {
+          pauschalAssignRevertSnapshotRef.current = null
+        } else {
+          setTimeout(() => {
+            void flushPauschalAssignmentQueueRef.current()
+          }, 50)
+        }
+      }
+    })()
+
+    pauschalAssignFlushInFlightRef.current = run
+    await run.finally(() => {
+      pauschalAssignFlushInFlightRef.current = null
+    })
+  }, [selectedVacationId, mutate])
+
+  const flushPauschalAssignmentQueueRef = useRef(flushPauschalAssignmentQueue)
+  flushPauschalAssignmentQueueRef.current = flushPauschalAssignmentQueue
+
+  useEffect(() => {
+    return () => {
+      if (pauschalAssignFlushTimerRef.current) {
+        clearTimeout(pauschalAssignFlushTimerRef.current)
+      }
+      if (pauschalAssignQueueRef.current.length > 0) {
+        void flushPauschalAssignmentQueueRef.current()
+      }
+    }
+  }, [])
 
   const handleToggleGruppe = async (
     itemId: string,

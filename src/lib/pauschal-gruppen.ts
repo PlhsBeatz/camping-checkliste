@@ -162,6 +162,19 @@ export function canToggleGruppeCheckbox(
   return ownGruppeId === gruppeId
 }
 
+/** Gruppe für Pauschal-Abhaken: gewähltes Personenprofil, sonst eigene Gruppe */
+export function resolveActiveGruppeIdForPacking(
+  selectedProfileId: string | null,
+  vacationMitreisende: Mitreisender[],
+  ownGruppeId: string | null
+): string | null {
+  if (selectedProfileId) {
+    const person = vacationMitreisende.find((m) => m.id === selectedProfileId)
+    if (person?.gruppe_id) return person.gruppe_id
+  }
+  return ownGruppeId
+}
+
 export function shouldWarnAdminForeignGruppe(
   item: PackingItem,
   ownGruppeId: string | null,

@@ -42,6 +42,7 @@ import {
   passesPauschalGruppenFilter,
   canTogglePauschalForOwnGruppe,
   canToggleGruppeCheckbox,
+  resolveActiveGruppeIdForPacking,
   isGruppeFullyPacked,
   areAllGruppenFullyPacked,
   getOwnGruppePackingState,
@@ -285,6 +286,16 @@ const PackingItem: React.FC<PackingItemProps> = ({
     () => getOwnGruppePackingState(fullItem, ownGruppeId ?? null),
     [fullItem, ownGruppeId]
   );
+  const activeGruppeId = useMemo(
+    () => resolveActiveGruppeIdForPacking(selectedProfile, vacationMitreisende, ownGruppeId ?? null),
+    [selectedProfile, vacationMitreisende, ownGruppeId]
+  );
+  const activeGruppeEntry = useMemo(
+    () => getOwnGruppePackingState(fullItem, activeGruppeId),
+    [fullItem, activeGruppeId]
+  );
+  const toggleGruppeId = selectedProfile ? activeGruppeId : ownGruppeId;
+  const toggleGruppeEntry = selectedProfile ? activeGruppeEntry : ownGruppeEntry;
   const allGruppenFullyPacked = useMemo(
     () => areAllGruppenFullyPacked(fullItem, !!canConfirmVorgemerkt),
     [fullItem, canConfirmVorgemerkt]
@@ -292,15 +303,21 @@ const PackingItem: React.FC<PackingItemProps> = ({
   const ownGruppeFullyPacked = useMemo(() => {
     return ownGruppeEntry ? isGruppeFullyPacked(ownGruppeEntry, !!canConfirmVorgemerkt) : false
   }, [ownGruppeEntry, canConfirmVorgemerkt]);
+  const activeGruppeFullyPacked = useMemo(() => {
+    return activeGruppeEntry ? isGruppeFullyPacked(activeGruppeEntry, !!canConfirmVorgemerkt) : false
+  }, [activeGruppeEntry, canConfirmVorgemerkt]);
   const showGruppenCheckboxesRow = usesGruppenCheckboxes && pauschalGruppenFilter === 'alle';
-  const mainGruppenCheckboxChecked =
-    pauschalGruppenFilter === 'eigene' ? ownGruppeFullyPacked : allGruppenFullyPacked;
-  const ownGruppeVorgemerkt = !!ownGruppeEntry?.gepackt_vorgemerkt && !ownGruppeEntry?.gepackt;
+  const mainGruppenCheckboxChecked = selectedProfile
+    ? activeGruppeFullyPacked
+    : pauschalGruppenFilter === 'eigene'
+      ? ownGruppeFullyPacked
+      : allGruppenFullyPacked;
+  const ownGruppeVorgemerkt = !!toggleGruppeEntry?.gepackt_vorgemerkt && !toggleGruppeEntry?.gepackt;
   const canToggleOwnGruppeMain =
-    !!ownGruppeId &&
-    !!ownGruppeEntry &&
+    !!toggleGruppeId &&
+    !!toggleGruppeEntry &&
     canEditPauschalEntries &&
-    canToggleGruppeCheckbox(ownGruppeId, ownGruppeId, isAdmin);
+    canToggleGruppeCheckbox(toggleGruppeId, ownGruppeId, isAdmin);
 
   type MitreisendeRow = NonNullable<typeof mitreisende>[number];
 
@@ -336,6 +353,7 @@ const PackingItem: React.FC<PackingItemProps> = ({
   const isFullyPacked = useMemo(() => {
     if (mitreisenden_typ === 'pauschal') {
       if (usesGruppenCheckboxes) {
+        if (selectedProfile) return activeGruppeFullyPacked;
         return pauschalGruppenFilter === 'eigene' ? ownGruppeFullyPacked : allGruppenFullyPacked;
       }
       return effectivePacked(gepackt, gepackt_vorgemerkt);
@@ -353,6 +371,7 @@ const PackingItem: React.FC<PackingItemProps> = ({
     pauschalGruppenFilter,
     ownGruppeFullyPacked,
     allGruppenFullyPacked,
+    activeGruppeFullyPacked,
     fullItem,
   ]);
 
@@ -360,6 +379,7 @@ const PackingItem: React.FC<PackingItemProps> = ({
   const isFullyPackedFinal = useMemo(() => {
     if (mitreisenden_typ === 'pauschal') {
       if (usesGruppenCheckboxes) {
+        if (selectedProfile) return !!activeGruppeEntry?.gepackt;
         if (pauschalGruppenFilter === 'eigene') return !!ownGruppeEntry?.gepackt;
         return (fullItem.gruppen ?? []).length > 0 && (fullItem.gruppen ?? []).every((g) => g.gepackt);
       }
@@ -376,6 +396,7 @@ const PackingItem: React.FC<PackingItemProps> = ({
     usesGruppenCheckboxes,
     pauschalGruppenFilter,
     ownGruppeEntry,
+    activeGruppeEntry,
     fullItem.gruppen,
   ]);
 
@@ -480,6 +501,7 @@ const PackingItem: React.FC<PackingItemProps> = ({
     if (canConfirmVorgemerkt) {
       if (mitreisenden_typ === 'pauschal') {
         if (usesGruppenCheckboxes) {
+          if (selectedProfile) return !!activeGruppeEntry?.gepackt;
           return pauschalGruppenFilter === 'eigene' ? !!ownGruppeEntry?.gepackt : (fullItem.gruppen ?? []).every((g) => g.gepackt);
         }
         return gepackt;
@@ -489,6 +511,7 @@ const PackingItem: React.FC<PackingItemProps> = ({
     }
     if (mitreisenden_typ === 'pauschal') {
       if (usesGruppenCheckboxes) {
+        if (selectedProfile) return activeGruppeFullyPacked;
         return pauschalGruppenFilter === 'eigene' ? ownGruppeFullyPacked : allGruppenFullyPacked;
       }
       return effectivePacked(gepackt, gepackt_vorgemerkt);
@@ -507,7 +530,9 @@ const PackingItem: React.FC<PackingItemProps> = ({
     usesGruppenCheckboxes,
     pauschalGruppenFilter,
     ownGruppeEntry,
+    activeGruppeEntry,
     ownGruppeFullyPacked,
+    activeGruppeFullyPacked,
     allGruppenFullyPacked,
     fullItem.gruppen,
   ]);
@@ -519,9 +544,9 @@ const PackingItem: React.FC<PackingItemProps> = ({
       if (mitreisenden_typ === 'pauschal') {
         if (usesGruppenCheckboxes) {
           if (canConfirmVorgemerkt) {
-            return pauschalGruppenFilter === 'eigene' ? !!ownGruppeEntry?.gepackt : (fullItem.gruppen ?? []).every((g) => g.gepackt);
+            return !!activeGruppeEntry?.gepackt;
           }
-          return pauschalGruppenFilter === 'eigene' ? ownGruppeFullyPacked : allGruppenFullyPacked;
+          return activeGruppeFullyPacked;
         }
         return canConfirmVorgemerkt ? gepackt : effectivePacked(gepackt, gepackt_vorgemerkt);
       }
@@ -546,7 +571,9 @@ const PackingItem: React.FC<PackingItemProps> = ({
     usesGruppenCheckboxes,
     pauschalGruppenFilter,
     ownGruppeEntry,
+    activeGruppeEntry,
     ownGruppeFullyPacked,
+    activeGruppeFullyPacked,
     allGruppenFullyPacked,
     fullItem.gruppen,
   ]);
@@ -577,11 +604,11 @@ const PackingItem: React.FC<PackingItemProps> = ({
   }, [shouldHideInProfileView, hidePackedItems]);
 
   const handleGruppenMainToggle = () => {
-    if (!onToggleGruppe || !ownGruppeId || !ownGruppeEntry || !canToggleOwnGruppeMain) return;
+    if (!onToggleGruppe || !toggleGruppeId || !toggleGruppeEntry || !canToggleOwnGruppeMain) return;
     const currentEffective = canConfirmVorgemerkt
-      ? ownGruppeEntry.gepackt
-      : ownGruppeEntry.gepackt || !!ownGruppeEntry.gepackt_vorgemerkt;
-    onToggleGruppe(id, ownGruppeId, currentEffective);
+      ? toggleGruppeEntry.gepackt
+      : toggleGruppeEntry.gepackt || !!toggleGruppeEntry.gepackt_vorgemerkt;
+    onToggleGruppe(id, toggleGruppeId, currentEffective);
   };
 
   // Handle pauschal toggle
