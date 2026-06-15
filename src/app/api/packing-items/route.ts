@@ -68,8 +68,20 @@ export async function POST(request: NextRequest) {
       temporary?: boolean
       was?: string
       kategorieId?: string
+      pauschalGruppenModus?: 'offen' | 'einmal' | 'pro_gruppe' | 'ausgewaehlte_gruppen'
     }
-    const { vacationId, gegenstandId, anzahl, bemerkung, transportId, mitreisende, temporary, was, kategorieId } = body
+    const {
+      vacationId,
+      gegenstandId,
+      anzahl,
+      bemerkung,
+      transportId,
+      mitreisende,
+      temporary,
+      was,
+      kategorieId,
+      pauschalGruppenModus,
+    } = body
 
     if (!vacationId) {
       return NextResponse.json({ error: 'vacationId is required' }, { status: 400 })
@@ -99,10 +111,20 @@ export async function POST(request: NextRequest) {
         anzahl ?? 1,
         bemerkung,
         transportId,
-        mitreisendeIds
+        mitreisendeIds,
+        pauschalGruppenModus ?? 'einmal'
       )
     } else if (gegenstandId) {
-      itemId = await addPackingItem(db, packlisteId, gegenstandId, anzahl || 1, bemerkung, transportId, mitreisende)
+      itemId = await addPackingItem(
+        db,
+        packlisteId,
+        gegenstandId,
+        anzahl || 1,
+        bemerkung,
+        transportId,
+        mitreisende,
+        pauschalGruppenModus ?? 'einmal'
+      )
     } else {
       return NextResponse.json({ error: 'gegenstandId or (temporary, was, kategorieId) required' }, { status: 400 })
     }

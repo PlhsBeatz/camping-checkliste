@@ -63,7 +63,7 @@ import {
   hasMultipleVacationGroups,
   isAdminForeignWarnSuppressed,
   shouldWarnAdminForeignGruppe,
-  resolveDefaultPauschalGruppenFilter,
+  resolvePauschalGruppenFilterOnHydrate,
   resolveActiveGruppeIdForPacking,
   countUnassignedPauschalItems,
   type PauschalGruppenFilter,
@@ -231,7 +231,9 @@ function HomeContent() {
   } | null>(null)
   /** Beim Wechsel des Urlaubs: UI aus Storage oder Urlaubs-Standard (einmal pro Urlaub). */
   const lastAppliedDefaultVacationIdRef = useRef<string | null>(null)
-  const pauschalFilterDefaultAppliedRef = useRef<string | null>(null)
+  const packingListReadyVacationIdRef = useRef<string | null>(null)
+  const packingUiDefaultsAppliedRef = useRef<string | null>(null)
+  const prevUnassignedPauschalCountRef = useRef<number | null>(null)
 
   useEffect(() => {
     const vid = resolveVacationIdForUi()
@@ -241,8 +243,6 @@ function HomeContent() {
       setSelectedPackProfile(ui.selectedPackProfile)
       setHidePackedItems(ui.hidePackedItems)
       setListDisplayMode(ui.listDisplayMode)
-      setActiveMainCategory(ui.activeMainCategory)
-      setPauschalGruppenFilter(ui.pauschalGruppenFilter)
       if (ui.selectedPackProfile !== null) {
         setAutoProfileInitializedVacationId(vid)
       }
@@ -251,6 +251,7 @@ function HomeContent() {
       if (mem?.length) {
         setPackingItems(mem)
         packingHadContentRef.current = true
+        packingListReadyVacationIdRef.current = vid
       }
       const memMit = getVacationMitreisendeMemory(vid)
       if (memMit?.length) {
@@ -435,6 +436,7 @@ function HomeContent() {
   const applyPackingItemsFromFetch = useCallback(
     (next: PackingItem[]) => {
       if (!selectedVacationId) return
+      packingListReadyVacationIdRef.current = selectedVacationId
       setPackingItems((prev) => {
         if (next.length === 0 && prev.length > 0) return prev
         if (packingItemsEqual(prev, next)) return prev
@@ -476,33 +478,39 @@ function HomeContent() {
     const vacationId = selectedVacationId
     const myVersion = ++fetchPackingVersionRef.current
 
-    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    try {
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        await restorePackingFromLocal(vacationId, myVersion)
+        return
+      }
+
+      const { data } = await fetchAndCache<PackingItem[]>(
+        `/api/packing-items?vacationId=${vacationId}`,
+        (items) =>
+          items.length > 0
+            ? cachePackingItems(vacationId, items)
+            : Promise.resolve(),
+        () => getCachedPackingItems(vacationId),
+        { cache: 'no-store' }
+      )
+      if (myVersion !== fetchPackingVersionRef.current) return
+
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        await restorePackingFromLocal(vacationId, myVersion)
+        return
+      }
+
+      if (data !== null && data.length > 0) {
+        applyPackingItemsFromFetch(data)
+        return
+      }
+
       await restorePackingFromLocal(vacationId, myVersion)
-      return
+    } finally {
+      if (myVersion === fetchPackingVersionRef.current) {
+        packingListReadyVacationIdRef.current = vacationId
+      }
     }
-
-    const { data } = await fetchAndCache<PackingItem[]>(
-      `/api/packing-items?vacationId=${vacationId}`,
-      (items) =>
-        items.length > 0
-          ? cachePackingItems(vacationId, items)
-          : Promise.resolve(),
-      () => getCachedPackingItems(vacationId),
-      { cache: 'no-store' }
-    )
-    if (myVersion !== fetchPackingVersionRef.current) return
-
-    if (typeof navigator !== 'undefined' && !navigator.onLine) {
-      await restorePackingFromLocal(vacationId, myVersion)
-      return
-    }
-
-    if (data !== null && data.length > 0) {
-      applyPackingItemsFromFetch(data)
-      return
-    }
-
-    await restorePackingFromLocal(vacationId, myVersion)
   }, [selectedVacationId, applyPackingItemsFromFetch, restorePackingFromLocal])
 
   const runPackingRefresh = useCallback(async () => {
@@ -896,17 +904,32 @@ function HomeContent() {
   )
 
   useEffect(() => {
-    if (pauschalGruppenFilter !== 'offen') return
-    if (unassignedPauschalCount > 0) return
-    setPauschalGruppenFilter('eigene')
-    if (selectedVacationId) {
-      persistPacklistUi({ pauschalGruppenFilter: 'eigene' })
+    packingUiDefaultsAppliedRef.current = null
+    prevUnassignedPauschalCountRef.current = null
+  }, [selectedVacationId])
+
+  /** Nur bei Wechsel des Zuordnungsstands (nicht bei manueller Filterwahl). */
+  useEffect(() => {
+    if (!selectedVacationId || !multiGroupVacation || !canEditPauschalEntries) return
+    if (packingUiDefaultsAppliedRef.current !== selectedVacationId) return
+
+    const prev = prevUnassignedPauschalCountRef.current
+    const current = unassignedPauschalCount
+
+    if (prev !== null && prev !== current) {
+      if (prev > 0 && current === 0) {
+        setPauschalGruppenFilter('eigene')
+      } else if (prev === 0 && current > 0) {
+        setPauschalGruppenFilter('alle')
+      }
     }
+
+    prevUnassignedPauschalCountRef.current = current
   }, [
-    pauschalGruppenFilter,
-    unassignedPauschalCount,
     selectedVacationId,
-    persistPacklistUi,
+    multiGroupVacation,
+    canEditPauschalEntries,
+    unassignedPauschalCount,
   ])
 
   const currentVacation = useMemo((): Vacation | null => {
@@ -950,31 +973,32 @@ function HomeContent() {
         setAutoProfileInitializedVacationId(selectedVacationId)
       }
     }
-    setActiveMainCategory(saved?.activeMainCategory ?? '')
-    if (saved?.pauschalGruppenFilter !== undefined) {
-      const savedFilter = saved.pauschalGruppenFilter
-      setPauschalGruppenFilter(
-        canEditPauschalEntries || savedFilter === 'eigene' ? savedFilter : 'eigene'
-      )
-      pauschalFilterDefaultAppliedRef.current = selectedVacationId
-    } else {
-      pauschalFilterDefaultAppliedRef.current = null
-    }
   }, [selectedVacationId, vacations, canEditPauschalEntries])
 
+  /** Nach Packlisten-Laden: Standard-Filter + erster Tab (nicht aus Storage). */
   useEffect(() => {
     if (!selectedVacationId || !multiGroupVacation) return
     if (!canEditPauschalEntries) {
       setPauschalGruppenFilter('eigene')
       return
     }
+    if (packingListReadyVacationIdRef.current !== selectedVacationId) return
+    if (packingUiDefaultsAppliedRef.current === selectedVacationId) return
+
+    packingUiDefaultsAppliedRef.current = selectedVacationId
     const saved = readPacklistUiSettings(selectedVacationId)
-    if (saved?.pauschalGruppenFilter !== undefined) return
-    if (pauschalFilterDefaultAppliedRef.current === selectedVacationId) return
-    const def = resolveDefaultPauschalGruppenFilter(packingItems)
-    setPauschalGruppenFilter(def)
-    pauschalFilterDefaultAppliedRef.current = selectedVacationId
-  }, [selectedVacationId, multiGroupVacation, packingItems, canEditPauschalEntries])
+    setPauschalGruppenFilter(
+      resolvePauschalGruppenFilterOnHydrate(packingItems, saved?.pauschalGruppenFilter)
+    )
+    prevUnassignedPauschalCountRef.current = unassignedPauschalCount
+    setActiveMainCategory('')
+  }, [
+    selectedVacationId,
+    multiGroupVacation,
+    packingItems,
+    unassignedPauschalCount,
+    canEditPauschalEntries,
+  ])
 
   const handleGeneratePackingList = async (equipmentItems: EquipmentItem[]) => {
     if (!selectedVacationId || equipmentItems.length === 0) return
@@ -1818,8 +1842,6 @@ function HomeContent() {
       const vacationMitreisendeById = new Map(vacationMitreisende.map((m) => [m.id, m]))
       const reiseTage = currentVacation ? berechneReiseTage(currentVacation) : 1
 
-      // Zeilen-anzahl und Pro-Person-Anzahlen für einen neuen Eintrag berechnen.
-      // Bei personenbezogenen Einträgen mit Regel: Pro-Person rechnen + Summe als Zeilenwert.
       const buildItemPayload = (eq: EquipmentItem | undefined, expectedIds: string[]) => {
         const typ = (eq?.mitreisenden_typ ?? 'pauschal') as 'pauschal' | 'alle' | 'ausgewaehlte'
         if (eq?.mengenregel && typ !== 'pauschal' && expectedIds.length > 0) {
@@ -1841,6 +1863,14 @@ function HomeContent() {
           ? berechneAnzahl(eq.mengenregel, reiseTage, false)
           : eq?.standard_anzahl ?? 1
         return { anzahl: Math.max(anzahl, 0), mitreisende: expectedIds as Array<string | { id: string; anzahl?: number | null }> }
+      }
+
+      const pauschalModusForNewItem = (eq: EquipmentItem | undefined) => {
+        const typ = (eq?.mitreisenden_typ ?? 'pauschal') as 'pauschal' | 'alle' | 'ausgewaehlte'
+        if (typ === 'pauschal' && multiGroupVacation) {
+          return { pauschalGruppenModus: 'offen' as const }
+        }
+        return {}
       }
 
       if (selectedPackProfile) {
@@ -1884,7 +1914,8 @@ function HomeContent() {
                 anzahl: payload.anzahl,
                 bemerkung: null,
                 transportId: eq?.transport_id ?? null,
-                mitreisende: payload.mitreisende
+                mitreisende: payload.mitreisende,
+                ...pauschalModusForNewItem(eq),
               })
             })
           }
@@ -1920,7 +1951,8 @@ function HomeContent() {
                   anzahl: payload.anzahl,
                   bemerkung: null,
                   transportId: eq?.transport_id ?? null,
-                  mitreisende: payload.mitreisende
+                  mitreisende: payload.mitreisende,
+                  ...pauschalModusForNewItem(eq),
                 })
               })
             )
@@ -2158,6 +2190,7 @@ function HomeContent() {
                   onActiveMainCategoryChange={handleActiveMainCategoryChange}
                   onProfileChange={handlePackProfileChange}
                   pauschalGruppenFilter={pauschalGruppenFilter}
+                  onPauschalGruppenFilterChange={handlePauschalGruppenFilterChange}
                   onSetPauschalGruppen={
                     canEditPauschalEntries ? handleSetPauschalGruppen : undefined
                   }

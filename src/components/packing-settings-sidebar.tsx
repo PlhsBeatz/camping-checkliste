@@ -116,8 +116,8 @@ export function PackingSettingsSidebar({
       : pauschalGruppenFilter === 'eigene'
         ? 'Eigene und gemeinsame Einträge'
         : unassignedPauschalCount > 0
-          ? `${unassignedPauschalCount} ohne Zuordnung – Badge tippen zum Zuweisen`
-          : 'Keine offenen Zuordnungen'
+          ? `${unassignedPauschalCount} nicht zugeordnet – Badge tippen zum Zuweisen`
+          : 'Keine nicht zugeordneten Einträge'
 
   return (
     <>

@@ -26,6 +26,7 @@ import type { EquipmentItem, MainCategory, Mitreisender } from '@/lib/db'
 import { MengenRegelEditor } from '@/components/mengen-regel-editor'
 import { regelToStandardAnzahl, type MengenRegel } from '@/lib/packing-quantity'
 import { sortMitreisendeNachRolleUndName } from '@/lib/mitreisenden-sort'
+import { hasMultipleVacationGroups } from '@/lib/pauschal-gruppen'
 
 interface CategoryWithMain {
   id: string
@@ -109,6 +110,14 @@ export function AddSingleItemDialog({
     () => sortMitreisendeNachRolleUndName(mitreisende),
     [mitreisende]
   )
+  const multiGroupVacation = useMemo(
+    () => hasMultipleVacationGroups(vacationMitreisende),
+    [vacationMitreisende]
+  )
+  const pauschalModusForNewItem = useMemo(() => {
+    if (!multiGroupVacation) return {}
+    return { pauschalGruppenModus: 'offen' as const }
+  }, [multiGroupVacation])
 
   useEffect(() => {
     if (open && form.saveToEquipment && tags.length === 0 && tagsProp.length === 0) {
@@ -224,6 +233,7 @@ export function AddSingleItemDialog({
             anzahl: dataEq.data.standard_anzahl ?? anzahl,
             transportId: form.transport_id === 'none' ? null : form.transport_id,
             mitreisende: mitreisendeIds ?? [],
+            ...(form.mitreisenden_typ === 'pauschal' ? pauschalModusForNewItem : {}),
           }),
         })
         const dataPack = (await resPack.json()) as ApiResponse<unknown>
@@ -258,6 +268,9 @@ export function AddSingleItemDialog({
             anzahl,
             transportId: form.transport_id === 'none' ? null : form.transport_id,
             mitreisende: mitreisendeForTemp,
+            ...(!mitreisendeForTemp?.length && multiGroupVacation
+              ? pauschalModusForNewItem
+              : {}),
           }),
         })
         const data = (await res.json()) as ApiResponse<unknown>

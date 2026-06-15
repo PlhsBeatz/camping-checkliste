@@ -617,7 +617,21 @@ const PackingItem: React.FC<PackingItemProps> = ({
     const currentEffective = canConfirmVorgemerkt
       ? toggleGruppeEntry.gepackt
       : toggleGruppeEntry.gepackt || !!toggleGruppeEntry.gepackt_vorgemerkt;
+    const wasUnpacked = !currentEffective;
+    const itemId = id;
+    const gruppeId = toggleGruppeId;
     onToggleGruppe(id, toggleGruppeId, currentEffective);
+    if (hidePackedItems && wasUnpacked && onShowToast) {
+      const gruppeName = resolveGruppeName(
+        gruppeId,
+        gruppenMap,
+        toggleGruppeEntry.gruppe_name
+      );
+      const undoAction = () => {
+        onToggleGruppe(itemId, gruppeId, true);
+      };
+      onShowToast(was, gruppeName, undoAction);
+    }
   };
 
   // Handle pauschal toggle
@@ -1111,6 +1125,7 @@ interface PackingListProps {
   activeMainCategory?: string;
   onActiveMainCategoryChange?: (mainCategory: string) => void;
   pauschalGruppenFilter?: PauschalGruppenFilter;
+  onPauschalGruppenFilterChange?: (filter: PauschalGruppenFilter) => void;
   onSetPauschalGruppen?: (packingItemId: string, payload: PauschalGruppenAssignmentPayload) => void;
   onToggleGruppe?: (packingItemId: string, gruppeId: string, currentStatus: boolean) => void;
   isAdmin?: boolean;
@@ -1146,6 +1161,7 @@ export function PackingList({
   activeMainCategory: activeMainCategoryProp,
   onActiveMainCategoryChange,
   pauschalGruppenFilter = 'alle',
+  onPauschalGruppenFilterChange,
   onSetPauschalGruppen,
   onToggleGruppe,
   isAdmin = false,
@@ -1690,7 +1706,10 @@ export function PackingList({
       lastTabCorrectionKeyRef.current = null;
       return;
     }
-    const next = visibleMainCategories[0]!;
+    const preferredFirst =
+      mainCategories.find((cat) => visibleMainCategories.includes(cat)) ??
+      visibleMainCategories[0]!
+    const next = preferredFirst;
     const correctionKey = `${visibleMainCategoriesKey}\u0001${next}`;
     if (lastTabCorrectionKeyRef.current === correctionKey) return;
     lastTabCorrectionKeyRef.current = correctionKey;
@@ -1699,6 +1718,7 @@ export function PackingList({
     visibleMainCategoriesKey,
     activeMainCategory,
     visibleMainCategories,
+    mainCategories,
     setActiveMainCategory,
   ]);
 
@@ -1857,8 +1877,20 @@ export function PackingList({
           canEditPauschalEntries &&
           onSetPauschalGruppen && (
           <div className="mb-4 w-full rounded-lg border border-[rgb(230,126,34)]/40 bg-[rgb(230,126,34)]/10 px-3 py-2 text-sm text-foreground">
+            {onPauschalGruppenFilterChange && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => onPauschalGruppenFilterChange('offen')}
+                  className="font-semibold text-[rgb(230,126,34)] underline underline-offset-2 hover:no-underline"
+                >
+                  Nicht zugeordnet anzeigen
+                </button>
+                {' · '}
+              </>
+            )}
             <span className="font-semibold text-[rgb(230,126,34)]">{unassignedPauschalItems.length}</span>{' '}
-            pauschale {unassignedPauschalItems.length === 1 ? 'Eintrag' : 'Einträge'} ohne Gruppe – Badge
+            pauschale {unassignedPauschalItems.length === 1 ? 'Eintrag' : 'Einträge'} nicht zugeordnet – Badge
             tippen zum Zuordnen
           </div>
         )}

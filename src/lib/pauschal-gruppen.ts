@@ -76,7 +76,7 @@ export function getPauschalBadgeLabels(
   const modus = item.pauschal_gruppen_modus ?? 'einmal'
 
   if (modus === 'offen') {
-    return [{ label: 'Offen', variant: 'offen' }]
+    return [{ label: 'Nicht zugeordnet', variant: 'offen' }]
   }
 
   if (
@@ -84,7 +84,7 @@ export function getPauschalBadgeLabels(
     (modus === 'pro_gruppe' || modus === 'ausgewaehlte_gruppen')
   ) {
     const gruppen = item.gruppen ?? []
-    if (gruppen.length === 0) return [{ label: 'Offen', variant: 'offen' }]
+    if (gruppen.length === 0) return [{ label: 'Nicht zugeordnet', variant: 'offen' }]
     return gruppen.map((g) => ({
       label: resolveGruppeName(g.gruppe_id, gruppenMap, g.gruppe_name),
       variant: 'gruppe' as const,
@@ -98,7 +98,7 @@ export function getPauschalBadgeLabels(
   if (modus === 'ausgewaehlte_gruppen') {
     const gruppen = item.gruppen ?? []
     const names = gruppen.map((g) => resolveGruppeName(g.gruppe_id, gruppenMap, g.gruppe_name))
-    if (names.length === 0) return [{ label: 'Offen', variant: 'offen' }]
+    if (names.length === 0) return [{ label: 'Nicht zugeordnet', variant: 'offen' }]
     if (names.length === 1) {
       const gid = gruppen[0]?.gruppe_id ?? null
       return [{ label: names[0]!, variant: 'gruppe', gruppeId: gid }]
@@ -250,6 +250,18 @@ export function countUnassignedPauschalItems(items: PackingItem[]): number {
 /** Standard-Filter wenn noch keine gespeicherte Wahl existiert */
 export function resolveDefaultPauschalGruppenFilter(items: PackingItem[]): PauschalGruppenFilter {
   return countUnassignedPauschalItems(items) === 0 ? 'eigene' : 'alle'
+}
+
+/** Nach Packlisten-Laden: Standard anwenden, manuelles „Nicht zugeordnet“ beibehalten */
+export function resolvePauschalGruppenFilterOnHydrate(
+  items: PackingItem[],
+  saved?: PauschalGruppenFilter
+): PauschalGruppenFilter {
+  const standard = resolveDefaultPauschalGruppenFilter(items)
+  if (saved === 'offen' && countUnassignedPauschalItems(items) > 0) {
+    return 'offen'
+  }
+  return standard
 }
 
 /** Aus DB-Zustand → ausgewählte Gruppen-Chips im Dialog */
