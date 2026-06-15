@@ -156,22 +156,6 @@ function HomeContent() {
   const packingHadContentRef = useRef(false)
   const [transportVehicles, setTransportVehicles] = useState<TransportVehicle[]>([])
   const [vacationMitreisende, setVacationMitreisende] = useState<Mitreisender[]>([])
-  const packProfileMitreisende = useMemo(() => {
-    if (!canSelectOtherProfiles) {
-      return user?.mitreisender_id
-        ? vacationMitreisende.filter((m) => m.id === user.mitreisender_id)
-        : []
-    }
-    if (user && isAdminRole(user.role)) {
-      return vacationMitreisende
-    }
-    if (user?.gruppe_id) {
-      return vacationMitreisende.filter((m) => m.gruppe_id === user.gruppe_id)
-    }
-    return user?.mitreisender_id
-      ? vacationMitreisende.filter((m) => m.id === user.mitreisender_id)
-      : []
-  }, [canSelectOtherProfiles, user, vacationMitreisende])
   const ownGruppeId = useMemo(
     () => resolveOwnGruppeId(user?.gruppe_id, vacationMitreisende),
     [user?.gruppe_id, vacationMitreisende]
@@ -188,20 +172,20 @@ function HomeContent() {
     () =>
       getPackProfileScopeMitreisende(vacationMitreisende, {
         canSelectOtherProfiles,
-        isAdmin: !!user && isAdminRole(user.role),
         ownGruppeId,
         ownMitreisenderId: user?.mitreisender_id ?? null,
       }),
     [vacationMitreisende, canSelectOtherProfiles, user, ownGruppeId]
   )
-  const alleOptionHint = useMemo(() => {
-    if (user && isAdminRole(user.role)) return 'Übersicht aller Mitreisenden'
-    return 'Übersicht Ihrer Reisegruppe'
-  }, [user])
+  const packProfileScopeIdSet = useMemo(
+    () => new Set(packProfileScopeMitreisende.map((m) => m.id)),
+    [packProfileScopeMitreisende]
+  )
+  const alleOptionHint = 'Übersicht Ihrer Reisegruppe'
   const sidebarVacationMitreisende = useMemo(() => {
     if (user && isAdminRole(user.role)) return vacationMitreisende
-    return packProfileMitreisende
-  }, [user, vacationMitreisende, packProfileMitreisende])
+    return packProfileScopeMitreisende
+  }, [user, vacationMitreisende, packProfileScopeMitreisende])
   const [selectedVacationId, setSelectedVacationId] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   
@@ -830,8 +814,10 @@ function HomeContent() {
 
   // Get available equipment (not on packing list, or on list but without selected person)
   const availableEquipment = useMemo(() => {
-    const vacationMitreisendeIds = vacationMitreisende.map((m) => m.id)
-    const vacationMitreisendeSet = new Set(vacationMitreisendeIds)
+    const scopeIds = selectedPackProfile
+      ? [selectedPackProfile]
+      : packProfileScopeMitreisende.map((m) => m.id)
+    const scopeIdSet = new Set(scopeIds)
 
     return equipmentItems.filter((eq) => {
       if (!PACKABLE_STATUSES.includes(eq.status)) return false
@@ -848,19 +834,19 @@ function HomeContent() {
 
       // Packprofil „Alle“: Pauschal bereits auf Liste → nicht verfügbar
       if (existingItem.mitreisenden_typ === 'pauschal') return false
-      // Typ „alle“: verfügbar, wenn nicht alle Urlaubs-Mitreisenden dem Eintrag zugeordnet sind
+      // Typ „alle“: verfügbar, wenn nicht alle Mitreisenden der eigenen Gruppe zugeordnet sind
       const existingIds = new Set((existingItem.mitreisende ?? []).map((m) => m.mitreisender_id))
       if ((eq.mitreisenden_typ ?? 'pauschal') === 'alle') {
-        const allAssigned = vacationMitreisendeIds.every((id) => existingIds.has(id))
+        const allAssigned = scopeIds.every((id) => existingIds.has(id))
         return !allAssigned
       }
-      // Typ „ausgewaehlte“: verfügbar, wenn nicht alle standardmäßig zugeordneten (die im Urlaub sind) zugeordnet sind
-      const expectedIds = (eq.standard_mitreisende ?? []).filter((id) => vacationMitreisendeSet.has(id))
-      if (expectedIds.length === 0) return false // Keine erwarteten Personen im Urlaub → nicht anbieten
+      // Typ „ausgewaehlte“: verfügbar, wenn nicht alle standardmäßig zugeordneten (im Gruppen-Scope) zugeordnet sind
+      const expectedIds = (eq.standard_mitreisende ?? []).filter((id) => scopeIdSet.has(id))
+      if (expectedIds.length === 0) return false // Keine erwarteten Personen im Scope → nicht anbieten
       const allAssigned = expectedIds.every((id) => existingIds.has(id))
       return !allAssigned
     })
-  }, [equipmentItems, packingItems, selectedPackProfile, canEditPauschalEntries, vacationMitreisende])
+  }, [equipmentItems, packingItems, selectedPackProfile, canEditPauschalEntries, packProfileScopeMitreisende])
 
   // Filter and group available equipment (nur Kategorien mit verfügbaren Gegenständen)
   const groupedAvailableEquipment = useMemo(() => {
@@ -1695,10 +1681,13 @@ function HomeContent() {
     // Packprofil „Alle“: personenbezogener Eintrag (alle/ausgewaehlte) → Dialog „Für wen löschen?“
     const personenbezogen = !forMitreisenderId && !isPauschal && (item.mitreisende?.length ?? 0) > 0
     if (personenbezogen) {
+      const scopedRows = (item.mitreisende ?? []).filter((m) =>
+        packProfileScopeIdSet.has(m.mitreisender_id)
+      )
       setDeletePersonsConfirm({
         packingItemId: id,
         travelers: sortMitreisendenZeilenNachStammdaten(
-          (item.mitreisende ?? []).map((m) => ({
+          scopedRows.map((m) => ({
             id: m.mitreisender_id,
             name: m.mitreisender_name,
             gepackt: !!m.gepackt,
@@ -1896,7 +1885,7 @@ function HomeContent() {
         }
       } else {
         // Packprofil Alle: Neuen Eintrag anlegen oder nur fehlende Zuordnungen zum bestehenden Eintrag ergänzen
-        const vacationMitreisendeSet = new Set(vacationMitreisendeIds)
+        const scopeIds = packProfileScopeMitreisende.map((m) => m.id)
         const promises: Promise<Response>[] = []
         for (const equipmentId of selectedEquipmentIds) {
           const eq = equipmentItems.find((e) => e.id === equipmentId)
@@ -1905,9 +1894,9 @@ function HomeContent() {
 
           let expectedIds: string[]
           if (eq?.mitreisenden_typ === 'alle') {
-            expectedIds = vacationMitreisendeIds
+            expectedIds = scopeIds
           } else if (eq?.mitreisenden_typ === 'ausgewaehlte' && eq.standard_mitreisende?.length) {
-            expectedIds = eq.standard_mitreisende.filter((id) => vacationMitreisendeSet.has(id))
+            expectedIds = eq.standard_mitreisende.filter((id) => packProfileScopeIdSet.has(id))
           } else {
             expectedIds = []
           }
@@ -2153,7 +2142,7 @@ function HomeContent() {
                   onOpenSettings={() => setShowPackSettings(true)}
                   vacationMitreisende={vacationMitreisende}
                   transportVehicles={transportVehicles}
-                  visiblePackProfileMitreisende={packProfileMitreisende}
+                  visiblePackProfileMitreisende={packProfileScopeMitreisende}
                   ownGruppeId={ownGruppeId}
                   packProfileScopeMitreisende={packProfileScopeMitreisende}
                   abreiseDatum={currentVacation?.abfahrtdatum?.trim() || currentVacation?.startdatum || null}

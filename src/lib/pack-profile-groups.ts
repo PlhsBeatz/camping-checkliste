@@ -80,18 +80,16 @@ export function getPackProfileScopeMitreisende(
   vacationMitreisende: Mitreisender[],
   options: {
     canSelectOtherProfiles: boolean
-    isAdmin: boolean
     ownGruppeId: string | null
     ownMitreisenderId: string | null
   }
 ): Mitreisender[] {
-  const { canSelectOtherProfiles, isAdmin, ownGruppeId, ownMitreisenderId } = options
+  const { canSelectOtherProfiles, ownGruppeId, ownMitreisenderId } = options
   if (!canSelectOtherProfiles) {
     return ownMitreisenderId
       ? vacationMitreisende.filter((m) => m.id === ownMitreisenderId)
       : []
   }
-  if (isAdmin) return vacationMitreisende
   if (ownGruppeId) {
     return vacationMitreisende.filter((m) => m.gruppe_id === ownGruppeId)
   }

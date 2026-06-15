@@ -99,7 +99,7 @@ export function PauschalGruppeAssignmentModal({
       open={open}
       onOpenChange={onOpenChange}
       title={`${itemName} – Zuordnung`}
-      description="Haushalt(e) auswählen. Eine Gruppe = gemeinsam von ihr, mehrere = pro Haushalt, alle = jeder Haushalt."
+      description="Haushalt(e) auswählen."
       contentClassName="sm:max-w-md"
     >
       <div className="flex flex-wrap gap-2 pt-2">
