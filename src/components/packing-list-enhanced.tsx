@@ -132,7 +132,8 @@ function isItemFullyPackedForProfile(
   canConfirmVorgemerkt: boolean,
   ownGruppeId?: string | null,
   multiGroupActive?: boolean,
-  pauschalGruppenFilter?: PauschalGruppenFilter
+  pauschalGruppenFilter?: PauschalGruppenFilter,
+  alleScopeIds?: Set<string> | null
 ): boolean {
   if (item.mitreisenden_typ === 'pauschal') {
     const modus = item.pauschal_gruppen_modus ?? 'einmal';
@@ -152,9 +153,17 @@ function isItemFullyPackedForProfile(
     if (!m) return true;
     return canConfirmVorgemerkt ? m.gepackt : (m.gepackt || !!m.gepackt_vorgemerkt);
   }
-  return (item.mitreisende?.length ?? 0) > 0 && item.mitreisende!.every(m =>
-    canConfirmVorgemerkt ? m.gepackt : (m.gepackt || !!m.gepackt_vorgemerkt)
-  );
+  if (item.mitreisende?.length) {
+    const relevant = alleScopeIds
+      ? item.mitreisende.filter((m) => alleScopeIds.has(m.mitreisender_id))
+      : item.mitreisende;
+    if (relevant.length === 0) return true;
+    return relevant.every((m) =>
+      canConfirmVorgemerkt ? m.gepackt : (m.gepackt || !!m.gepackt_vorgemerkt)
+    );
+  }
+  if (item.mitreisenden_typ === 'alle') return false;
+  return true;
 }
 
 interface PackingItemProps {
@@ -1428,9 +1437,10 @@ export function PackingList({
         !!canConfirmVorgemerkt,
         ownGruppeId,
         multiGroupActive,
-        pauschalGruppenFilter
+        pauschalGruppenFilter,
+        alleScopeIds
       ),
-    [selectedProfile, canConfirmVorgemerkt, ownGruppeId, multiGroupActive, pauschalGruppenFilter]
+    [selectedProfile, canConfirmVorgemerkt, ownGruppeId, multiGroupActive, pauschalGruppenFilter, alleScopeIds]
   );
 
   const sortedProfileMitreisende = useMemo(
