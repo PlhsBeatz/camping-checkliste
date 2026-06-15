@@ -226,6 +226,7 @@ function HomeContent() {
   )
   const [adminForeignWarn, setAdminForeignWarn] = useState<{
     gruppeName: string
+    markingAsPacked: boolean
     proceed: () => void
   } | null>(null)
   /** Beim Wechsel des Urlaubs: UI aus Storage oder Urlaubs-Standard (einmal pro Urlaub). */
@@ -1159,12 +1160,16 @@ function HomeContent() {
       shouldWarnAdminForeignGruppe(item, ownGruppeId, true, activeGruppeId ?? undefined) &&
       !isAdminForeignWarnSuppressed(selectedVacationId)
     ) {
+      const isPacked = gepacktRequiresParentApproval
+        ? !!(item.gepackt || item.gepackt_vorgemerkt)
+        : !!item.gepackt
       setAdminForeignWarn({
         gruppeName: getForeignGruppeNameForWarning(
           item,
           vacationGruppenMap,
           activeGruppeId ?? undefined
         ),
+        markingAsPacked: !isPacked,
         proceed: () => {
           setAdminForeignWarn(null)
           void executeTogglePacked(itemId)
@@ -1381,6 +1386,7 @@ function HomeContent() {
     ) {
       setAdminForeignWarn({
         gruppeName: getForeignGruppeNameForWarning(item, vacationGruppenMap, gruppeId),
+        markingAsPacked: !currentStatus,
         proceed: () => {
           setAdminForeignWarn(null)
           void executeToggleGruppe(itemId, gruppeId, currentStatus)
@@ -2162,6 +2168,7 @@ function HomeContent() {
               <AdminFremdeGruppeWarningDialog
                 open={!!adminForeignWarn}
                 gruppeName={adminForeignWarn?.gruppeName ?? ''}
+                markingAsPacked={adminForeignWarn?.markingAsPacked ?? true}
                 vacationId={selectedVacationId}
                 onConfirm={() => adminForeignWarn?.proceed()}
                 onCancel={() => setAdminForeignWarn(null)}
