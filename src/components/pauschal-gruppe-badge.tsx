@@ -14,6 +14,8 @@ interface PauschalGruppeBadgeProps {
   ownGruppeId?: string | null
   /** Im Filter „Alle“: je Gruppe ein Badge statt „Familie +1“ */
   expandAllGroups?: boolean
+  /** Im Filter „Alle Haushalte“: eigene Gruppe hervorheben; in „Meine“ dezent wie „+x“-Badges */
+  highlightOwnGruppe?: boolean
   onClick?: () => void
   className?: string
 }
@@ -31,6 +33,7 @@ function BadgeChip({
   variant,
   gruppeId,
   ownGruppeId,
+  highlightOwnGruppe = true,
   onClick,
   className,
 }: {
@@ -38,10 +41,13 @@ function BadgeChip({
   variant: PauschalBadgeVariant
   gruppeId?: string | null
   ownGruppeId?: string | null
+  highlightOwnGruppe?: boolean
   onClick?: () => void
   className?: string
 }) {
   const isOwn = variant === 'gruppe' && gruppeId && gruppeId === ownGruppeId
+  const displayVariant =
+    !highlightOwnGruppe && isOwn ? ('mehrere' as PauschalBadgeVariant) : variant
 
   return (
     <Badge
@@ -61,8 +67,8 @@ function BadgeChip({
       }}
       className={cn(
         'shrink-0 max-w-[8rem] truncate text-[10px] px-1.5 py-0 font-medium',
-        variantClasses[variant],
-        isOwn && 'ring-1 ring-[rgb(45,79,30)]/60 font-bold',
+        variantClasses[displayVariant],
+        highlightOwnGruppe && isOwn && 'ring-1 ring-[rgb(45,79,30)]/60 font-bold',
         onClick && 'cursor-pointer hover:opacity-80 active:scale-95 transition-transform',
         className
       )}
@@ -77,6 +83,7 @@ export function PauschalGruppeBadge({
   gruppenMap,
   ownGruppeId,
   expandAllGroups = false,
+  highlightOwnGruppe = true,
   onClick,
   className,
 }: PauschalGruppeBadgeProps) {
@@ -93,6 +100,7 @@ export function PauschalGruppeBadge({
         variant={variant}
         gruppeId={gruppeId}
         ownGruppeId={ownGruppeId}
+        highlightOwnGruppe={highlightOwnGruppe}
         onClick={onClick}
         className={className}
       />
@@ -108,6 +116,7 @@ export function PauschalGruppeBadge({
           variant={badge.variant}
           gruppeId={badge.gruppeId}
           ownGruppeId={ownGruppeId}
+          highlightOwnGruppe={highlightOwnGruppe}
           onClick={onClick}
           className={className}
         />

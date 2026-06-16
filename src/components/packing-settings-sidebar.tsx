@@ -32,6 +32,9 @@ interface PackingSettingsSidebarProps {
   pauschalGruppenFilter?: PauschalGruppenFilter
   onPauschalGruppenFilterChange?: (filter: PauschalGruppenFilter) => void
   unassignedPauschalCount?: number
+  /** Mehrfach-Zuordnung pauscher Einträge starten */
+  showBulkSelection?: boolean
+  onStartBulkSelection?: () => void
 }
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
@@ -102,6 +105,8 @@ export function PackingSettingsSidebar({
   pauschalGruppenFilter = 'alle',
   onPauschalGruppenFilterChange,
   unassignedPauschalCount = 0,
+  showBulkSelection = false,
+  onStartBulkSelection,
 }: PackingSettingsSidebarProps) {
   const { ownGroup, otherGroups } = useMemo(
     () => buildPackProfileGroups(vacationMitreisende, ownGruppeId),
@@ -232,6 +237,20 @@ export function PackingSettingsSidebar({
                   <p className="text-xs text-muted-foreground mt-1.5 min-h-[2.5rem] leading-tight">
                     {pauschalHelpText}
                   </p>
+                  {showBulkSelection && onStartBulkSelection && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="mt-2 w-full border-[rgb(45,79,30)]/40 text-brand-heading hover:bg-[rgb(45,79,30)]/5"
+                      onClick={() => {
+                        onStartBulkSelection()
+                        onClose()
+                      }}
+                    >
+                      Mehrfach zuordnen
+                    </Button>
+                  )}
                 </div>
               )}
 

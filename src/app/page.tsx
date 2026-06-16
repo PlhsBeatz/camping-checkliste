@@ -66,10 +66,12 @@ import {
   resolvePauschalGruppenFilterOnHydrate,
   resolveActiveGruppeIdForPacking,
   countUnassignedPauschalItems,
+  applyPauschalGruppenPayloadToItem,
   type PauschalGruppenFilter,
   type PauschalGruppenAssignmentPayload,
 } from '@/lib/pauschal-gruppen'
 import { AdminFremdeGruppeWarningDialog } from '@/components/admin-fremde-gruppe-warning-dialog'
+import type { BulkPackingPatch } from '@/components/bulk-packing-edit-modal'
 import { usePackingSync } from '@/hooks/use-packing-sync'
 import { useOptimisticMutation } from '@/hooks/use-optimistic-mutation'
 import {
@@ -224,6 +226,7 @@ function HomeContent() {
   const [pauschalGruppenFilter, setPauschalGruppenFilter] = useState<PauschalGruppenFilter>(
     defaultPacklistUi.pauschalGruppenFilter
   )
+  const [bulkSelectionTrigger, setBulkSelectionTrigger] = useState(0)
   const [adminForeignWarn, setAdminForeignWarn] = useState<{
     gruppeName: string
     markingAsPacked: boolean
@@ -1272,37 +1275,11 @@ function HomeContent() {
       }
 
       setPackingItems((prev) =>
-        prev.map((p) => {
-          if (p.id !== packingItemId) return p
-          const gruppeNames = vacationGruppenMap
-          let gruppen = p.gruppen ?? []
-          if (payload.pauschalGruppenModus === 'pro_gruppe') {
-            gruppen = [...vacationGruppenMap.keys()].map((gid) => ({
-              id: `${packingItemId}-${gid}`,
-              gruppe_id: gid,
-              gruppe_name: gruppeNames.get(gid),
-              gepackt: gruppen.find((g) => g.gruppe_id === gid)?.gepackt ?? false,
-            }))
-          } else if (payload.pauschalGruppenModus === 'ausgewaehlte_gruppen') {
-            gruppen = (payload.gruppeIds ?? []).map((gid) => ({
-              id: `${packingItemId}-${gid}`,
-              gruppe_id: gid,
-              gruppe_name: gruppeNames.get(gid),
-              gepackt: gruppen.find((g) => g.gruppe_id === gid)?.gepackt ?? false,
-            }))
-          } else {
-            gruppen = []
-          }
-          return {
-            ...p,
-            pauschal_gruppen_modus: payload.pauschalGruppenModus,
-            verantwortliche_gruppe_id: payload.verantwortlicheGruppeId ?? null,
-            verantwortliche_gruppe_name: payload.verantwortlicheGruppeId
-              ? gruppeNames.get(payload.verantwortlicheGruppeId) ?? null
-              : null,
-            gruppen,
-          }
-        })
+        prev.map((p) =>
+          p.id !== packingItemId
+            ? p
+            : applyPauschalGruppenPayloadToItem(p, payload, vacationGruppenMap)
+        )
       )
 
       pauschalAssignQueueRef.current.push({ packingItemId, payload })
@@ -1316,6 +1293,127 @@ function HomeContent() {
       }, PAUSCHAL_ASSIGN_FLUSH_MS)
     },
     [vacationGruppenMap]
+  )
+
+  const handleBulkSetPauschalGruppen = useCallback(
+    (packingItemIds: string[], payload: PauschalGruppenAssignmentPayload) => {
+      if (packingItemIds.length === 0) return
+      if (pauschalAssignRevertSnapshotRef.current === null) {
+        pauschalAssignRevertSnapshotRef.current = packingItemsRef.current
+      }
+
+      const idSet = new Set(packingItemIds)
+      setPackingItems((prev) =>
+        prev.map((p) =>
+          idSet.has(p.id) ? applyPauschalGruppenPayloadToItem(p, payload, vacationGruppenMap) : p
+        )
+      )
+
+      for (const packingItemId of packingItemIds) {
+        pauschalAssignQueueRef.current.push({ packingItemId, payload })
+      }
+
+      if (pauschalAssignFlushTimerRef.current) {
+        clearTimeout(pauschalAssignFlushTimerRef.current)
+      }
+      pauschalAssignFlushTimerRef.current = setTimeout(() => {
+        pauschalAssignFlushTimerRef.current = null
+        void flushPauschalAssignmentQueueRef.current()
+      }, PAUSCHAL_ASSIGN_FLUSH_MS)
+    },
+    [vacationGruppenMap]
+  )
+
+  const handleBulkUpdatePackingItems = useCallback(
+    async (packingItemIds: string[], patch: BulkPackingPatch): Promise<boolean> => {
+      if (!selectedVacationId || packingItemIds.length === 0) return false
+      pendingMutationsRef.current += 1
+      const revertSnapshot = packingItemsRef.current
+      const idSet = new Set(packingItemIds)
+      const transportNameById = new Map(transportVehicles.map((t) => [t.id, t.name]))
+
+      setPackingItems((prev) =>
+        prev.map((p) => {
+          if (!idSet.has(p.id)) return p
+          const next = { ...p }
+          if ('transport_id' in patch) {
+            next.transport_id = patch.transport_id ?? null
+            next.transport_name = patch.transport_id
+              ? transportNameById.get(patch.transport_id) ?? null
+              : null
+          }
+          if ('bemerkung' in patch) next.bemerkung = patch.bemerkung ?? null
+          if ('anzahl' in patch && patch.anzahl !== undefined) next.anzahl = patch.anzahl
+          return next
+        })
+      )
+
+      try {
+        for (let offset = 0; offset < packingItemIds.length; offset += PAUSCHAL_ASSIGN_BATCH_SIZE) {
+          const chunk = packingItemIds.slice(offset, offset + PAUSCHAL_ASSIGN_BATCH_SIZE)
+          const res = await fetch('/api/packing-items/batch-update', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              vacationId: selectedVacationId,
+              itemIds: chunk,
+              patch,
+            }),
+          })
+          const data = (await res.json()) as ApiResponse<{ updated: number; failed: number }>
+          if (!res.ok || !data.success) {
+            throw new Error(data.error ?? 'Batch-Aktualisierung fehlgeschlagen')
+          }
+        }
+        return true
+      } catch (error) {
+        console.error('Failed to bulk update packing items:', error)
+        setPackingItems(revertSnapshot)
+        alert('Bearbeitung fehlgeschlagen')
+        return false
+      } finally {
+        pendingMutationsRef.current -= 1
+      }
+    },
+    [selectedVacationId, transportVehicles]
+  )
+
+  const handleBulkDeletePackingItems = useCallback(
+    async (packingItemIds: string[]): Promise<boolean> => {
+      if (!selectedVacationId || packingItemIds.length === 0) return false
+      pendingMutationsRef.current += 1
+      const revertSnapshot = packingItemsRef.current
+      const idSet = new Set(packingItemIds)
+
+      setPackingItems((prev) => prev.filter((p) => !idSet.has(p.id)))
+
+      try {
+        for (let offset = 0; offset < packingItemIds.length; offset += PAUSCHAL_ASSIGN_BATCH_SIZE) {
+          const chunk = packingItemIds.slice(offset, offset + PAUSCHAL_ASSIGN_BATCH_SIZE)
+          const res = await fetch('/api/packing-items/batch-delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              vacationId: selectedVacationId,
+              itemIds: chunk,
+            }),
+          })
+          const data = (await res.json()) as ApiResponse<{ deleted: number; failed: number }>
+          if (!res.ok || !data.success) {
+            throw new Error(data.error ?? 'Batch-Löschen fehlgeschlagen')
+          }
+        }
+        return true
+      } catch (error) {
+        console.error('Failed to bulk delete packing items:', error)
+        setPackingItems(revertSnapshot)
+        alert('Löschen fehlgeschlagen')
+        return false
+      } finally {
+        pendingMutationsRef.current -= 1
+      }
+    },
+    [selectedVacationId]
   )
 
   const flushPauschalAssignmentQueue = useCallback(async () => {
@@ -2199,6 +2297,16 @@ function HomeContent() {
                   onSetPauschalGruppen={
                     canEditPauschalEntries ? handleSetPauschalGruppen : undefined
                   }
+                  onBulkSetPauschalGruppen={
+                    canEditPauschalEntries ? handleBulkSetPauschalGruppen : undefined
+                  }
+                  onBulkUpdatePackingItems={
+                    canEditPauschalEntries ? handleBulkUpdatePackingItems : undefined
+                  }
+                  onBulkDeletePackingItems={
+                    canEditPauschalEntries ? handleBulkDeletePackingItems : undefined
+                  }
+                  bulkSelectionTrigger={bulkSelectionTrigger}
                   onToggleGruppe={canEditPauschalEntries ? handleToggleGruppe : undefined}
                   isAdmin={!!user && isAdminRole(user.role)}
               />
@@ -2412,6 +2520,8 @@ function HomeContent() {
         pauschalGruppenFilter={pauschalGruppenFilter}
         onPauschalGruppenFilterChange={handlePauschalGruppenFilterChange}
         unassignedPauschalCount={unassignedPauschalCount}
+        showBulkSelection={multiGroupVacation && canEditPauschalEntries}
+        onStartBulkSelection={() => setBulkSelectionTrigger((t) => t + 1)}
       />
 
       {/* FAB: Gegenstände hinzufügen – Admin/Erwachsene (Kinder: nur abhaken, nicht Struktur ändern) */}

@@ -1,7 +1,8 @@
 'use client'
 
-import { useCallback, useMemo } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ResponsiveModal } from '@/components/ui/responsive-modal'
+import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import type { PauschalGruppenModus } from '@/lib/pauschal-gruppen'
 import {
@@ -11,18 +12,25 @@ import {
 } from '@/lib/pauschal-gruppen'
 import type { PackProfileGroup } from '@/lib/pack-profile-groups'
 
+const EMPTY_GRUPPE_IDS: string[] = []
+
 export type { PauschalGruppenAssignmentPayload }
 
 interface PauschalGruppeAssignmentModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   itemName: string
+  /** Mehrfach-Zuordnung: Anzahl der Einträge (Titel/Confirm-Button) */
+  itemCount?: number
   vacationGroups: PackProfileGroup[]
   currentModus?: PauschalGruppenModus
   currentVerantwortlicheGruppeId?: string | null
   currentGruppeIds?: string[]
   ownGruppeId?: string | null
-  onAssign: (payload: PauschalGruppenAssignmentPayload) => void
+  /** false: Sofort bei Chip-Klick; true: Bestätigen-Button (Bulk) */
+  deferApply?: boolean
+  onAssign?: (payload: PauschalGruppenAssignmentPayload) => void
+  onConfirm?: (payload: PauschalGruppenAssignmentPayload) => void
 }
 
 function GroupChip({
@@ -57,13 +65,18 @@ export function PauschalGruppeAssignmentModal({
   open,
   onOpenChange,
   itemName,
+  itemCount,
   vacationGroups,
   currentModus,
   currentVerantwortlicheGruppeId,
-  currentGruppeIds = [],
+  currentGruppeIds,
   ownGruppeId,
+  deferApply = false,
   onAssign,
+  onConfirm,
 }: PauschalGruppeAssignmentModalProps) {
+  const gruppeIds = currentGruppeIds ?? EMPTY_GRUPPE_IDS
+  const gruppeIdsKey = gruppeIds.join('\u0001')
   const groups = useMemo(
     () =>
       vacationGroups.flatMap((g) =>
@@ -72,34 +85,76 @@ export function PauschalGruppeAssignmentModal({
     [vacationGroups]
   )
   const allGruppeIds = useMemo(() => groups.map((g) => g.id), [groups])
+  const isBulk = (itemCount ?? 1) > 1
 
-  const selectedIds = useMemo(
+  const initialSelectedIds = useMemo(
     () =>
-      getSelectedGruppeIdsFromAssignment(
-        currentModus,
-        currentVerantwortlicheGruppeId,
-        currentGruppeIds,
-        allGruppeIds
-      ),
-    [currentModus, currentVerantwortlicheGruppeId, currentGruppeIds, allGruppeIds]
+      isBulk
+        ? EMPTY_GRUPPE_IDS
+        : getSelectedGruppeIdsFromAssignment(
+            currentModus,
+            currentVerantwortlicheGruppeId,
+            gruppeIds,
+            allGruppeIds
+          ),
+    [
+      isBulk,
+      currentModus,
+      currentVerantwortlicheGruppeId,
+      gruppeIdsKey,
+      allGruppeIds,
+    ]
   )
+
+  const [pendingIds, setPendingIds] = useState<string[]>(EMPTY_GRUPPE_IDS)
+  const wasOpenRef = useRef(false)
+
+  useEffect(() => {
+    if (open && !wasOpenRef.current) {
+      setPendingIds(initialSelectedIds)
+    }
+    wasOpenRef.current = open
+  }, [open, initialSelectedIds])
+
+  const selectedIds = deferApply ? pendingIds : initialSelectedIds
 
   const toggleGroup = useCallback(
     (gruppeId: string) => {
-      const next = selectedIds.includes(gruppeId)
-        ? selectedIds.filter((id) => id !== gruppeId)
-        : [...selectedIds, gruppeId]
-      onAssign(derivePauschalAssignmentFromGruppeSelection(next, allGruppeIds))
+      const base = deferApply ? pendingIds : initialSelectedIds
+      const next = base.includes(gruppeId)
+        ? base.filter((id) => id !== gruppeId)
+        : [...base, gruppeId]
+      const payload = derivePauschalAssignmentFromGruppeSelection(next, allGruppeIds)
+
+      if (deferApply) {
+        setPendingIds(next)
+        return
+      }
+      onAssign?.(payload)
     },
-    [selectedIds, allGruppeIds, onAssign]
+    [deferApply, pendingIds, initialSelectedIds, allGruppeIds, onAssign]
   )
+
+  const handleConfirm = () => {
+    const payload = derivePauschalAssignmentFromGruppeSelection(pendingIds, allGruppeIds)
+    if (payload.pauschalGruppenModus === 'offen') return
+    onConfirm?.(payload)
+  }
+
+  const title = isBulk
+    ? `${itemCount} Einträge – Zuordnung`
+    : `${itemName} – Zuordnung`
+
+  const description = isBulk
+    ? 'Haushalt(e) für alle ausgewählten pauschalen Einträge wählen.'
+    : 'Haushalt(e) auswählen.'
 
   return (
     <ResponsiveModal
       open={open}
       onOpenChange={onOpenChange}
-      title={`${itemName} – Zuordnung`}
-      description="Haushalt(e) auswählen."
+      title={title}
+      description={description}
       contentClassName="sm:max-w-md"
     >
       <div className="flex flex-wrap gap-2 pt-2">
@@ -114,6 +169,16 @@ export function PauschalGruppeAssignmentModal({
           </GroupChip>
         ))}
       </div>
+      {deferApply && (
+        <Button
+          type="button"
+          className="w-full mt-4 bg-[rgb(45,79,30)] hover:bg-[rgb(45,79,30)]/90 text-white"
+          disabled={pendingIds.length === 0}
+          onClick={handleConfirm}
+        >
+          {itemCount} {itemCount === 1 ? 'Eintrag' : 'Einträge'} zuordnen
+        </Button>
+      )}
     </ResponsiveModal>
   )
 }

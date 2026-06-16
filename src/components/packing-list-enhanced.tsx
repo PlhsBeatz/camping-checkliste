@@ -30,6 +30,9 @@ import {
 import { sortMitreisendeNachRolleUndName, sortMitreisendenZeilenNachStammdaten } from "@/lib/mitreisenden-sort";
 import { buildPackProfileGroups } from '@/lib/pack-profile-groups';
 import { PackProfileGroupOverviewList } from '@/components/pack-profile-person-groups';
+import { BulkSelectionBar } from '@/components/bulk-selection-bar';
+import { BulkPackingEditModal, type BulkPackingPatch } from '@/components/bulk-packing-edit-modal';
+import { BulkPackingDeleteDialog } from '@/components/bulk-packing-delete-dialog';
 import { PauschalGruppeBadge } from '@/components/pauschal-gruppe-badge';
 import {
   PauschalGruppeAssignmentModal,
@@ -47,6 +50,7 @@ import {
   areAllGruppenFullyPacked,
   getOwnGruppePackingState,
   resolveGruppeName,
+  snapshotPauschalGruppenAssignment,
   type PauschalGruppenFilter,
 } from '@/lib/pauschal-gruppen';
 
@@ -210,6 +214,11 @@ interface PackingItemProps {
   onOpenAssignment?: (item: DBPackingItem) => void;
   onToggleGruppe?: (packingItemId: string, gruppeId: string, currentStatus: boolean) => void;
   pauschalGruppenFilter?: PauschalGruppenFilter;
+  bulkSelectionMode?: boolean;
+  bulkSelected?: boolean;
+  bulkSelectable?: boolean;
+  onBulkSelectionToggle?: () => void;
+  onBulkSelectionStart?: () => void;
 }
 
 const PackingItem: React.FC<PackingItemProps> = ({
@@ -250,6 +259,11 @@ const PackingItem: React.FC<PackingItemProps> = ({
   onOpenAssignment,
   onToggleGruppe,
   pauschalGruppenFilter = 'alle',
+  bulkSelectionMode = false,
+  bulkSelected = false,
+  bulkSelectable = false,
+  onBulkSelectionToggle,
+  onBulkSelectionStart,
 }) => {
   const [showMarkAllDialog, setShowMarkAllDialog] = useState(false);
   const [personListPopoverOpen, setPersonListPopoverOpen] = useState(false);
@@ -257,6 +271,125 @@ const PackingItem: React.FC<PackingItemProps> = ({
   const [hasExited, setHasExited] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const previousShouldHideRef = useRef<boolean | 'init'>('init');
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressTriggeredRef = useRef(false);
+  /** Nach Long-Press den folgenden Klick ignorieren (sonst sofort wieder abgewählt). */
+  const suppressBulkToggleRef = useRef(false);
+  const longPressStartRef = useRef<{ x: number; y: number } | null>(null);
+
+  const clearLongPressTimer = useCallback(() => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  }, []);
+
+  const moveLongPress = useCallback(
+    (clientX: number, clientY: number) => {
+      const start = longPressStartRef.current;
+      if (!start) return;
+      const dx = clientX - start.x;
+      const dy = clientY - start.y;
+      if (Math.hypot(dx, dy) > 12) clearLongPressTimer();
+    },
+    [clearLongPressTimer]
+  );
+
+  const endLongPress = useCallback(() => {
+    clearLongPressTimer();
+    longPressStartRef.current = null;
+  }, [clearLongPressTimer]);
+
+  const startLongPress = useCallback(
+    (clientX: number, clientY: number) => {
+      if (!bulkSelectable || bulkSelectionMode || !onBulkSelectionStart) return;
+      longPressTriggeredRef.current = false;
+      longPressStartRef.current = { x: clientX, y: clientY };
+      clearLongPressTimer();
+      longPressTimerRef.current = setTimeout(() => {
+        longPressTriggeredRef.current = true;
+        suppressBulkToggleRef.current = true;
+        if (typeof navigator !== 'undefined' && navigator.vibrate) {
+          navigator.vibrate(30);
+        }
+        onBulkSelectionStart();
+      }, 450);
+    },
+    [bulkSelectable, bulkSelectionMode, onBulkSelectionStart, clearLongPressTimer]
+  );
+
+  const handlePointerDown = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      if (!bulkSelectable || bulkSelectionMode || !onBulkSelectionStart) return;
+      if (event.button !== 0) return;
+      const target = event.target as HTMLElement;
+      if (target.closest('[data-no-bulk-long-press]')) return;
+      startLongPress(event.clientX, event.clientY);
+    },
+    [bulkSelectable, bulkSelectionMode, onBulkSelectionStart, startLongPress]
+  );
+
+  const handlePointerMove = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      moveLongPress(event.clientX, event.clientY);
+    },
+    [moveLongPress]
+  );
+
+  const handlePointerUp = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      if (longPressTriggeredRef.current) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+      endLongPress();
+    },
+    [endLongPress]
+  );
+
+  const handlePointerCancel = useCallback(() => {
+    endLongPress();
+  }, [endLongPress]);
+
+  const handleContextMenu = useCallback(
+    (event: React.MouseEvent<HTMLDivElement>) => {
+      if (bulkSelectable && !bulkSelectionMode) {
+        event.preventDefault();
+      }
+    },
+    [bulkSelectable, bulkSelectionMode]
+  );
+
+  const handleBulkRowClick = useCallback(
+    (event: React.MouseEvent<HTMLDivElement>) => {
+      if (suppressBulkToggleRef.current) {
+        suppressBulkToggleRef.current = false;
+        longPressTriggeredRef.current = false;
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
+      if (!bulkSelectionMode || !bulkSelectable || !onBulkSelectionToggle) return;
+      if (longPressTriggeredRef.current) {
+        longPressTriggeredRef.current = false;
+        return;
+      }
+      const target = event.target as HTMLElement;
+      if (
+        target.closest(
+          'button, a, input, label, [role="checkbox"], [role="menuitem"], [data-no-bulk-select]'
+        )
+      ) {
+        return;
+      }
+      onBulkSelectionToggle();
+    },
+    [bulkSelectionMode, bulkSelectable, onBulkSelectionToggle]
+  );
+
+  useEffect(() => () => clearLongPressTimer(), [clearLongPressTimer]);
+
+  const showBulkSelectCheckbox = bulkSelectionMode && bulkSelectable;
 
   // Sanftes Hervorheben, wenn sich der Status dieser Zeile ändert (eigene Aktion oder Remote-Sync).
   const statusSignature = useMemo(() => {
@@ -779,15 +912,53 @@ const PackingItem: React.FC<PackingItemProps> = ({
     <>
       <div
         className={cn(
-          "p-4 mb-3 bg-card rounded-xl border border-subtle dark:border-white/10 shadow-sm transition-all duration-200 overflow-hidden",
+          "relative p-4 mb-3 bg-card rounded-xl border border-subtle dark:border-white/10 shadow-sm transition-all duration-200 overflow-hidden",
           isExiting && "animate-pack-item-out",
           !isExiting && justUpdated && "animate-pack-item-update",
-          !isExiting && (isPackedForOpacity ? 'opacity-60' : 'hover:shadow-md')
+          !isExiting && isPackedForOpacity && "opacity-60",
+          bulkSelectionMode && bulkSelectable && !bulkSelected && "border-dashed border-[rgb(45,79,30)]/30",
+          bulkSelected &&
+            "ring-2 ring-[rgb(45,79,30)]/50 border-[rgb(45,79,30)]/40 bg-[rgb(237,242,233)] dark:bg-[rgb(38,48,34)] shadow-[inset_4px_0_0_0_rgb(45,79,30)]",
+          bulkSelected && "hover:bg-[rgb(229,236,224)] dark:hover:bg-[rgb(42,52,38)] hover:shadow-sm",
+          !bulkSelected && !isExiting && !isPackedForOpacity && "hover:shadow-md",
+          bulkSelectionMode && !bulkSelectable && "opacity-50",
+          bulkSelectable && !bulkSelectionMode && "[touch-action:manipulation] select-none"
         )}
+        onClick={handleBulkRowClick}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerCancel}
+        onContextMenu={handleContextMenu}
       >
         <div className="flex items-start space-x-3">
+          {showBulkSelectCheckbox && (
+            <div className="mt-0.5 flex-shrink-0" data-no-bulk-select>
+              <button
+                type="button"
+                aria-pressed={bulkSelected}
+                aria-label={bulkSelected ? 'Auswahl aufheben' : 'Für Mehrfach-Zuordnung auswählen'}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onBulkSelectionToggle?.()
+                }}
+                className={cn(
+                  'flex h-7 w-7 min-h-7 min-w-7 items-center justify-center rounded-full border-2 transition-all',
+                  bulkSelected
+                    ? 'border-[rgb(45,79,30)] bg-[rgb(45,79,30)] text-white scale-105'
+                    : 'border-[rgb(45,79,30)]/45 bg-card'
+                )}
+              >
+                {bulkSelected ? (
+                  <Check className="h-4 w-4" strokeWidth={3} aria-hidden />
+                ) : (
+                  <span className="h-2.5 w-2.5 rounded-full bg-[rgb(45,79,30)]/25" aria-hidden />
+                )}
+              </button>
+            </div>
+          )}
           {/* Checkbox logic based on mode - feste Größe mit flex-shrink-0 */}
-          {mitreisenden_typ === 'pauschal' && !usesGruppenCheckboxes && (
+          {!showBulkSelectCheckbox && mitreisenden_typ === 'pauschal' && !usesGruppenCheckboxes && (
             <div className="mt-0.5 flex-shrink-0">
               <Checkbox
                 id={`item-${id}`}
@@ -803,7 +974,7 @@ const PackingItem: React.FC<PackingItemProps> = ({
             </div>
           )}
 
-          {mitreisenden_typ === 'pauschal' && usesGruppenCheckboxes && (
+          {!showBulkSelectCheckbox && mitreisenden_typ === 'pauschal' && usesGruppenCheckboxes && (
             <div className="mt-0.5 flex-shrink-0">
               <Checkbox
                 id={`item-${id}`}
@@ -820,7 +991,7 @@ const PackingItem: React.FC<PackingItemProps> = ({
             </div>
           )}
           
-          {mitreisenden_typ !== 'pauschal' && selectedProfile !== null && (
+          {!showBulkSelectCheckbox && mitreisenden_typ !== 'pauschal' && selectedProfile !== null && (
             <div className="mt-0.5 flex-shrink-0">
               <Checkbox
                 id={`item-${id}`}
@@ -836,7 +1007,7 @@ const PackingItem: React.FC<PackingItemProps> = ({
             </div>
           )}
 
-          {mitreisenden_typ !== 'pauschal' && selectedProfile === null && (
+          {!showBulkSelectCheckbox && mitreisenden_typ !== 'pauschal' && selectedProfile === null && (
             <div className="mt-0.5 flex-shrink-0">
               <Checkbox
                 id={`item-${id}`}
@@ -888,6 +1059,7 @@ const PackingItem: React.FC<PackingItemProps> = ({
                   gruppenMap={gruppenMap}
                   ownGruppeId={ownGruppeId}
                   expandAllGroups={pauschalGruppenFilter === 'alle'}
+                  highlightOwnGruppe={pauschalGruppenFilter === 'alle'}
                   onClick={onOpenAssignment ? () => onOpenAssignment(fullItem) : undefined}
                 />
               )}
@@ -1026,6 +1198,7 @@ const PackingItem: React.FC<PackingItemProps> = ({
               <Button
                 variant="ghost"
                 size="icon"
+                data-no-bulk-long-press
                 className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-accent/10"
               >
                 <MoreVertical className="h-4 w-4" />
@@ -1127,6 +1300,11 @@ interface PackingListProps {
   pauschalGruppenFilter?: PauschalGruppenFilter;
   onPauschalGruppenFilterChange?: (filter: PauschalGruppenFilter) => void;
   onSetPauschalGruppen?: (packingItemId: string, payload: PauschalGruppenAssignmentPayload) => void;
+  onBulkSetPauschalGruppen?: (packingItemIds: string[], payload: PauschalGruppenAssignmentPayload) => void;
+  onBulkUpdatePackingItems?: (packingItemIds: string[], patch: BulkPackingPatch) => Promise<boolean>;
+  onBulkDeletePackingItems?: (packingItemIds: string[]) => Promise<boolean>;
+  /** Von außen (Sidebar) Mehrfachauswahl starten – Zähler hochzählen */
+  bulkSelectionTrigger?: number;
   onToggleGruppe?: (packingItemId: string, gruppeId: string, currentStatus: boolean) => void;
   isAdmin?: boolean;
 }
@@ -1163,15 +1341,30 @@ export function PackingList({
   pauschalGruppenFilter = 'alle',
   onPauschalGruppenFilterChange,
   onSetPauschalGruppen,
+  onBulkSetPauschalGruppen,
+  onBulkUpdatePackingItems,
+  onBulkDeletePackingItems,
+  bulkSelectionTrigger = 0,
   onToggleGruppe,
   isAdmin = false,
 }: PackingListProps) {
   const [assignmentItemId, setAssignmentItemId] = useState<string | null>(null);
+  const [bulkSelectionMode, setBulkSelectionMode] = useState(false);
+  const [bulkSelectedIds, setBulkSelectedIds] = useState<Set<string>>(() => new Set());
+  const [bulkAssignOpen, setBulkAssignOpen] = useState(false);
+  const [bulkEditOpen, setBulkEditOpen] = useState(false);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [bulkDeleteLoading, setBulkDeleteLoading] = useState(false);
   const assignmentItem = useMemo(
     () => (assignmentItemId ? items.find((i) => i.id === assignmentItemId) ?? null : null),
     [assignmentItemId, items]
   );
-  const [undoToast, setUndoToast] = useState<{ visible: boolean; itemName: string; action: () => void } | null>(null);
+  const [undoToast, setUndoToast] = useState<{
+    visible: boolean;
+    itemName: string;
+    message?: string;
+    action: () => void;
+  } | null>(null);
   const [internalActiveMainCategory, setInternalActiveMainCategory] = useState('');
   const activeMainCategory =
     activeMainCategoryProp !== undefined ? activeMainCategoryProp : internalActiveMainCategory;
@@ -1218,6 +1411,62 @@ export function PackingList({
     () => (multiGroupActive ? items.filter((i) => isPauschalGruppenFeatureActive(i, vacationMitreisende) && (i.pauschal_gruppen_modus ?? 'einmal') === 'offen') : []),
     [items, multiGroupActive, vacationMitreisende]
   );
+
+  const isBulkSelectableItem = useCallback(
+    (item: DBPackingItem) =>
+      multiGroupActive &&
+      canEditPauschalEntries &&
+      item.mitreisenden_typ === 'pauschal',
+    [multiGroupActive, canEditPauschalEntries]
+  );
+
+  const showBulkAssignUi =
+    multiGroupActive && canEditPauschalEntries && !!onBulkSetPauschalGruppen;
+
+  const bulkSelectedItems = useMemo(
+    () => items.filter((i) => bulkSelectedIds.has(i.id)),
+    [items, bulkSelectedIds]
+  );
+
+  const exitBulkSelection = useCallback(() => {
+    setBulkSelectionMode(false);
+    setBulkSelectedIds(new Set());
+    setBulkAssignOpen(false);
+  }, []);
+
+  const startBulkSelection = useCallback((itemId: string) => {
+    setBulkSelectionMode(true);
+    setBulkSelectedIds(new Set([itemId]));
+  }, []);
+
+  const toggleBulkSelection = useCallback((itemId: string) => {
+    setBulkSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(itemId)) next.delete(itemId);
+      else next.add(itemId);
+      if (next.size === 0) setBulkSelectionMode(false);
+      return next;
+    });
+  }, []);
+
+  useEffect(() => {
+    if (bulkSelectionTrigger > 0) {
+      setBulkSelectionMode(true);
+    }
+  }, [bulkSelectionTrigger]);
+
+  useEffect(() => {
+    if (!bulkSelectionMode) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') exitBulkSelection();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [bulkSelectionMode, exitBulkSelection]);
+
+  useEffect(() => {
+    exitBulkSelection();
+  }, [selectedProfile, pauschalGruppenFilter, exitBulkSelection]);
 
   const ownGroupMitreisende = profileGroups.ownGroup;
 
@@ -1868,6 +2117,7 @@ export function PackingList({
         <div
           className={cn(
             "min-h-full bg-scroll-pattern px-4 sm:px-6 pt-6 pb-6",
+            bulkSelectionMode && "pb-24",
             tabSwipeDirection === 'left' && "animate-tab-swipe-in-from-right",
             tabSwipeDirection === 'right' && "animate-tab-swipe-in-from-left"
           )}
@@ -2027,12 +2277,21 @@ export function PackingList({
                               gruppenMap={gruppenMap}
                               vacationGroups={profileGroups}
                               onOpenAssignment={
-                                canEditPauschalEntries
+                                canEditPauschalEntries && !bulkSelectionMode
                                   ? (item) => setAssignmentItemId(item.id)
                                   : undefined
                               }
                               onToggleGruppe={onToggleGruppe}
                               pauschalGruppenFilter={pauschalGruppenFilter}
+                              bulkSelectionMode={bulkSelectionMode}
+                              bulkSelected={bulkSelectedIds.has(item.id)}
+                              bulkSelectable={showBulkAssignUi && isBulkSelectableItem(item)}
+                              onBulkSelectionToggle={
+                                showBulkAssignUi ? () => toggleBulkSelection(item.id) : undefined
+                              }
+                              onBulkSelectionStart={
+                                showBulkAssignUi ? () => startBulkSelection(item.id) : undefined
+                              }
                             />
                           ))}
                       </CardContent>
@@ -2050,6 +2309,7 @@ export function PackingList({
         <UndoToast
           isVisible={undoToast.visible}
           itemName={undoToast.itemName}
+          message={undoToast.message}
           onUndo={undoToast.action}
           onDismiss={() => setUndoToast(null)}
         />
@@ -2066,6 +2326,102 @@ export function PackingList({
           ownGruppeId={ownGruppeId}
           onAssign={(payload) => {
             onSetPauschalGruppen(assignmentItem.id, payload);
+            setAssignmentItemId(null);
+          }}
+        />
+      )}
+      {onBulkSetPauschalGruppen && (
+        <PauschalGruppeAssignmentModal
+          open={bulkAssignOpen}
+          onOpenChange={setBulkAssignOpen}
+          itemName=""
+          itemCount={bulkSelectedIds.size}
+          vacationGroups={vacationGroupsForSheet}
+          ownGruppeId={ownGruppeId}
+          deferApply
+          onConfirm={(payload) => {
+            const ids = [...bulkSelectedIds];
+            const previous = new Map(
+              ids.map((id) => {
+                const item = items.find((i) => i.id === id);
+                return [id, item ? snapshotPauschalGruppenAssignment(item) : null] as const;
+              })
+            );
+            onBulkSetPauschalGruppen(ids, payload);
+            setBulkAssignOpen(false);
+            exitBulkSelection();
+            setUndoToast({
+              visible: true,
+              itemName: '',
+              message: `${ids.length} ${ids.length === 1 ? 'Eintrag' : 'Einträge'} zugeordnet`,
+              action: () => {
+                const undoEntries = [...previous.entries()].filter(
+                  (entry): entry is [string, PauschalGruppenAssignmentPayload] => entry[1] != null
+                );
+                for (const [id, prevPayload] of undoEntries) {
+                  onSetPauschalGruppen?.(id, prevPayload);
+                }
+              },
+            });
+          }}
+        />
+      )}
+      {bulkSelectionMode && showBulkAssignUi && (
+        <BulkSelectionBar
+          count={bulkSelectedIds.size}
+          onCancel={exitBulkSelection}
+          onAssign={() => {
+            if (bulkSelectedIds.size > 0) setBulkAssignOpen(true);
+          }}
+          onEdit={
+            onBulkUpdatePackingItems
+              ? () => {
+                  if (bulkSelectedIds.size > 0) setBulkEditOpen(true);
+                }
+              : undefined
+          }
+          onDelete={
+            onBulkDeletePackingItems
+              ? () => {
+                  if (bulkSelectedIds.size > 0) setBulkDeleteOpen(true);
+                }
+              : undefined
+          }
+        />
+      )}
+      {onBulkUpdatePackingItems && (
+        <BulkPackingEditModal
+          open={bulkEditOpen}
+          onOpenChange={setBulkEditOpen}
+          itemCount={bulkSelectedIds.size}
+          transportVehicles={transportVehicles}
+          onConfirm={async (patch) => {
+            const ids = [...bulkSelectedIds];
+            const ok = await onBulkUpdatePackingItems(ids, patch);
+            if (ok) {
+              setBulkEditOpen(false);
+              exitBulkSelection();
+            }
+          }}
+        />
+      )}
+      {onBulkDeletePackingItems && (
+        <BulkPackingDeleteDialog
+          open={bulkDeleteOpen}
+          onOpenChange={setBulkDeleteOpen}
+          itemNames={bulkSelectedItems.map((i) => i.was)}
+          isLoading={bulkDeleteLoading}
+          onConfirm={async () => {
+            const ids = [...bulkSelectedIds];
+            setBulkDeleteLoading(true);
+            try {
+              const ok = await onBulkDeletePackingItems(ids);
+              if (ok) {
+                exitBulkSelection();
+              }
+            } finally {
+              setBulkDeleteLoading(false);
+            }
           }}
         />
       )}

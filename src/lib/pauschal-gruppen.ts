@@ -288,6 +288,51 @@ export interface PauschalGruppenAssignmentPayload {
 /**
  * 0 Gruppen → offen | 1 → einmal + Verantwortliche | alle → pro_gruppe | sonst → ausgewaehlte_gruppen
  */
+export function snapshotPauschalGruppenAssignment(item: PackingItem): PauschalGruppenAssignmentPayload {
+  const modus = item.pauschal_gruppen_modus ?? 'einmal'
+  return {
+    pauschalGruppenModus: modus,
+    verantwortlicheGruppeId: item.verantwortliche_gruppe_id ?? null,
+    gruppeIds: (item.gruppen ?? []).map((g) => g.gruppe_id),
+  }
+}
+
+/** Optimistic-Update eines Packlisteneintrags nach Gruppen-Zuordnung */
+export function applyPauschalGruppenPayloadToItem(
+  item: PackingItem,
+  payload: PauschalGruppenAssignmentPayload,
+  gruppenMap: Map<string, string>
+): PackingItem {
+  const packingItemId = item.id
+  let gruppen = item.gruppen ?? []
+  if (payload.pauschalGruppenModus === 'pro_gruppe') {
+    gruppen = [...gruppenMap.keys()].map((gid) => ({
+      id: `${packingItemId}-${gid}`,
+      gruppe_id: gid,
+      gruppe_name: gruppenMap.get(gid),
+      gepackt: gruppen.find((g) => g.gruppe_id === gid)?.gepackt ?? false,
+    }))
+  } else if (payload.pauschalGruppenModus === 'ausgewaehlte_gruppen') {
+    gruppen = (payload.gruppeIds ?? []).map((gid) => ({
+      id: `${packingItemId}-${gid}`,
+      gruppe_id: gid,
+      gruppe_name: gruppenMap.get(gid),
+      gepackt: gruppen.find((g) => g.gruppe_id === gid)?.gepackt ?? false,
+    }))
+  } else {
+    gruppen = []
+  }
+  return {
+    ...item,
+    pauschal_gruppen_modus: payload.pauschalGruppenModus,
+    verantwortliche_gruppe_id: payload.verantwortlicheGruppeId ?? null,
+    verantwortliche_gruppe_name: payload.verantwortlicheGruppeId
+      ? gruppenMap.get(payload.verantwortlicheGruppeId) ?? null
+      : null,
+    gruppen,
+  }
+}
+
 export function derivePauschalAssignmentFromGruppeSelection(
   selectedIds: string[],
   allVacationGruppeIds: string[]

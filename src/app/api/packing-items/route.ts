@@ -183,11 +183,10 @@ export async function PUT(request: NextRequest) {
       transport_id?: string | null
       was?: string | null
       kategorie_id?: string | null
-    } = {
-      anzahl,
-      bemerkung,
-      transport_id: transport_id ?? undefined,
-    }
+    } = {}
+    if (anzahl !== undefined) updates.anzahl = anzahl
+    if (bemerkung !== undefined) updates.bemerkung = bemerkung
+    if (transport_id !== undefined) updates.transport_id = transport_id
 
     if (kategorieId !== undefined) {
       const isTempKat = await isTemporaryPackingEintrag(db, id)
