@@ -1710,7 +1710,7 @@ export function PackingList({
       mainCategories.find((cat) => visibleMainCategories.includes(cat)) ??
       visibleMainCategories[0]!
     const next = preferredFirst;
-    const correctionKey = `${visibleMainCategoriesKey}\u0001${next}`;
+    const correctionKey = `${visibleMainCategoriesKey}\u0001${next}\u0001${activeMainCategory ?? ''}`;
     if (lastTabCorrectionKeyRef.current === correctionKey) return;
     lastTabCorrectionKeyRef.current = correctionKey;
     setActiveMainCategory(next);

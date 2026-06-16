@@ -243,6 +243,7 @@ function HomeContent() {
       setSelectedPackProfile(ui.selectedPackProfile)
       setHidePackedItems(ui.hidePackedItems)
       setListDisplayMode(ui.listDisplayMode)
+      setActiveMainCategory(ui.activeMainCategory)
       if (ui.selectedPackProfile !== null) {
         setAutoProfileInitializedVacationId(vid)
       }
@@ -973,6 +974,11 @@ function HomeContent() {
         setAutoProfileInitializedVacationId(selectedVacationId)
       }
     }
+    if (saved?.activeMainCategory !== undefined) {
+      setActiveMainCategory(saved.activeMainCategory)
+    } else {
+      setActiveMainCategory('')
+    }
   }, [selectedVacationId, vacations, canEditPauschalEntries])
 
   /** Nach Packlisten-Laden: Standard-Filter + erster Tab (nicht aus Storage). */
@@ -991,7 +997,6 @@ function HomeContent() {
       resolvePauschalGruppenFilterOnHydrate(packingItems, saved?.pauschalGruppenFilter)
     )
     prevUnassignedPauschalCountRef.current = unassignedPauschalCount
-    setActiveMainCategory('')
   }, [
     selectedVacationId,
     multiGroupVacation,
