@@ -345,16 +345,29 @@ const PackingItem: React.FC<PackingItemProps> = ({
 
   const handlePointerUp = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
-      if (longPressTriggeredRef.current) {
+      const wasLongPress = longPressTriggeredRef.current;
+      if (wasLongPress) {
         event.preventDefault();
         event.stopPropagation();
       }
       endLongPress();
+      if (wasLongPress) {
+        window.setTimeout(() => {
+          suppressBulkToggleRef.current = false;
+          longPressTriggeredRef.current = false;
+        }, 0);
+      }
     },
     [endLongPress]
   );
 
   const handlePointerCancel = useCallback(() => {
+    if (longPressTriggeredRef.current) {
+      window.setTimeout(() => {
+        suppressBulkToggleRef.current = false;
+        longPressTriggeredRef.current = false;
+      }, 0);
+    }
     endLongPress();
   }, [endLongPress]);
 
@@ -369,7 +382,7 @@ const PackingItem: React.FC<PackingItemProps> = ({
 
   const handleBulkRowClick = useCallback(
     (event: React.MouseEvent<HTMLDivElement>) => {
-      if (suppressBulkToggleRef.current) {
+      if (suppressBulkToggleRef.current || longPressTriggeredRef.current) {
         suppressBulkToggleRef.current = false;
         longPressTriggeredRef.current = false;
         event.preventDefault();
@@ -377,10 +390,6 @@ const PackingItem: React.FC<PackingItemProps> = ({
         return;
       }
       if (!bulkSelectionMode || !bulkSelectable || !onBulkSelectionToggle) return;
-      if (longPressTriggeredRef.current) {
-        longPressTriggeredRef.current = false;
-        return;
-      }
       const target = event.target as HTMLElement;
       if (
         target.closest(
@@ -929,7 +938,9 @@ const PackingItem: React.FC<PackingItemProps> = ({
             "border-[rgb(45,79,30)]/40 bg-[rgb(237,242,233)] dark:bg-[rgb(38,48,34)] hover:bg-[rgb(229,236,224)] dark:hover:bg-[rgb(42,52,38)]",
           !bulkSelected && !isExiting && !isPackedForOpacity && "hover:shadow-md",
           bulkSelectionMode && !bulkSelectable && "opacity-50 border-subtle dark:border-white/10",
-          bulkSelectable && !bulkSelectionMode && "[touch-action:manipulation] select-none"
+          bulkSelectionMode && bulkSelectable && "touch-manipulation",
+          bulkSelectable && !bulkSelectionMode && "[touch-action:manipulation]",
+          "select-none [webkit-touch-callout:none]"
         )}
         onClick={handleBulkRowClick}
         onPointerDown={handlePointerDown}
@@ -2249,8 +2260,8 @@ export function PackingList({
       >
         <div
           className={cn(
-            "min-h-full bg-scroll-pattern px-4 sm:px-6 pt-6 pb-6",
-            bulkSelectionMode && "pb-24",
+            "min-h-full bg-scroll-pattern px-4 sm:px-6 pt-6 pb-6 select-none [webkit-touch-callout:none]",
+            bulkSelectionMode && "pb-24 touch-manipulation",
             tabSwipeDirection === 'left' && "animate-tab-swipe-in-from-right",
             tabSwipeDirection === 'right' && "animate-tab-swipe-in-from-left"
           )}
