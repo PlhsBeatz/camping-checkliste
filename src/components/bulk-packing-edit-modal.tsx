@@ -13,6 +13,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import type { TransportVehicle } from '@/lib/db'
+import type { BulkEditFieldDefaults, BulkEditBemerkungMode } from '@/lib/bulk-packing-profile'
 
 export type BulkPackingPatch = {
   transport_id?: string | null
@@ -25,6 +26,8 @@ interface BulkPackingEditModalProps {
   onOpenChange: (open: boolean) => void
   itemCount: number
   transportVehicles: TransportVehicle[]
+  fieldDefaults?: BulkEditFieldDefaults
+  bemerkungMode?: BulkEditBemerkungMode
   onConfirm: (patch: BulkPackingPatch) => void
 }
 
@@ -33,6 +36,8 @@ export function BulkPackingEditModal({
   onOpenChange,
   itemCount,
   transportVehicles,
+  fieldDefaults,
+  bemerkungMode = 'normal',
   onConfirm,
 }: BulkPackingEditModalProps) {
   const [changeTransport, setChangeTransport] = useState(false)
@@ -45,12 +50,16 @@ export function BulkPackingEditModal({
   useEffect(() => {
     if (!open) return
     setChangeTransport(false)
-    setTransportId('')
     setChangeBemerkung(false)
-    setBemerkung('')
     setChangeAnzahl(false)
-    setAnzahl('1')
-  }, [open])
+    setTransportId(fieldDefaults?.transport_id ?? '')
+    setBemerkung(fieldDefaults?.bemerkung ?? '')
+    setAnzahl(
+      fieldDefaults?.anzahl !== undefined ? String(fieldDefaults.anzahl) : '1'
+    )
+  }, [open, fieldDefaults])
+
+  const showBemerkung = bemerkungMode !== 'hidden'
 
   const handleSubmit = () => {
     const patch: BulkPackingPatch = {}
@@ -108,6 +117,7 @@ export function BulkPackingEditModal({
           )}
         </div>
 
+        {showBemerkung && (
         <div className="space-y-2 rounded-lg border border-subtle p-3">
           <label className="flex items-center gap-2 cursor-pointer">
             <Checkbox
@@ -116,6 +126,12 @@ export function BulkPackingEditModal({
             />
             <span className="text-sm font-medium">Bemerkung ändern</span>
           </label>
+          {bemerkungMode === 'mixed' && (
+            <p className="text-xs text-muted-foreground">
+              Bemerkungen gelten nur für pauschale bzw. ganze Einträge, nicht für
+              personenbezogene Zeilen in der Auswahl.
+            </p>
+          )}
           {changeBemerkung && (
             <Input
               value={bemerkung}
@@ -124,6 +140,7 @@ export function BulkPackingEditModal({
             />
           )}
         </div>
+        )}
 
         <div className="space-y-2 rounded-lg border border-subtle p-3">
           <label className="flex items-center gap-2 cursor-pointer">

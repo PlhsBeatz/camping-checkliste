@@ -18,8 +18,9 @@ import { suppressAdminForeignWarn } from '@/lib/pauschal-gruppen'
 interface AdminFremdeGruppeWarningDialogProps {
   open: boolean
   gruppeName: string
-  /** true = abhaken, false = Haken entfernen */
-  markingAsPacked: boolean
+  /** true = abhaken, false = Haken entfernen (nur ohne bulkAction) */
+  markingAsPacked?: boolean
+  bulkAction?: 'edit' | 'delete' | 'assign'
   vacationId: string | null
   onConfirm: () => void
   onCancel: () => void
@@ -28,12 +29,33 @@ interface AdminFremdeGruppeWarningDialogProps {
 export function AdminFremdeGruppeWarningDialog({
   open,
   gruppeName,
-  markingAsPacked,
+  markingAsPacked = true,
+  bulkAction,
   vacationId,
   onConfirm,
   onCancel,
 }: AdminFremdeGruppeWarningDialogProps) {
   const [dontAskAgain, setDontAskAgain] = useState(false)
+
+  const actionText = bulkAction
+    ? bulkAction === 'edit'
+      ? 'Trotzdem bearbeiten?'
+      : bulkAction === 'delete'
+        ? 'Trotzdem entfernen?'
+        : 'Trotzdem zuordnen?'
+    : markingAsPacked
+      ? 'Trotzdem abhaken?'
+      : 'Trotzdem Haken entfernen?'
+
+  const confirmLabel = bulkAction
+    ? bulkAction === 'edit'
+      ? 'Trotzdem bearbeiten'
+      : bulkAction === 'delete'
+        ? 'Trotzdem entfernen'
+        : 'Trotzdem zuordnen'
+    : markingAsPacked
+      ? 'Trotzdem abhaken'
+      : 'Trotzdem entfernen'
 
   const handleConfirm = () => {
     if (dontAskAgain && vacationId) {
@@ -48,8 +70,7 @@ export function AdminFremdeGruppeWarningDialog({
         <AlertDialogHeader>
           <AlertDialogTitle>Fremde Gruppe</AlertDialogTitle>
           <AlertDialogDescription>
-            Dieser Eintrag ist <strong>{gruppeName}</strong> zugeordnet.{' '}
-            {markingAsPacked ? 'Trotzdem abhaken?' : 'Trotzdem Haken entfernen?'}
+            Dieser Eintrag ist <strong>{gruppeName}</strong> zugeordnet. {actionText}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <div className="flex items-center gap-2 py-2">
@@ -64,9 +85,7 @@ export function AdminFremdeGruppeWarningDialog({
         </div>
         <AlertDialogFooter>
           <AlertDialogCancel onClick={onCancel}>Abbrechen</AlertDialogCancel>
-          <AlertDialogAction onClick={handleConfirm}>
-            {markingAsPacked ? 'Trotzdem abhaken' : 'Trotzdem entfernen'}
-          </AlertDialogAction>
+          <AlertDialogAction onClick={handleConfirm}>{confirmLabel}</AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>

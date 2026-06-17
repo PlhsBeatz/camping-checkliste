@@ -13,7 +13,7 @@ import { Edit2, MoreVertical, Trash2, Users, X } from 'lucide-react'
 interface BulkSelectionBarProps {
   count: number
   onCancel: () => void
-  onAssign: () => void
+  onAssign?: () => void
   onEdit?: () => void
   onDelete?: () => void
 }
@@ -60,16 +60,18 @@ export function BulkSelectionBar({
           <Edit2 className="h-4 w-4" />
           <span className="hidden sm:inline">Bearbeiten</span>
         </Button>
-        <Button
-          type="button"
-          size="sm"
-          onClick={onAssign}
-          disabled={!hasSelection}
-          className="shrink-0 gap-1 px-2 sm:px-3 bg-[rgb(45,79,30)] hover:bg-[rgb(45,79,30)]/90 text-white"
-        >
-          <Users className="h-4 w-4" />
-          <span className="hidden xs:inline sm:inline">Zuordnen</span>
-        </Button>
+        {onAssign && (
+          <Button
+            type="button"
+            size="sm"
+            onClick={onAssign}
+            disabled={!hasSelection}
+            className="shrink-0 gap-1 px-2 sm:px-3 bg-[rgb(45,79,30)] hover:bg-[rgb(45,79,30)]/90 text-white"
+          >
+            <Users className="h-4 w-4" />
+            <span className="hidden xs:inline sm:inline">Zuordnen</span>
+          </Button>
+        )}
         {onDelete && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

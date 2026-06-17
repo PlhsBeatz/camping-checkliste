@@ -206,6 +206,31 @@ async function defaultSend(opts: MutationOptions): Promise<{ ok: boolean; status
       url = '/api/packing-items/batch'
       body = opts.payload
       break
+    case 'packing-items-batch-update':
+      method = 'PATCH'
+      url = '/api/packing-items/batch-update'
+      body = opts.payload
+      break
+    case 'packing-items-batch-delete':
+      method = 'POST'
+      url = '/api/packing-items/batch-delete'
+      body = opts.payload
+      break
+    case 'packing-items-pauschal-gruppen-batch':
+      method = 'POST'
+      url = '/api/packing-items/pauschal-gruppen/batch'
+      body = opts.payload
+      break
+    case 'packing-items-batch-set-mitreisender-anzahl':
+      method = 'POST'
+      url = '/api/packing-items/batch-set-mitreisender-anzahl'
+      body = opts.payload
+      break
+    case 'packing-items-batch-remove-mitreisender':
+      method = 'POST'
+      url = '/api/packing-items/batch-remove-mitreisender'
+      body = opts.payload
+      break
     case 'checklisten-eintrag-erledigt':
       method = 'PATCH'
       url = `/api/checklisten/${encodeURIComponent(ctx.checklistId ?? '')}/eintraege/${encodeURIComponent(ctx.eintragId ?? '')}`

@@ -31,6 +31,8 @@ interface MarkAllConfirmationDialogProps {
   confirmLabel?: string
   /** Löschen-Modus: „Für wen von der Packliste entfernen?“ – Bestätigungs-Button zeigt Anzahl */
   deleteMode?: boolean
+  /** Bearbeiten-Modus: Personen vor Bulk-Bearbeitung wählen */
+  editMode?: boolean
 }
 
 export function MarkAllConfirmationDialog({
@@ -43,7 +45,8 @@ export function MarkAllConfirmationDialog({
   title: titleOverride,
   description: descriptionOverride,
   confirmLabel: confirmLabelOverride,
-  deleteMode = false
+  deleteMode = false,
+  editMode = false,
 }: MarkAllConfirmationDialogProps) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
 
@@ -77,25 +80,31 @@ export function MarkAllConfirmationDialog({
 
   const title =
     titleOverride ??
-    (deleteMode
-      ? 'Für wen von der Packliste entfernen?'
-      : isUnmarkMode
-        ? 'Für alle zurücksetzen?'
-        : 'Für alle abhaken?')
+    (editMode
+      ? 'Für wen bearbeiten?'
+      : deleteMode
+        ? 'Für wen von der Packliste entfernen?'
+        : isUnmarkMode
+          ? 'Für alle zurücksetzen?'
+          : 'Für alle abhaken?')
   const description =
     descriptionOverride ??
-    (deleteMode
-      ? 'Wählen Sie die Mitreisenden, für die dieser Eintrag von der Packliste entfernt werden soll.'
-      : isUnmarkMode
-        ? 'Wählen Sie die Mitreisenden, für die dieser Gegenstand zurückgesetzt werden soll.'
-        : 'Wählen Sie die Mitreisenden, für die dieser Gegenstand als "gepackt" markiert werden soll.')
+    (editMode
+      ? 'Wählen Sie die Mitreisenden, für die die Änderungen gelten sollen.'
+      : deleteMode
+        ? 'Wählen Sie die Mitreisenden, für die dieser Eintrag von der Packliste entfernt werden soll.'
+        : isUnmarkMode
+          ? 'Wählen Sie die Mitreisenden, für die dieser Gegenstand zurückgesetzt werden soll.'
+          : 'Wählen Sie die Mitreisenden, für die dieser Gegenstand als "gepackt" markiert werden soll.')
   const confirmLabel =
     confirmLabelOverride ??
-    (deleteMode
-      ? `Entfernen (${selectedIds.size})`
-      : isUnmarkMode
-        ? `Zurücksetzen (${selectedIds.size})`
-        : `Abhaken (${selectedIds.size})`)
+    (editMode
+      ? `Weiter (${selectedIds.size})`
+      : deleteMode
+        ? `Entfernen (${selectedIds.size})`
+        : isUnmarkMode
+          ? `Zurücksetzen (${selectedIds.size})`
+          : `Abhaken (${selectedIds.size})`)
 
   const hasPackedOrVorgemerkt = deleteMode && travelers.some(t => t.gepackt || t.gepackt_vorgemerkt)
 
@@ -114,6 +123,8 @@ export function MarkAllConfirmationDialog({
         )}>
           {deleteMode ? (
             <Trash2 className="h-6 w-6 text-destructive" />
+          ) : editMode ? (
+            <CheckCheck className="h-6 w-6 text-primary" />
           ) : (
             <CheckCheck className="h-6 w-6 text-primary" />
           )}

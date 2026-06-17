@@ -72,6 +72,11 @@ import {
 } from '@/lib/pauschal-gruppen'
 import { AdminFremdeGruppeWarningDialog } from '@/components/admin-fremde-gruppe-warning-dialog'
 import type { BulkPackingPatch } from '@/components/bulk-packing-edit-modal'
+import {
+  applyBulkDeleteToItem,
+  applyBulkPatchToItem,
+  resolveBulkPersonMitreisenderIds,
+} from '@/lib/bulk-packing-profile'
 import { usePackingSync } from '@/hooks/use-packing-sync'
 import { useOptimisticMutation } from '@/hooks/use-optimistic-mutation'
 import {
@@ -226,12 +231,13 @@ function HomeContent() {
   const [pauschalGruppenFilter, setPauschalGruppenFilter] = useState<PauschalGruppenFilter>(
     defaultPacklistUi.pauschalGruppenFilter
   )
-  const [bulkSelectionTrigger, setBulkSelectionTrigger] = useState(0)
   const [adminForeignWarn, setAdminForeignWarn] = useState<{
     gruppeName: string
-    markingAsPacked: boolean
+    markingAsPacked?: boolean
+    bulkAction?: 'edit' | 'delete' | 'assign'
     proceed: () => void
   } | null>(null)
+  const [bulkSelectionActive, setBulkSelectionActive] = useState(false)
   /** Beim Wechsel des Urlaubs: UI aus Storage oder Urlaubs-Standard (einmal pro Urlaub). */
   const lastAppliedDefaultVacationIdRef = useRef<string | null>(null)
   const packingListReadyVacationIdRef = useRef<string | null>(null)
@@ -453,6 +459,99 @@ function HomeContent() {
       })
     },
     [selectedVacationId]
+  )
+
+  const refetchPackingItemsFromServer = useCallback(async () => {
+    if (!selectedVacationId) return
+    try {
+      const itemsRes = await fetch(`/api/packing-items?vacationId=${selectedVacationId}`, {
+        cache: 'no-store',
+      })
+      const itemsData = (await itemsRes.json()) as ApiResponse<PackingItem[]>
+      if (itemsData.success && itemsData.data) {
+        applyPackingItemsFromFetch(itemsData.data)
+      }
+    } catch (error) {
+      console.error('Failed to refetch packing items:', error)
+    }
+  }, [selectedVacationId, applyPackingItemsFromFetch])
+
+  type BulkMutateOutcome = 'ok' | 'queued' | 'failed'
+
+  const runBulkApiMutate = useCallback(
+    async (
+      table: string,
+      action: 'post' | 'patch',
+      key: string,
+      payload: unknown,
+      url: string,
+      method: 'POST' | 'PATCH'
+    ): Promise<BulkMutateOutcome> => {
+      const result = await mutate({
+        table,
+        action,
+        key,
+        payload,
+        send: async () => {
+          const res = await fetch(url, {
+            method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          })
+          if (!res.ok) return { ok: false, status: res.status }
+          try {
+            const data = (await res.json()) as { success?: boolean }
+            return { ok: !!data.success, status: res.status }
+          } catch {
+            return { ok: res.ok, status: res.status }
+          }
+        },
+      })
+      if (result.queued) return 'queued'
+      if (result.ok) return 'ok'
+      return 'failed'
+    },
+    [mutate]
+  )
+
+  const guardBulkAdminForeignWarn = useCallback(
+    (action: 'edit' | 'delete' | 'assign', itemIds: string[], proceed: () => void) => {
+      const isAdmin = !!user && isAdminRole(user.role)
+      if (!isAdmin || !multiGroupVacation || !selectedVacationId) {
+        proceed()
+        return
+      }
+      if (isAdminForeignWarnSuppressed(selectedVacationId)) {
+        proceed()
+        return
+      }
+      const foreignItem = packingItems.find(
+        (p) =>
+          itemIds.includes(p.id) &&
+          p.mitreisenden_typ === 'pauschal' &&
+          shouldWarnAdminForeignGruppe(p, ownGruppeId, true)
+      )
+      if (!foreignItem) {
+        proceed()
+        return
+      }
+      setAdminForeignWarn({
+        gruppeName: getForeignGruppeNameForWarning(foreignItem, vacationGruppenMap),
+        bulkAction: action,
+        proceed: () => {
+          setAdminForeignWarn(null)
+          proceed()
+        },
+      })
+    },
+    [
+      user,
+      multiGroupVacation,
+      selectedVacationId,
+      packingItems,
+      ownGruppeId,
+      vacationGruppenMap,
+    ]
   )
 
   /** Beim Offline-Wechsel: sichtbare Liste sofort in Memory/IDB sichern, bevor async Fetches enden.
@@ -1325,95 +1424,260 @@ function HomeContent() {
   )
 
   const handleBulkUpdatePackingItems = useCallback(
-    async (packingItemIds: string[], patch: BulkPackingPatch): Promise<boolean> => {
+    async (
+      packingItemIds: string[],
+      patch: BulkPackingPatch,
+      selectedPersonIds?: string[]
+    ): Promise<boolean> => {
       if (!selectedVacationId || packingItemIds.length === 0) return false
       pendingMutationsRef.current += 1
-      const revertSnapshot = packingItemsRef.current
-      const idSet = new Set(packingItemIds)
       const transportNameById = new Map(transportVehicles.map((t) => [t.id, t.name]))
+      const itemsById = new Map(packingItemsRef.current.map((p) => [p.id, p]))
+      const idSet = new Set(packingItemIds)
+      const personIdSet = selectedPersonIds?.length
+        ? new Set(selectedPersonIds)
+        : null
+
+      const personOnlyPatch: { transport_id?: string | null; anzahl?: number } = {}
+      if ('transport_id' in patch) personOnlyPatch.transport_id = patch.transport_id
+      if ('anzahl' in patch && patch.anzahl !== undefined) personOnlyPatch.anzahl = patch.anzahl
+
+      const wholeItemPatch: BulkPackingPatch = {}
+      if ('transport_id' in patch) wholeItemPatch.transport_id = patch.transport_id
+      if ('bemerkung' in patch) wholeItemPatch.bemerkung = patch.bemerkung
+      if ('anzahl' in patch && patch.anzahl !== undefined) wholeItemPatch.anzahl = patch.anzahl
+
+      const wholeItemIds: string[] = []
+      const personUpdateEntries: Array<{
+        packingItemId: string
+        mitreisenderId: string
+        anzahl: number
+        transportId?: string | null
+      }> = []
+
+      for (const id of packingItemIds) {
+        const item = itemsById.get(id)
+        if (!item) continue
+        const personIds = resolveBulkPersonMitreisenderIds(
+          item,
+          selectedPackProfile,
+          packProfileScopeIdSet,
+          personIdSet
+        )
+        if (personIds) {
+          if (Object.keys(personOnlyPatch).length > 0) {
+            for (const mitreisenderId of personIds) {
+              const personEntry = item.mitreisende?.find(
+                (m) => m.mitreisender_id === mitreisenderId
+              )
+              const anzahl =
+                personOnlyPatch.anzahl ?? personEntry?.anzahl ?? item.anzahl ?? 1
+              const entry: (typeof personUpdateEntries)[number] = {
+                packingItemId: id,
+                mitreisenderId,
+                anzahl,
+              }
+              if ('transport_id' in personOnlyPatch) {
+                entry.transportId = personOnlyPatch.transport_id ?? null
+              }
+              personUpdateEntries.push(entry)
+            }
+          }
+        } else {
+          wholeItemIds.push(id)
+        }
+      }
 
       setPackingItems((prev) =>
         prev.map((p) => {
           if (!idSet.has(p.id)) return p
-          const next = { ...p }
-          if ('transport_id' in patch) {
-            next.transport_id = patch.transport_id ?? null
-            next.transport_name = patch.transport_id
-              ? transportNameById.get(patch.transport_id) ?? null
-              : null
+          const personIds = resolveBulkPersonMitreisenderIds(
+            p,
+            selectedPackProfile,
+            packProfileScopeIdSet,
+            personIdSet
+          )
+          if (personIds && Object.keys(personOnlyPatch).length > 0) {
+            return applyBulkPatchToItem(p, personOnlyPatch, transportNameById, personIds)
           }
-          if ('bemerkung' in patch) next.bemerkung = patch.bemerkung ?? null
-          if ('anzahl' in patch && patch.anzahl !== undefined) next.anzahl = patch.anzahl
-          return next
+          if (wholeItemIds.includes(p.id)) {
+            return applyBulkPatchToItem(p, wholeItemPatch, transportNameById, null)
+          }
+          return p
         })
       )
 
+      let anyQueued = false
+
       try {
-        for (let offset = 0; offset < packingItemIds.length; offset += PAUSCHAL_ASSIGN_BATCH_SIZE) {
-          const chunk = packingItemIds.slice(offset, offset + PAUSCHAL_ASSIGN_BATCH_SIZE)
-          const res = await fetch('/api/packing-items/batch-update', {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
+        for (let offset = 0; offset < personUpdateEntries.length; offset += PAUSCHAL_ASSIGN_BATCH_SIZE) {
+          const chunk = personUpdateEntries.slice(offset, offset + PAUSCHAL_ASSIGN_BATCH_SIZE)
+          const payload = { vacationId: selectedVacationId, updates: chunk }
+          const outcome = await runBulkApiMutate(
+            'packing-items-batch-set-mitreisender-anzahl',
+            'post',
+            `${selectedVacationId}-person-update-${offset}`,
+            payload,
+            '/api/packing-items/batch-set-mitreisender-anzahl',
+            'POST'
+          )
+          if (outcome === 'queued') anyQueued = true
+          else if (outcome === 'failed') {
+            throw new Error('Personen-Aktualisierung fehlgeschlagen')
+          }
+        }
+
+        if (wholeItemIds.length > 0 && Object.keys(wholeItemPatch).length > 0) {
+          for (let offset = 0; offset < wholeItemIds.length; offset += PAUSCHAL_ASSIGN_BATCH_SIZE) {
+            const chunk = wholeItemIds.slice(offset, offset + PAUSCHAL_ASSIGN_BATCH_SIZE)
+            const payload = {
               vacationId: selectedVacationId,
               itemIds: chunk,
-              patch,
-            }),
-          })
-          const data = (await res.json()) as ApiResponse<{ updated: number; failed: number }>
-          if (!res.ok || !data.success) {
-            throw new Error(data.error ?? 'Batch-Aktualisierung fehlgeschlagen')
+              patch: wholeItemPatch,
+            }
+            const outcome = await runBulkApiMutate(
+              'packing-items-batch-update',
+              'patch',
+              `${selectedVacationId}-whole-update-${offset}`,
+              payload,
+              '/api/packing-items/batch-update',
+              'PATCH'
+            )
+            if (outcome === 'queued') anyQueued = true
+            else if (outcome === 'failed') {
+              throw new Error('Batch-Aktualisierung fehlgeschlagen')
+            }
           }
+        }
+
+        if (!anyQueued) {
+          await refetchPackingItemsFromServer()
         }
         return true
       } catch (error) {
         console.error('Failed to bulk update packing items:', error)
-        setPackingItems(revertSnapshot)
-        alert('Bearbeitung fehlgeschlagen')
+        await refetchPackingItemsFromServer()
+        alert('Bearbeitung fehlgeschlagen – Anzeige wurde aktualisiert')
         return false
       } finally {
         pendingMutationsRef.current -= 1
       }
     },
-    [selectedVacationId, transportVehicles]
+    [
+      selectedVacationId,
+      transportVehicles,
+      selectedPackProfile,
+      packProfileScopeIdSet,
+      runBulkApiMutate,
+      refetchPackingItemsFromServer,
+    ]
   )
 
   const handleBulkDeletePackingItems = useCallback(
-    async (packingItemIds: string[]): Promise<boolean> => {
+    async (packingItemIds: string[], selectedPersonIds?: string[]): Promise<boolean> => {
       if (!selectedVacationId || packingItemIds.length === 0) return false
       pendingMutationsRef.current += 1
-      const revertSnapshot = packingItemsRef.current
+      const itemsById = new Map(packingItemsRef.current.map((p) => [p.id, p]))
       const idSet = new Set(packingItemIds)
+      const personIdSet = selectedPersonIds?.length
+        ? new Set(selectedPersonIds)
+        : null
 
-      setPackingItems((prev) => prev.filter((p) => !idSet.has(p.id)))
+      const wholeDeleteIds: string[] = []
+      const personRemovals: Array<{ packingItemId: string; mitreisenderId: string }> = []
+
+      for (const id of packingItemIds) {
+        const item = itemsById.get(id)
+        if (!item) continue
+        const personIds = resolveBulkPersonMitreisenderIds(
+          item,
+          selectedPackProfile,
+          packProfileScopeIdSet,
+          personIdSet
+        )
+        if (personIds) {
+          for (const mitreisenderId of personIds) {
+            personRemovals.push({ packingItemId: id, mitreisenderId })
+          }
+        } else {
+          wholeDeleteIds.push(id)
+        }
+      }
+
+      setPackingItems((prev) =>
+        prev.flatMap((p) => {
+          if (!idSet.has(p.id)) return [p]
+          const personIds = resolveBulkPersonMitreisenderIds(
+            p,
+            selectedPackProfile,
+            packProfileScopeIdSet,
+            personIdSet
+          )
+          if (personIds) {
+            const updated = applyBulkDeleteToItem(p, personIds)
+            return updated ? [updated] : []
+          }
+          return []
+        })
+      )
+
+      let anyQueued = false
 
       try {
-        for (let offset = 0; offset < packingItemIds.length; offset += PAUSCHAL_ASSIGN_BATCH_SIZE) {
-          const chunk = packingItemIds.slice(offset, offset + PAUSCHAL_ASSIGN_BATCH_SIZE)
-          const res = await fetch('/api/packing-items/batch-delete', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              vacationId: selectedVacationId,
-              itemIds: chunk,
-            }),
-          })
-          const data = (await res.json()) as ApiResponse<{ deleted: number; failed: number }>
-          if (!res.ok || !data.success) {
-            throw new Error(data.error ?? 'Batch-Löschen fehlgeschlagen')
+        for (let offset = 0; offset < personRemovals.length; offset += PAUSCHAL_ASSIGN_BATCH_SIZE) {
+          const chunk = personRemovals.slice(offset, offset + PAUSCHAL_ASSIGN_BATCH_SIZE)
+          const payload = { vacationId: selectedVacationId, removals: chunk }
+          const outcome = await runBulkApiMutate(
+            'packing-items-batch-remove-mitreisender',
+            'post',
+            `${selectedVacationId}-person-remove-${offset}`,
+            payload,
+            '/api/packing-items/batch-remove-mitreisender',
+            'POST'
+          )
+          if (outcome === 'queued') anyQueued = true
+          else if (outcome === 'failed') {
+            throw new Error('Entfernen fehlgeschlagen')
           }
+        }
+
+        for (let offset = 0; offset < wholeDeleteIds.length; offset += PAUSCHAL_ASSIGN_BATCH_SIZE) {
+          const chunk = wholeDeleteIds.slice(offset, offset + PAUSCHAL_ASSIGN_BATCH_SIZE)
+          const payload = { vacationId: selectedVacationId, itemIds: chunk }
+          const outcome = await runBulkApiMutate(
+            'packing-items-batch-delete',
+            'post',
+            `${selectedVacationId}-whole-delete-${offset}`,
+            payload,
+            '/api/packing-items/batch-delete',
+            'POST'
+          )
+          if (outcome === 'queued') anyQueued = true
+          else if (outcome === 'failed') {
+            throw new Error('Batch-Löschen fehlgeschlagen')
+          }
+        }
+
+        if (!anyQueued) {
+          await refetchPackingItemsFromServer()
         }
         return true
       } catch (error) {
         console.error('Failed to bulk delete packing items:', error)
-        setPackingItems(revertSnapshot)
-        alert('Löschen fehlgeschlagen')
+        await refetchPackingItemsFromServer()
+        alert('Löschen fehlgeschlagen – Anzeige wurde aktualisiert')
         return false
       } finally {
         pendingMutationsRef.current -= 1
       }
     },
-    [selectedVacationId]
+    [
+      selectedVacationId,
+      selectedPackProfile,
+      packProfileScopeIdSet,
+      runBulkApiMutate,
+      refetchPackingItemsFromServer,
+    ]
   )
 
   const flushPauschalAssignmentQueue = useCallback(async () => {
@@ -1441,28 +1705,33 @@ function HomeContent() {
           })
           success = result.ok || result.queued
         } else {
-          const res = await fetch('/api/packing-items/pauschal-gruppen/batch', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              vacationId: selectedVacationId,
-              assignments: chunk.map(({ packingItemId, payload }) => ({
-                packingItemId,
-                ...payload,
-              })),
-            }),
-          })
-          const data = (await res.json()) as ApiResponse<{ updated: number; failed: number }>
-          success = res.ok && !!data.success
+          const payload = {
+            vacationId: selectedVacationId,
+            assignments: chunk.map(({ packingItemId, payload }) => ({
+              packingItemId,
+              ...payload,
+            })),
+          }
+          const outcome = await runBulkApiMutate(
+            'packing-items-pauschal-gruppen-batch',
+            'post',
+            `${selectedVacationId}-assign-${Date.now()}`,
+            payload,
+            '/api/packing-items/pauschal-gruppen/batch',
+            'POST'
+          )
+          success = outcome === 'ok' || outcome === 'queued'
         }
 
         if (!success) {
           setPackingItems(revertSnapshot)
+          await refetchPackingItemsFromServer()
           alert('Zuordnung fehlgeschlagen')
         }
       } catch (error) {
         console.error('Failed to set pauschal gruppen:', error)
         setPackingItems(revertSnapshot)
+        await refetchPackingItemsFromServer()
         alert('Zuordnung fehlgeschlagen')
       } finally {
         pendingMutationsRef.current -= 1
@@ -1480,7 +1749,7 @@ function HomeContent() {
     await run.finally(() => {
       pauschalAssignFlushInFlightRef.current = null
     })
-  }, [selectedVacationId, mutate])
+  }, [selectedVacationId, mutate, runBulkApiMutate, refetchPackingItemsFromServer])
 
   const flushPauschalAssignmentQueueRef = useRef(flushPauschalAssignmentQueue)
   flushPauschalAssignmentQueueRef.current = flushPauschalAssignmentQueue
@@ -2300,13 +2569,18 @@ function HomeContent() {
                   onBulkSetPauschalGruppen={
                     canEditPauschalEntries ? handleBulkSetPauschalGruppen : undefined
                   }
-                  onBulkUpdatePackingItems={
-                    canEditPauschalEntries ? handleBulkUpdatePackingItems : undefined
+                  onBulkUpdatePackingItems={handleBulkUpdatePackingItems}
+                  onBulkDeletePackingItems={handleBulkDeletePackingItems}
+                  beforeBulkEdit={(ids, proceed) =>
+                    guardBulkAdminForeignWarn('edit', ids, proceed)
                   }
-                  onBulkDeletePackingItems={
-                    canEditPauschalEntries ? handleBulkDeletePackingItems : undefined
+                  beforeBulkDelete={(ids, proceed) =>
+                    guardBulkAdminForeignWarn('delete', ids, proceed)
                   }
-                  bulkSelectionTrigger={bulkSelectionTrigger}
+                  beforeBulkAssign={(ids, proceed) =>
+                    guardBulkAdminForeignWarn('assign', ids, proceed)
+                  }
+                  onBulkSelectionModeChange={setBulkSelectionActive}
                   onToggleGruppe={canEditPauschalEntries ? handleToggleGruppe : undefined}
                   isAdmin={!!user && isAdminRole(user.role)}
               />
@@ -2314,7 +2588,8 @@ function HomeContent() {
               <AdminFremdeGruppeWarningDialog
                 open={!!adminForeignWarn}
                 gruppeName={adminForeignWarn?.gruppeName ?? ''}
-                markingAsPacked={adminForeignWarn?.markingAsPacked ?? true}
+                markingAsPacked={adminForeignWarn?.markingAsPacked}
+                bulkAction={adminForeignWarn?.bulkAction}
                 vacationId={selectedVacationId}
                 onConfirm={() => adminForeignWarn?.proceed()}
                 onCancel={() => setAdminForeignWarn(null)}
@@ -2520,12 +2795,10 @@ function HomeContent() {
         pauschalGruppenFilter={pauschalGruppenFilter}
         onPauschalGruppenFilterChange={handlePauschalGruppenFilterChange}
         unassignedPauschalCount={unassignedPauschalCount}
-        showBulkSelection={multiGroupVacation && canEditPauschalEntries}
-        onStartBulkSelection={() => setBulkSelectionTrigger((t) => t + 1)}
       />
 
       {/* FAB: Gegenstände hinzufügen – Admin/Erwachsene (Kinder: nur abhaken, nicht Struktur ändern) */}
-      {currentVacation && canSelectOtherProfiles && (
+      {currentVacation && canSelectOtherProfiles && !bulkSelectionActive && (
         <div className="fixed bottom-6 right-6 z-30">
           <Button
             size="icon"

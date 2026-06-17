@@ -7,12 +7,44 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
+import type { BulkDeleteSemantics } from '@/lib/bulk-packing-profile'
+
 interface BulkPackingDeleteDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   itemNames: string[]
+  semantics?: BulkDeleteSemantics
   onConfirm: () => void | Promise<void>
   isLoading?: boolean
+}
+
+function deleteCopy(semantics: BulkDeleteSemantics, count: number) {
+  const entries = count === 1 ? 'Eintrag' : 'Einträge'
+  switch (semantics) {
+    case 'person':
+      return {
+        title: `${count} ${entries} entfernen?`,
+        description:
+          'Die Zuordnung wird für die gewählten Personen aufgehoben. Einträge können für andere Personen auf der Packliste bleiben.',
+        confirmCheckbox: `Ich verstehe, dass ${count} Zuordnungen aufgehoben werden.`,
+        confirmButton: `${count} entfernen`,
+      }
+    case 'mixed':
+      return {
+        title: `${count} ${entries} entfernen?`,
+        description:
+          'Ganze Einträge werden gelöscht. Bei personenbezogenen Einträgen wird nur die Zuordnung für die gewählten Personen aufgehoben.',
+        confirmCheckbox: `Ich verstehe die Auswirkungen für ${count} ausgewählte Einträge.`,
+        confirmButton: `${count} bestätigen`,
+      }
+    default:
+      return {
+        title: `${count} ${entries} löschen?`,
+        description: 'Diese Einträge werden aus der Packliste entfernt.',
+        confirmCheckbox: `Ich verstehe, dass ${count} Einträge gelöscht werden.`,
+        confirmButton: `${count} löschen`,
+      }
+  }
 }
 
 const PREVIEW_LIMIT = 5
@@ -23,6 +55,7 @@ export function BulkPackingDeleteDialog({
   open,
   onOpenChange,
   itemNames,
+  semantics = 'whole',
   onConfirm,
   isLoading = false,
 }: BulkPackingDeleteDialogProps) {
@@ -44,6 +77,7 @@ export function BulkPackingDeleteDialog({
   const needsTypedCount = count >= TYPE_COUNT_FROM
   const typedOk = !needsTypedCount || typedCount.trim() === String(count)
   const canDelete = (!needsCheckbox || confirmed) && typedOk && !isLoading
+  const copy = deleteCopy(semantics, count)
 
   const handleConfirm = async () => {
     if (!canDelete) return
@@ -55,8 +89,8 @@ export function BulkPackingDeleteDialog({
     <ResponsiveModal
       open={open}
       onOpenChange={onOpenChange}
-      title={`${count} ${count === 1 ? 'Eintrag' : 'Einträge'} löschen?`}
-      description="Diese Einträge werden dauerhaft aus der Packliste entfernt."
+      title={copy.title}
+      description={copy.description}
       contentClassName="sm:max-w-md"
     >
       <div className="space-y-4 pt-2">
@@ -74,7 +108,7 @@ export function BulkPackingDeleteDialog({
               onCheckedChange={(c) => setConfirmed(!!c)}
               className="mt-0.5"
             />
-            <span>Ich verstehe, dass {count} Einträge dauerhaft gelöscht werden.</span>
+            <span>{copy.confirmCheckbox}</span>
           </label>
         )}
 
@@ -104,7 +138,7 @@ export function BulkPackingDeleteDialog({
             disabled={!canDelete}
             onClick={() => void handleConfirm()}
           >
-            {isLoading ? 'Wird gelöscht…' : `${count} löschen`}
+            {isLoading ? 'Wird verarbeitet…' : copy.confirmButton}
           </Button>
         </div>
       </div>

@@ -585,6 +585,29 @@ function resolveRoute(e: SyncQueueEntry): ResolvedRoute | null {
     case 'packing-items-batch': {
       return { method: 'POST', url: '/api/packing-items/batch', body: e.payload }
     }
+    case 'packing-items-batch-update': {
+      return { method: 'PATCH', url: '/api/packing-items/batch-update', body: e.payload }
+    }
+    case 'packing-items-batch-delete': {
+      return { method: 'POST', url: '/api/packing-items/batch-delete', body: e.payload }
+    }
+    case 'packing-items-pauschal-gruppen-batch': {
+      return { method: 'POST', url: '/api/packing-items/pauschal-gruppen/batch', body: e.payload }
+    }
+    case 'packing-items-batch-set-mitreisender-anzahl': {
+      return {
+        method: 'POST',
+        url: '/api/packing-items/batch-set-mitreisender-anzahl',
+        body: e.payload,
+      }
+    }
+    case 'packing-items-batch-remove-mitreisender': {
+      return {
+        method: 'POST',
+        url: '/api/packing-items/batch-remove-mitreisender',
+        body: e.payload,
+      }
+    }
     case 'checklisten-eintrag-erledigt': {
       // key = `${checklistId}|${eintragId}`, payload = { erledigt }
       const checklistId = ctx.checklistId
