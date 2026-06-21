@@ -22,13 +22,6 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import {
   Copy,
   Plus,
   Webhook,
@@ -162,8 +155,16 @@ export default function IntegrationenPage() {
       ])
       const tokJson = (await tokRes.json()) as ApiResponse<TokenRow[]>
       const whJson = (await whRes.json()) as ApiResponse<WebhookRow[]>
-      if (tokJson.success && tokJson.data) setTokens(tokJson.data.filter((t) => !t.revoked_at))
-      if (whJson.success && whJson.data) setWebhooks(whJson.data)
+      if (tokJson.success && tokJson.data) {
+        setTokens(tokJson.data.filter((t) => !t.revoked_at))
+      } else if (tokJson.error) {
+        setMessage(tokJson.error)
+      }
+      if (whJson.success && whJson.data) {
+        setWebhooks(whJson.data)
+      } else if (whJson.error && !tokJson.error) {
+        setMessage(whJson.error)
+      }
     } catch {
       setMessage('Daten konnten nicht geladen werden')
     }
@@ -418,11 +419,12 @@ export default function IntegrationenPage() {
                 <div>
                   <CardTitle className="flex items-center gap-2 text-base">
                     <Key className="h-5 w-5" />
-                    API-Token
+                    API-Token & REST-API
                   </CardTitle>
                   <CardDescription className="mt-1.5">
                     REST-Zugriff mit{' '}
                     <code className="text-xs">Authorization: Bearer …</code>
+                    {' '}— Endpunkte und Beispielantworten unten in der Vorschau.
                   </CardDescription>
                 </div>
                 <Button
@@ -436,7 +438,7 @@ export default function IntegrationenPage() {
                   Token erstellen
                 </Button>
               </CardHeader>
-              <CardContent>
+              <CardContent className="space-y-0">
                 {tokens.length === 0 ? (
                   <p className="text-sm text-muted-foreground py-2">Noch keine aktiven Tokens.</p>
                 ) : (
@@ -452,6 +454,81 @@ export default function IntegrationenPage() {
                     ))}
                   </ul>
                 )}
+
+                <Collapsible open={previewOpen} onOpenChange={setPreviewOpen}>
+                  <div className="mt-6 -mx-6 border-t bg-muted/20 rounded-b-lg">
+                    <CollapsibleTrigger asChild>
+                      <button
+                        type="button"
+                        className="w-full text-left px-6 py-4 flex items-center justify-between gap-2 hover:bg-muted/40 transition-colors"
+                      >
+                        <div>
+                          <p className="font-medium text-sm flex items-center gap-2">
+                            <Eye className="h-4 w-4 text-muted-foreground" />
+                            API-Vorschau
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            Beispielantworten der Endpunkte, die mit oben erstellten Tokens abrufbar sind
+                          </p>
+                        </div>
+                        <ChevronDown
+                          className={cn(
+                            'h-4 w-4 shrink-0 text-muted-foreground transition-transform',
+                            previewOpen && 'rotate-180'
+                          )}
+                        />
+                      </button>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <div className="px-6 pb-6 pt-0 space-y-3 border-t border-border/60">
+                        <div className="pt-4">
+                          <Label className="text-xs text-muted-foreground block">Endpunkt</Label>
+                          <div className="flex flex-wrap gap-3 items-center mt-1.5">
+                            <div className="flex-1 min-w-[200px] max-w-md">
+                              <select
+                                id="preview-endpoint"
+                                value={previewEndpoint}
+                                onChange={(e) =>
+                                  setPreviewEndpoint(e.target.value as PreviewEndpoint)
+                                }
+                                className="flex h-9 w-full rounded-md border border-input bg-field px-3 py-2 text-sm shadow-sm ring-offset-background focus:outline-none focus:ring-1 focus:ring-ring"
+                              >
+                                {PREVIEW_ENDPOINTS.map((ep) => (
+                                  <option key={ep.id} value={ep.id}>
+                                    {ep.label}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="shrink-0"
+                              onClick={() => loadPreview(previewEndpoint)}
+                              disabled={previewLoading}
+                            >
+                              <RefreshCw
+                                className={cn('h-4 w-4 mr-1', previewLoading && 'animate-spin')}
+                              />
+                              Aktualisieren
+                            </Button>
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-1.5 font-mono">
+                            {PREVIEW_ENDPOINTS.find((e) => e.id === previewEndpoint)?.path}
+                          </p>
+                        </div>
+                        <pre className="text-xs bg-slate-950 text-slate-50 rounded-lg p-3 overflow-auto max-h-96">
+                          {previewLoading
+                            ? 'Laden…'
+                            : previewJson ?? 'Keine Daten'}
+                        </pre>
+                        <p className="text-xs text-muted-foreground">
+                          Dokumentation: <code>docs/HOME_ASSISTANT.md</code>
+                        </p>
+                      </div>
+                    </CollapsibleContent>
+                  </div>
+                </Collapsible>
               </CardContent>
             </Card>
 
@@ -499,79 +576,6 @@ export default function IntegrationenPage() {
                 )}
               </CardContent>
             </Card>
-
-            <Collapsible open={previewOpen} onOpenChange={setPreviewOpen}>
-              <Card>
-                <CollapsibleTrigger asChild>
-                  <button
-                    type="button"
-                    className="w-full text-left px-6 py-4 flex items-center justify-between gap-2 hover:bg-muted/30 transition-colors rounded-t-lg"
-                  >
-                    <div>
-                      <p className="font-semibold text-base">API-Vorschau</p>
-                      <p className="text-sm text-muted-foreground mt-0.5">
-                        Beispielantworten der Integrations-Endpunkte (Admin-Vorschau)
-                      </p>
-                    </div>
-                    <ChevronDown
-                      className={cn(
-                        'h-5 w-5 shrink-0 text-muted-foreground transition-transform',
-                        previewOpen && 'rotate-180'
-                      )}
-                    />
-                  </button>
-                </CollapsibleTrigger>
-                <CollapsibleContent>
-                  <CardContent className="pt-4 space-y-3">
-                    <div>
-                      <Label className="text-xs text-muted-foreground block">Endpunkt</Label>
-                      <div className="flex flex-wrap gap-3 items-center mt-1.5">
-                        <div className="flex-1 min-w-[200px] max-w-md">
-                          <Select
-                            value={previewEndpoint}
-                            onValueChange={(v) => setPreviewEndpoint(v as PreviewEndpoint)}
-                          >
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {PREVIEW_ENDPOINTS.map((ep) => (
-                                <SelectItem key={ep.id} value={ep.id}>
-                                  {ep.label}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="shrink-0"
-                          onClick={() => loadPreview(previewEndpoint)}
-                          disabled={previewLoading}
-                        >
-                          <RefreshCw
-                            className={cn('h-4 w-4 mr-1', previewLoading && 'animate-spin')}
-                          />
-                          Aktualisieren
-                        </Button>
-                      </div>
-                      <p className="text-xs text-muted-foreground mt-1.5 font-mono">
-                        {PREVIEW_ENDPOINTS.find((e) => e.id === previewEndpoint)?.path}
-                      </p>
-                    </div>
-                    <pre className="text-xs bg-slate-950 text-slate-50 rounded-lg p-3 overflow-auto max-h-96">
-                      {previewLoading
-                        ? 'Laden…'
-                        : previewJson ?? 'Keine Daten'}
-                    </pre>
-                    <p className="text-xs text-muted-foreground">
-                      Dokumentation: <code>docs/HOME_ASSISTANT.md</code>
-                    </p>
-                  </CardContent>
-                </CollapsibleContent>
-              </Card>
-            </Collapsible>
         </div>
       </ConfigPageLayout>
 

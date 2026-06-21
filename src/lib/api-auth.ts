@@ -5,7 +5,7 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { getSession, isAdminRole, isSystemAdminRole } from '@/lib/auth'
-import { getDB, CloudflareEnv } from '@/lib/db'
+import { getDB, getUserById, CloudflareEnv } from '@/lib/db'
 import { buildUserContext, type UserContext } from '@/lib/permissions'
 
 export async function requireAuth(
@@ -17,7 +17,16 @@ export async function requireAuth(
   }
   const env = process.env as unknown as CloudflareEnv
   const db = await getDB(env)
-  const userContext = await buildUserContext(db, session)
+  const user = await getUserById(db, session.id)
+  if (!user) {
+    return NextResponse.json({ error: 'Nicht angemeldet' }, { status: 401 })
+  }
+  const userContext = await buildUserContext(db, {
+    id: user.id,
+    email: user.email,
+    role: user.role,
+    mitreisender_id: user.mitreisender_id,
+  })
   return { session, userContext }
 }
 
