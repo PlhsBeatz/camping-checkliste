@@ -213,7 +213,7 @@ export function PackingSettingsSidebar({
                       },
                       {
                         id: 'eigene',
-                        label: 'Meine',
+                        label: 'Mein Haushalt',
                         active: pauschalGruppenFilter === 'eigene',
                         onClick: () => onPauschalGruppenFilterChange('eigene'),
                       },

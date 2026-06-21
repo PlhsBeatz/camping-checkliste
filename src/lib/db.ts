@@ -2718,7 +2718,7 @@ export async function createMitreisender(
     if (!gruppeId) {
       gruppeId = await resolveDefaultGruppeId(db, options.isDefaultMember !== false)
     } else if (!(await mitreisendenGruppeExists(db, gruppeId))) {
-      throw new Error('Die gewählte Reisegruppe existiert nicht.')
+      throw new Error('Der gewählte Haushalt existiert nicht.')
     }
     const personentyp = options.personentyp ?? 'erwachsen'
     const defaultGruppe = await resolveDefaultGruppeId(db, true)
@@ -2773,7 +2773,7 @@ export async function updateMitreisender(
     }
     if (options.gruppeId !== undefined) {
       if (options.gruppeId !== null && !(await mitreisendenGruppeExists(db, options.gruppeId))) {
-        throw new Error('Die gewählte Reisegruppe existiert nicht.')
+        throw new Error('Der gewählte Haushalt existiert nicht.')
       }
       fields.push('gruppe_id = ?')
       values.push(options.gruppeId)

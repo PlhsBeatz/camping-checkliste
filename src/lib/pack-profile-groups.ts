@@ -24,7 +24,7 @@ export function buildPackProfileGroups(
   const byGroup = new Map<string, { name: string; members: Mitreisender[] }>()
   for (const m of vacationMitreisende) {
     const gid = m.gruppe_id ?? 'unknown'
-    const gname = m.gruppe_name ?? 'Ohne Gruppe'
+    const gname = m.gruppe_name ?? 'Ohne Haushalt'
     if (!byGroup.has(gid)) {
       byGroup.set(gid, { name: gname, members: [] })
     }
@@ -56,7 +56,7 @@ export function groupAllMitreisendeByGruppe(
   const byGroup = new Map<string, { name: string; members: Mitreisender[] }>()
   for (const m of mitreisende) {
     const gid = m.gruppe_id ?? 'unknown'
-    const gname = m.gruppe_name ?? 'Ohne Gruppe'
+    const gname = m.gruppe_name ?? 'Ohne Haushalt'
     if (!byGroup.has(gid)) {
       byGroup.set(gid, { name: gname, members: [] })
     }

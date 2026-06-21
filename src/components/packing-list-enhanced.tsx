@@ -46,6 +46,7 @@ import {
   type PauschalGruppenAssignmentPayload,
 } from '@/components/pauschal-gruppe-assignment-modal';
 import {
+  getVacationGruppeIds,
   getVacationGruppenMap,
   hasMultipleVacationGroups,
   isPauschalGruppenFeatureActive,
@@ -56,8 +57,10 @@ import {
   isGruppeFullyPacked,
   areAllGruppenFullyPacked,
   getOwnGruppePackingState,
+  isPauschalPackedForHideFilter,
   resolveGruppeName,
   snapshotPauschalGruppenAssignment,
+  getSelectedGruppeIdsFromAssignment,
   type PauschalGruppenFilter,
 } from '@/lib/pauschal-gruppen';
 
@@ -144,20 +147,21 @@ function isItemFullyPackedForProfile(
   ownGruppeId?: string | null,
   multiGroupActive?: boolean,
   pauschalGruppenFilter?: PauschalGruppenFilter,
-  alleScopeIds?: Set<string> | null
+  alleScopeIds?: Set<string> | null,
+  allVacationGruppeIds?: string[]
 ): boolean {
   if (item.mitreisenden_typ === 'pauschal') {
-    const modus = item.pauschal_gruppen_modus ?? 'einmal';
-    if (multiGroupActive && (modus === 'pro_gruppe' || modus === 'ausgewaehlte_gruppen')) {
-      if (pauschalGruppenFilter === 'eigene' && ownGruppeId) {
-        const own = getOwnGruppePackingState(item, ownGruppeId);
-        if (!own) return false;
-        return isGruppeFullyPacked(own, canConfirmVorgemerkt);
-      }
-      return areAllGruppenFullyPacked(item, canConfirmVorgemerkt);
+    if (multiGroupActive && pauschalGruppenFilter && pauschalGruppenFilter !== 'offen') {
+      return isPauschalPackedForHideFilter(item, {
+        pauschalGruppenFilter,
+        ownGruppeId: ownGruppeId ?? null,
+        canConfirmVorgemerkt,
+        finalOnly: canConfirmVorgemerkt,
+        allVacationGruppeIds,
+      })
     }
-    if (canConfirmVorgemerkt) return item.gepackt;
-    return item.gepackt || !!item.gepackt_vorgemerkt;
+    if (canConfirmVorgemerkt) return item.gepackt
+    return item.gepackt || !!item.gepackt_vorgemerkt
   }
   if (selectedProfile) {
     const m = item.mitreisende?.find(t => t.mitreisender_id === selectedProfile);
@@ -439,7 +443,9 @@ const PackingItem: React.FC<PackingItemProps> = ({
   const usesGruppenCheckboxes =
     multiGroupActive &&
     mitreisenden_typ === 'pauschal' &&
-    (pauschalModus === 'pro_gruppe' || pauschalModus === 'ausgewaehlte_gruppen');
+    (pauschalModus === 'pro_gruppe' ||
+      pauschalModus === 'ausgewaehlte_gruppen' ||
+      (fullItem.gruppen ?? []).length > 0);
   const ownGruppeEntry = useMemo(
     () => getOwnGruppePackingState(fullItem, ownGruppeId ?? null),
     [fullItem, ownGruppeId]
@@ -464,7 +470,79 @@ const PackingItem: React.FC<PackingItemProps> = ({
   const activeGruppeFullyPacked = useMemo(() => {
     return activeGruppeEntry ? isGruppeFullyPacked(activeGruppeEntry, !!canConfirmVorgemerkt) : false
   }, [activeGruppeEntry, canConfirmVorgemerkt]);
-  const showGruppenCheckboxesRow = usesGruppenCheckboxes && pauschalGruppenFilter === 'alle';
+  const showGruppenChipsRow =
+    multiGroupActive && mitreisenden_typ === 'pauschal' && pauschalGruppenFilter === 'alle';
+  const allVacationGruppeIds = useMemo(() => {
+    if (vacationGroups) {
+      const ids: string[] = [];
+      if (vacationGroups.ownGroup.length > 0 && ownGruppeId) {
+        ids.push(ownGruppeId);
+      }
+      for (const g of vacationGroups.otherGroups) {
+        if (g.members.length > 0) {
+          ids.push(g.id);
+        }
+      }
+      return ids;
+    }
+    return (fullItem.gruppen ?? []).map((g) => g.gruppe_id);
+  }, [vacationGroups, ownGruppeId, fullItem.gruppen]);
+  const assignedGruppeIds = useMemo(
+    () =>
+      getSelectedGruppeIdsFromAssignment(
+        pauschalModus,
+        fullItem.verantwortliche_gruppe_id,
+        (fullItem.gruppen ?? []).map((g) => g.gruppe_id),
+        allVacationGruppeIds
+      ),
+    [
+      pauschalModus,
+      fullItem.verantwortliche_gruppe_id,
+      fullItem.gruppen,
+      allVacationGruppeIds,
+    ]
+  );
+  const assignedGroupsForChipsRow = useMemo(() => {
+    const nameById = new Map<string, string>();
+    if (vacationGroups) {
+      if (ownGruppeId) {
+        nameById.set(ownGruppeId, gruppenMap.get(ownGruppeId) ?? 'Mein Haushalt');
+      }
+      for (const g of vacationGroups.otherGroups) {
+        if (g.members.length > 0) {
+          nameById.set(g.id, g.name);
+        }
+      }
+    }
+    for (const g of fullItem.gruppen ?? []) {
+      nameById.set(
+        g.gruppe_id,
+        resolveGruppeName(g.gruppe_id, gruppenMap, g.gruppe_name)
+      );
+    }
+    if (fullItem.verantwortliche_gruppe_id) {
+      nameById.set(
+        fullItem.verantwortliche_gruppe_id,
+        resolveGruppeName(
+          fullItem.verantwortliche_gruppe_id,
+          gruppenMap,
+          fullItem.verantwortliche_gruppe_name
+        )
+      );
+    }
+    return assignedGruppeIds.map((id) => ({
+      id,
+      name: nameById.get(id) ?? id,
+    }));
+  }, [
+    assignedGruppeIds,
+    vacationGroups,
+    ownGruppeId,
+    gruppenMap,
+    fullItem.gruppen,
+    fullItem.verantwortliche_gruppe_id,
+    fullItem.verantwortliche_gruppe_name,
+  ]);
   const mainGruppenCheckboxChecked = selectedProfile
     ? activeGruppeFullyPacked
     : pauschalGruppenFilter === 'eigene'
@@ -510,11 +588,21 @@ const PackingItem: React.FC<PackingItemProps> = ({
 
   const isFullyPacked = useMemo(() => {
     if (mitreisenden_typ === 'pauschal') {
-      if (usesGruppenCheckboxes) {
-        if (selectedProfile) return activeGruppeFullyPacked;
-        return pauschalGruppenFilter === 'eigene' ? ownGruppeFullyPacked : allGruppenFullyPacked;
+      if (multiGroupActive && pauschalGruppenFilter !== 'offen') {
+        if (selectedProfile) {
+          return activeGruppeEntry
+            ? isGruppeFullyPacked(activeGruppeEntry, !!canConfirmVorgemerkt)
+            : false
+        }
+        return isPauschalPackedForHideFilter(fullItem, {
+          pauschalGruppenFilter,
+          ownGruppeId: ownGruppeId ?? null,
+          canConfirmVorgemerkt: !!canConfirmVorgemerkt,
+          finalOnly: false,
+          allVacationGruppeIds,
+        })
       }
-      return effectivePacked(gepackt, gepackt_vorgemerkt);
+      return effectivePacked(gepackt, gepackt_vorgemerkt)
     }
     const rows = selectedProfile === null ? mitreisendeRowsForUi : (mitreisende ?? []);
     return rows.length > 0 && rows.every((m) => effectivePacked(m.gepackt, m.gepackt_vorgemerkt));
@@ -525,23 +613,57 @@ const PackingItem: React.FC<PackingItemProps> = ({
     mitreisende,
     selectedProfile,
     mitreisendeRowsForUi,
-    usesGruppenCheckboxes,
+    multiGroupActive,
     pauschalGruppenFilter,
-    ownGruppeFullyPacked,
-    allGruppenFullyPacked,
-    activeGruppeFullyPacked,
+    ownGruppeId,
+    activeGruppeEntry,
     fullItem,
+    allVacationGruppeIds,
   ]);
+
+  const pauschalHidePacked = useMemo(() => {
+    if (mitreisenden_typ !== 'pauschal' || !multiGroupActive || pauschalGruppenFilter === 'offen') {
+      return null
+    }
+    const effectiveOwnGruppeId = selectedProfile
+      ? activeGruppeId ?? null
+      : ownGruppeId ?? null
+    if (pauschalGruppenFilter === 'eigene' && !effectiveOwnGruppeId) {
+      return false
+    }
+    return isPauschalPackedForHideFilter(fullItem, {
+      pauschalGruppenFilter,
+      ownGruppeId: effectiveOwnGruppeId,
+      canConfirmVorgemerkt: !!canConfirmVorgemerkt,
+      finalOnly: !!canConfirmVorgemerkt,
+      allVacationGruppeIds,
+    })
+  }, [
+    mitreisenden_typ,
+    multiGroupActive,
+    pauschalGruppenFilter,
+    selectedProfile,
+    activeGruppeId,
+    fullItem,
+    ownGruppeId,
+    canConfirmVorgemerkt,
+    allVacationGruppeIds,
+  ])
 
   /** Nur final gepackt (gepackt=true), nicht vorgemerkt – für Eltern bei „Gepacktes ausblenden“ */
   const isFullyPackedFinal = useMemo(() => {
     if (mitreisenden_typ === 'pauschal') {
-      if (usesGruppenCheckboxes) {
-        if (selectedProfile) return !!activeGruppeEntry?.gepackt;
-        if (pauschalGruppenFilter === 'eigene') return !!ownGruppeEntry?.gepackt;
-        return (fullItem.gruppen ?? []).length > 0 && (fullItem.gruppen ?? []).every((g) => g.gepackt);
+      if (multiGroupActive && pauschalGruppenFilter !== 'offen') {
+        if (selectedProfile) return !!activeGruppeEntry?.gepackt
+        return isPauschalPackedForHideFilter(fullItem, {
+          pauschalGruppenFilter,
+          ownGruppeId: ownGruppeId ?? null,
+          canConfirmVorgemerkt: !!canConfirmVorgemerkt,
+          finalOnly: true,
+          allVacationGruppeIds,
+        })
       }
-      return gepackt;
+      return gepackt
     }
     const rows = selectedProfile === null ? mitreisendeRowsForUi : (mitreisende ?? []);
     return rows.length > 0 && rows.every((m) => m.gepackt);
@@ -551,11 +673,12 @@ const PackingItem: React.FC<PackingItemProps> = ({
     mitreisende,
     selectedProfile,
     mitreisendeRowsForUi,
-    usesGruppenCheckboxes,
+    multiGroupActive,
     pauschalGruppenFilter,
-    ownGruppeEntry,
+    ownGruppeId,
     activeGruppeEntry,
-    fullItem.gruppen,
+    fullItem,
+    canConfirmVorgemerkt,
   ]);
 
   const isScopeFullyPackedFinal = useMemo(() => {
@@ -698,68 +821,61 @@ const PackingItem: React.FC<PackingItemProps> = ({
   // Check if item should be hidden in individual profile view
   const shouldHideInProfileView = useMemo(() => {
     if (!hidePackedItems) return false;
+    if (pauschalHidePacked !== null) {
+      return pauschalHidePacked
+    }
     if (selectedProfile) {
-      if (mitreisenden_typ === 'pauschal') {
-        if (usesGruppenCheckboxes) {
-          if (canConfirmVorgemerkt) {
-            return !!activeGruppeEntry?.gepackt;
-          }
-          return activeGruppeFullyPacked;
-        }
-        return canConfirmVorgemerkt ? gepackt : effectivePacked(gepackt, gepackt_vorgemerkt);
-      }
       // Mitreisender-Einträge: Eltern nur final gepackt ausblenden
       const packed = selectedTravelerItem
         ? (canConfirmVorgemerkt ? selectedTravelerItem.gepackt : effectivePacked(selectedTravelerItem.gepackt, selectedTravelerItem.gepackt_vorgemerkt))
         : false;
       return packed;
     }
-    // Zentral/Alle: Eltern nur bei isFullyPackedFinal ausblenden
     return canConfirmVorgemerkt ? isFullyPackedFinal : isFullyPacked;
   }, [
     hidePackedItems,
+    pauschalHidePacked,
     selectedProfile,
     selectedTravelerItem,
-    mitreisenden_typ,
-    gepackt,
-    gepackt_vorgemerkt,
     canConfirmVorgemerkt,
     isFullyPacked,
     isFullyPackedFinal,
-    usesGruppenCheckboxes,
-    pauschalGruppenFilter,
-    ownGruppeEntry,
-    activeGruppeEntry,
-    ownGruppeFullyPacked,
-    activeGruppeFullyPacked,
-    allGruppenFullyPacked,
-    fullItem.gruppen,
   ]);
 
-  // Micro-Animation nur beim Abhaken (Übergang sichtbar → ausblenden), nicht beim Tab-Wechsel (bereits ausgeblendet)
+  const hidePackedActive = hidePackedItems && shouldHideInProfileView;
+
+  // Beim Wechsel Meine ↔ Alle Haushalte Ausblend-Zustand zurücksetzen
   useEffect(() => {
-    if (previousShouldHideRef.current === 'init') {
-      const hide = !!shouldHideInProfileView && hidePackedItems;
-      previousShouldHideRef.current = !!shouldHideInProfileView;
-      if (hide) setHasExited(true);
+    previousShouldHideRef.current = false;
+    setIsExiting(false);
+    setHasExited(false);
+  }, [pauschalGruppenFilter]);
+
+  // Micro-Animation nur beim Abhaken (Übergang sichtbar → ausblenden)
+  useEffect(() => {
+    if (!hidePackedActive) {
+      previousShouldHideRef.current = false;
+      setIsExiting(false);
+      setHasExited(false);
       return undefined;
     }
-    if (shouldHideInProfileView && hidePackedItems) {
-      const wasVisible = !previousShouldHideRef.current;
+
+    if (previousShouldHideRef.current === 'init') {
       previousShouldHideRef.current = true;
-      if (wasVisible) {
-        setIsExiting(true);
-        const t = setTimeout(() => setHasExited(true), 280);
-        return () => clearTimeout(t);
-      }
       setHasExited(true);
       return undefined;
     }
-    previousShouldHideRef.current = !!shouldHideInProfileView;
-    setIsExiting(false);
-    setHasExited(false);
+
+    const wasVisible = !previousShouldHideRef.current;
+    previousShouldHideRef.current = true;
+    if (wasVisible) {
+      setIsExiting(true);
+      const t = setTimeout(() => setHasExited(true), 280);
+      return () => clearTimeout(t);
+    }
+    setHasExited(true);
     return undefined;
-  }, [shouldHideInProfileView, hidePackedItems]);
+  }, [hidePackedActive]);
 
   const handleGruppenMainToggle = () => {
     if (!onToggleGruppe || !toggleGruppeId || !toggleGruppeEntry || !canToggleOwnGruppeMain) return;
@@ -771,21 +887,53 @@ const PackingItem: React.FC<PackingItemProps> = ({
     const gruppeId = toggleGruppeId;
     onToggleGruppe(id, toggleGruppeId, currentEffective);
     if (hidePackedItems && wasUnpacked && onShowToast) {
-      const gruppeName = resolveGruppeName(
-        gruppeId,
-        gruppenMap,
-        toggleGruppeEntry.gruppe_name
+      const nextGruppen = (fullItem.gruppen ?? []).map((g) => {
+        if (g.gruppe_id !== toggleGruppeId) return g;
+        if (canConfirmVorgemerkt) {
+          return { ...g, gepackt: true, gepackt_vorgemerkt: false };
+        }
+        return { ...g, gepackt: false, gepackt_vorgemerkt: true };
+      });
+      const effectiveOwnGruppeId = selectedProfile
+        ? activeGruppeId ?? null
+        : ownGruppeId ?? null;
+      const willHide = isPauschalPackedForHideFilter(
+        { ...fullItem, gruppen: nextGruppen },
+        {
+          pauschalGruppenFilter,
+          ownGruppeId: effectiveOwnGruppeId,
+          canConfirmVorgemerkt: !!canConfirmVorgemerkt,
+          finalOnly: !!canConfirmVorgemerkt,
+          allVacationGruppeIds,
+        }
       );
-      const undoAction = () => {
-        onToggleGruppe(itemId, gruppeId, true);
-      };
-      onShowToast(was, gruppeName, undoAction);
+      if (willHide) {
+        const gruppeName = resolveGruppeName(
+          gruppeId,
+          gruppenMap,
+          toggleGruppeEntry.gruppe_name
+        );
+        const undoAction = () => {
+          onToggleGruppe(itemId, gruppeId, true);
+        };
+        onShowToast(was, gruppeName, undoAction);
+      }
     }
   };
 
   // Handle pauschal toggle
   const handlePauschalToggle = () => {
     if (!canTogglePauschal) return;
+    if (
+      usesGruppenCheckboxes &&
+      onToggleGruppe &&
+      toggleGruppeId &&
+      toggleGruppeEntry &&
+      canToggleOwnGruppeMain
+    ) {
+      handleGruppenMainToggle();
+      return;
+    }
     if (isVorgemerktPauschal && canConfirmVorgemerkt && onConfirmVorgemerkt) {
       onConfirmVorgemerkt(id);
       return;
@@ -919,8 +1067,8 @@ const PackingItem: React.FC<PackingItemProps> = ({
     return sortMitreisendenZeilenNachStammdaten(rows, vacationMitreisende);
   }, [mitreisendeRowsForScope, vacationMitreisende, isScopeFullyPackedFinal]);
 
-  // Hide if packed – nach Exit-Animation
-  if (hasExited) {
+  // Hide if packed – nach Exit-Animation (nur solange Ausblenden aktiv ist)
+  if (hasExited && hidePackedActive) {
     return null;
   }
 
@@ -1077,14 +1225,20 @@ const PackingItem: React.FC<PackingItemProps> = ({
                   <Clock className="h-3.5 w-3.5" aria-hidden />
                 </span>
               )}
-              {multiGroupActive && mitreisenden_typ === 'pauschal' && canEditPauschalEntries && (
+              {multiGroupActive &&
+                mitreisenden_typ === 'pauschal' &&
+                (!showGruppenChipsRow || assignedGroupsForChipsRow.length === 0) && (
                 <PauschalGruppeBadge
                   item={fullItem}
                   gruppenMap={gruppenMap}
                   ownGruppeId={ownGruppeId}
                   expandAllGroups={pauschalGruppenFilter === 'alle'}
                   highlightOwnGruppe={pauschalGruppenFilter === 'alle'}
-                  onClick={onOpenAssignment ? () => onOpenAssignment(fullItem) : undefined}
+                  onClick={
+                    canEditPauschalEntries && onOpenAssignment
+                      ? () => onOpenAssignment(fullItem)
+                      : undefined
+                  }
                 />
               )}
             </div>
@@ -1092,34 +1246,76 @@ const PackingItem: React.FC<PackingItemProps> = ({
             {details && <p className="text-xs text-muted-foreground mt-1.5">{details}</p>}
             {bemerkung && <p className="text-xs text-accent mt-1.5">📝 {bemerkung}</p>}
 
-            {showGruppenCheckboxesRow && (
-              <div className="mt-2 flex flex-wrap gap-2">
-                {(fullItem.gruppen ?? []).map((g) => {
-                  const packed = canConfirmVorgemerkt
-                    ? g.gepackt
-                    : g.gepackt || !!g.gepackt_vorgemerkt;
-                  const vorgemerkt = !!g.gepackt_vorgemerkt && !g.gepackt;
-                  const name = resolveGruppeName(g.gruppe_id, gruppenMap, g.gruppe_name);
-                  const short = name.slice(0, 3);
-                  return (
-                    <span
-                      key={g.gruppe_id}
-                      className={cn(
-                        'inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px]',
-                        g.gruppe_id === ownGruppeId ? 'border-[rgb(45,79,30)]/50 bg-[rgb(45,79,30)]/5' : 'border-subtle'
+            {showGruppenChipsRow && assignedGroupsForChipsRow.length > 0 && (
+              <div className="mt-1.5 flex flex-wrap gap-x-1 gap-y-1">
+                {assignedGroupsForChipsRow.map((g) => {
+                  const gruppeEntry = (fullItem.gruppen ?? []).find(
+                    (entry) => entry.gruppe_id === g.id
+                  );
+                  const showPackStatus =
+                    usesGruppenCheckboxes || pauschalModus === 'einmal';
+                  const packed = gruppeEntry
+                    ? canConfirmVorgemerkt
+                      ? gruppeEntry.gepackt
+                      : gruppeEntry.gepackt || !!gruppeEntry.gepackt_vorgemerkt
+                    : pauschalModus === 'einmal'
+                      ? canConfirmVorgemerkt
+                        ? gepackt
+                        : effectivePacked(gepackt, gepackt_vorgemerkt)
+                      : false;
+                  const vorgemerkt = gruppeEntry
+                    ? !!gruppeEntry.gepackt_vorgemerkt && !gruppeEntry.gepackt
+                    : pauschalModus === 'einmal'
+                      ? !!gepackt_vorgemerkt && !gepackt
+                      : false;
+                  const canOpenAssignment =
+                    canEditPauschalEntries && !!onOpenAssignment;
+                  const chipClassName = cn(
+                    'inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-medium transition-colors shrink-0',
+                    g.id === ownGruppeId
+                      ? 'border-[rgb(45,79,30)]/50 bg-[rgb(45,79,30)]/5 text-[rgb(45,79,30)] dark:text-green-300 font-semibold'
+                      : 'border-[rgb(45,79,30)]/40 bg-[rgb(45,79,30)]/10 text-[rgb(45,79,30)] dark:text-green-300',
+                    canOpenAssignment && 'cursor-pointer hover:bg-muted/50 active:scale-[0.98]'
+                  );
+                  const chipContent = (
+                    <>
+                      {showPackStatus && (
+                        <span
+                          aria-hidden
+                          className={cn(
+                            'inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border-2 border-gray-300',
+                            (packed || vorgemerkt) &&
+                              (vorgemerkt
+                                ? 'border-[rgb(230,126,34)] bg-[rgb(230,126,34)] text-white'
+                                : 'border-[rgb(45,79,30)] bg-[rgb(45,79,30)] text-white')
+                          )}
+                        >
+                          {(packed || vorgemerkt) && (
+                            <Check className="h-2.5 w-2.5" strokeWidth={3} />
+                          )}
+                        </span>
                       )}
-                    >
-                      <Checkbox
-                        checked={packed || vorgemerkt}
-                        disabled
-                        className={cn(
-                          'h-3.5 w-3.5 min-h-3.5 min-w-3.5 cursor-default',
-                          vorgemerkt
-                            ? 'data-[state=checked]:bg-[rgb(230,126,34)] data-[state=checked]:border-[rgb(230,126,34)]'
-                            : 'data-[state=checked]:bg-[rgb(45,79,30)] data-[state=checked]:border-[rgb(45,79,30)]'
-                        )}
-                      />
-                      <span>{short}</span>
+                      <span className="leading-none">{g.name}</span>
+                    </>
+                  );
+
+                  if (canOpenAssignment) {
+                    return (
+                      <button
+                        key={g.id}
+                        type="button"
+                        title={g.name}
+                        onClick={() => onOpenAssignment(fullItem)}
+                        className={chipClassName}
+                      >
+                        {chipContent}
+                      </button>
+                    );
+                  }
+
+                  return (
+                    <span key={g.id} className={chipClassName} title={g.name}>
+                      {chipContent}
                     </span>
                   );
                 })}
@@ -1431,10 +1627,14 @@ export function PackingList({
     () => getVacationGruppenMap(vacationMitreisende),
     [vacationMitreisende]
   );
+  const allVacationGruppeIdsForList = useMemo(
+    () => getVacationGruppeIds(vacationMitreisende),
+    [vacationMitreisende]
+  );
   const vacationGroupsForSheet = useMemo(() => {
     const groups: Array<{ id: string; name: string; members: Mitreisender[] }> = [];
     if (profileGroups.ownGroup.length > 0 && ownGruppeId) {
-      groups.push({ id: ownGruppeId, name: gruppenMap.get(ownGruppeId) ?? 'Meine Gruppe', members: profileGroups.ownGroup });
+      groups.push({ id: ownGruppeId, name: gruppenMap.get(ownGruppeId) ?? 'Mein Haushalt', members: profileGroups.ownGroup });
     }
     for (const g of profileGroups.otherGroups) {
       groups.push(g);
@@ -1847,9 +2047,18 @@ export function PackingList({
         ownGruppeId,
         multiGroupActive,
         pauschalGruppenFilter,
-        alleScopeIds
+        alleScopeIds,
+        allVacationGruppeIdsForList
       ),
-    [selectedProfile, canConfirmVorgemerkt, ownGruppeId, multiGroupActive, pauschalGruppenFilter, alleScopeIds]
+    [
+      selectedProfile,
+      canConfirmVorgemerkt,
+      ownGruppeId,
+      multiGroupActive,
+      pauschalGruppenFilter,
+      alleScopeIds,
+      allVacationGruppeIdsForList,
+    ]
   );
 
   const sortedProfileMitreisende = useMemo(
@@ -2470,7 +2679,6 @@ export function PackingList({
           ownGruppeId={ownGruppeId}
           onAssign={(payload) => {
             onSetPauschalGruppen(assignmentItem.id, payload);
-            setAssignmentItemId(null);
           }}
         />
       )}

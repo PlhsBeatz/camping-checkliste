@@ -80,7 +80,7 @@ export async function POST(request: NextRequest) {
 
     if (finalGruppeId && !(await mitreisendenGruppeExists(db, finalGruppeId))) {
       return NextResponse.json(
-        { success: false, error: 'Die gewählte Reisegruppe existiert nicht. Bitte Seite aktualisieren.' },
+        { success: false, error: 'Der gewählte Haushalt existiert nicht. Bitte Seite aktualisieren.' },
         { status: 400 }
       )
     }
@@ -158,7 +158,7 @@ export async function PUT(request: NextRequest) {
 
     if (finalGruppeId && !(await mitreisendenGruppeExists(db, finalGruppeId))) {
       return NextResponse.json(
-        { success: false, error: 'Die gewählte Reisegruppe existiert nicht. Bitte Seite aktualisieren.' },
+        { success: false, error: 'Der gewählte Haushalt existiert nicht. Bitte Seite aktualisieren.' },
         { status: 400 }
       )
     }

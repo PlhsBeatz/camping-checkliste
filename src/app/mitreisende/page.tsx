@@ -78,7 +78,7 @@ export default function MitreisendePage() {
         <FabMenuM3
           open={fabMenuOpen}
           onOpenChange={setFabMenuOpen}
-          ariaLabel="Neue Person oder neue Reisegruppe"
+          ariaLabel="Neue Person oder neuer Haushalt"
           actions={[
             {
               id: 'person',
@@ -88,7 +88,7 @@ export default function MitreisendePage() {
             },
             {
               id: 'group',
-              label: 'Neue Reisegruppe',
+              label: 'Neuer Haushalt',
               icon: <UsersRound className="h-[22px] w-[22px]" strokeWidth={2} aria-hidden />,
               onSelect: () => setOpenNewGroupTrigger(true),
             },
@@ -100,7 +100,7 @@ export default function MitreisendePage() {
         <CardHeader>
           <CardTitle>Personen-Verwaltung</CardTitle>
           <CardDescription>
-            Erstellen und verwalten Sie Personen und Reisegruppen für Ihre Urlaube
+            Erstellen und verwalten Sie Personen und Haushalte für Ihre Urlaube
           </CardDescription>
         </CardHeader>
         <CardContent>

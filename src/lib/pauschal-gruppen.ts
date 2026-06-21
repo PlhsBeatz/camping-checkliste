@@ -201,7 +201,7 @@ export function getForeignGruppeNameForWarning(
   togglingGruppeId?: string
 ): string {
   if (togglingGruppeId) {
-    return gruppenMap.get(togglingGruppeId) ?? 'einer anderen Gruppe'
+    return gruppenMap.get(togglingGruppeId) ?? 'einem anderen Haushalt'
   }
   if (item.verantwortliche_gruppe_id) {
     return (
@@ -209,10 +209,10 @@ export function getForeignGruppeNameForWarning(
         item.verantwortliche_gruppe_id,
         gruppenMap,
         item.verantwortliche_gruppe_name
-      ) || 'einer anderen Gruppe'
+      ) || 'einem anderen Haushalt'
     )
   }
-  return 'einer anderen Gruppe'
+  return 'einem anderen Haushalt'
 }
 
 export function passesPauschalGruppenFilter(
@@ -378,6 +378,99 @@ export function areAllGruppenFullyPacked(
   const gruppen = item.gruppen ?? []
   if (gruppen.length === 0) return false
   return gruppen.every((g) => isGruppeFullyPacked(g, canConfirmVorgemerkt))
+}
+
+/**
+ * Ob ein pauschaler Eintrag bei „Gepacktes ausblenden“ als erledigt gilt
+ * (Mehrgruppen-Urlaub, abhängig vom Haushalts-Filter).
+ */
+export function isPauschalPackedForHideFilter(
+  item: PackingItem,
+  options: {
+    pauschalGruppenFilter: PauschalGruppenFilter
+    ownGruppeId: string | null
+    canConfirmVorgemerkt: boolean
+    /** true: nur gepackt=true (Eltern), false: auch Vormerkung zählt */
+    finalOnly: boolean
+    /** Für pro_gruppe: alle Urlaubs-Haushalte; sonst Fallback aus item.gruppen */
+    allVacationGruppeIds?: string[]
+  }
+): boolean {
+  const { pauschalGruppenFilter, ownGruppeId, canConfirmVorgemerkt, finalOnly } = options
+  if (item.mitreisenden_typ !== 'pauschal') return false
+
+  const modus = item.pauschal_gruppen_modus ?? 'einmal'
+  const gruppen = item.gruppen ?? []
+  const gruppeIdsInItem = gruppen.map((g) => g.gruppe_id)
+  const vacationIds =
+    options.allVacationGruppeIds && options.allVacationGruppeIds.length > 0
+      ? options.allVacationGruppeIds
+      : gruppeIdsInItem
+  const assignedIds = getSelectedGruppeIdsFromAssignment(
+    modus,
+    item.verantwortliche_gruppe_id,
+    gruppeIdsInItem,
+    vacationIds
+  )
+
+  const gruppePacked = (g: PackingItemGruppe): boolean =>
+    finalOnly ? g.gepackt : isGruppeFullyPacked(g, canConfirmVorgemerkt)
+
+  const isAssignedGruppePacked = (gruppeId: string): boolean => {
+    const entry = gruppen.find((g) => g.gruppe_id === gruppeId)
+    if (entry) return gruppePacked(entry)
+    // einmal: oft kein Junction-Eintrag – Status liegt auf Eintragsebene (item.gepackt)
+    if (modus === 'einmal' && item.verantwortliche_gruppe_id === gruppeId) {
+      return itemLevelPacked()
+    }
+    return false
+  }
+
+  const itemLevelPacked = (): boolean =>
+    finalOnly ? item.gepackt : item.gepackt || !!item.gepackt_vorgemerkt
+
+  if (pauschalGruppenFilter === 'offen') {
+    return false
+  }
+
+  if (pauschalGruppenFilter === 'eigene') {
+    if (modus === 'offen') return false
+    if (modus === 'pro_gruppe' || modus === 'ausgewaehlte_gruppen') {
+      if (!ownGruppeId) return false
+      const own = getOwnGruppePackingState(item, ownGruppeId)
+      if (!own) return false
+      return gruppePacked(own)
+    }
+    if (modus === 'einmal') {
+      if (item.verantwortliche_gruppe_id && ownGruppeId) {
+        if (item.verantwortliche_gruppe_id !== ownGruppeId) return false
+      }
+      if (item.verantwortliche_gruppe_id) {
+        return isAssignedGruppePacked(item.verantwortliche_gruppe_id)
+      }
+      return itemLevelPacked()
+    }
+    const own = ownGruppeId ? getOwnGruppePackingState(item, ownGruppeId) : undefined
+    if (own) return gruppePacked(own)
+    return itemLevelPacked()
+  }
+
+  // alle Haushalte – Überblick: erst ausblenden, wenn alle zugeordneten Haushalte erledigt sind
+  if (modus === 'offen') return false
+  if (assignedIds.length === 0) return false
+
+  // Mehrere Haushalte / Gruppen-Modi: nur Gruppen-Zeilen, nie item.gepackt
+  if (modus === 'pro_gruppe' || modus === 'ausgewaehlte_gruppen' || assignedIds.length > 1) {
+    return assignedIds.every(isAssignedGruppePacked)
+  }
+
+  // Ein Haushalt (einmal)
+  if (item.verantwortliche_gruppe_id) {
+    return isAssignedGruppePacked(item.verantwortliche_gruppe_id)
+  }
+
+  // Legacy: gemeinsamer pauschaler Eintrag ohne Haushalts-Zuordnung
+  return itemLevelPacked()
 }
 
 export function isPauschalItemFullyPackedForProfile(

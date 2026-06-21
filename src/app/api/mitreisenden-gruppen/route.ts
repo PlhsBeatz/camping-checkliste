@@ -52,7 +52,7 @@ export async function POST(request: NextRequest) {
       sortOrder: body.sortOrder ?? body.sort_order,
     })
     if (!id) {
-      return NextResponse.json({ success: false, error: 'Gruppe konnte nicht erstellt werden' }, { status: 500 })
+      return NextResponse.json({ success: false, error: 'Haushalt konnte nicht erstellt werden' }, { status: 500 })
     }
     return NextResponse.json({ success: true, data: { id } })
   } catch (error) {
@@ -90,7 +90,7 @@ export async function PUT(request: NextRequest) {
       sortOrder,
     })
     if (!success) {
-      return NextResponse.json({ success: false, error: 'Gruppe konnte nicht aktualisiert werden' }, { status: 400 })
+      return NextResponse.json({ success: false, error: 'Haushalt konnte nicht aktualisiert werden' }, { status: 400 })
     }
     return NextResponse.json({ success: true })
   } catch (error) {
@@ -117,7 +117,7 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          error: `Die Gruppe enthält noch ${memberCount} Person(en). Bitte zuerst verschieben oder löschen.`,
+          error: `Der Haushalt enthält noch ${memberCount} Person(en). Bitte zuerst verschieben oder löschen.`,
         },
         { status: 400 }
       )
@@ -125,7 +125,7 @@ export async function DELETE(request: NextRequest) {
 
     const success = await deleteMitreisendenGruppe(db, id)
     if (!success) {
-      return NextResponse.json({ success: false, error: 'Gruppe konnte nicht gelöscht werden' }, { status: 400 })
+      return NextResponse.json({ success: false, error: 'Haushalt konnte nicht gelöscht werden' }, { status: 400 })
     }
     return NextResponse.json({ success: true })
   } catch (error) {

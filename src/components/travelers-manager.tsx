@@ -204,7 +204,7 @@ export function TravelersManager({
     for (const t of travelers) {
       const gid = t.gruppe_id ?? 'unknown'
       const gmeta = gruppen.find((g) => g.id === gid)
-      const gname = t.gruppe_name ?? gmeta?.name ?? 'Ohne Gruppe'
+      const gname = t.gruppe_name ?? gmeta?.name ?? 'Ohne Haushalt'
       const urlaubDefault = gmeta?.urlaub_standard_mitnehmen ?? t.urlaub_standard_mitnehmen ?? false
       const sortOrder = gmeta?.sort_order ?? 999
       if (!map.has(gid)) {
@@ -258,7 +258,7 @@ export function TravelersManager({
       ...sortedGruppen,
       {
         id: form.gruppeId,
-        name: meta?.name ?? travelerMeta?.gruppe_name ?? 'Reisegruppe',
+        name: meta?.name ?? travelerMeta?.gruppe_name ?? 'Haushalt',
         sort_order: meta?.sort_order ?? 999,
         ist_standard_familie: meta?.ist_standard_familie ?? false,
         urlaub_standard_mitnehmen: meta?.urlaub_standard_mitnehmen ?? false,
@@ -457,7 +457,7 @@ export function TravelersManager({
 
   const handleSaveGroup = async () => {
     if (!groupForm.name.trim()) {
-      alert('Bitte geben Sie einen Gruppennamen ein')
+      alert('Bitte geben Sie einen Haushaltsnamen ein')
       return
     }
     setIsLoading(true)
@@ -480,7 +480,7 @@ export function TravelersManager({
         alert('Fehler: ' + (data.error ?? 'Unbekannt'))
       }
     } catch {
-      alert('Fehler beim Speichern der Gruppe')
+      alert('Fehler beim Speichern des Haushalts')
     } finally {
       setIsLoading(false)
     }
@@ -501,7 +501,7 @@ export function TravelersManager({
         alert('Fehler: ' + (data.error ?? 'Unbekannt'))
       }
     } catch {
-      alert('Fehler beim Löschen der Gruppe')
+      alert('Fehler beim Löschen des Haushalts')
     } finally {
       setIsLoading(false)
     }
@@ -694,7 +694,7 @@ export function TravelersManager({
                 </h3>
                 {group.urlaubDefault && (
                   <p className="text-sm text-muted-foreground mt-0.5">
-                    Diese Gruppe wird bei neuen Urlauben automatisch vorausgewählt
+                    Dieser Haushalt wird bei neuen Urlauben automatisch vorausgewählt
                   </p>
                 )}
               </div>
@@ -723,7 +723,7 @@ export function TravelersManager({
             </div>
             {sorted.length === 0 ? (
               <p className="text-sm text-muted-foreground border rounded-lg p-3">
-                Keine Personen in dieser Gruppe
+                Keine Personen in diesem Haushalt
               </p>
             ) : (
               <div className="space-y-2">
@@ -814,13 +814,13 @@ export function TravelersManager({
               </div>
             )}
             <div>
-              <Label>Reisegruppe</Label>
+              <Label>Haushalt</Label>
               <Select
                 value={form.gruppeId}
                 onValueChange={(v) => setForm({ ...form, gruppeId: v })}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Gruppe wählen" />
+                  <SelectValue placeholder="Haushalt wählen" />
                 </SelectTrigger>
                 <SelectContent>
                   {gruppenForSelect.map((g) => (
@@ -857,7 +857,7 @@ export function TravelersManager({
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground mt-1">
-                Steuert Pack-Verhalten (eigene vs. Gruppen-Profile), unabhängig vom Login.
+                Steuert Pack-Verhalten (eigenes vs. Haushalts-Profil), unabhängig vom Login.
               </p>
             </div>
             <div>
@@ -1002,15 +1002,15 @@ export function TravelersManager({
         </div>
       </ResponsiveModal>
 
-      {/* Reisegruppe anlegen/bearbeiten */}
+      {/* Haushalt anlegen/bearbeiten */}
       <ResponsiveModal
         open={showGroupDialog}
         onOpenChange={setShowGroupDialog}
-        title={editingGroup ? 'Reisegruppe bearbeiten' : 'Neue Reisegruppe'}
+        title={editingGroup ? 'Haushalt bearbeiten' : 'Neuer Haushalt'}
         description={
           editingGroup
-            ? 'Name und Urlaubs-Vorauswahl der Gruppe ändern'
-            : 'Legen Sie eine weitere Reisegruppe für Personen an'
+            ? 'Name und Urlaubs-Vorauswahl des Haushalts ändern'
+            : 'Legen Sie einen weiteren Haushalt für Personen an'
         }
         contentClassName="max-w-lg"
       >
@@ -1037,22 +1037,22 @@ export function TravelersManager({
                 Bei neuen Urlauben vorauswählen
               </label>
               <p className="text-xs text-muted-foreground">
-                Personen dieser Gruppe werden standardmäßig neuen Urlauben zugeordnet (Stern-Symbol).
+                Personen dieses Haushalts werden standardmäßig neuen Urlauben zugeordnet (Stern-Symbol).
               </p>
             </div>
           </div>
           <Button onClick={handleSaveGroup} disabled={isLoading} className="w-full">
-            {isLoading ? 'Wird gespeichert…' : editingGroup ? 'Speichern' : 'Gruppe erstellen'}
+            {isLoading ? 'Wird gespeichert…' : editingGroup ? 'Speichern' : 'Haushalt erstellen'}
           </Button>
         </div>
       </ResponsiveModal>
 
-      {/* Reisegruppe löschen */}
+      {/* Haushalt löschen */}
       <ConfirmDialog
         open={!!deleteGroupId}
         onOpenChange={(open) => !open && setDeleteGroupId(null)}
-        title="Reisegruppe löschen"
-        description="Möchten Sie diese Gruppe wirklich löschen? Sie darf keine zugeordneten Personen mehr enthalten."
+        title="Haushalt löschen"
+        description="Möchten Sie diesen Haushalt wirklich löschen? Er darf keine zugeordneten Personen mehr enthalten."
         onConfirm={executeDeleteGroup}
         isLoading={isLoading}
       />
@@ -1074,7 +1074,7 @@ export function TravelersManager({
         title="Mitreisenden zuordnen?"
         description={
           editingTraveler
-            ? `Ihr Benutzerkonto wird dauerhaft mit „${editingTraveler.name}“ verknüpft. Packprofil, Gruppe und Berechtigungen richten sich dann nach diesem Mitreisenden. Diese Zuordnung können Sie hier nicht wieder aufheben. Möchten Sie fortfahren?`
+            ? `Ihr Benutzerkonto wird dauerhaft mit „${editingTraveler.name}“ verknüpft. Packprofil, Haushalt und Berechtigungen richten sich dann nach diesem Mitreisenden. Diese Zuordnung können Sie hier nicht wieder aufheben. Möchten Sie fortfahren?`
             : ''
         }
         confirmLabel="Zuordnen"

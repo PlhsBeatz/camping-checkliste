@@ -68,7 +68,7 @@ export function AdminFremdeGruppeWarningDialog({
     <AlertDialog open={open} onOpenChange={(o) => !o && onCancel()}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Fremde Gruppe</AlertDialogTitle>
+          <AlertDialogTitle>Fremder Haushalt</AlertDialogTitle>
           <AlertDialogDescription>
             Dieser Eintrag ist <strong>{gruppeName}</strong> zugeordnet. {actionText}
           </AlertDialogDescription>

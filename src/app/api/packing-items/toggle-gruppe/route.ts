@@ -46,7 +46,7 @@ export async function PUT(request: NextRequest) {
 
     const isAdmin = isAdminRole(auth.userContext.role)
     if (!canToggleGruppeCheckbox(gruppeId, auth.userContext.gruppeId, isAdmin)) {
-      return NextResponse.json({ error: 'Keine Berechtigung für diese Gruppe' }, { status: 403 })
+      return NextResponse.json({ error: 'Keine Berechtigung für diesen Haushalt' }, { status: 403 })
     }
 
     const useVorgemerkt = gepacktRequiresParentApproval(auth.userContext)

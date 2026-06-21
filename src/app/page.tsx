@@ -188,7 +188,7 @@ function HomeContent() {
     () => new Set(packProfileScopeMitreisende.map((m) => m.id)),
     [packProfileScopeMitreisende]
   )
-  const alleOptionHint = 'Übersicht Ihrer Reisegruppe'
+  const alleOptionHint = 'Übersicht Ihres Haushalts'
   const sidebarVacationMitreisende = useMemo(() => {
     if (user && isAdminRole(user.role)) return vacationMitreisende
     return packProfileScopeMitreisende
@@ -1282,6 +1282,48 @@ function HomeContent() {
       vacationMitreisende,
       ownGruppeId
     )
+
+    if (item?.mitreisenden_typ === 'pauschal' && multiGroupVacation) {
+      const modus = item.pauschal_gruppen_modus ?? 'einmal'
+      const gruppeEntry =
+        activeGruppeId != null
+          ? item.gruppen?.find((g) => g.gruppe_id === activeGruppeId)
+          : undefined
+      if (
+        activeGruppeId &&
+        gruppeEntry &&
+        (modus === 'pro_gruppe' ||
+          modus === 'ausgewaehlte_gruppen' ||
+          (item.gruppen ?? []).length > 0)
+      ) {
+        const isPacked = gepacktRequiresParentApproval
+          ? !!(gruppeEntry.gepackt || gruppeEntry.gepackt_vorgemerkt)
+          : !!gruppeEntry.gepackt
+        if (
+          isAdmin &&
+          selectedVacationId &&
+          shouldWarnAdminForeignGruppe(item, ownGruppeId, true, activeGruppeId) &&
+          !isAdminForeignWarnSuppressed(selectedVacationId)
+        ) {
+          setAdminForeignWarn({
+            gruppeName: getForeignGruppeNameForWarning(
+              item,
+              vacationGruppenMap,
+              activeGruppeId
+            ),
+            markingAsPacked: !isPacked,
+            proceed: () => {
+              setAdminForeignWarn(null)
+              void executeToggleGruppe(itemId, activeGruppeId, isPacked)
+            },
+          })
+          return
+        }
+        void executeToggleGruppe(itemId, activeGruppeId, isPacked)
+        return
+      }
+    }
+
     if (
       item &&
       item.mitreisenden_typ === 'pauschal' &&

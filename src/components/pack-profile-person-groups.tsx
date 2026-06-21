@@ -61,7 +61,7 @@ export function PackProfilePersonGroups({
   selectedProfile,
   onProfileSelect,
   showOwnGroupLabel = false,
-  ownGroupLabel = 'Meine Gruppe',
+  ownGroupLabel = 'Mein Haushalt',
 }: PackProfilePersonGroupsProps) {
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({})
   const allNames = [...ownGroup, ...otherGroups.flatMap((g) => g.members)].map((m) => m.name)
@@ -97,7 +97,7 @@ export function PackProfilePersonGroups({
       {otherGroups.length > 0 && (
         <div className="space-y-2">
           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide px-0.5">
-            Weitere Gruppen
+            Weitere Haushalte
           </p>
           {otherGroups.map((group) => {
             const open = expandedGroups[group.id] ?? false
