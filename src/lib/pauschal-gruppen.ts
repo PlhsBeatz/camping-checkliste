@@ -231,7 +231,7 @@ export function passesPauschalGruppenFilter(
   if (filter === 'alle') {
     return true
   }
-  // eigene Gruppe
+  // eigene Gruppe / Haushalt des aktiven Packprofils (Parameter ownGruppeId)
   if (modus === 'offen') return false
   if (modus === 'einmal') {
     if (!item.verantwortliche_gruppe_id) return true

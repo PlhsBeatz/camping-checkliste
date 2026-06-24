@@ -99,10 +99,15 @@ function filterVisibleItemsForProfile(
   opts: VisibleItemsFilterOpts
 ): DBPackingItem[] {
   const { canEditPauschalEntries, vacationMitreisende, alleScopeIds, pauschalGruppenFilter = 'alle', multiGroupActive = false, ownGruppeId = null } = opts;
+  const filterGruppeId = resolveActiveGruppeIdForPacking(
+    selectedProfile,
+    vacationMitreisende,
+    ownGruppeId ?? null
+  );
 
   return items.filter(item => {
     if (!passesBaseVisibleFilters(item, opts)) return false;
-    if (multiGroupActive && !passesPauschalGruppenFilter(item, pauschalGruppenFilter, ownGruppeId)) {
+    if (multiGroupActive && !passesPauschalGruppenFilter(item, pauschalGruppenFilter, filterGruppeId)) {
       return false;
     }
 
@@ -148,13 +153,19 @@ function isItemFullyPackedForProfile(
   multiGroupActive?: boolean,
   pauschalGruppenFilter?: PauschalGruppenFilter,
   alleScopeIds?: Set<string> | null,
-  allVacationGruppeIds?: string[]
+  allVacationGruppeIds?: string[],
+  vacationMitreisende: Mitreisender[] = []
 ): boolean {
   if (item.mitreisenden_typ === 'pauschal') {
     if (multiGroupActive && pauschalGruppenFilter && pauschalGruppenFilter !== 'offen') {
+      const filterGruppeId = resolveActiveGruppeIdForPacking(
+        selectedProfile,
+        vacationMitreisende,
+        ownGruppeId ?? null
+      );
       return isPauschalPackedForHideFilter(item, {
         pauschalGruppenFilter,
-        ownGruppeId: ownGruppeId ?? null,
+        ownGruppeId: filterGruppeId,
         canConfirmVorgemerkt,
         finalOnly: canConfirmVorgemerkt,
         allVacationGruppeIds,
@@ -2048,7 +2059,8 @@ export function PackingList({
         multiGroupActive,
         pauschalGruppenFilter,
         alleScopeIds,
-        allVacationGruppeIdsForList
+        allVacationGruppeIdsForList,
+        effectiveScopeMitreisende
       ),
     [
       selectedProfile,
@@ -2058,6 +2070,7 @@ export function PackingList({
       pauschalGruppenFilter,
       alleScopeIds,
       allVacationGruppeIdsForList,
+      effectiveScopeMitreisende,
     ]
   );
 
