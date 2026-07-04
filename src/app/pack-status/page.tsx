@@ -549,10 +549,11 @@ function MissingWeightEntryRow({
       >
         <span className="font-medium">{entry.was}</span>
         <span className="flex items-center gap-2 shrink-0 ml-2">
-          <span className="text-muted-foreground tabular-nums text-right">
+          <span className="text-muted-foreground tabular-nums text-right whitespace-nowrap">
             × {effectiveQty}
             {isPersonBound && entry.personen_anzahl != null && entry.personen_anzahl > 0 && (
-              <span className="block text-[10px]">
+              <span className="text-[11px]">
+                {' · '}
                 {entry.personen_anzahl} {entry.personen_anzahl === 1 ? 'Person' : 'Personen'}
               </span>
             )}
