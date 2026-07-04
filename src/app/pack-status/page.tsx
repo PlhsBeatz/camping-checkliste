@@ -5,9 +5,9 @@ import { useSearchParams } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { NavigationSidebar } from '@/components/navigation-sidebar'
-import { Menu, Scale, Package, TrendingUp, AlertTriangle } from 'lucide-react'
+import { Menu, Scale, Package, TrendingUp, AlertTriangle, ChevronDown, ChevronUp, Loader2 } from 'lucide-react'
 import { Progress } from '@/components/ui/progress'
-import { formatWeight } from '@/lib/utils'
+import { formatWeight, parseWeightInput } from '@/lib/utils'
 import { Vacation } from '@/lib/db'
 import type { ApiResponse } from '@/lib/api-types'
 import type {
@@ -15,12 +15,17 @@ import type {
   PackStatusTransportOverview,
   PackStatusEntryOhneGewicht,
   PackStatusProgressHauptkategorie,
+  PackEntryWeightScope,
 } from '@/lib/db'
-import { getCachedVacations, getCachedPackStatus } from '@/lib/offline-sync'
+import { getCachedVacations, getCachedPackStatus, enqueueSync } from '@/lib/offline-sync'
 import { cacheVacations, cachePackStatus } from '@/lib/offline-db'
 import { useReconnectRefetch } from '@/hooks/use-reconnect-refetch'
 import { showOfflineToast, showOfflineErrorToast, isOffline } from '@/lib/offline-toast'
 import { PullToRefreshWrapper } from '@/components/pull-to-refresh-wrapper'
+import { WeightInput } from '@/components/ui/weight-input'
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
+import { Label } from '@/components/ui/label'
+import { cn } from '@/lib/utils'
 
 const findNextVacation = (vacations: Vacation[]): Vacation | null => {
   if (vacations.length === 0) return null
@@ -229,13 +234,20 @@ function PackStatusContent() {
                     Gewichtsübersicht
                   </CardTitle>
                   <CardDescription>
-                    Zuladung, Fest installiert, Beladung und berechnete Reserve
+                    Kapazität (Zuladung) und Aufteilung in Fest installiert, Beladung und Reserve
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-6">
                     {packStatus.transportOverview.map((t: PackStatusTransportOverview) => (
-                      <TransportWeightCard key={t.transportId} data={t} />
+                      <TransportWeightCard
+                        key={t.transportId}
+                        data={t}
+                        missingWeightCount={
+                          packStatus.entriesOhneGewicht.filter((e) => e.transport_id === t.transportId)
+                            .length
+                        }
+                      />
                     ))}
                     {packStatus.transportOverview.length === 0 && (
                       <p className="text-sm text-muted-foreground">
@@ -258,7 +270,16 @@ function PackStatusContent() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <EntriesOhneGewichtList entries={packStatus.entriesOhneGewicht} />
+                  <EntriesOhneGewichtList
+                    entries={packStatus.entriesOhneGewicht}
+                    vacationId={selectedVacationId}
+                    onSaved={(data) => {
+                      setPackStatus(data)
+                      if (selectedVacationId) {
+                        void cachePackStatus(selectedVacationId, data)
+                      }
+                    }}
+                  />
                 </CardContent>
               </Card>
 
@@ -286,69 +307,157 @@ function PackStatusContent() {
   )
 }
 
-function TransportWeightCard({ data }: { data: PackStatusTransportOverview }) {
+function WeightSegmentLabel({
+  dotClass,
+  label,
+  value,
+  valueClass,
+  style,
+  align = 'center',
+}: {
+  dotClass: string
+  label: string
+  value: string
+  valueClass?: string
+  style?: React.CSSProperties
+  align?: 'left' | 'center' | 'right'
+}) {
+  return (
+    <div
+      className={cn(
+        'absolute top-0 text-xs whitespace-nowrap',
+        align === 'left' && 'left-0',
+        align === 'center' && '-translate-x-1/2',
+        align === 'right' && 'right-0 left-auto'
+      )}
+      style={style}
+    >
+      <div className="flex items-center gap-1.5">
+        <span className={cn('h-2 w-2 rounded-full shrink-0', dotClass)} aria-hidden />
+        <span className="text-muted-foreground">{label}</span>
+      </div>
+      <p className={cn('font-medium tabular-nums mt-0.5 pl-3.5', valueClass)}>{value}</p>
+    </div>
+  )
+}
+
+function TransportWeightCard({
+  data,
+  missingWeightCount = 0,
+}: {
+  data: PackStatusTransportOverview
+  missingWeightCount?: number
+}) {
   const { transportName, zuladung, festInstalliert, beladung, reserve } = data
   const reservePct = zuladung > 0 ? (reserve / zuladung) * 100 : 0
   const isNegative = reserve < 0
   const isLow = !isNegative && reservePct < 10 && reservePct >= 0
 
+  const festPct = zuladung > 0 ? (festInstalliert / zuladung) * 100 : 0
+  const beladPct = zuladung > 0 ? (beladung / zuladung) * 100 : 0
+  const reservePctBar = zuladung > 0 ? Math.max(0, (reserve / zuladung) * 100) : 0
+
+  const beladLabelLeft = festPct + beladPct / 2
+
+  const reserveColorClass = isNegative ? 'text-red-600' : isLow ? 'text-amber-600' : 'text-emerald-600'
+  const reserveDotClass = isNegative ? 'bg-red-400' : isLow ? 'bg-amber-400' : 'bg-emerald-400'
+
   return (
     <div className="rounded-xl border border-border bg-card p-4 sm:p-5">
-      <h3 className="font-semibold text-brand-heading mb-4">{transportName}</h3>
+      <div className="flex items-start justify-between gap-3 mb-4">
+        <h3 className="font-semibold text-brand-heading">{transportName}</h3>
+        <div className="text-right shrink-0">
+          <span className="text-xs text-muted-foreground block">Zuladung</span>
+          <span className="font-semibold tabular-nums">{formatWeight(zuladung, 0)}</span>
+        </div>
+      </div>
 
-      {/* Stacked bar – visuelle Darstellung */}
       <div className="space-y-3 mb-4">
         <div className="h-8 rounded-lg overflow-hidden flex bg-muted">
-          <div
-            className="bg-amber-200 min-w-0 transition-all"
-            style={{
-              width: `${zuladung > 0 ? (festInstalliert / zuladung) * 100 : 0}%`,
-            }}
-            title="Fest installiert"
-          />
+          <div className="bg-amber-200 min-w-0 transition-all" style={{ width: `${festPct}%` }} title="Fest installiert" />
           <div
             className="bg-[rgb(45,79,30)]/80 min-w-0 transition-all"
-            style={{
-              width: `${zuladung > 0 ? (beladung / zuladung) * 100 : 0}%`,
-            }}
+            style={{ width: `${beladPct}%` }}
             title="Beladung"
           />
           <div
-            className={`min-w-0 flex-1 transition-all ${
-              isNegative ? 'bg-red-400' : isLow ? 'bg-amber-400' : 'bg-emerald-400'
-            }`}
-            style={{
-              width: `${zuladung > 0 ? Math.max(0, (reserve / zuladung) * 100) : 0}%`,
-            }}
+            className={cn(
+              'min-w-0 transition-all',
+              isNegative ? 'bg-red-400 flex-1' : isLow ? 'bg-amber-400' : 'bg-emerald-400',
+              !isNegative && reservePctBar === 0 && 'flex-1'
+            )}
+            style={{ width: isNegative ? undefined : `${reservePctBar}%` }}
             title="Reserve"
           />
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm">
-          <div>
-            <span className="text-muted-foreground block">Zuladung</span>
-            <span className="font-medium">{formatWeight(zuladung, 0)}</span>
+        <div className="sm:hidden space-y-2 text-sm">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="h-2.5 w-2.5 rounded-full bg-amber-200 shrink-0" />
+              <span className="text-muted-foreground">Fest installiert</span>
+            </div>
+            <span className="font-medium tabular-nums">{formatWeight(festInstalliert, 0)}</span>
           </div>
-          <div>
-            <span className="text-muted-foreground block">Fest installiert</span>
-            <span className="font-medium">{formatWeight(festInstalliert, 0)}</span>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="h-2.5 w-2.5 rounded-full bg-[rgb(45,79,30)]/80 shrink-0" />
+              <span className="text-muted-foreground">Beladung</span>
+            </div>
+            <span className="font-medium tabular-nums">{formatWeight(beladung, 0)}</span>
           </div>
-          <div>
-            <span className="text-muted-foreground block">Beladung</span>
-            <span className="font-medium">{formatWeight(beladung, 0)}</span>
-          </div>
-          <div>
-            <span className="text-muted-foreground block">Reserve</span>
-            <span
-              className={`font-semibold ${
-                isNegative ? 'text-red-600' : isLow ? 'text-amber-600' : 'text-emerald-600'
-              }`}
-            >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className={cn('h-2.5 w-2.5 rounded-full shrink-0', reserveDotClass)} />
+              <span className="text-muted-foreground">Reserve</span>
+            </div>
+            <span className={cn('font-semibold tabular-nums', reserveColorClass)}>
               {formatWeight(reserve, 0)}
             </span>
           </div>
         </div>
+
+        <div className="hidden sm:block relative h-14">
+          {festInstalliert > 0 && (
+            <WeightSegmentLabel
+              dotClass="bg-amber-200"
+              label="Fest installiert"
+              value={formatWeight(festInstalliert, 0)}
+              align="left"
+            />
+          )}
+          {beladPct >= 8 && (
+            <WeightSegmentLabel
+              dotClass="bg-[rgb(45,79,30)]/80"
+              label="Beladung"
+              value={formatWeight(beladung, 0)}
+              style={{ left: `${beladLabelLeft}%` }}
+            />
+          )}
+          {beladPct < 8 && beladung > 0 && (
+            <WeightSegmentLabel
+              dotClass="bg-[rgb(45,79,30)]/80"
+              label="Beladung"
+              value={formatWeight(beladung, 0)}
+              style={{ left: `${beladLabelLeft}%` }}
+            />
+          )}
+          <WeightSegmentLabel
+            dotClass={reserveDotClass}
+            label="Reserve"
+            value={formatWeight(reserve, 0)}
+            valueClass={cn('font-semibold', reserveColorClass)}
+            align="right"
+          />
+        </div>
       </div>
+
+      {missingWeightCount > 0 && (
+        <p className="text-xs text-muted-foreground mb-2">
+          {missingWeightCount} {missingWeightCount === 1 ? 'Eintrag' : 'Einträge'} ohne Gewicht — Reserve
+          kann optimistisch sein.
+        </p>
+      )}
 
       {isNegative && (
         <p className="text-xs text-red-600 flex items-center gap-1">
@@ -366,7 +475,184 @@ function TransportWeightCard({ data }: { data: PackStatusTransportOverview }) {
   )
 }
 
-function EntriesOhneGewichtList({ entries }: { entries: PackStatusEntryOhneGewicht[] }) {
+function MissingWeightEntryRow({
+  entry,
+  vacationId,
+  onSaved,
+}: {
+  entry: PackStatusEntryOhneGewicht
+  vacationId: string
+  onSaved: (data: PackStatusData) => void
+}) {
+  const [expanded, setExpanded] = useState(false)
+  const [weightStr, setWeightStr] = useState('')
+  const [scope, setScope] = useState<PackEntryWeightScope>('equipment')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const parsedWeight = parseWeightInput(weightStr)
+  const effectiveQty = entry.effective_anzahl ?? entry.anzahl
+  const totalWeight =
+    parsedWeight != null && parsedWeight > 0 && effectiveQty > 0
+      ? parsedWeight * effectiveQty
+      : null
+  const isPersonBound = entry.mitreisenden_typ != null && entry.mitreisenden_typ !== 'pauschal'
+
+  const handleSave = async () => {
+    if (parsedWeight == null || parsedWeight <= 0) {
+      setError('Bitte ein gültiges Gewicht eingeben.')
+      return
+    }
+    setSaving(true)
+    setError(null)
+    const payload = {
+      packEntryId: entry.id,
+      weight: parsedWeight,
+      scope: entry.is_temporaer ? ('packlist' as const) : scope,
+    }
+
+    try {
+      const res = await fetch('/api/pack-status/entry-weight', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      const data = (await res.json()) as ApiResponse<PackStatusData>
+      if (data.success && data.data) {
+        onSaved(data.data)
+        setExpanded(false)
+        setWeightStr('')
+        return
+      }
+      setError(data.error ?? 'Speichern fehlgeschlagen.')
+    } catch {
+      if (isOffline()) {
+        await enqueueSync('pack-status-entry-weight', 'patch', entry.id, payload, { vacationId })
+        showOfflineToast({ description: 'Gewicht wird synchronisiert, sobald Sie online sind.' })
+        setExpanded(false)
+        setWeightStr('')
+        setError(null)
+        return
+      }
+      setError('Netzwerkfehler beim Speichern.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <li className="rounded-lg border border-border overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        className="flex w-full items-center justify-between text-sm py-2 px-3 bg-muted/60 hover:bg-muted transition-colors text-left"
+      >
+        <span className="font-medium">{entry.was}</span>
+        <span className="flex items-center gap-2 shrink-0 ml-2">
+          <span className="text-muted-foreground tabular-nums text-right">
+            × {effectiveQty}
+            {isPersonBound && entry.personen_anzahl != null && entry.personen_anzahl > 0 && (
+              <span className="block text-[10px]">
+                {entry.personen_anzahl} {entry.personen_anzahl === 1 ? 'Person' : 'Personen'}
+              </span>
+            )}
+          </span>
+          {expanded ? (
+            <ChevronUp className="h-4 w-4 text-muted-foreground" />
+          ) : (
+            <ChevronDown className="h-4 w-4 text-muted-foreground" />
+          )}
+        </span>
+      </button>
+
+      {expanded && (
+        <div className="p-3 space-y-4 bg-card border-t border-border">
+          <div>
+            <Label htmlFor={`weight-${entry.id}`} className="text-xs text-muted-foreground mb-1.5 block">
+              Gewicht (Stück)
+            </Label>
+            <WeightInput
+              id={`weight-${entry.id}`}
+              value={weightStr}
+              onChange={(v) => {
+                setWeightStr(v)
+                setError(null)
+              }}
+              placeholder="0"
+              className="max-w-[160px]"
+            />
+          </div>
+
+          {!entry.is_temporaer && (
+            <RadioGroup
+              value={scope}
+              onValueChange={(v) => setScope(v as PackEntryWeightScope)}
+              className="space-y-3"
+            >
+              <div className="flex items-start gap-2">
+                <RadioGroupItem value="equipment" id={`scope-equipment-${entry.id}`} className="mt-0.5" />
+                <Label htmlFor={`scope-equipment-${entry.id}`} className="font-normal cursor-pointer">
+                  <span className="font-medium block">In Ausrüstung speichern</span>
+                  <span className="text-xs text-muted-foreground">Gilt für alle Urlaube</span>
+                </Label>
+              </div>
+              <div className="flex items-start gap-2">
+                <RadioGroupItem value="packlist" id={`scope-packlist-${entry.id}`} className="mt-0.5" />
+                <Label htmlFor={`scope-packlist-${entry.id}`} className="font-normal cursor-pointer">
+                  <span className="font-medium block">Nur für diesen Urlaub</span>
+                  <span className="text-xs text-muted-foreground">
+                    Z. B. wenn die Menge diesmal anders ist
+                  </span>
+                </Label>
+              </div>
+            </RadioGroup>
+          )}
+
+          {entry.is_temporaer && (
+            <p className="text-xs text-muted-foreground">
+              Temporärer Eintrag — Gewicht gilt nur für diese Packliste.
+            </p>
+          )}
+
+          {totalWeight != null && (
+            <p className="text-sm text-muted-foreground">
+              Gesamt: <span className="font-medium text-foreground">{formatWeight(totalWeight, 1)}</span>
+              {' '}
+              ({effectiveQty} × {formatWeight(parsedWeight!, 1)}
+              {isPersonBound && entry.personen_anzahl != null && entry.personen_anzahl > 0
+                ? ` · ${entry.personen_anzahl} ${entry.personen_anzahl === 1 ? 'Person' : 'Personen'}`
+                : ''}
+              )
+            </p>
+          )}
+
+          {error && <p className="text-xs text-red-600">{error}</p>}
+
+          <Button size="sm" onClick={handleSave} disabled={saving || parsedWeight == null || parsedWeight <= 0}>
+            {saving ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin mr-1.5" />
+                Speichern…
+              </>
+            ) : (
+              'Speichern'
+            )}
+          </Button>
+        </div>
+      )}
+    </li>
+  )
+}
+
+function EntriesOhneGewichtList({
+  entries,
+  vacationId,
+  onSaved,
+}: {
+  entries: PackStatusEntryOhneGewicht[]
+  vacationId: string
+  onSaved: (data: PackStatusData) => void
+}) {
   // Nach Transport gruppieren, dann nach Hauptkategorie
   const byTransport = entries.reduce<Record<string, PackStatusEntryOhneGewicht[]>>((acc, e) => {
     const transportKey = e.transport_name?.trim() || 'Ohne Transport'
@@ -404,13 +690,12 @@ function EntriesOhneGewichtList({ entries }: { entries: PackStatusEntryOhneGewic
                   <h4 className="text-xs font-medium text-muted-foreground mb-1.5">{kategorie}</h4>
                   <ul className="space-y-1.5">
                     {items.map((e) => (
-                      <li
+                      <MissingWeightEntryRow
                         key={e.id}
-                        className="flex items-center justify-between text-sm py-1 px-2 rounded bg-muted"
-                      >
-                        <span>{e.was}</span>
-                        <span className="text-muted-foreground tabular-nums">× {e.anzahl}</span>
-                      </li>
+                        entry={e}
+                        vacationId={vacationId}
+                        onSaved={onSaved}
+                      />
                     ))}
                   </ul>
                 </div>

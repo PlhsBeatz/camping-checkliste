@@ -11,7 +11,7 @@ export function packingItemsEqual(a: PackingItem[], b: PackingItem[]): boolean {
         const mit = (i.mitreisende ?? [])
           .map(
             (m) =>
-              `${m.mitreisender_id}:${m.gepackt ? 1 : 0}:${m.gepackt_vorgemerkt ? 1 : 0}:${m.anzahl ?? ''}:${m.transport_id ?? ''}`
+              `${m.mitreisender_id}:${m.gepackt ? 1 : 0}:${m.gepackt_vorgemerkt ? 1 : 0}:${m.anzahl ?? ''}:${m.transport_id ?? ''}:${m.einzelgewicht_override ?? ''}`
           )
           .sort()
           .join(';')
@@ -28,7 +28,10 @@ export function packingItemsEqual(a: PackingItem[], b: PackingItem[]): boolean {
         const transportId = i.transport_id ?? ''
         const was = i.was ?? ''
         const kategorieId = i.kategorie_id ?? ''
-        return `${i.id}\t${i.gepackt ? 1 : 0}\t${i.gepackt_vorgemerkt ? 1 : 0}\t${i.anzahl}\t${modus}\t${verantwortliche}\t${bemerkung}\t${transportId}\t${was}\t${kategorieId}\t${grup}\t${mit}`
+        const gewicht = i.einzelgewicht ?? ''
+        const gewichtOverride = i.einzelgewicht_override ?? ''
+        const ausruestungGewicht = i.ausruestung_einzelgewicht ?? ''
+        return `${i.id}\t${i.gepackt ? 1 : 0}\t${i.gepackt_vorgemerkt ? 1 : 0}\t${i.anzahl}\t${modus}\t${verantwortliche}\t${bemerkung}\t${transportId}\t${was}\t${kategorieId}\t${gewicht}\t${gewichtOverride}\t${ausruestungGewicht}\t${grup}\t${mit}`
       })
       .sort()
       .join('\n')

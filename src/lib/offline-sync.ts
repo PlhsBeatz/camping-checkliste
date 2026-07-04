@@ -619,6 +619,13 @@ function resolveRoute(e: SyncQueueEntry): ResolvedRoute | null {
         body: e.payload,
       }
     }
+    case 'pack-status-entry-weight': {
+      return {
+        method: 'PATCH',
+        url: '/api/pack-status/entry-weight',
+        body: e.payload,
+      }
+    }
     default:
       return null
   }

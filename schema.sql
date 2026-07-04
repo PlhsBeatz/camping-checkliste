@@ -188,6 +188,7 @@ CREATE TABLE IF NOT EXISTS packlisten_eintraege (
     bemerkung TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now')), transport_id TEXT,
+    einzelgewicht_override REAL,
     UNIQUE (packliste_id, gegenstand_id),
     CHECK (anzahl >= 0),
     FOREIGN KEY (packliste_id) REFERENCES packlisten(id) ON DELETE CASCADE,

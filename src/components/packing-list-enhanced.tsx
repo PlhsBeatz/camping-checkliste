@@ -1453,8 +1453,26 @@ const PackingItem: React.FC<PackingItemProps> = ({
                   onEdit(fullItem)
                 }}
               >
-                <Edit2 className="h-4 w-4 mr-2" />
-                Bearbeiten
+                <Edit2 className="h-4 w-4 mr-2 shrink-0" />
+                <span className="flex-1">Bearbeiten</span>
+                {(() => {
+                  const personEntry = selectedProfile
+                    ? fullItem.mitreisende?.find((m) => m.mitreisender_id === selectedProfile)
+                    : undefined
+                  const hasWeightOverride =
+                    !isTemporaer &&
+                    (selectedProfile && mitreisenden_typ !== 'pauschal'
+                      ? personEntry?.einzelgewicht_override != null &&
+                        personEntry.einzelgewicht_override > 0
+                      : fullItem.einzelgewicht_override != null &&
+                        fullItem.einzelgewicht_override > 0)
+                  if (!hasWeightOverride) return null
+                  return (
+                  <span className="text-[10px] font-medium text-amber-600 dark:text-amber-400 ml-2 shrink-0">
+                    Gewicht
+                  </span>
+                  )
+                })()}
               </DropdownMenuItem>
               {!(selectedProfile && mitreisenden_typ === 'pauschal' && !isTemporaer && !canEditPauschalEntries) && (
                 <DropdownMenuItem 

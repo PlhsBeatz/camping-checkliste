@@ -42,6 +42,10 @@ export interface PackingItem {
   hauptkategorie: string // Gejoint
   details?: string
   einzelgewicht?: number
+  /** Urlaubsspezifisches Gewicht (Override der Ausrüstung), nur bei normalen Einträgen */
+  einzelgewicht_override?: number | null
+  /** Stammdaten-Gewicht aus der Ausrüstung (ohne Override) */
+  ausruestung_einzelgewicht?: number | null
   /** Status des Ausrüstungsgegenstands (z.B. "Normal", "Immer gepackt") */
   status?: string
   /** Erst am Abreisetag zu packen – im Packliste-Modus nur an diesem Tag anzeigen */
@@ -72,6 +76,8 @@ export interface PackingItemMitreisender {
   /** Pro-Person-Transport; bei undefined wird item.transport_id verwendet */
   transport_id?: string | null
   transport_name?: string
+  /** Urlaubsspezifisches Gewicht nur für diese Person */
+  einzelgewicht_override?: number | null
 }
 
 export type PauschalGruppenModus = 'offen' | 'einmal' | 'pro_gruppe' | 'ausgewaehlte_gruppen'
@@ -929,7 +935,9 @@ export async function getPackingItems(db: D1Database, vacationId: string): Promi
         CASE WHEN ag.id IS NULL
           THEN '(Gegenstand fehlt in Ausrüstung — Zeile ' || pe.id || ', Ausrüstung ' || pe.gegenstand_id || ')'
           ELSE ag.was END AS was,
-        ag.einzelgewicht AS einzelgewicht, ag.details AS details,
+        COALESCE(pe.einzelgewicht_override, ag.einzelgewicht) AS einzelgewicht,
+        pe.einzelgewicht_override AS einzelgewicht_override,
+        ag.einzelgewicht AS ausruestung_einzelgewicht, ag.details AS details,
         COALESCE(ag.mitreisenden_typ, 'pauschal') AS mitreisenden_typ,
         CASE WHEN ag.id IS NULL THEN 'Normal' ELSE ag.status END AS status,
         ag.erst_abreisetag_gepackt AS erst_abreisetag_gepackt,
@@ -958,10 +966,13 @@ export async function getPackingItems(db: D1Database, vacationId: string): Promi
 
     const pemCols = await getD1TableColumnNames(db, 'packlisten_eintrag_mitreisende')
     const pemAnzahlSelect = pemCols.has('anzahl') ? 'pem.anzahl' : 'CAST(NULL AS INTEGER) AS anzahl'
+    const pemGewichtSelect = pemCols.has('einzelgewicht_override')
+      ? 'pem.einzelgewicht_override'
+      : 'CAST(NULL AS REAL) AS einzelgewicht_override'
 
     // Batch: alle Mitreisende für diese Urlaubs-Packliste in einer Query (Subquery, kein IN mit vielen IDs)
     const mitQuery = `
-      SELECT pem.packlisten_eintrag_id, pem.mitreisender_id, m.name as mitreisender_name, pem.gepackt, pem.gepackt_vorgemerkt, ${pemAnzahlSelect}, pem.transport_id as pem_transport_id, t.name as pem_transport_name
+      SELECT pem.packlisten_eintrag_id, pem.mitreisender_id, m.name as mitreisender_name, pem.gepackt, pem.gepackt_vorgemerkt, ${pemAnzahlSelect}, ${pemGewichtSelect}, pem.transport_id as pem_transport_id, t.name as pem_transport_name
       FROM packlisten_eintrag_mitreisende pem
       JOIN mitreisende m ON pem.mitreisender_id = m.id
       LEFT JOIN transportmittel t ON pem.transport_id = t.id
@@ -979,11 +990,12 @@ export async function getPackingItems(db: D1Database, vacationId: string): Promi
       gepackt: number
       gepackt_vorgemerkt?: number
       anzahl?: number | null
+      einzelgewicht_override?: number | null
       pem_transport_id?: string | null
       pem_transport_name?: string | null
     }>()
     const mitRows = mitResult.results || []
-    const mitreisendeByEintrag = new Map<string, Array<{ mitreisender_id: string; mitreisender_name: string; gepackt: boolean; gepackt_vorgemerkt?: boolean; anzahl?: number; transport_id?: string | null; transport_name?: string }>>()
+    const mitreisendeByEintrag = new Map<string, Array<{ mitreisender_id: string; mitreisender_name: string; gepackt: boolean; gepackt_vorgemerkt?: boolean; anzahl?: number; einzelgewicht_override?: number | null; transport_id?: string | null; transport_name?: string }>>()
     for (const m of mitRows) {
       const eid = String(m.packlisten_eintrag_id)
       const arr = mitreisendeByEintrag.get(eid) || []
@@ -993,6 +1005,8 @@ export async function getPackingItems(db: D1Database, vacationId: string): Promi
         gepackt: !!m.gepackt,
         gepackt_vorgemerkt: !!m.gepackt_vorgemerkt,
         anzahl: m.anzahl != null ? Number(m.anzahl) : undefined,
+        einzelgewicht_override:
+          m.einzelgewicht_override != null ? Number(m.einzelgewicht_override) : null,
         transport_id: m.pem_transport_id != null ? String(m.pem_transport_id) : undefined,
         transport_name: m.pem_transport_name != null ? String(m.pem_transport_name) : undefined,
       })
@@ -1023,7 +1037,18 @@ export async function getPackingItems(db: D1Database, vacationId: string): Promi
         kategorie: String(item.kategorie),
         hauptkategorie: String(item.hauptkategorie),
         details: item.details ? String(item.details) : undefined,
-        einzelgewicht: item.einzelgewicht ? Number(item.einzelgewicht) : undefined,
+        einzelgewicht:
+          item.einzelgewicht != null && Number(item.einzelgewicht) > 0
+            ? Number(item.einzelgewicht)
+            : undefined,
+        einzelgewicht_override:
+          (item as Record<string, unknown>).einzelgewicht_override != null
+            ? Number((item as Record<string, unknown>).einzelgewicht_override)
+            : null,
+        ausruestung_einzelgewicht:
+          (item as Record<string, unknown>).ausruestung_einzelgewicht != null
+            ? Number((item as Record<string, unknown>).ausruestung_einzelgewicht)
+            : null,
         status: (() => {
           const raw = (item as Record<string, unknown>).status ?? (item as Record<string, unknown>)['ag.status']
           const s = raw != null ? String(raw).trim() : ''
@@ -1052,9 +1077,12 @@ export async function getPackingItems(db: D1Database, vacationId: string): Promi
     if (packlisteId) {
       const pemTempCols = await getD1TableColumnNames(db, 'packlisten_eintrag_mitreisende_temporaer')
       const pemTempAnzahlSelect = pemTempCols.has('anzahl') ? 'pem.anzahl' : 'CAST(NULL AS INTEGER) AS anzahl'
+      const pemTempGewichtSelect = pemTempCols.has('einzelgewicht_override')
+        ? 'pem.einzelgewicht_override'
+        : 'CAST(NULL AS REAL) AS einzelgewicht_override'
       // Mitreisende für temporäre Einträge laden (separate Tabelle)
       const tempMitQuery = `
-        SELECT pem.packlisten_eintrag_id, pem.mitreisender_id, m.name as mitreisender_name, pem.gepackt, pem.gepackt_vorgemerkt, ${pemTempAnzahlSelect}, pem.transport_id as pem_transport_id, t.name as pem_transport_name
+        SELECT pem.packlisten_eintrag_id, pem.mitreisender_id, m.name as mitreisender_name, pem.gepackt, pem.gepackt_vorgemerkt, ${pemTempAnzahlSelect}, ${pemTempGewichtSelect}, pem.transport_id as pem_transport_id, t.name as pem_transport_name
         FROM packlisten_eintrag_mitreisende_temporaer pem
         JOIN mitreisende m ON pem.mitreisender_id = m.id
         LEFT JOIN transportmittel t ON pem.transport_id = t.id
@@ -1071,6 +1099,7 @@ export async function getPackingItems(db: D1Database, vacationId: string): Promi
         gepackt: number
         gepackt_vorgemerkt?: number
         anzahl?: number | null
+        einzelgewicht_override?: number | null
         pem_transport_id?: string | null
         pem_transport_name?: string | null
       }>()
@@ -1083,6 +1112,7 @@ export async function getPackingItems(db: D1Database, vacationId: string): Promi
           gepackt: boolean
           gepackt_vorgemerkt?: boolean
           anzahl?: number
+          einzelgewicht_override?: number | null
           transport_id?: string | null
           transport_name?: string
         }>
@@ -1096,6 +1126,8 @@ export async function getPackingItems(db: D1Database, vacationId: string): Promi
           gepackt: !!m.gepackt,
           gepackt_vorgemerkt: !!m.gepackt_vorgemerkt,
           anzahl: m.anzahl != null ? Number(m.anzahl) : undefined,
+          einzelgewicht_override:
+            m.einzelgewicht_override != null ? Number(m.einzelgewicht_override) : null,
           transport_id: m.pem_transport_id != null ? String(m.pem_transport_id) : undefined,
           transport_name: m.pem_transport_name != null ? String(m.pem_transport_name) : undefined,
         })
@@ -1104,7 +1136,7 @@ export async function getPackingItems(db: D1Database, vacationId: string): Promi
 
       const tempQuery = `
         SELECT pet.id, pet.packliste_id, pet.was, pet.kategorie_id, pet.anzahl, pet.gepackt, pet.gepackt_vorgemerkt, pet.gepackt_vorgemerkt_durch, pet.bemerkung, pet.transport_id,
-               pet.pauschal_gruppen_modus, pet.verantwortliche_gruppe_id,
+               pet.einzelgewicht, pet.pauschal_gruppen_modus, pet.verantwortliche_gruppe_id,
                vg.name AS verantwortliche_gruppe_name,
                k.titel as kategorie, hk.titel as hauptkategorie, hk.reihenfolge as hk_reihenfolge, k.reihenfolge as k_reihenfolge,
                t.name as transport_name, pet.created_at
@@ -1139,6 +1171,7 @@ export async function getPackingItems(db: D1Database, vacationId: string): Promi
           kategorie_id: row.kategorie_id != null ? String(row.kategorie_id) : undefined,
           kategorie: String(row.kategorie),
           hauptkategorie: String(row.hauptkategorie),
+          einzelgewicht: row.einzelgewicht != null && Number(row.einzelgewicht) > 0 ? Number(row.einzelgewicht) : undefined,
           created_at: String(row.created_at || ''),
           is_temporaer: true,
           orderHk: row.hk_reihenfolge != null ? Number(row.hk_reihenfolge) : undefined,
@@ -2060,9 +2093,16 @@ export interface PackStatusEntryOhneGewicht {
   id: string
   was: string
   anzahl: number
+  /** Für Gewichtsberechnung: pauschal = anzahl, pro Person = Summe der zugeordneten Mengen */
+  effective_anzahl: number
+  mitreisenden_typ?: 'pauschal' | 'alle' | 'ausgewaehlte'
+  /** Anzahl zugeordneter Personen (nur bei personengebundenen Einträgen) */
+  personen_anzahl?: number
   hauptkategorie: string
   transport_id?: string | null
   transport_name?: string | null
+  gegenstand_id?: string
+  is_temporaer?: boolean
 }
 
 export interface PackStatusProgressHauptkategorie {
@@ -2121,8 +2161,8 @@ export async function getPackStatus(db: D1Database, vacationId: string): Promise
       SELECT pe.transport_id,
         COALESCE(SUM(
           CASE
-            WHEN ag.mitreisenden_typ = 'pauschal' THEN ag.einzelgewicht * pe.anzahl
-            ELSE ag.einzelgewicht * COALESCE(pem.anzahl, pe.anzahl)
+            WHEN ag.mitreisenden_typ = 'pauschal' THEN COALESCE(pe.einzelgewicht_override, ag.einzelgewicht) * pe.anzahl
+            ELSE COALESCE(pem.einzelgewicht_override, pe.einzelgewicht_override, ag.einzelgewicht) * COALESCE(pem.anzahl, pe.anzahl)
           END
         ), 0) as gewicht
       FROM packlisten_eintraege pe
@@ -2130,6 +2170,10 @@ export async function getPackStatus(db: D1Database, vacationId: string): Promise
       LEFT JOIN packlisten_eintrag_mitreisende pem ON pem.packlisten_eintrag_id = pe.id
       WHERE pe.packliste_id = ? AND pe.transport_id IS NOT NULL
         AND (ag.mitreisenden_typ = 'pauschal' OR pem.mitreisender_id IS NOT NULL)
+        AND (
+          (ag.mitreisenden_typ = 'pauschal' AND COALESCE(pe.einzelgewicht_override, ag.einzelgewicht) IS NOT NULL AND COALESCE(pe.einzelgewicht_override, ag.einzelgewicht) > 0)
+          OR (ag.mitreisenden_typ != 'pauschal' AND COALESCE(pem.einzelgewicht_override, pe.einzelgewicht_override, ag.einzelgewicht) IS NOT NULL AND COALESCE(pem.einzelgewicht_override, pe.einzelgewicht_override, ag.einzelgewicht) > 0)
+        )
       GROUP BY pe.transport_id
     `
     const beladungResult = await db
@@ -2141,6 +2185,38 @@ export async function getPackStatus(db: D1Database, vacationId: string): Promise
       beladungByTransport.set(t.id, 0)
     }
     for (const r of beladungResult.results || []) {
+      const cur = beladungByTransport.get(r.transport_id) ?? 0
+      beladungByTransport.set(r.transport_id, cur + r.gewicht)
+    }
+
+    const tempBeladungQuery = `
+      SELECT pet.transport_id,
+        COALESCE(SUM(
+          CASE
+            WHEN pem.mitreisender_id IS NULL THEN pet.einzelgewicht * pet.anzahl
+            ELSE COALESCE(pem.einzelgewicht_override, pet.einzelgewicht) * COALESCE(pem.anzahl, pet.anzahl)
+          END
+        ), 0) as gewicht
+      FROM packlisten_eintraege_temporaer pet
+      LEFT JOIN packlisten_eintrag_mitreisende_temporaer pem ON pem.packlisten_eintrag_id = pet.id
+      WHERE pet.packliste_id = ? AND pet.transport_id IS NOT NULL
+        AND (
+          (pem.mitreisender_id IS NULL AND pet.einzelgewicht IS NOT NULL AND pet.einzelgewicht > 0)
+          OR (pem.mitreisender_id IS NOT NULL AND COALESCE(pem.einzelgewicht_override, pet.einzelgewicht) IS NOT NULL AND COALESCE(pem.einzelgewicht_override, pet.einzelgewicht) > 0)
+        )
+        AND (
+          pem.mitreisender_id IS NOT NULL
+          OR NOT EXISTS (
+            SELECT 1 FROM packlisten_eintrag_mitreisende_temporaer x WHERE x.packlisten_eintrag_id = pet.id
+          )
+        )
+      GROUP BY pet.transport_id
+    `
+    const tempBeladungResult = await db
+      .prepare(tempBeladungQuery)
+      .bind(packlisteId)
+      .all<{ transport_id: string; gewicht: number }>()
+    for (const r of tempBeladungResult.results || []) {
       const cur = beladungByTransport.get(r.transport_id) ?? 0
       beladungByTransport.set(r.transport_id, cur + r.gewicht)
     }
@@ -2224,30 +2300,125 @@ export async function getPackStatus(db: D1Database, vacationId: string): Promise
     })
 
     const ohneGewichtQuery = `
-      SELECT pe.id, ag.was, pe.anzahl, hk.titel as hauptkategorie,
-        pe.transport_id, t.name as transport_name
-      FROM packlisten_eintraege pe
-      JOIN ausruestungsgegenstaende ag ON pe.gegenstand_id = ag.id
-      JOIN kategorien k ON ag.kategorie_id = k.id
-      JOIN hauptkategorien hk ON k.hauptkategorie_id = hk.id
-      LEFT JOIN transportmittel t ON pe.transport_id = t.id
-      WHERE pe.packliste_id = ? AND ag.status NOT IN ('Ausgemustert', 'Fest Installiert')
-        AND (ag.einzelgewicht IS NULL OR ag.einzelgewicht = 0)
-        AND COALESCE(ag.in_pauschale_inbegriffen, 0) = 0
-      ORDER BY COALESCE(t.name, 'zzz'), hk.reihenfolge, ag.was
+      SELECT * FROM (
+        SELECT pe.id, pe.gegenstand_id, ag.was, pe.anzahl, hk.titel as hauptkategorie,
+          pe.transport_id, t.name as transport_name, 0 as is_temporaer,
+          COALESCE(ag.mitreisenden_typ, 'pauschal') as mitreisenden_typ,
+          CASE
+            WHEN COALESCE(ag.mitreisenden_typ, 'pauschal') = 'pauschal' THEN pe.anzahl
+            ELSE COALESCE((
+              SELECT SUM(COALESCE(pem2.anzahl, pe.anzahl))
+              FROM packlisten_eintrag_mitreisende pem2
+              WHERE pem2.packlisten_eintrag_id = pe.id
+            ), 0)
+          END as effective_anzahl,
+          CASE
+            WHEN COALESCE(ag.mitreisenden_typ, 'pauschal') = 'pauschal' THEN 0
+            ELSE COALESCE((
+              SELECT COUNT(*)
+              FROM packlisten_eintrag_mitreisende pem2
+              WHERE pem2.packlisten_eintrag_id = pe.id
+            ), 0)
+          END as personen_anzahl
+        FROM packlisten_eintraege pe
+        JOIN ausruestungsgegenstaende ag ON pe.gegenstand_id = ag.id
+        JOIN kategorien k ON ag.kategorie_id = k.id
+        JOIN hauptkategorien hk ON k.hauptkategorie_id = hk.id
+        LEFT JOIN transportmittel t ON pe.transport_id = t.id
+        WHERE pe.packliste_id = ? AND ag.status NOT IN ('Ausgemustert', 'Fest Installiert')
+          AND COALESCE(ag.in_pauschale_inbegriffen, 0) = 0
+          AND (
+            (COALESCE(ag.mitreisenden_typ, 'pauschal') = 'pauschal'
+              AND (COALESCE(pe.einzelgewicht_override, ag.einzelgewicht) IS NULL OR COALESCE(pe.einzelgewicht_override, ag.einzelgewicht) = 0))
+            OR (COALESCE(ag.mitreisenden_typ, 'pauschal') != 'pauschal'
+              AND EXISTS (
+                SELECT 1 FROM packlisten_eintrag_mitreisende pem_m
+                WHERE pem_m.packlisten_eintrag_id = pe.id
+                  AND COALESCE(pem_m.anzahl, pe.anzahl) > 0
+                  AND (COALESCE(pem_m.einzelgewicht_override, pe.einzelgewicht_override, ag.einzelgewicht) IS NULL
+                       OR COALESCE(pem_m.einzelgewicht_override, pe.einzelgewicht_override, ag.einzelgewicht) = 0)
+              ))
+          )
+        UNION ALL
+        SELECT pet.id, NULL as gegenstand_id, pet.was, pet.anzahl, hk.titel as hauptkategorie,
+          pet.transport_id, t.name as transport_name, 1 as is_temporaer,
+          CASE
+            WHEN NOT EXISTS (
+              SELECT 1 FROM packlisten_eintrag_mitreisende_temporaer x WHERE x.packlisten_eintrag_id = pet.id
+            ) THEN 'pauschal'
+            ELSE 'ausgewaehlte'
+          END as mitreisenden_typ,
+          CASE
+            WHEN NOT EXISTS (
+              SELECT 1 FROM packlisten_eintrag_mitreisende_temporaer x WHERE x.packlisten_eintrag_id = pet.id
+            ) THEN pet.anzahl
+            ELSE COALESCE((
+              SELECT SUM(COALESCE(pem2.anzahl, pet.anzahl))
+              FROM packlisten_eintrag_mitreisende_temporaer pem2
+              WHERE pem2.packlisten_eintrag_id = pet.id
+            ), 0)
+          END as effective_anzahl,
+          CASE
+            WHEN NOT EXISTS (
+              SELECT 1 FROM packlisten_eintrag_mitreisende_temporaer x WHERE x.packlisten_eintrag_id = pet.id
+            ) THEN 0
+            ELSE COALESCE((
+              SELECT COUNT(*)
+              FROM packlisten_eintrag_mitreisende_temporaer pem2
+              WHERE pem2.packlisten_eintrag_id = pet.id
+            ), 0)
+          END as personen_anzahl
+        FROM packlisten_eintraege_temporaer pet
+        JOIN kategorien k ON pet.kategorie_id = k.id
+        JOIN hauptkategorien hk ON k.hauptkategorie_id = hk.id
+        LEFT JOIN transportmittel t ON pet.transport_id = t.id
+        WHERE pet.packliste_id = ?
+          AND (
+            (NOT EXISTS (
+              SELECT 1 FROM packlisten_eintrag_mitreisende_temporaer x WHERE x.packlisten_eintrag_id = pet.id
+            ) AND (pet.einzelgewicht IS NULL OR pet.einzelgewicht = 0))
+            OR (EXISTS (
+              SELECT 1 FROM packlisten_eintrag_mitreisende_temporaer x WHERE x.packlisten_eintrag_id = pet.id
+            ) AND EXISTS (
+              SELECT 1 FROM packlisten_eintrag_mitreisende_temporaer pem_m
+              WHERE pem_m.packlisten_eintrag_id = pet.id
+                AND COALESCE(pem_m.anzahl, pet.anzahl) > 0
+                AND (COALESCE(pem_m.einzelgewicht_override, pet.einzelgewicht) IS NULL
+                     OR COALESCE(pem_m.einzelgewicht_override, pet.einzelgewicht) = 0)
+            ))
+          )
+      )
+      ORDER BY COALESCE(transport_name, 'zzz'), hauptkategorie, was
     `
     const ohneGewichtResult = await db
       .prepare(ohneGewichtQuery)
-      .bind(packlisteId)
-      .all<{ id: string; was: string; anzahl: number; hauptkategorie: string; transport_id: string | null; transport_name: string | null }>()
+      .bind(packlisteId, packlisteId)
+      .all<{
+        id: string
+        gegenstand_id: string | null
+        was: string
+        anzahl: number
+        effective_anzahl: number
+        mitreisenden_typ: string
+        personen_anzahl: number
+        hauptkategorie: string
+        transport_id: string | null
+        transport_name: string | null
+        is_temporaer: number
+      }>()
     const entriesOhneGewicht: PackStatusEntryOhneGewicht[] = (ohneGewichtResult.results || []).map(
       (r) => ({
         id: r.id,
         was: r.was,
         anzahl: r.anzahl,
+        effective_anzahl: Number(r.effective_anzahl) || 0,
+        mitreisenden_typ: (r.mitreisenden_typ || 'pauschal') as 'pauschal' | 'alle' | 'ausgewaehlte',
+        personen_anzahl: Number(r.personen_anzahl) || 0,
         hauptkategorie: r.hauptkategorie,
         transport_id: r.transport_id ?? null,
-        transport_name: r.transport_name ?? null
+        transport_name: r.transport_name ?? null,
+        gegenstand_id: r.gegenstand_id ?? undefined,
+        is_temporaer: !!r.is_temporaer,
       })
     )
 
@@ -2292,6 +2463,156 @@ export async function getPackStatus(db: D1Database, vacationId: string): Promise
   } catch (error) {
     console.error('Error fetching pack status:', error)
     return null
+  }
+}
+
+export type PackEntryWeightScope = 'equipment' | 'packlist'
+
+/**
+ * Gewicht für einen Packlisteneintrag setzen (Ausrüstung oder urlaubsspezifischer Override).
+ */
+export async function setPackEntryWeight(
+  db: D1Database,
+  packEntryId: string,
+  weight: number,
+  scope: PackEntryWeightScope
+): Promise<boolean> {
+  if (weight <= 0 || !Number.isFinite(weight)) return false
+
+  try {
+    const temp = await isTemporaryPackingEintrag(db, packEntryId)
+    if (temp) {
+      const r = await db
+        .prepare(
+          'UPDATE packlisten_eintraege_temporaer SET einzelgewicht = ?, updated_at = datetime(\'now\') WHERE id = ?'
+        )
+        .bind(weight, packEntryId)
+        .run()
+      return r.meta.changes > 0
+    }
+
+    const entry = await db
+      .prepare('SELECT gegenstand_id FROM packlisten_eintraege WHERE id = ?')
+      .bind(packEntryId)
+      .first<{ gegenstand_id: string }>()
+    if (!entry?.gegenstand_id) return false
+
+    if (scope === 'equipment') {
+      await db
+        .prepare('UPDATE ausruestungsgegenstaende SET einzelgewicht = ? WHERE id = ?')
+        .bind(weight, entry.gegenstand_id)
+        .run()
+      await db
+        .prepare(
+          'UPDATE packlisten_eintraege SET einzelgewicht_override = NULL, updated_at = datetime(\'now\') WHERE id = ?'
+        )
+        .bind(packEntryId)
+        .run()
+      return true
+    }
+
+    const r = await db
+      .prepare(
+        'UPDATE packlisten_eintraege SET einzelgewicht_override = ?, updated_at = datetime(\'now\') WHERE id = ?'
+      )
+      .bind(weight, packEntryId)
+      .run()
+    return r.meta.changes > 0
+  } catch (error) {
+    console.error('Error setting pack entry weight:', error)
+    return false
+  }
+}
+
+/**
+ * Urlaubsspezifisches Gewicht zurücksetzen (Override löschen → Ausrüstungswert gilt wieder).
+ */
+export async function clearPackEntryWeightOverride(
+  db: D1Database,
+  packEntryId: string,
+  mitreisenderId?: string
+): Promise<boolean> {
+  try {
+    if (mitreisenderId) {
+      return clearPackEntryPersonWeightOverride(db, packEntryId, mitreisenderId)
+    }
+
+    const temp = await isTemporaryPackingEintrag(db, packEntryId)
+    if (temp) {
+      const r = await db
+        .prepare(
+          'UPDATE packlisten_eintraege_temporaer SET einzelgewicht = NULL, updated_at = datetime(\'now\') WHERE id = ?'
+        )
+        .bind(packEntryId)
+        .run()
+      return r.meta.changes > 0
+    }
+
+    const r = await db
+      .prepare(
+        'UPDATE packlisten_eintraege SET einzelgewicht_override = NULL, updated_at = datetime(\'now\') WHERE id = ?'
+      )
+      .bind(packEntryId)
+      .run()
+    return r.meta.changes > 0
+  } catch (error) {
+    console.error('Error clearing pack entry weight override:', error)
+    return false
+  }
+}
+
+/**
+ * Urlaubsspezifisches Gewicht nur für eine Person setzen.
+ */
+export async function setPackEntryPersonWeight(
+  db: D1Database,
+  packEntryId: string,
+  mitreisenderId: string,
+  weight: number
+): Promise<boolean> {
+  if (weight <= 0 || !Number.isFinite(weight)) return false
+
+  try {
+    const temp = await isTemporaryPackingEintrag(db, packEntryId)
+    const table = temp
+      ? 'packlisten_eintrag_mitreisende_temporaer'
+      : 'packlisten_eintrag_mitreisende'
+    const r = await db
+      .prepare(
+        `UPDATE ${table} SET einzelgewicht_override = ? WHERE packlisten_eintrag_id = ? AND mitreisender_id = ?`
+      )
+      .bind(weight, packEntryId, mitreisenderId)
+      .run()
+    return r.meta.changes > 0
+  } catch (error) {
+    console.error('Error setting pack entry person weight:', error)
+    return false
+  }
+}
+
+/**
+ * Personenspezifisches Gewicht zurücksetzen (Override löschen).
+ */
+export async function clearPackEntryPersonWeightOverride(
+  db: D1Database,
+  packEntryId: string,
+  mitreisenderId: string
+): Promise<boolean> {
+  try {
+    const temp = await isTemporaryPackingEintrag(db, packEntryId)
+    const table = temp
+      ? 'packlisten_eintrag_mitreisende_temporaer'
+      : 'packlisten_eintrag_mitreisende'
+    const r = await db
+      .prepare(
+        `UPDATE ${table} SET einzelgewicht_override = NULL WHERE packlisten_eintrag_id = ? AND mitreisender_id = ?`
+      )
+      .bind(packEntryId, mitreisenderId)
+      .run()
+    return r.meta.changes > 0
+  } catch (error) {
+    console.error('Error clearing pack entry person weight override:', error)
+    return false
   }
 }
 

@@ -32,6 +32,7 @@ import { ResponsiveModal } from '@/components/ui/responsive-modal'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { MarkAllConfirmationDialog } from '@/components/mark-all-confirmation-dialog'
 import { Input } from '@/components/ui/input'
+import { WeightInput } from '@/components/ui/weight-input'
 import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
@@ -42,7 +43,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { CategoryGroupedSelectField } from '@/components/category-select-grouped'
-import { cn, formatWeight, getInitials } from '@/lib/utils'
+import { cn, formatWeight, formatWeightForDisplay, getInitials, parseWeightInput } from '@/lib/utils'
 import { getMitreisenderAvatarStyle } from '@/lib/user-colors'
 import { useAuth } from '@/components/auth-provider'
 import { isAdminRole } from '@/lib/user-roles'
@@ -356,8 +357,10 @@ function HomeContent() {
     bemerkung: '',
     transportId: '',
     was: '',
-    kategorieId: ''
+    kategorieId: '',
+    gewicht: '',
   })
+  const [editingWeightSnapshot, setEditingWeightSnapshot] = useState<number | null>(null)
 
   const urlVacationId = useVacationSearchParam()
 
@@ -1992,9 +1995,202 @@ function HomeContent() {
       bemerkung: item.bemerkung || '',
       transportId: transportForForm,
       was: item.is_temporaer ? item.was : '',
-      kategorieId: item.is_temporaer && item.kategorie_id ? item.kategorie_id : ''
+      kategorieId: item.is_temporaer && item.kategorie_id ? item.kategorie_id : '',
+      gewicht: (() => {
+        if (forProfile && personEntry) {
+          if (
+            personEntry.einzelgewicht_override != null &&
+            personEntry.einzelgewicht_override > 0
+          ) {
+            return formatWeight(personEntry.einzelgewicht_override, 6)
+          }
+          return ''
+        }
+        if (item.is_temporaer) {
+          return item.einzelgewicht != null && item.einzelgewicht > 0
+            ? formatWeight(item.einzelgewicht, 6)
+            : ''
+        }
+        if (item.einzelgewicht_override != null && item.einzelgewicht_override > 0) {
+          return formatWeight(item.einzelgewicht_override, 6)
+        }
+        return ''
+      })(),
     })
+    setEditingWeightSnapshot(
+      forProfile && personEntry
+        ? personEntry.einzelgewicht_override != null && personEntry.einzelgewicht_override > 0
+          ? personEntry.einzelgewicht_override
+          : null
+        : item.is_temporaer
+          ? item.einzelgewicht != null && item.einzelgewicht > 0
+            ? item.einzelgewicht
+            : null
+          : item.einzelgewicht_override != null && item.einzelgewicht_override > 0
+            ? item.einzelgewicht_override
+            : null
+    )
     setShowEditItemDialog(true)
+  }
+
+  const refetchPackingItemsAfterWeightChange = async () => {
+    if (!selectedVacationId) return
+    const itemsRes = await fetch(`/api/packing-items?vacationId=${selectedVacationId}`, {
+      cache: 'no-store',
+    })
+    const itemsData = (await itemsRes.json()) as ApiResponse<PackingItem[]>
+    if (itemsData.success && itemsData.data) {
+      applyPackingItemsFromFetch(itemsData.data)
+    }
+  }
+
+  const handleResetPackEntryWeight = async () => {
+    if (!editingPackingItemId) return
+    const item = packingItems.find((p) => p.id === editingPackingItemId)
+    if (!item) return
+
+    const isPersonReset = !!editingForMitreisenderId
+    if (isPersonReset) {
+      const personEntry = item.mitreisende?.find(
+        (m) => m.mitreisender_id === editingForMitreisenderId
+      )
+      if (!personEntry?.einzelgewicht_override || personEntry.einzelgewicht_override <= 0) return
+    } else if (item.is_temporaer) {
+      if (!item.einzelgewicht || item.einzelgewicht <= 0) return
+    } else if (!item.einzelgewicht_override || item.einzelgewicht_override <= 0) {
+      return
+    }
+
+    setIsLoading(true)
+    try {
+      const res = await fetch('/api/pack-status/entry-weight', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          packEntryId: editingPackingItemId,
+          reset: true,
+          ...(isPersonReset ? { mitreisenderId: editingForMitreisenderId } : {}),
+        }),
+      })
+      const data = (await res.json()) as ApiResponse<unknown>
+      if (!data.success) {
+        alert('Fehler beim Zurücksetzen: ' + (data.error ?? 'Unbekannt'))
+        return
+      }
+      await refetchPackingItemsAfterWeightChange()
+      setPackingItemForm((prev) => ({ ...prev, gewicht: '' }))
+      setEditingWeightSnapshot(null)
+    } catch {
+      alert('Netzwerkfehler beim Zurücksetzen')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const savePackEntryPersonWeightIfChanged = async (
+    packEntryId: string,
+    item: PackingItem,
+    mitreisenderId: string,
+    parsedWeight: number | null
+  ): Promise<boolean> => {
+    const personEntry = item.mitreisende?.find((m) => m.mitreisender_id === mitreisenderId)
+    const inheritedWeight = item.is_temporaer
+      ? item.einzelgewicht != null && item.einzelgewicht > 0
+        ? item.einzelgewicht
+        : null
+      : item.einzelgewicht_override != null && item.einzelgewicht_override > 0
+        ? item.einzelgewicht_override
+        : item.ausruestung_einzelgewicht != null && item.ausruestung_einzelgewicht > 0
+          ? item.ausruestung_einzelgewicht
+          : null
+
+    if (parsedWeight == null || parsedWeight <= 0) return true
+
+    if (parsedWeight === editingWeightSnapshot) return true
+
+    if (inheritedWeight != null && parsedWeight === inheritedWeight) {
+      if (personEntry?.einzelgewicht_override == null) return true
+      const res = await fetch('/api/pack-status/entry-weight', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ packEntryId, reset: true, mitreisenderId }),
+      })
+      const data = (await res.json()) as ApiResponse<unknown>
+      if (!data.success) {
+        alert('Fehler beim Speichern des Gewichts: ' + (data.error ?? 'Unbekannt'))
+        return false
+      }
+      return true
+    }
+
+    if (parsedWeight === personEntry?.einzelgewicht_override) return true
+
+    const res = await fetch('/api/pack-status/entry-weight', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ packEntryId, weight: parsedWeight, mitreisenderId }),
+    })
+    const data = (await res.json()) as ApiResponse<unknown>
+    if (!data.success) {
+      alert('Fehler beim Speichern des Gewichts: ' + (data.error ?? 'Unbekannt'))
+      return false
+    }
+    return true
+  }
+
+  const savePackEntryWeightIfChanged = async (
+    packEntryId: string,
+    item: PackingItem,
+    parsedWeight: number | null
+  ): Promise<boolean> => {
+    if (parsedWeight == null || parsedWeight <= 0) return true
+
+    if (item.is_temporaer) {
+      if (parsedWeight === editingWeightSnapshot) return true
+      const res = await fetch('/api/pack-status/entry-weight', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ packEntryId, weight: parsedWeight, scope: 'packlist' }),
+      })
+      const data = (await res.json()) as ApiResponse<unknown>
+      if (!data.success) {
+        alert('Fehler beim Speichern des Gewichts: ' + (data.error ?? 'Unbekannt'))
+        return false
+      }
+      return true
+    }
+
+    const equipWeight = item.ausruestung_einzelgewicht
+    const matchesEquipment = equipWeight != null && equipWeight > 0 && parsedWeight === equipWeight
+
+    if (matchesEquipment) {
+      if (item.einzelgewicht_override == null) return true
+      const res = await fetch('/api/pack-status/entry-weight', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ packEntryId, reset: true }),
+      })
+      const data = (await res.json()) as ApiResponse<unknown>
+      if (!data.success) {
+        alert('Fehler beim Speichern des Gewichts: ' + (data.error ?? 'Unbekannt'))
+        return false
+      }
+      return true
+    }
+
+    if (parsedWeight === item.einzelgewicht_override) return true
+
+    const res = await fetch('/api/pack-status/entry-weight', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ packEntryId, weight: parsedWeight, scope: 'packlist' }),
+    })
+    const data = (await res.json()) as ApiResponse<unknown>
+    if (!data.success) {
+      alert('Fehler beim Speichern des Gewichts: ' + (data.error ?? 'Unbekannt'))
+      return false
+    }
+    return true
   }
 
   const handleUpdatePackingItem = async () => {
@@ -2006,7 +2202,24 @@ function HomeContent() {
 
     setIsLoading(true)
     try {
+      const parsedWeight = parseWeightInput(packingItemForm.gewicht)
+
+      if (!editingForMitreisenderId && editingPackingItemId && item) {
+        const weightOk = await savePackEntryWeightIfChanged(editingPackingItemId, item, parsedWeight)
+        if (!weightOk) return
+      }
+
       if (isProfileUpdate) {
+        if (editingForMitreisenderId && item.mitreisenden_typ !== 'pauschal') {
+          const weightOk = await savePackEntryPersonWeightIfChanged(
+            editingPackingItemId,
+            item,
+            editingForMitreisenderId,
+            parsedWeight
+          )
+          if (!weightOk) return
+        }
+
         const res = await fetch('/api/packing-items/set-mitreisender-anzahl', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
@@ -2092,6 +2305,7 @@ function HomeContent() {
         setShowEditItemDialog(false)
         setEditingPackingItemId(null)
         setEditingForMitreisenderId(null)
+        setEditingWeightSnapshot(null)
       }
     } catch (error) {
       console.error('Failed to update packing item:', error)
@@ -2674,7 +2888,14 @@ function HomeContent() {
           {/* Edit Item Dialog */}
           <ResponsiveModal
             open={showEditItemDialog}
-            onOpenChange={setShowEditItemDialog}
+            onOpenChange={(open) => {
+              setShowEditItemDialog(open)
+              if (!open) {
+                setEditingPackingItemId(null)
+                setEditingForMitreisenderId(null)
+                setEditingWeightSnapshot(null)
+              }
+            }}
             title={
               editingForMitreisenderId &&
               packingItems.find((p) => p.id === editingPackingItemId)?.is_temporaer
@@ -2690,8 +2911,8 @@ function HomeContent() {
                 : editingForMitreisenderId
                   ? 'Änderung gilt nur für diesen Mitreisenden'
                   : packingItems.find((p) => p.id === editingPackingItemId)?.is_temporaer
-                    ? 'Bezeichnung, Kategorie, Anzahl und Bemerkung anpassen'
-                    : 'Anzahl und Bemerkung anpassen'
+                    ? 'Bezeichnung, Kategorie, Anzahl, Gewicht und Bemerkung anpassen'
+                    : 'Anzahl, Gewicht (nur dieser Urlaub), Bemerkung und Transport anpassen'
             }
           >
             <div className="space-y-4">
@@ -2743,6 +2964,103 @@ function HomeContent() {
                   )
                 })()}
               </div>
+              {(() => {
+                const editItem = packingItems.find((p) => p.id === editingPackingItemId)
+                if (!editItem) return null
+                if (editingForMitreisenderId && editItem.mitreisenden_typ === 'pauschal') return null
+
+                const isProfileEdit = !!editingForMitreisenderId
+                const personEntry = isProfileEdit
+                  ? editItem.mitreisende?.find((m) => m.mitreisender_id === editingForMitreisenderId)
+                  : undefined
+                const equipWeight = editItem.ausruestung_einzelgewicht
+                const inheritedWeight = isProfileEdit
+                  ? editItem.is_temporaer
+                    ? editItem.einzelgewicht != null && editItem.einzelgewicht > 0
+                      ? editItem.einzelgewicht
+                      : null
+                    : editItem.einzelgewicht_override != null && editItem.einzelgewicht_override > 0
+                      ? editItem.einzelgewicht_override
+                      : equipWeight != null && equipWeight > 0
+                        ? equipWeight
+                        : null
+                  : equipWeight
+                const hasOverride = isProfileEdit
+                  ? personEntry?.einzelgewicht_override != null &&
+                    personEntry.einzelgewicht_override > 0
+                  : !editItem.is_temporaer &&
+                    editItem.einzelgewicht_override != null &&
+                    editItem.einzelgewicht_override > 0
+
+                return (
+                  <div className="space-y-3">
+                    <div>
+                      <Label htmlFor="edit-gewicht">
+                        {isProfileEdit
+                          ? 'Gewicht für diese Person (Stück)'
+                          : 'Gewicht für diesen Urlaub (Stück)'}
+                      </Label>
+                      <WeightInput
+                        id="edit-gewicht"
+                        value={packingItemForm.gewicht}
+                        onChange={(v) => setPackingItemForm({ ...packingItemForm, gewicht: v })}
+                        placeholder={
+                          inheritedWeight != null && inheritedWeight > 0
+                            ? formatWeightForDisplay(inheritedWeight, 6)
+                            : undefined
+                        }
+                        className="max-w-[180px]"
+                      />
+                      {isProfileEdit ? (
+                        <p className="text-xs text-muted-foreground mt-1.5">
+                          {editItem.is_temporaer
+                            ? 'Ohne eigenen Wert gilt das Gewicht der Packliste.'
+                            : inheritedWeight != null && inheritedWeight > 0
+                              ? `Ohne eigenen Wert gilt ${editItem.einzelgewicht_override != null && editItem.einzelgewicht_override > 0 ? 'der Urlaubswert' : 'der Ausrüstungswert'} (${formatWeight(inheritedWeight, 1)}).`
+                              : 'Gilt nur für diese Person.'}
+                        </p>
+                      ) : (
+                        <>
+                          {!editItem.is_temporaer && equipWeight != null && equipWeight > 0 && (
+                            <p className="text-xs text-muted-foreground mt-1.5">
+                              Ausrüstung: {formatWeight(equipWeight, 1)} — wird vorgeschlagen, wenn kein
+                              Urlaubswert gesetzt ist.
+                            </p>
+                          )}
+                          {editItem.is_temporaer && (
+                            <p className="text-xs text-muted-foreground mt-1.5">
+                              Gilt nur für diese Packliste.
+                            </p>
+                          )}
+                        </>
+                      )}
+                    </div>
+                    {hasOverride && (
+                      <div className="rounded-lg border border-amber-200 bg-amber-50/80 dark:bg-amber-950/20 px-3 py-2 space-y-2">
+                        <p className="text-xs text-amber-800 dark:text-amber-200">
+                          {isProfileEdit
+                            ? inheritedWeight != null && inheritedWeight > 0
+                              ? `Gewicht weicht vom Standard (${formatWeight(inheritedWeight, 1)}) ab.`
+                              : 'Für diese Person ist ein eigenes Gewicht gesetzt.'
+                            : equipWeight != null && equipWeight > 0
+                              ? `Gewicht weicht von der Ausrüstung (${formatWeight(equipWeight, 1)}) ab.`
+                              : 'Für diesen Urlaub ist ein eigenes Gewicht gesetzt.'}
+                        </p>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-8 text-xs"
+                          disabled={isLoading}
+                          onClick={handleResetPackEntryWeight}
+                        >
+                          {isProfileEdit ? 'Auf Standard zurücksetzen' : 'Auf Ausrüstungswert zurücksetzen'}
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                )
+              })()}
               {!editingForMitreisenderId && (
               <div>
                 <Label htmlFor="edit-bemerkung">Bemerkung (optional)</Label>
