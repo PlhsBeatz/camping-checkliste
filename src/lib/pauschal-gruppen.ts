@@ -380,9 +380,44 @@ export function areAllGruppenFullyPacked(
   return gruppen.every((g) => isGruppeFullyPacked(g, canConfirmVorgemerkt))
 }
 
+export interface PauschalHidePackedOptions {
+  multiGroupActive: boolean
+  pauschalGruppenFilter: PauschalGruppenFilter
+  filterGruppeId: string | null
+  canConfirmVorgemerkt: boolean
+  /** true: nur gepackt=true (Eltern), false: auch Vormerkung zählt */
+  finalOnly: boolean
+  allVacationGruppeIds?: string[]
+}
+
+/**
+ * Ob ein pauschaler Eintrag bei „Gepacktes ausblenden“ ausgeblendet werden soll.
+ * null = Filter „Nicht zugeordnet“ (nur Mehrhaushalt) – hier nicht anwenden.
+ */
+export function resolvePauschalHidePacked(
+  item: PackingItem,
+  options: PauschalHidePackedOptions
+): boolean | null {
+  if (item.mitreisenden_typ !== 'pauschal') return null
+  if (options.multiGroupActive && options.pauschalGruppenFilter === 'offen') return null
+
+  const filter = options.multiGroupActive ? options.pauschalGruppenFilter : 'eigene'
+  if (filter === 'eigene' && !options.filterGruppeId && options.multiGroupActive) {
+    return false
+  }
+
+  return isPauschalPackedForHideFilter(item, {
+    pauschalGruppenFilter: filter,
+    ownGruppeId: options.filterGruppeId,
+    canConfirmVorgemerkt: options.canConfirmVorgemerkt,
+    finalOnly: options.finalOnly,
+    allVacationGruppeIds: options.allVacationGruppeIds,
+  })
+}
+
 /**
  * Ob ein pauschaler Eintrag bei „Gepacktes ausblenden“ als erledigt gilt
- * (Mehrgruppen-Urlaub, abhängig vom Haushalts-Filter).
+ * (Ein- und Mehrhaushalt, abhängig vom Haushalts-Filter).
  */
 export function isPauschalPackedForHideFilter(
   item: PackingItem,

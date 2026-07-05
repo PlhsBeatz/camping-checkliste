@@ -57,7 +57,7 @@ import {
   isGruppeFullyPacked,
   areAllGruppenFullyPacked,
   getOwnGruppePackingState,
-  isPauschalPackedForHideFilter,
+  resolvePauschalHidePacked,
   resolveGruppeName,
   snapshotPauschalGruppenAssignment,
   getSelectedGruppeIdsFromAssignment,
@@ -157,22 +157,22 @@ function isItemFullyPackedForProfile(
   vacationMitreisende: Mitreisender[] = []
 ): boolean {
   if (item.mitreisenden_typ === 'pauschal') {
-    if (multiGroupActive && pauschalGruppenFilter && pauschalGruppenFilter !== 'offen') {
-      const filterGruppeId = resolveActiveGruppeIdForPacking(
-        selectedProfile,
-        vacationMitreisende,
-        ownGruppeId ?? null
-      );
-      return isPauschalPackedForHideFilter(item, {
-        pauschalGruppenFilter,
-        ownGruppeId: filterGruppeId,
-        canConfirmVorgemerkt,
-        finalOnly: canConfirmVorgemerkt,
-        allVacationGruppeIds,
-      })
-    }
-    if (canConfirmVorgemerkt) return item.gepackt
-    return item.gepackt || !!item.gepackt_vorgemerkt
+    const filterGruppeId = resolveActiveGruppeIdForPacking(
+      selectedProfile,
+      vacationMitreisende,
+      ownGruppeId ?? null
+    );
+    const hidePacked = resolvePauschalHidePacked(item, {
+      multiGroupActive: !!multiGroupActive,
+      pauschalGruppenFilter: pauschalGruppenFilter ?? 'eigene',
+      filterGruppeId: filterGruppeId,
+      canConfirmVorgemerkt,
+      finalOnly: canConfirmVorgemerkt,
+      allVacationGruppeIds,
+    });
+    if (hidePacked !== null) return hidePacked;
+    if (canConfirmVorgemerkt) return item.gepackt;
+    return item.gepackt || !!item.gepackt_vorgemerkt;
   }
   if (selectedProfile) {
     const m = item.mitreisende?.find(t => t.mitreisender_id === selectedProfile);
@@ -599,20 +599,18 @@ const PackingItem: React.FC<PackingItemProps> = ({
 
   const isFullyPacked = useMemo(() => {
     if (mitreisenden_typ === 'pauschal') {
-      if (multiGroupActive && pauschalGruppenFilter !== 'offen') {
-        if (selectedProfile) {
-          return activeGruppeEntry
-            ? isGruppeFullyPacked(activeGruppeEntry, !!canConfirmVorgemerkt)
-            : false
-        }
-        return isPauschalPackedForHideFilter(fullItem, {
-          pauschalGruppenFilter,
-          ownGruppeId: ownGruppeId ?? null,
-          canConfirmVorgemerkt: !!canConfirmVorgemerkt,
-          finalOnly: false,
-          allVacationGruppeIds,
-        })
-      }
+      const effectiveFilterGruppeId = selectedProfile
+        ? activeGruppeId ?? null
+        : ownGruppeId ?? null
+      const packed = resolvePauschalHidePacked(fullItem, {
+        multiGroupActive,
+        pauschalGruppenFilter,
+        filterGruppeId: effectiveFilterGruppeId,
+        canConfirmVorgemerkt: !!canConfirmVorgemerkt,
+        finalOnly: false,
+        allVacationGruppeIds,
+      })
+      if (packed !== null) return packed
       return effectivePacked(gepackt, gepackt_vorgemerkt)
     }
     const rows = selectedProfile === null ? mitreisendeRowsForUi : (mitreisende ?? []);
@@ -627,24 +625,21 @@ const PackingItem: React.FC<PackingItemProps> = ({
     multiGroupActive,
     pauschalGruppenFilter,
     ownGruppeId,
-    activeGruppeEntry,
+    activeGruppeId,
     fullItem,
     allVacationGruppeIds,
+    canConfirmVorgemerkt,
   ]);
 
   const pauschalHidePacked = useMemo(() => {
-    if (mitreisenden_typ !== 'pauschal' || !multiGroupActive || pauschalGruppenFilter === 'offen') {
-      return null
-    }
-    const effectiveOwnGruppeId = selectedProfile
+    if (mitreisenden_typ !== 'pauschal') return null
+    const effectiveFilterGruppeId = selectedProfile
       ? activeGruppeId ?? null
       : ownGruppeId ?? null
-    if (pauschalGruppenFilter === 'eigene' && !effectiveOwnGruppeId) {
-      return false
-    }
-    return isPauschalPackedForHideFilter(fullItem, {
+    return resolvePauschalHidePacked(fullItem, {
+      multiGroupActive,
       pauschalGruppenFilter,
-      ownGruppeId: effectiveOwnGruppeId,
+      filterGruppeId: effectiveFilterGruppeId,
       canConfirmVorgemerkt: !!canConfirmVorgemerkt,
       finalOnly: !!canConfirmVorgemerkt,
       allVacationGruppeIds,
@@ -664,16 +659,18 @@ const PackingItem: React.FC<PackingItemProps> = ({
   /** Nur final gepackt (gepackt=true), nicht vorgemerkt – für Eltern bei „Gepacktes ausblenden“ */
   const isFullyPackedFinal = useMemo(() => {
     if (mitreisenden_typ === 'pauschal') {
-      if (multiGroupActive && pauschalGruppenFilter !== 'offen') {
-        if (selectedProfile) return !!activeGruppeEntry?.gepackt
-        return isPauschalPackedForHideFilter(fullItem, {
-          pauschalGruppenFilter,
-          ownGruppeId: ownGruppeId ?? null,
-          canConfirmVorgemerkt: !!canConfirmVorgemerkt,
-          finalOnly: true,
-          allVacationGruppeIds,
-        })
-      }
+      const effectiveFilterGruppeId = selectedProfile
+        ? activeGruppeId ?? null
+        : ownGruppeId ?? null
+      const packed = resolvePauschalHidePacked(fullItem, {
+        multiGroupActive,
+        pauschalGruppenFilter,
+        filterGruppeId: effectiveFilterGruppeId,
+        canConfirmVorgemerkt: !!canConfirmVorgemerkt,
+        finalOnly: true,
+        allVacationGruppeIds,
+      })
+      if (packed !== null) return packed
       return gepackt
     }
     const rows = selectedProfile === null ? mitreisendeRowsForUi : (mitreisende ?? []);
@@ -687,9 +684,10 @@ const PackingItem: React.FC<PackingItemProps> = ({
     multiGroupActive,
     pauschalGruppenFilter,
     ownGruppeId,
-    activeGruppeEntry,
+    activeGruppeId,
     fullItem,
     canConfirmVorgemerkt,
+    allVacationGruppeIds,
   ]);
 
   const isScopeFullyPackedFinal = useMemo(() => {
@@ -832,6 +830,10 @@ const PackingItem: React.FC<PackingItemProps> = ({
   // Check if item should be hidden in individual profile view
   const shouldHideInProfileView = useMemo(() => {
     if (!hidePackedItems) return false;
+    if (mitreisenden_typ === 'pauschal') {
+      if (pauschalHidePacked !== null) return pauschalHidePacked
+      return canConfirmVorgemerkt ? isFullyPackedFinal : isFullyPacked
+    }
     if (pauschalHidePacked !== null) {
       return pauschalHidePacked
     }
@@ -845,6 +847,7 @@ const PackingItem: React.FC<PackingItemProps> = ({
     return canConfirmVorgemerkt ? isFullyPackedFinal : isFullyPacked;
   }, [
     hidePackedItems,
+    mitreisenden_typ,
     pauschalHidePacked,
     selectedProfile,
     selectedTravelerItem,
@@ -908,16 +911,18 @@ const PackingItem: React.FC<PackingItemProps> = ({
       const effectiveOwnGruppeId = selectedProfile
         ? activeGruppeId ?? null
         : ownGruppeId ?? null;
-      const willHide = isPauschalPackedForHideFilter(
-        { ...fullItem, gruppen: nextGruppen },
-        {
-          pauschalGruppenFilter,
-          ownGruppeId: effectiveOwnGruppeId,
-          canConfirmVorgemerkt: !!canConfirmVorgemerkt,
-          finalOnly: !!canConfirmVorgemerkt,
-          allVacationGruppeIds,
-        }
-      );
+      const willHide =
+        resolvePauschalHidePacked(
+          { ...fullItem, gruppen: nextGruppen },
+          {
+            multiGroupActive,
+            pauschalGruppenFilter,
+            filterGruppeId: effectiveOwnGruppeId,
+            canConfirmVorgemerkt: !!canConfirmVorgemerkt,
+            finalOnly: !!canConfirmVorgemerkt,
+            allVacationGruppeIds,
+          }
+        ) === true;
       if (willHide) {
         const gruppeName = resolveGruppeName(
           gruppeId,
