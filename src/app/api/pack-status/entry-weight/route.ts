@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getCloudflareContext } from '@opennextjs/cloudflare'
 import {
   getDB,
   getPackStatus,
@@ -12,6 +13,23 @@ import {
 } from '@/lib/db'
 import { requireAuth } from '@/lib/api-auth'
 import { canAccessVacation } from '@/lib/permissions'
+import { notifyPackingSyncChange } from '@/lib/packing-sync'
+import { notifyIntegrationChange } from '@/lib/integration-events'
+
+async function broadcastWeightChange(
+  vacationId: string,
+  options?: { equipmentChanged?: boolean }
+): Promise<void> {
+  try {
+    const cfEnv = (await getCloudflareContext({ async: true })).env as unknown as CloudflareEnv
+    await notifyPackingSyncChange(cfEnv, vacationId)
+    if (options?.equipmentChanged) {
+      await notifyIntegrationChange(cfEnv, vacationId)
+    }
+  } catch (err) {
+    console.warn('Weight change broadcast failed:', err)
+  }
+}
 
 export async function PATCH(request: NextRequest) {
   try {
@@ -50,6 +68,7 @@ export async function PATCH(request: NextRequest) {
         return NextResponse.json({ error: 'Gewicht konnte nicht zurückgesetzt werden' }, { status: 400 })
       }
       const data = await getPackStatus(db, vacationId)
+      await broadcastWeightChange(vacationId)
       return NextResponse.json({ success: true, data: data ?? undefined })
     }
 
@@ -62,6 +81,7 @@ export async function PATCH(request: NextRequest) {
         return NextResponse.json({ error: 'Gewicht konnte nicht gespeichert werden' }, { status: 400 })
       }
       const data = await getPackStatus(db, vacationId)
+      await broadcastWeightChange(vacationId)
       return NextResponse.json({ success: true, data: data ?? undefined })
     }
 
@@ -82,6 +102,7 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'Pack-Status nicht gefunden' }, { status: 404 })
     }
 
+    await broadcastWeightChange(vacationId, { equipmentChanged: scope === 'equipment' })
     return NextResponse.json({ success: true, data })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error)

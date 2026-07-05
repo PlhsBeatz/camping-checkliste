@@ -93,7 +93,9 @@ import {
   getSyncQueueCount,
   OUTBOX_SYNCED_EVENT_NAME,
   EQUIPMENT_CHANGED_EVENT_NAME,
+  enqueueSync,
 } from '@/lib/offline-sync'
+import { isOffline, showOfflineToast } from '@/lib/offline-toast'
 import {
   cachePackingItems,
   cacheVacations,
@@ -2044,6 +2046,105 @@ function HomeContent() {
     }
   }
 
+  type PackEntryWeightApiBody = {
+    packEntryId: string
+    weight?: number
+    scope?: 'equipment' | 'packlist'
+    reset?: boolean
+    mitreisenderId?: string
+  }
+
+  type OptimisticWeightChange = {
+    reset?: boolean
+    weight?: number
+    mitreisenderId?: string | null
+    scope?: 'equipment' | 'packlist'
+  }
+
+  const applyOptimisticPackEntryWeight = useCallback(
+    (packEntryId: string, change: OptimisticWeightChange) => {
+      setPackingItems((prev) => {
+        const next = prev.map((item) => {
+          if (item.id !== packEntryId) return item
+          if (change.mitreisenderId) {
+            return {
+              ...item,
+              mitreisende: (item.mitreisende ?? []).map((m) =>
+                m.mitreisender_id === change.mitreisenderId
+                  ? {
+                      ...m,
+                      einzelgewicht_override: change.reset
+                        ? null
+                        : (change.weight ?? m.einzelgewicht_override),
+                    }
+                  : m
+              ),
+            }
+          }
+          if (change.scope === 'equipment' && change.weight != null) {
+            return {
+              ...item,
+              ausruestung_einzelgewicht: change.weight,
+              einzelgewicht_override: null,
+              einzelgewicht: change.weight,
+            }
+          }
+          if (item.is_temporaer) {
+            return {
+              ...item,
+              einzelgewicht: change.reset ? undefined : (change.weight ?? item.einzelgewicht),
+            }
+          }
+          return {
+            ...item,
+            einzelgewicht_override: change.reset ? null : (change.weight ?? item.einzelgewicht_override),
+          }
+        })
+        if (selectedVacationId) {
+          setPackingItemsMemory(selectedVacationId, next)
+          void cachePackingItems(selectedVacationId, next)
+        }
+        return next
+      })
+    },
+    [selectedVacationId]
+  )
+
+  const patchPackEntryWeight = useCallback(
+    async (
+      body: PackEntryWeightApiBody,
+      optimistic?: OptimisticWeightChange
+    ): Promise<{ ok: boolean; offline?: boolean; error?: string }> => {
+      try {
+        const res = await fetch('/api/pack-status/entry-weight', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        })
+        const data = (await res.json()) as ApiResponse<unknown>
+        if (!data.success) {
+          return { ok: false, error: data.error ?? 'Unbekannt' }
+        }
+        return { ok: true }
+      } catch {
+        if (isOffline() && selectedVacationId) {
+          await enqueueSync('pack-status-entry-weight', 'patch', body.packEntryId, body, {
+            vacationId: selectedVacationId,
+          })
+          showOfflineToast({
+            description: 'Gewicht wird synchronisiert, sobald Sie online sind.',
+          })
+          if (optimistic) {
+            applyOptimisticPackEntryWeight(body.packEntryId, optimistic)
+          }
+          return { ok: true, offline: true }
+        }
+        return { ok: false, error: 'Netzwerkfehler' }
+      }
+    },
+    [selectedVacationId, applyOptimisticPackEntryWeight]
+  )
+
   const handleResetPackEntryWeight = async () => {
     if (!editingPackingItemId) return
     const item = packingItems.find((p) => p.id === editingPackingItemId)
@@ -2063,25 +2164,26 @@ function HomeContent() {
 
     setIsLoading(true)
     try {
-      const res = await fetch('/api/pack-status/entry-weight', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      const result = await patchPackEntryWeight(
+        {
           packEntryId: editingPackingItemId,
           reset: true,
-          ...(isPersonReset ? { mitreisenderId: editingForMitreisenderId } : {}),
-        }),
-      })
-      const data = (await res.json()) as ApiResponse<unknown>
-      if (!data.success) {
-        alert('Fehler beim Zurücksetzen: ' + (data.error ?? 'Unbekannt'))
+          ...(isPersonReset ? { mitreisenderId: editingForMitreisenderId! } : {}),
+        },
+        {
+          reset: true,
+          mitreisenderId: isPersonReset ? editingForMitreisenderId : null,
+        }
+      )
+      if (!result.ok) {
+        alert('Fehler beim Zurücksetzen: ' + (result.error ?? 'Unbekannt'))
         return
       }
-      await refetchPackingItemsAfterWeightChange()
+      if (!result.offline) {
+        await refetchPackingItemsAfterWeightChange()
+      }
       setPackingItemForm((prev) => ({ ...prev, gewicht: '' }))
       setEditingWeightSnapshot(null)
-    } catch {
-      alert('Netzwerkfehler beim Zurücksetzen')
     } finally {
       setIsLoading(false)
     }
@@ -2092,7 +2194,7 @@ function HomeContent() {
     item: PackingItem,
     mitreisenderId: string,
     parsedWeight: number | null
-  ): Promise<boolean> => {
+  ): Promise<'ok' | 'offline' | false> => {
     const personEntry = item.mitreisende?.find((m) => m.mitreisender_id === mitreisenderId)
     const inheritedWeight = item.is_temporaer
       ? item.einzelgewicht != null && item.einzelgewicht > 0
@@ -2104,93 +2206,80 @@ function HomeContent() {
           ? item.ausruestung_einzelgewicht
           : null
 
-    if (parsedWeight == null || parsedWeight <= 0) return true
+    if (parsedWeight == null || parsedWeight <= 0) return 'ok'
 
-    if (parsedWeight === editingWeightSnapshot) return true
+    if (parsedWeight === editingWeightSnapshot) return 'ok'
 
     if (inheritedWeight != null && parsedWeight === inheritedWeight) {
-      if (personEntry?.einzelgewicht_override == null) return true
-      const res = await fetch('/api/pack-status/entry-weight', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ packEntryId, reset: true, mitreisenderId }),
-      })
-      const data = (await res.json()) as ApiResponse<unknown>
-      if (!data.success) {
-        alert('Fehler beim Speichern des Gewichts: ' + (data.error ?? 'Unbekannt'))
+      if (personEntry?.einzelgewicht_override == null) return 'ok'
+      const result = await patchPackEntryWeight(
+        { packEntryId, reset: true, mitreisenderId },
+        { reset: true, mitreisenderId }
+      )
+      if (!result.ok) {
+        alert('Fehler beim Speichern des Gewichts: ' + (result.error ?? 'Unbekannt'))
         return false
       }
-      return true
+      return result.offline ? 'offline' : 'ok'
     }
 
-    if (parsedWeight === personEntry?.einzelgewicht_override) return true
+    if (parsedWeight === personEntry?.einzelgewicht_override) return 'ok'
 
-    const res = await fetch('/api/pack-status/entry-weight', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ packEntryId, weight: parsedWeight, mitreisenderId }),
-    })
-    const data = (await res.json()) as ApiResponse<unknown>
-    if (!data.success) {
-      alert('Fehler beim Speichern des Gewichts: ' + (data.error ?? 'Unbekannt'))
+    const result = await patchPackEntryWeight(
+      { packEntryId, weight: parsedWeight, mitreisenderId },
+      { weight: parsedWeight, mitreisenderId }
+    )
+    if (!result.ok) {
+      alert('Fehler beim Speichern des Gewichts: ' + (result.error ?? 'Unbekannt'))
       return false
     }
-    return true
+    return result.offline ? 'offline' : 'ok'
   }
 
   const savePackEntryWeightIfChanged = async (
     packEntryId: string,
     item: PackingItem,
     parsedWeight: number | null
-  ): Promise<boolean> => {
-    if (parsedWeight == null || parsedWeight <= 0) return true
+  ): Promise<'ok' | 'offline' | false> => {
+    if (parsedWeight == null || parsedWeight <= 0) return 'ok'
 
     if (item.is_temporaer) {
-      if (parsedWeight === editingWeightSnapshot) return true
-      const res = await fetch('/api/pack-status/entry-weight', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ packEntryId, weight: parsedWeight, scope: 'packlist' }),
-      })
-      const data = (await res.json()) as ApiResponse<unknown>
-      if (!data.success) {
-        alert('Fehler beim Speichern des Gewichts: ' + (data.error ?? 'Unbekannt'))
+      if (parsedWeight === editingWeightSnapshot) return 'ok'
+      const result = await patchPackEntryWeight(
+        { packEntryId, weight: parsedWeight, scope: 'packlist' },
+        { weight: parsedWeight }
+      )
+      if (!result.ok) {
+        alert('Fehler beim Speichern des Gewichts: ' + (result.error ?? 'Unbekannt'))
         return false
       }
-      return true
+      return result.offline ? 'offline' : 'ok'
     }
 
     const equipWeight = item.ausruestung_einzelgewicht
     const matchesEquipment = equipWeight != null && equipWeight > 0 && parsedWeight === equipWeight
 
     if (matchesEquipment) {
-      if (item.einzelgewicht_override == null) return true
-      const res = await fetch('/api/pack-status/entry-weight', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ packEntryId, reset: true }),
-      })
-      const data = (await res.json()) as ApiResponse<unknown>
-      if (!data.success) {
-        alert('Fehler beim Speichern des Gewichts: ' + (data.error ?? 'Unbekannt'))
+      if (item.einzelgewicht_override == null) return 'ok'
+      const result = await patchPackEntryWeight({ packEntryId, reset: true }, { reset: true })
+      if (!result.ok) {
+        alert('Fehler beim Speichern des Gewichts: ' + (result.error ?? 'Unbekannt'))
         return false
       }
-      return true
+      return result.offline ? 'offline' : 'ok'
     }
 
-    if (parsedWeight === item.einzelgewicht_override) return true
+    if (parsedWeight === item.einzelgewicht_override) return 'ok'
 
-    const res = await fetch('/api/pack-status/entry-weight', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ packEntryId, weight: parsedWeight, scope: 'packlist' }),
-    })
-    const data = (await res.json()) as ApiResponse<unknown>
-    if (!data.success) {
-      alert('Fehler beim Speichern des Gewichts: ' + (data.error ?? 'Unbekannt'))
+    const result = await patchPackEntryWeight(
+      { packEntryId, weight: parsedWeight, scope: 'packlist' },
+      { weight: parsedWeight }
+    )
+    if (!result.ok) {
+      alert('Fehler beim Speichern des Gewichts: ' + (result.error ?? 'Unbekannt'))
       return false
     }
-    return true
+    return result.offline ? 'offline' : 'ok'
   }
 
   const handleUpdatePackingItem = async () => {
@@ -2203,21 +2292,36 @@ function HomeContent() {
     setIsLoading(true)
     try {
       const parsedWeight = parseWeightInput(packingItemForm.gewicht)
+      let weightSavedOffline = false
 
       if (!editingForMitreisenderId && editingPackingItemId && item) {
-        const weightOk = await savePackEntryWeightIfChanged(editingPackingItemId, item, parsedWeight)
-        if (!weightOk) return
+        const weightResult = await savePackEntryWeightIfChanged(
+          editingPackingItemId,
+          item,
+          parsedWeight
+        )
+        if (weightResult === false) return
+        if (weightResult === 'offline') weightSavedOffline = true
       }
 
       if (isProfileUpdate) {
         if (editingForMitreisenderId && item.mitreisenden_typ !== 'pauschal') {
-          const weightOk = await savePackEntryPersonWeightIfChanged(
+          const weightResult = await savePackEntryPersonWeightIfChanged(
             editingPackingItemId,
             item,
             editingForMitreisenderId,
             parsedWeight
           )
-          if (!weightOk) return
+          if (weightResult === false) return
+          if (weightResult === 'offline') weightSavedOffline = true
+        }
+
+        if (weightSavedOffline && isOffline()) {
+          setShowEditItemDialog(false)
+          setEditingPackingItemId(null)
+          setEditingForMitreisenderId(null)
+          setEditingWeightSnapshot(null)
+          return
         }
 
         const res = await fetch('/api/packing-items/set-mitreisender-anzahl', {
@@ -2262,6 +2366,14 @@ function HomeContent() {
           }
         }
       } else {
+        if (weightSavedOffline && isOffline()) {
+          setShowEditItemDialog(false)
+          setEditingPackingItemId(null)
+          setEditingForMitreisenderId(null)
+          setEditingWeightSnapshot(null)
+          return
+        }
+
         const editPayload: Record<string, unknown> = {
           id: editingPackingItemId,
           anzahl: parseInt(packingItemForm.anzahl) || 1,

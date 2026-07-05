@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, Suspense } from 'react'
+import { useState, useEffect, useCallback, useRef, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -20,12 +20,16 @@ import type {
 import { getCachedVacations, getCachedPackStatus, enqueueSync } from '@/lib/offline-sync'
 import { cacheVacations, cachePackStatus } from '@/lib/offline-db'
 import { useReconnectRefetch } from '@/hooks/use-reconnect-refetch'
+import { usePackingSync } from '@/hooks/use-packing-sync'
 import { showOfflineToast, showOfflineErrorToast, isOffline } from '@/lib/offline-toast'
 import { PullToRefreshWrapper } from '@/components/pull-to-refresh-wrapper'
 import { WeightInput } from '@/components/ui/weight-input'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
+
+/** Nach externem WS-Update: zu häufige Refetches vermeiden. */
+const WS_FETCH_COOLDOWN_MS = 6000
 
 const findNextVacation = (vacations: Vacation[]): Vacation | null => {
   if (vacations.length === 0) return null
@@ -54,6 +58,7 @@ function PackStatusContent() {
   const [packStatus, setPackStatus] = useState<PackStatusData | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const lastPackStatusFetchAtRef = useRef(0)
 
   // Sidebar offen: Body-Scroll sperren
   useEffect(() => {
@@ -126,6 +131,7 @@ function PackStatusContent() {
       const data = (await res.json()) as ApiResponse<PackStatusData>
       if (data.success && data.data) {
         setPackStatus(data.data)
+        lastPackStatusFetchAtRef.current = Date.now()
         // In IndexedDB spiegeln, damit der Status auch offline verfügbar ist.
         try {
           await cachePackStatus(selectedVacationId, data.data)
@@ -158,6 +164,35 @@ function PackStatusContent() {
       setIsLoading(false)
     }
   }, [selectedVacationId])
+
+  /** Leises Nachladen bei Echtzeit-Updates (ohne Lade-Spinner). */
+  const refreshPackStatusFromServer = useCallback(async () => {
+    if (!selectedVacationId) return
+    if (typeof navigator !== 'undefined' && !navigator.onLine) return
+    try {
+      const res = await fetch(`/api/pack-status?vacationId=${selectedVacationId}`)
+      const data = (await res.json()) as ApiResponse<PackStatusData>
+      if (data.success && data.data) {
+        setPackStatus(data.data)
+        lastPackStatusFetchAtRef.current = Date.now()
+        try {
+          await cachePackStatus(selectedVacationId, data.data)
+        } catch (cacheErr) {
+          console.warn('cachePackStatus failed:', cacheErr)
+        }
+      }
+    } catch {
+      // Aktuelle Anzeige beibehalten
+    }
+  }, [selectedVacationId])
+
+  const handlePackingSyncUpdate = useCallback(() => {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) return
+    if (Date.now() - lastPackStatusFetchAtRef.current < WS_FETCH_COOLDOWN_MS) return
+    void refreshPackStatusFromServer()
+  }, [refreshPackStatusFromServer])
+
+  usePackingSync(selectedVacationId, handlePackingSyncUpdate)
 
   useEffect(() => {
     fetchPackStatus()
