@@ -486,7 +486,7 @@ function MissingWeightEntryRow({
 }) {
   const [expanded, setExpanded] = useState(false)
   const [weightStr, setWeightStr] = useState('')
-  const [scope, setScope] = useState<PackEntryWeightScope>('equipment')
+  const [scope, setScope] = useState<PackEntryWeightScope>('packlist')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -550,13 +550,7 @@ function MissingWeightEntryRow({
         <span className="font-medium">{entry.was}</span>
         <span className="flex items-center gap-2 shrink-0 ml-2">
           <span className="text-muted-foreground tabular-nums text-right whitespace-nowrap">
-            × {effectiveQty}
-            {isPersonBound && entry.personen_anzahl != null && entry.personen_anzahl > 0 && (
-              <span className="text-[11px]">
-                {' · '}
-                {entry.personen_anzahl} {entry.personen_anzahl === 1 ? 'Person' : 'Personen'}
-              </span>
-            )}
+            {effectiveQty}x
           </span>
           {expanded ? (
             <ChevronUp className="h-4 w-4 text-muted-foreground" />
@@ -591,19 +585,19 @@ function MissingWeightEntryRow({
               className="space-y-3"
             >
               <div className="flex items-start gap-2">
-                <RadioGroupItem value="equipment" id={`scope-equipment-${entry.id}`} className="mt-0.5" />
-                <Label htmlFor={`scope-equipment-${entry.id}`} className="font-normal cursor-pointer">
-                  <span className="font-medium block">In Ausrüstung speichern</span>
-                  <span className="text-xs text-muted-foreground">Gilt für alle Urlaube</span>
-                </Label>
-              </div>
-              <div className="flex items-start gap-2">
                 <RadioGroupItem value="packlist" id={`scope-packlist-${entry.id}`} className="mt-0.5" />
                 <Label htmlFor={`scope-packlist-${entry.id}`} className="font-normal cursor-pointer">
                   <span className="font-medium block">Nur für diesen Urlaub</span>
                   <span className="text-xs text-muted-foreground">
                     Z. B. wenn die Menge diesmal anders ist
                   </span>
+                </Label>
+              </div>
+              <div className="flex items-start gap-2">
+                <RadioGroupItem value="equipment" id={`scope-equipment-${entry.id}`} className="mt-0.5" />
+                <Label htmlFor={`scope-equipment-${entry.id}`} className="font-normal cursor-pointer">
+                  <span className="font-medium block">In Ausrüstung speichern</span>
+                  <span className="text-xs text-muted-foreground">Gilt für alle Urlaube</span>
                 </Label>
               </div>
             </RadioGroup>
@@ -685,7 +679,7 @@ function EntriesOhneGewichtList({
         return (
           <div key={transportName}>
             <h3 className="text-sm font-semibold text-brand-heading mb-3">{transportName}</h3>
-            <div className="space-y-4 pl-2 border-l-2 border-border">
+            <div className="space-y-4">
               {Object.entries(byHauptkategorie).map(([kategorie, items]) => (
                 <div key={`${transportName}-${kategorie}`}>
                   <h4 className="text-xs font-medium text-muted-foreground mb-1.5">{kategorie}</h4>
