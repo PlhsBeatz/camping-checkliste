@@ -234,8 +234,8 @@ export function applyBulkPatchToItem(
   if ('transport_id' in patch) {
     next.transport_id = patch.transport_id ?? null
     next.transport_name = patch.transport_id
-      ? transportNameById.get(patch.transport_id) ?? null
-      : null
+      ? transportNameById.get(patch.transport_id) ?? undefined
+      : undefined
   }
   if ('bemerkung' in patch) next.bemerkung = patch.bemerkung ?? null
   if ('anzahl' in patch && patch.anzahl !== undefined) next.anzahl = patch.anzahl

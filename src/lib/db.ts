@@ -3416,6 +3416,199 @@ export async function setMitreisenderAnzahl(
 }
 
 /**
+ * Packlisteneintrag nach Löschen-Rückgängig vollständig wiederherstellen (gleiche ID inkl. Haushaltszuordnung).
+ */
+export async function restorePackingItemFromSnapshot(
+  db: D1Database,
+  packlisteId: string,
+  snapshot: {
+    id: string
+    is_temporaer?: boolean
+    gegenstand_id?: string
+    was?: string
+    kategorie_id?: string
+    anzahl: number
+    gepackt?: boolean
+    gepackt_vorgemerkt?: boolean
+    gepackt_vorgemerkt_durch?: string | null
+    bemerkung?: string | null
+    transport_id?: string | null
+    einzelgewicht?: number
+    einzelgewicht_override?: number | null
+    pauschal_gruppen_modus?: PauschalGruppenModus
+    verantwortliche_gruppe_id?: string | null
+    mitreisende?: PackingItemMitreisender[]
+    gruppen?: PackingItemGruppe[]
+  }
+): Promise<boolean> {
+  try {
+    const existing = await db
+      .prepare(
+        `SELECT 1 AS ok FROM packlisten_eintraege WHERE id = ?
+         UNION ALL
+         SELECT 1 FROM packlisten_eintraege_temporaer WHERE id = ? LIMIT 1`
+      )
+      .bind(snapshot.id, snapshot.id)
+      .first()
+    if (existing) return true
+
+    const modus = snapshot.pauschal_gruppen_modus ?? 'einmal'
+    const gepackt = snapshot.gepackt ? 1 : 0
+    const gepacktVorgemerkt = snapshot.gepackt_vorgemerkt ? 1 : 0
+
+    if (snapshot.is_temporaer) {
+      const was = (snapshot.was ?? '').trim()
+      const kategorieId = snapshot.kategorie_id?.trim()
+      if (!was || !kategorieId) return false
+
+      await db
+        .prepare(
+          `INSERT INTO packlisten_eintraege_temporaer
+           (id, packliste_id, was, kategorie_id, anzahl, gepackt, gepackt_vorgemerkt, gepackt_vorgemerkt_durch,
+            bemerkung, transport_id, einzelgewicht, pauschal_gruppen_modus, verantwortliche_gruppe_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        )
+        .bind(
+          snapshot.id,
+          packlisteId,
+          was,
+          kategorieId,
+          snapshot.anzahl,
+          gepackt,
+          gepacktVorgemerkt,
+          snapshot.gepackt_vorgemerkt_durch ?? null,
+          snapshot.bemerkung ?? null,
+          snapshot.transport_id ?? null,
+          snapshot.einzelgewicht ?? null,
+          modus,
+          snapshot.verantwortliche_gruppe_id ?? null
+        )
+        .run()
+    } else {
+      if (!snapshot.gegenstand_id) return false
+
+      await db
+        .prepare(
+          `INSERT INTO packlisten_eintraege
+           (id, packliste_id, gegenstand_id, anzahl, gepackt, gepackt_vorgemerkt, gepackt_vorgemerkt_durch,
+            bemerkung, transport_id, einzelgewicht_override, pauschal_gruppen_modus, verantwortliche_gruppe_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        )
+        .bind(
+          snapshot.id,
+          packlisteId,
+          snapshot.gegenstand_id,
+          snapshot.anzahl,
+          gepackt,
+          gepacktVorgemerkt,
+          snapshot.gepackt_vorgemerkt_durch ?? null,
+          snapshot.bemerkung ?? null,
+          snapshot.transport_id ?? null,
+          snapshot.einzelgewicht_override ?? null,
+          modus,
+          snapshot.verantwortliche_gruppe_id ?? null
+        )
+        .run()
+    }
+
+    for (const m of snapshot.mitreisende ?? []) {
+      await restoreMitreisenderOnPackingItem(db, snapshot.id, m)
+    }
+
+    if (
+      (modus === 'pro_gruppe' || modus === 'ausgewaehlte_gruppen') &&
+      (snapshot.gruppen?.length ?? 0) > 0
+    ) {
+      const pegTable = snapshot.is_temporaer
+        ? 'packlisten_eintrag_gruppen_temporaer'
+        : 'packlisten_eintrag_gruppen'
+      for (const g of snapshot.gruppen ?? []) {
+        await db
+          .prepare(
+            `INSERT OR IGNORE INTO ${pegTable}
+             (id, packlisten_eintrag_id, gruppe_id, gepackt, gepackt_vorgemerkt, gepackt_vorgemerkt_durch, anzahl)
+             VALUES (?, ?, ?, ?, ?, ?, ?)`
+          )
+          .bind(
+            g.id || crypto.randomUUID(),
+            snapshot.id,
+            g.gruppe_id,
+            g.gepackt ? 1 : 0,
+            g.gepackt_vorgemerkt ? 1 : 0,
+            g.gepackt_vorgemerkt_durch ?? null,
+            g.anzahl ?? 1
+          )
+          .run()
+      }
+    }
+
+    return true
+  } catch (error) {
+    console.error('Error restoring packing item from snapshot:', error)
+    return false
+  }
+}
+
+/**
+ * Mitreisenden-Zuordnung nach Löschen wiederherstellen (Rückgängig).
+ */
+export async function restoreMitreisenderOnPackingItem(
+  db: D1Database,
+  packingItemId: string,
+  mitreisender: {
+    mitreisender_id: string
+    gepackt?: boolean
+    gepackt_vorgemerkt?: boolean
+    anzahl?: number | null
+    transport_id?: string | null
+    einzelgewicht_override?: number | null
+  }
+): Promise<boolean> {
+  try {
+    const isTemp = await isTemporaryPackingEintrag(db, packingItemId)
+    if (isTemp) {
+      await db
+        .prepare(
+          `INSERT OR IGNORE INTO packlisten_eintrag_mitreisende_temporaer
+           (packlisten_eintrag_id, mitreisender_id, gepackt, gepackt_vorgemerkt, anzahl, transport_id, einzelgewicht_override)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`
+        )
+        .bind(
+          packingItemId,
+          mitreisender.mitreisender_id,
+          mitreisender.gepackt ? 1 : 0,
+          mitreisender.gepackt_vorgemerkt ? 1 : 0,
+          mitreisender.anzahl ?? null,
+          mitreisender.transport_id ?? null,
+          mitreisender.einzelgewicht_override ?? null
+        )
+        .run()
+    } else {
+      await db
+        .prepare(
+          `INSERT OR IGNORE INTO packlisten_eintrag_mitreisende
+           (packlisten_eintrag_id, mitreisender_id, gepackt, gepackt_vorgemerkt, anzahl, transport_id, einzelgewicht_override)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`
+        )
+        .bind(
+          packingItemId,
+          mitreisender.mitreisender_id,
+          mitreisender.gepackt ? 1 : 0,
+          mitreisender.gepackt_vorgemerkt ? 1 : 0,
+          mitreisender.anzahl ?? null,
+          mitreisender.transport_id ?? null,
+          mitreisender.einzelgewicht_override ?? null
+        )
+        .run()
+    }
+    return true
+  } catch (error) {
+    console.error('Error restoring mitreisender on packing item:', error)
+    return false
+  }
+}
+
+/**
  * Mitreisenden von einem Packlisten-Eintrag entfernen.
  * Wenn es der letzte Mitreisende ist, wird der gesamte Eintrag gelöscht.
  */

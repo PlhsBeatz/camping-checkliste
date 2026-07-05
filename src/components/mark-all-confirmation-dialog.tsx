@@ -21,7 +21,10 @@ interface MarkAllConfirmationDialogProps {
   isOpen: boolean
   onClose: () => void
   onConfirm: (selectedTravelerIds: string[]) => void
-  _itemName: string
+  /** Name des betroffenen Eintrags (wird in Titel/Beschreibung angezeigt) */
+  itemName?: string
+  /** @deprecated Alias für itemName – nur Abwärtskompatibilität */
+  _itemName?: string
   /** Betroffene Mitreisende – für Mark-Modus die ungepackten, für Unmark die gepackten */
   travelers: TravelerForMarkAll[]
   isUnmarkMode?: boolean
@@ -35,10 +38,16 @@ interface MarkAllConfirmationDialogProps {
   editMode?: boolean
 }
 
+function formatItemLabel(name: string): string {
+  const trimmed = name.trim()
+  return trimmed ? `„${trimmed}"` : ''
+}
+
 export function MarkAllConfirmationDialog({
   isOpen,
   onClose,
   onConfirm,
+  itemName,
   _itemName,
   travelers,
   isUnmarkMode = false,
@@ -49,6 +58,8 @@ export function MarkAllConfirmationDialog({
   editMode = false,
 }: MarkAllConfirmationDialogProps) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const resolvedItemName = (itemName ?? _itemName ?? '').trim()
+  const itemLabel = formatItemLabel(resolvedItemName)
 
   useEffect(() => {
     if (isOpen && travelers.length > 0) {
@@ -90,12 +101,20 @@ export function MarkAllConfirmationDialog({
   const description =
     descriptionOverride ??
     (editMode
-      ? 'Wählen Sie die Mitreisenden, für die die Änderungen gelten sollen.'
+      ? itemLabel
+        ? `${itemLabel}: Wählen Sie die Mitreisenden, für die die Änderungen gelten sollen.`
+        : 'Wählen Sie die Mitreisenden, für die die Änderungen gelten sollen.'
       : deleteMode
-        ? 'Wählen Sie die Mitreisenden, für die dieser Eintrag von der Packliste entfernt werden soll.'
+        ? itemLabel
+          ? `${itemLabel} – wählen Sie die Mitreisenden, für die dieser Eintrag von der Packliste entfernt werden soll.`
+          : 'Wählen Sie die Mitreisenden, für die dieser Eintrag von der Packliste entfernt werden soll.'
         : isUnmarkMode
-          ? 'Wählen Sie die Mitreisenden, für die dieser Gegenstand zurückgesetzt werden soll.'
-          : 'Wählen Sie die Mitreisenden, für die dieser Gegenstand als "gepackt" markiert werden soll.')
+          ? itemLabel
+            ? `${itemLabel}: Wählen Sie die Mitreisenden, für die dieser Gegenstand zurückgesetzt werden soll.`
+            : 'Wählen Sie die Mitreisenden, für die dieser Gegenstand zurückgesetzt werden soll.'
+          : itemLabel
+            ? `${itemLabel}: Wählen Sie die Mitreisenden, für die dieser Gegenstand als „gepackt" markiert werden soll.`
+            : 'Wählen Sie die Mitreisenden, für die dieser Gegenstand als „gepackt" markiert werden soll.')
   const confirmLabel =
     confirmLabelOverride ??
     (editMode
@@ -129,6 +148,9 @@ export function MarkAllConfirmationDialog({
             <CheckCheck className="h-6 w-6 text-primary" />
           )}
         </div>
+        {itemLabel && (
+          <p className="text-center text-base font-semibold text-foreground px-2">{itemLabel}</p>
+        )}
         {hasPackedOrVorgemerkt && (
           <p className="text-sm text-muted-foreground bg-muted/50 rounded-lg px-3 py-2">
             Bei einigen Personen ist der Eintrag bereits als gepackt oder vorgemerkt markiert. Diese sind standardmäßig nicht ausgewählt.

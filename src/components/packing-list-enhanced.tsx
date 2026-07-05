@@ -16,7 +16,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { MoreVertical, Edit2, Trash2, RotateCcw, CheckCheck, Check, Clock, ChevronRight } from "lucide-react";
-import { useMemo, useState, useEffect, useRef, useCallback } from "react";
+import { useMemo, useState, useEffect, useRef, useCallback, type MutableRefObject } from "react";
 import { PackingItem as DBPackingItem, type Mitreisender, type TransportVehicle } from "@/lib/db";
 import { MarkAllConfirmationDialog, type TravelerForMarkAll } from "./mark-all-confirmation-dialog";
 import { UndoToast } from "./undo-toast";
@@ -28,6 +28,7 @@ import {
   USER_COLORS,
 } from "@/lib/user-colors";
 import { sortMitreisendeNachRolleUndName, sortMitreisendenZeilenNachStammdaten } from "@/lib/mitreisenden-sort";
+import type { ShowPackListUndoToast } from '@/lib/packing-delete-undo';
 import { buildPackProfileGroups } from '@/lib/pack-profile-groups';
 import { PackProfileGroupOverviewList } from '@/components/pack-profile-person-groups';
 import { BulkSelectionBar } from '@/components/bulk-selection-bar';
@@ -1504,6 +1505,7 @@ const PackingItem: React.FC<PackingItemProps> = ({
           onClose={() => setShowMarkAllDialog(false)}
           onConfirm={confirmMarkAll}
           _itemName={was}
+          itemName={was}
           travelers={travelersForMarkAll}
           isUnmarkMode={isFullyPackedFinal}
         />
@@ -1556,13 +1558,18 @@ interface PackingListProps {
   onSetPauschalGruppen?: (packingItemId: string, payload: PauschalGruppenAssignmentPayload) => void;
   onBulkSetPauschalGruppen?: (packingItemIds: string[], payload: PauschalGruppenAssignmentPayload) => void;
   onBulkUpdatePackingItems?: (packingItemIds: string[], patch: BulkPackingPatch, selectedPersonIds?: string[]) => Promise<boolean>;
-  onBulkDeletePackingItems?: (packingItemIds: string[], selectedPersonIds?: string[]) => Promise<boolean>;
+  onBulkDeletePackingItems?: (
+    packingItemIds: string[],
+    selectedPersonIds?: string[]
+  ) => Promise<boolean | { ok: boolean; undo?: { message: string; action: () => void } }>;
   beforeBulkEdit?: (itemIds: string[], proceed: () => void) => void;
   beforeBulkDelete?: (itemIds: string[], proceed: () => void) => void;
   beforeBulkAssign?: (itemIds: string[], proceed: () => void) => void;
   onBulkSelectionModeChange?: (active: boolean) => void;
   onToggleGruppe?: (packingItemId: string, gruppeId: string, currentStatus: boolean) => void;
   isAdmin?: boolean;
+  /** Parent kann Undo-Toast auslösen (z. B. nach Löschen in page.tsx) */
+  showUndoToastRef?: MutableRefObject<ShowPackListUndoToast | null>;
 }
 
 export function PackingList({
@@ -1606,6 +1613,7 @@ export function PackingList({
   onBulkSelectionModeChange,
   onToggleGruppe,
   isAdmin = false,
+  showUndoToastRef,
 }: PackingListProps) {
   const [assignmentItemId, setAssignmentItemId] = useState<string | null>(null);
   const [bulkSelectionMode, setBulkSelectionMode] = useState(false);
@@ -1629,6 +1637,22 @@ export function PackingList({
     message?: string;
     action: () => void;
   } | null>(null);
+
+  useEffect(() => {
+    if (!showUndoToastRef) return;
+    showUndoToastRef.current = (opts) => {
+      setUndoToast({
+        visible: true,
+        itemName: opts.itemName ?? '',
+        message: opts.message,
+        action: opts.action,
+      });
+    };
+    return () => {
+      showUndoToastRef.current = null;
+    };
+  }, [showUndoToastRef]);
+
   const [internalActiveMainCategory, setInternalActiveMainCategory] = useState('');
   const activeMainCategory =
     activeMainCategoryProp !== undefined ? activeMainCategoryProp : internalActiveMainCategory;
@@ -2790,7 +2814,13 @@ export function PackingList({
           isOpen
           onClose={() => setBulkPersonsDialog(null)}
           onConfirm={handleBulkPersonsConfirm}
-          _itemName=""
+          itemName={
+            bulkPersonsDialog.mode === 'delete' && bulkSelectedItems.length > 0
+              ? bulkSelectedItems.length === 1
+                ? bulkSelectedItems[0]!.was
+                : `${bulkSelectedItems.length} Einträge`
+              : ''
+          }
           travelers={bulkPersonsDialog.travelers}
           deleteMode={bulkPersonsDialog.mode === 'delete'}
           editMode={bulkPersonsDialog.mode === 'edit'}
@@ -2829,11 +2859,20 @@ export function PackingList({
             const ids = [...bulkSelectedIds];
             setBulkDeleteLoading(true);
             try {
-              const ok = await onBulkDeletePackingItems(
+              const result = await onBulkDeletePackingItems(
                 ids,
                 bulkSelectedPersonIds ?? undefined
               );
+              const ok = result === true || (typeof result === 'object' && result.ok);
               if (ok) {
+                if (typeof result === 'object' && result.undo) {
+                  setUndoToast({
+                    visible: true,
+                    itemName: '',
+                    message: result.undo.message,
+                    action: result.undo.action,
+                  });
+                }
                 exitBulkSelection();
               }
             } finally {

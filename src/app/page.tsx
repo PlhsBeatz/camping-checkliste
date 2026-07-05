@@ -78,6 +78,16 @@ import {
   applyBulkPatchToItem,
   resolveBulkPersonMitreisenderIds,
 } from '@/lib/bulk-packing-profile'
+import {
+  applyPersonDeleteToSnapshot,
+  buildPackingItemRestorePayload,
+  clonePackingItemSnapshot,
+  formatBulkDeleteUndoMessage,
+  formatDeleteUndoMessage,
+  mergeMitreisendeBack,
+  restoreItemsInList,
+  type ShowPackListUndoToast,
+} from '@/lib/packing-delete-undo'
 import { usePackingSync } from '@/hooks/use-packing-sync'
 import { useOptimisticMutation } from '@/hooks/use-optimistic-mutation'
 import {
@@ -222,12 +232,15 @@ function HomeContent() {
     id: string
     forMitreisenderId?: string | null
     isProfileDelete: boolean
+    itemName: string
   } | null>(null)
   /** Im Packprofil „Alle“: personenbezogener Eintrag – Auswahl „für wen löschen?“ (wie beim Abhaken) */
   const [deletePersonsConfirm, setDeletePersonsConfirm] = useState<{
     packingItemId: string
+    itemName: string
     travelers: Array<{ id: string; name: string; gepackt?: boolean; gepackt_vorgemerkt?: boolean }>
   } | null>(null)
+  const packListUndoRef = useRef<ShowPackListUndoToast | null>(null)
   const [listDisplayMode, setListDisplayMode] = useState<'alles' | 'packliste'>(
     defaultPacklistUi.listDisplayMode
   )
@@ -480,6 +493,139 @@ function HomeContent() {
       console.error('Failed to refetch packing items:', error)
     }
   }, [selectedVacationId, applyPackingItemsFromFetch])
+
+  const persistPackingItemsUpdate = useCallback(
+    (updater: (prev: PackingItem[]) => PackingItem[]) => {
+      setPackingItems((prev) => {
+        const next = updater(prev)
+        if (selectedVacationId) {
+          setPackingItemsMemory(selectedVacationId, next)
+          void cachePackingItems(selectedVacationId, next)
+        }
+        return next
+      })
+    },
+    [selectedVacationId]
+  )
+
+  const restoreWholePackingItemOnServer = useCallback(
+    async (snapshot: PackingItem) => {
+      if (!selectedVacationId) return
+      await fetch('/api/packing-items/restore', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          vacationId: selectedVacationId,
+          item: buildPackingItemRestorePayload(snapshot),
+        }),
+      })
+    },
+    [selectedVacationId]
+  )
+
+  const restoreMitreisenderOnServer = useCallback(
+    async (packingItemId: string, row: NonNullable<PackingItem['mitreisende']>[number]) => {
+      await fetch('/api/packing-items/restore-mitreisender', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ packingItemId, mitreisender: row }),
+      })
+    },
+    []
+  )
+
+  const showDeleteUndoToast = useCallback((message: string, action: () => void) => {
+    packListUndoRef.current?.({ message, action })
+  }, [])
+
+  const buildDeleteUndoAction = useCallback(
+    (
+      snapshot: PackingItem,
+      opts: {
+        afterDelete: PackingItem | null
+        removedRows: NonNullable<PackingItem['mitreisende']>
+        packingItemId: string
+      }
+    ) => {
+      return () => {
+        if (!opts.afterDelete) {
+          persistPackingItemsUpdate((prev) => restoreItemsInList(prev, [snapshot]))
+          void restoreWholePackingItemOnServer(snapshot).then(() => refetchPackingItemsFromServer())
+          return
+        }
+
+        persistPackingItemsUpdate((prev) =>
+          prev.map((p) =>
+            p.id === opts.packingItemId
+              ? mergeMitreisendeBack(p, opts.removedRows)
+              : p
+          )
+        )
+        void Promise.all(
+          opts.removedRows.map((row) => restoreMitreisenderOnServer(opts.packingItemId, row))
+        ).then(() => refetchPackingItemsFromServer())
+      }
+    },
+    [
+      persistPackingItemsUpdate,
+      restoreWholePackingItemOnServer,
+      restoreMitreisenderOnServer,
+      refetchPackingItemsFromServer,
+    ]
+  )
+
+  const executeBulkDeleteUndo = useCallback(
+    (
+      wholeItems: PackingItem[],
+      personRemovals: Array<{
+        itemId: string
+        snapshot: PackingItem
+        removedRows: NonNullable<PackingItem['mitreisende']>
+      }>
+    ) => {
+      persistPackingItemsUpdate((prev) => {
+        let next = prev
+        for (const snapshot of wholeItems) {
+          next = restoreItemsInList(next, [snapshot])
+        }
+        for (const entry of personRemovals) {
+          next = next.map((p) =>
+            p.id === entry.itemId ? mergeMitreisendeBack(p, entry.removedRows) : p
+          )
+          if (!next.some((p) => p.id === entry.itemId)) {
+            next = restoreItemsInList(next, [entry.snapshot])
+          }
+        }
+        return next
+      })
+
+      void (async () => {
+        for (const snapshot of wholeItems) {
+          await restoreWholePackingItemOnServer(snapshot)
+        }
+        for (const entry of personRemovals) {
+          const afterDelete = applyBulkDeleteToItem(
+            entry.snapshot,
+            entry.removedRows.map((row) => row.mitreisender_id)
+          )
+          if (!afterDelete) {
+            await restoreWholePackingItemOnServer(entry.snapshot)
+          } else {
+            for (const row of entry.removedRows) {
+              await restoreMitreisenderOnServer(entry.itemId, row)
+            }
+          }
+        }
+        await refetchPackingItemsFromServer()
+      })()
+    },
+    [
+      persistPackingItemsUpdate,
+      restoreWholePackingItemOnServer,
+      restoreMitreisenderOnServer,
+      refetchPackingItemsFromServer,
+    ]
+  )
 
   type BulkMutateOutcome = 'ok' | 'queued' | 'failed'
 
@@ -1621,7 +1767,10 @@ function HomeContent() {
   )
 
   const handleBulkDeletePackingItems = useCallback(
-    async (packingItemIds: string[], selectedPersonIds?: string[]): Promise<boolean> => {
+    async (
+      packingItemIds: string[],
+      selectedPersonIds?: string[]
+    ): Promise<boolean | { ok: boolean; undo?: { message: string; action: () => void } }> => {
       if (!selectedVacationId || packingItemIds.length === 0) return false
       pendingMutationsRef.current += 1
       const itemsById = new Map(packingItemsRef.current.map((p) => [p.id, p]))
@@ -1632,10 +1781,17 @@ function HomeContent() {
 
       const wholeDeleteIds: string[] = []
       const personRemovals: Array<{ packingItemId: string; mitreisenderId: string }> = []
+      const wholeItemSnapshots: PackingItem[] = []
+      const personRemovalSnapshots: Array<{
+        itemId: string
+        snapshot: PackingItem
+        removedRows: NonNullable<PackingItem['mitreisende']>
+      }> = []
 
       for (const id of packingItemIds) {
         const item = itemsById.get(id)
         if (!item) continue
+        const snapshot = clonePackingItemSnapshot(item)
         const personIds = resolveBulkPersonMitreisenderIds(
           item,
           selectedPackProfile,
@@ -1643,15 +1799,20 @@ function HomeContent() {
           personIdSet
         )
         if (personIds) {
+          const { removedRows } = applyPersonDeleteToSnapshot(snapshot, personIds)
+          if (removedRows.length > 0) {
+            personRemovalSnapshots.push({ itemId: id, snapshot, removedRows })
+          }
           for (const mitreisenderId of personIds) {
             personRemovals.push({ packingItemId: id, mitreisenderId })
           }
         } else {
           wholeDeleteIds.push(id)
+          wholeItemSnapshots.push(snapshot)
         }
       }
 
-      setPackingItems((prev) =>
+      persistPackingItemsUpdate((prev) =>
         prev.flatMap((p) => {
           if (!idSet.has(p.id)) return [p]
           const personIds = resolveBulkPersonMitreisenderIds(
@@ -1705,10 +1866,17 @@ function HomeContent() {
           }
         }
 
-        if (!anyQueued) {
+        if (anyQueued) {
           await refetchPackingItemsFromServer()
         }
-        return true
+
+        return {
+          ok: true,
+          undo: {
+            message: formatBulkDeleteUndoMessage(packingItemIds.length),
+            action: () => executeBulkDeleteUndo(wholeItemSnapshots, personRemovalSnapshots),
+          },
+        }
       } catch (error) {
         console.error('Failed to bulk delete packing items:', error)
         await refetchPackingItemsFromServer()
@@ -1724,6 +1892,8 @@ function HomeContent() {
       packProfileScopeIdSet,
       runBulkApiMutate,
       refetchPackingItemsFromServer,
+      persistPackingItemsUpdate,
+      executeBulkDeleteUndo,
     ]
   )
 
@@ -2431,7 +2601,12 @@ function HomeContent() {
   const handleDeletePackingItem = (id: string, forMitreisenderId?: string | null) => {
     const item = packingItems.find((p) => p.id === id)
     if (!item) {
-      setDeletePackingItemConfirm({ id, forMitreisenderId: null, isProfileDelete: false })
+      setDeletePackingItemConfirm({
+        id,
+        forMitreisenderId: null,
+        isProfileDelete: false,
+        itemName: '',
+      })
       return
     }
 
@@ -2456,6 +2631,7 @@ function HomeContent() {
       )
       setDeletePersonsConfirm({
         packingItemId: id,
+        itemName: item.was,
         travelers: sortMitreisendenZeilenNachStammdaten(
           scopedRows.map((m) => ({
             id: m.mitreisender_id,
@@ -2482,16 +2658,30 @@ function HomeContent() {
       id,
       forMitreisenderId: isProfileDelete ? forMitreisenderId : null,
       isProfileDelete,
+      itemName: item.was,
     })
   }
 
   const executeDeleteForPersons = async (selectedTravelerIds: string[]) => {
     if (!deletePersonsConfirm || selectedTravelerIds.length === 0) return
-    const { packingItemId } = deletePersonsConfirm
+    const { packingItemId, itemName } = deletePersonsConfirm
     setDeletePersonsConfirm(null)
+
+    const item = packingItemsRef.current.find((p) => p.id === packingItemId)
+    if (!item) return
+
+    const snapshot = clonePackingItemSnapshot(item)
+    const { afterDelete, removedRows } = applyPersonDeleteToSnapshot(snapshot, selectedTravelerIds)
+    const displayName = itemName || item.was
+
+    persistPackingItemsUpdate((prev) =>
+      prev.flatMap((p) => (p.id !== packingItemId ? [p] : afterDelete ? [afterDelete] : []))
+    )
+
     pendingMutationsRef.current += 1
     setIsLoading(true)
     try {
+      let failed = false
       for (const mitreisenderId of selectedTravelerIds) {
         const res = await fetch(
           `/api/packing-items/remove-mitreisender?packingItemId=${packingItemId}&mitreisenderId=${mitreisenderId}`,
@@ -2499,21 +2689,24 @@ function HomeContent() {
         )
         const data = (await res.json()) as ApiResponse<boolean>
         if (!data.success) {
+          failed = true
           alert('Fehler beim Entfernen: ' + (data.error ?? 'Unbekannt'))
         }
       }
-      if (selectedVacationId) {
-        const itemsRes = await fetch(`/api/packing-items?vacationId=${selectedVacationId}`, {
-          cache: 'no-store',
-        })
-        const itemsData = (await itemsRes.json()) as ApiResponse<PackingItem[]>
-        if (itemsData.success && itemsData.data && itemsData.data.length > 0) {
-          applyPackingItemsFromFetch(itemsData.data)
-        }
+      if (!failed) {
+        showDeleteUndoToast(
+          formatDeleteUndoMessage(displayName),
+          buildDeleteUndoAction(snapshot, {
+            afterDelete,
+            removedRows,
+            packingItemId,
+          })
+        )
       }
     } catch (error) {
       console.error('Failed to remove from packing item:', error)
       alert('Fehler beim Entfernen')
+      await refetchPackingItemsFromServer()
     } finally {
       pendingMutationsRef.current -= 1
       setIsLoading(false)
@@ -2522,12 +2715,25 @@ function HomeContent() {
 
   const executeDeletePackingItem = async () => {
     if (!deletePackingItemConfirm) return
-    const { id, forMitreisenderId, isProfileDelete } = deletePackingItemConfirm
+    const { id, forMitreisenderId, isProfileDelete, itemName } = deletePackingItemConfirm
+    setDeletePackingItemConfirm(null)
+
+    const item = packingItemsRef.current.find((p) => p.id === id)
+    if (!item) return
+
+    const snapshot = clonePackingItemSnapshot(item)
+    const displayName = itemName || item.was
 
     pendingMutationsRef.current += 1
     setIsLoading(true)
     try {
-      if (isProfileDelete) {
+      if (isProfileDelete && forMitreisenderId) {
+        const { afterDelete, removedRows } = applyPersonDeleteToSnapshot(snapshot, [forMitreisenderId])
+
+        persistPackingItemsUpdate((prev) =>
+          prev.flatMap((p) => (p.id !== id ? [p] : afterDelete ? [afterDelete] : []))
+        )
+
         const res = await fetch(
           `/api/packing-items/remove-mitreisender?packingItemId=${id}&mitreisenderId=${forMitreisenderId}`,
           { method: 'DELETE' }
@@ -2535,27 +2741,42 @@ function HomeContent() {
         const data = (await res.json()) as ApiResponse<boolean>
         if (!data.success) {
           alert('Fehler beim Entfernen: ' + (data.error ?? 'Unbekannt'))
+          await refetchPackingItemsFromServer()
+          return
         }
+
+        showDeleteUndoToast(
+          formatDeleteUndoMessage(displayName),
+          buildDeleteUndoAction(snapshot, {
+            afterDelete,
+            removedRows,
+            packingItemId: id,
+          })
+        )
       } else {
+        persistPackingItemsUpdate((prev) => prev.filter((p) => p.id !== id))
+
         const res = await fetch(`/api/packing-items?id=${id}`, { method: 'DELETE' })
         const data = (await res.json()) as ApiResponse<boolean>
         if (!data.success) {
           alert('Fehler beim Löschen: ' + (data.error ?? 'Unbekannt'))
+          await refetchPackingItemsFromServer()
+          return
         }
-      }
 
-      if (selectedVacationId) {
-        const itemsRes = await fetch(`/api/packing-items?vacationId=${selectedVacationId}`, {
-          cache: 'no-store',
-        })
-        const itemsData = (await itemsRes.json()) as ApiResponse<PackingItem[]>
-        if (itemsData.success && itemsData.data && itemsData.data.length > 0) {
-          applyPackingItemsFromFetch(itemsData.data)
-        }
+        showDeleteUndoToast(
+          formatDeleteUndoMessage(displayName),
+          buildDeleteUndoAction(snapshot, {
+            afterDelete: null,
+            removedRows: [],
+            packingItemId: id,
+          })
+        )
       }
     } catch (error) {
       console.error('Failed to delete packing item:', error)
       alert('Fehler beim Löschen')
+      await refetchPackingItemsFromServer()
     } finally {
       pendingMutationsRef.current -= 1
       setIsLoading(false)
@@ -2951,6 +3172,7 @@ function HomeContent() {
                   onBulkSelectionModeChange={setBulkSelectionActive}
                   onToggleGruppe={canEditPauschalEntries ? handleToggleGruppe : undefined}
                   isAdmin={!!user && isAdminRole(user.role)}
+                  showUndoToastRef={packListUndoRef}
               />
 
               <AdminFremdeGruppeWarningDialog
@@ -3225,9 +3447,13 @@ function HomeContent() {
             onOpenChange={(open) => !open && setDeletePackingItemConfirm(null)}
             title={deletePackingItemConfirm?.isProfileDelete ? 'Eintrag entfernen' : 'Eintrag löschen'}
             description={
-              deletePackingItemConfirm?.isProfileDelete
-                ? 'Diesen Eintrag nur für diesen Mitreisenden entfernen?'
-                : 'Möchten Sie diesen Eintrag wirklich aus der Packliste entfernen?'
+              deletePackingItemConfirm?.itemName
+                ? deletePackingItemConfirm.isProfileDelete
+                  ? `„${deletePackingItemConfirm.itemName}" nur für diesen Mitreisenden von der Packliste entfernen?`
+                  : `Möchten Sie „${deletePackingItemConfirm.itemName}" wirklich aus der Packliste entfernen?`
+                : deletePackingItemConfirm?.isProfileDelete
+                  ? 'Diesen Eintrag nur für diesen Mitreisenden entfernen?'
+                  : 'Möchten Sie diesen Eintrag wirklich aus der Packliste entfernen?'
             }
             confirmLabel={deletePackingItemConfirm?.isProfileDelete ? 'Entfernen' : 'Löschen'}
             onConfirm={executeDeletePackingItem}
@@ -3239,7 +3465,7 @@ function HomeContent() {
             isOpen={!!deletePersonsConfirm}
             onClose={() => setDeletePersonsConfirm(null)}
             onConfirm={executeDeleteForPersons}
-            _itemName=""
+            itemName={deletePersonsConfirm?.itemName ?? ''}
             travelers={deletePersonsConfirm?.travelers ?? []}
             deleteMode
           />
