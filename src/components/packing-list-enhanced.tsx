@@ -206,6 +206,8 @@ interface PackingItemProps {
   onToggle: (id: string) => void;
   /** Explizites Setzen des Gepackt-Status (für Undo bei Pauschal – vermeidet Stale-Closure) */
   onSetPacked?: (id: string, gepackt: boolean) => void;
+  /** Explizites Setzen des Gepackt-Status pro Mitreisender (für Undo) */
+  onSetMitreisenderPacked?: (packingItemId: string, mitreisenderId: string, gepackt: boolean) => void;
   onToggleMitreisender: (packingItemId: string, mitreisenderId: string, currentStatus: boolean) => void;
   onEdit: (item: DBPackingItem) => void;
   /** id + optional forMitreisenderId (nur diesen Mitreisenden entfernen) */
@@ -236,6 +238,8 @@ interface PackingItemProps {
   vacationGroups?: ReturnType<typeof buildPackProfileGroups>;
   onOpenAssignment?: (item: DBPackingItem) => void;
   onToggleGruppe?: (packingItemId: string, gruppeId: string, currentStatus: boolean) => void;
+  /** Explizites Setzen des Gepackt-Status pro Haushalt/Gruppe (für Undo) */
+  onSetGruppePacked?: (packingItemId: string, gruppeId: string, gepackt: boolean) => void;
   pauschalGruppenFilter?: PauschalGruppenFilter;
   bulkSelectionMode?: boolean;
   bulkSelected?: boolean;
@@ -258,6 +262,7 @@ const PackingItem: React.FC<PackingItemProps> = ({
   mitreisende,
   onToggle,
   onSetPacked,
+  onSetMitreisenderPacked,
   onToggleMitreisender,
   onEdit,
   onDelete,
@@ -283,6 +288,7 @@ const PackingItem: React.FC<PackingItemProps> = ({
   vacationGroups,
   onOpenAssignment,
   onToggleGruppe,
+  onSetGruppePacked,
   pauschalGruppenFilter = 'alle',
   bulkSelectionMode = false,
   bulkSelected = false,
@@ -954,7 +960,11 @@ const PackingItem: React.FC<PackingItemProps> = ({
           toggleGruppeEntry.gruppe_name
         );
         const undoAction = () => {
-          onToggleGruppe(itemId, gruppeId, true);
+          if (onSetGruppePacked) {
+            onSetGruppePacked(itemId, gruppeId, false);
+          } else {
+            onToggleGruppe?.(itemId, gruppeId, true);
+          }
         };
         onShowToast(was, gruppeName, undoAction);
       }
@@ -1015,7 +1025,11 @@ const PackingItem: React.FC<PackingItemProps> = ({
       onToggleMitreisender(itemId, profileId, currentStatus);
       if (hidePackedItems && wasUnpacked && onShowToast) {
         const undoAction = () => {
-          onToggleMitreisender(itemId, profileId, true)
+          if (onSetMitreisenderPacked) {
+            onSetMitreisenderPacked(itemId, profileId, false);
+          } else {
+            onToggleMitreisender(itemId, profileId, true);
+          }
         }
         onShowToast(was, selectedTravelerItem?.mitreisender_name, undoAction)
       }
@@ -1556,6 +1570,8 @@ interface PackingListProps {
   items: DBPackingItem[];
   onToggle: (id: string) => void;
   onSetPacked?: (id: string, gepackt: boolean) => void;
+  onSetMitreisenderPacked?: (packingItemId: string, mitreisenderId: string, gepackt: boolean) => void;
+  onSetGruppePacked?: (packingItemId: string, gruppeId: string, gepackt: boolean) => void;
   onToggleMitreisender: (packingItemId: string, mitreisenderId: string, currentStatus: boolean) => void;
   onToggleMultipleMitreisende: (packingItemId: string, updates: Array<{ mitreisenderId: string; newStatus: boolean }>) => void;
   onEdit: (item: DBPackingItem) => void;
@@ -1614,6 +1630,8 @@ export function PackingList({
   items,
   onToggle,
   onSetPacked,
+  onSetMitreisenderPacked,
+  onSetGruppePacked,
   onToggleMitreisender,
   onToggleMultipleMitreisende,
   onEdit,
@@ -2705,6 +2723,7 @@ export function PackingList({
                               mitreisende={item.mitreisende}
                               onToggle={onToggle}
                               onSetPacked={onSetPacked}
+                              onSetMitreisenderPacked={onSetMitreisenderPacked}
                               onToggleMitreisender={onToggleMitreisender}
                               onEdit={onEdit}
                               onDelete={onDelete}
@@ -2733,6 +2752,7 @@ export function PackingList({
                                   : undefined
                               }
                               onToggleGruppe={onToggleGruppe}
+                              onSetGruppePacked={onSetGruppePacked}
                               pauschalGruppenFilter={pauschalGruppenFilter}
                               bulkSelectionMode={bulkSelectionMode}
                               bulkSelected={bulkSelectedIds.has(item.id)}

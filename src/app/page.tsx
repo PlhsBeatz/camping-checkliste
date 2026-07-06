@@ -105,6 +105,12 @@ import {
   EQUIPMENT_CHANGED_EVENT_NAME,
   enqueueSync,
 } from '@/lib/offline-sync'
+import {
+  enqueuePackingMutation,
+  packingGruppeMutationKey,
+  packingItemMutationKey,
+  packingMitreisenderMutationKey,
+} from '@/lib/packing-mutation-queue'
 import { isOffline, showOfflineToast } from '@/lib/offline-toast'
 import {
   cachePackingItems,
@@ -1353,30 +1359,39 @@ function HomeContent() {
     }
   }
 
-  const handleSetPacked = async (itemId: string, gepackt: boolean) => {
+  const executeSetItemPacked = async (itemId: string, gepackt: boolean) => {
     pendingMutationsRef.current += 1
-    const prevItems = packingItems
-    // Optimistic update: bei Kind mit vorgemerkt → gepackt_vorgemerkt setzen; bei Admin Abhaken/Vormerkung entfernen
+    const prevItems = packingItemsRef.current
     setPackingItems(prev =>
       prev.map(item =>
         item.id === itemId
           ? gepacktRequiresParentApproval
-            ? { ...item, gepackt_vorgemerkt: gepackt, gepackt_vorgemerkt_durch: gepackt ? user?.mitreisender_id ?? undefined : undefined }
-            : { ...item, gepackt, ...(gepackt === false && { gepackt_vorgemerkt: false, gepackt_vorgemerkt_durch: undefined }) }
+            ? {
+                ...item,
+                gepackt_vorgemerkt: gepackt,
+                gepackt_vorgemerkt_durch: gepackt ? user?.mitreisender_id ?? undefined : undefined,
+              }
+            : {
+                ...item,
+                gepackt,
+                ...(gepackt === false && { gepackt_vorgemerkt: false, gepackt_vorgemerkt_durch: undefined }),
+              }
           : item
       )
     )
     try {
-      const result = await mutate({
-        table: 'packing-items',
-        action: 'put',
-        key: itemId,
-        payload: { gepackt },
+      await enqueuePackingMutation(packingItemMutationKey(itemId), async () => {
+        const result = await mutate({
+          table: 'packing-items',
+          action: 'put',
+          key: itemId,
+          payload: { gepackt },
+        })
+        if (!result.ok && !result.queued) {
+          setPackingItems(prevItems)
+          alert(result.error ?? 'Fehler beim Aktualisieren')
+        }
       })
-      if (!result.ok && !result.queued) {
-        setPackingItems(prevItems)
-        alert(result.error ?? 'Fehler beim Aktualisieren')
-      }
     } catch (error) {
       console.error('Failed to set packed:', error)
       setPackingItems(prevItems)
@@ -1386,43 +1401,18 @@ function HomeContent() {
     }
   }
 
+  const handleSetPacked = (itemId: string, gepackt: boolean) => {
+    void executeSetItemPacked(itemId, gepackt)
+  }
+
   const executeTogglePacked = async (itemId: string) => {
-    pendingMutationsRef.current += 1
-    const item = packingItems.find(p => p.id === itemId)
+    const item = packingItemsRef.current.find((p) => p.id === itemId)
     const isPacked = item
-      ? (gepacktRequiresParentApproval ? !!(item.gepackt || item.gepackt_vorgemerkt) : !!item.gepackt)
+      ? gepacktRequiresParentApproval
+        ? !!(item.gepackt || item.gepackt_vorgemerkt)
+        : !!item.gepackt
       : false
-    const newPackedState = !isPacked
-    const prevItems = packingItems
-
-    setPackingItems(prev =>
-      prev.map(p =>
-        p.id === itemId
-          ? gepacktRequiresParentApproval
-            ? { ...p, gepackt_vorgemerkt: newPackedState, gepackt_vorgemerkt_durch: newPackedState ? user?.mitreisender_id ?? undefined : undefined }
-            : { ...p, gepackt: newPackedState }
-          : p
-      )
-    )
-
-    try {
-      const result = await mutate({
-        table: 'packing-items',
-        action: 'put',
-        key: itemId,
-        payload: { gepackt: newPackedState },
-      })
-      if (!result.ok && !result.queued) {
-        setPackingItems(prevItems)
-        alert(result.error ?? 'Fehler beim Aktualisieren')
-      }
-    } catch (error) {
-      console.error('Failed to toggle packed:', error)
-      setPackingItems(prevItems)
-      alert('Fehler beim Aktualisieren')
-    } finally {
-      pendingMutationsRef.current -= 1
-    }
+    await executeSetItemPacked(itemId, !isPacked)
   }
 
   const handleTogglePacked = (itemId: string) => {
@@ -1465,12 +1455,12 @@ function HomeContent() {
             markingAsPacked: !isPacked,
             proceed: () => {
               setAdminForeignWarn(null)
-              void executeToggleGruppe(itemId, activeGruppeId, isPacked)
+              void executeSetGruppePacked(itemId, activeGruppeId, !isPacked)
             },
           })
           return
         }
-        void executeToggleGruppe(itemId, activeGruppeId, isPacked)
+        void executeSetGruppePacked(itemId, activeGruppeId, !isPacked)
         return
       }
     }
@@ -1504,32 +1494,60 @@ function HomeContent() {
     void executeTogglePacked(itemId)
   }
 
-  const handleToggleMitreisender = async (itemId: string, mitreisenderId: string, currentStatus: boolean) => {
+  const executeSetMitreisenderPacked = async (
+    itemId: string,
+    mitreisenderId: string,
+    gepackt: boolean
+  ) => {
     pendingMutationsRef.current += 1
-    const newStatus = !currentStatus
-    const prevItems = packingItems
+    const prevItems = packingItemsRef.current
 
-    // Optimistic update: bei Kind mit vorgemerkt → gepackt_vorgemerkt, sonst gepackt (+ Vormerkung zurücksetzen)
     const updateField = gepacktRequiresParentApproval
-      ? (m: { mitreisender_id: string; mitreisender_name: string; gepackt: boolean; gepackt_vorgemerkt?: boolean; anzahl?: number }) =>
-          ({ ...m, gepackt_vorgemerkt: newStatus } as typeof m)
-      : (m: { mitreisender_id: string; mitreisender_name: string; gepackt: boolean; gepackt_vorgemerkt?: boolean; anzahl?: number }) =>
-          ({ ...m, gepackt: newStatus, ...(newStatus === false && { gepackt_vorgemerkt: false }) } as typeof m)
+      ? (m: {
+          mitreisender_id: string
+          mitreisender_name: string
+          gepackt: boolean
+          gepackt_vorgemerkt?: boolean
+          anzahl?: number
+        }) => ({ ...m, gepackt_vorgemerkt: gepackt } as typeof m)
+      : (m: {
+          mitreisender_id: string
+          mitreisender_name: string
+          gepackt: boolean
+          gepackt_vorgemerkt?: boolean
+          anzahl?: number
+        }) =>
+          ({
+            ...m,
+            gepackt,
+            ...(gepackt === false && { gepackt_vorgemerkt: false }),
+          } as typeof m)
     const newMitEntry = gepacktRequiresParentApproval
-      ? { mitreisender_id: mitreisenderId, mitreisender_name: vacationMitreisende.find(m => m.id === mitreisenderId)?.name ?? '', gepackt: false, gepackt_vorgemerkt: true }
-      : { mitreisender_id: mitreisenderId, mitreisender_name: vacationMitreisende.find(m => m.id === mitreisenderId)?.name ?? '', gepackt: true }
+      ? {
+          mitreisender_id: mitreisenderId,
+          mitreisender_name:
+            vacationMitreisende.find((m) => m.id === mitreisenderId)?.name ?? '',
+          gepackt: false,
+          gepackt_vorgemerkt: true,
+        }
+      : {
+          mitreisender_id: mitreisenderId,
+          mitreisender_name:
+            vacationMitreisende.find((m) => m.id === mitreisenderId)?.name ?? '',
+          gepackt: true,
+        }
 
-    setPackingItems(prev =>
-      prev.map(p => {
+    setPackingItems((prev) =>
+      prev.map((p) => {
         if (p.id !== itemId) return p
         const mitreisende = p.mitreisende ?? []
-        const existingIdx = mitreisende.findIndex(m => m.mitreisender_id === mitreisenderId)
+        const existingIdx = mitreisende.findIndex((m) => m.mitreisender_id === mitreisenderId)
         let updatedMitreisende: typeof mitreisende
         if (existingIdx >= 0) {
           updatedMitreisende = mitreisende.map((m, i) =>
             i === existingIdx ? updateField(m) : m
           )
-        } else if (newStatus) {
+        } else if (gepackt) {
           updatedMitreisende = [...mitreisende, newMitEntry]
         } else {
           return p
@@ -1539,25 +1557,46 @@ function HomeContent() {
     )
 
     try {
-      const result = await mutate({
-        table: 'packing-items-toggle-mitreisender',
-        action: 'put',
-        key: `${itemId}|${mitreisenderId}`,
-        payload: {
-          packingItemId: itemId,
-          mitreisenderId,
-          gepackt: newStatus,
-        },
-      })
-      if (!result.ok && !result.queued) {
-        setPackingItems(prevItems)
-      }
+      await enqueuePackingMutation(
+        packingMitreisenderMutationKey(itemId, mitreisenderId),
+        async () => {
+          const result = await mutate({
+            table: 'packing-items-toggle-mitreisender',
+            action: 'put',
+            key: `${itemId}|${mitreisenderId}`,
+            payload: {
+              packingItemId: itemId,
+              mitreisenderId,
+              gepackt,
+            },
+          })
+          if (!result.ok && !result.queued) {
+            setPackingItems(prevItems)
+          }
+        }
+      )
     } catch (error) {
-      console.error('Failed to toggle mitreisender:', error)
+      console.error('Failed to set mitreisender packed:', error)
       setPackingItems(prevItems)
     } finally {
       pendingMutationsRef.current -= 1
     }
+  }
+
+  const handleToggleMitreisender = (
+    itemId: string,
+    mitreisenderId: string,
+    currentStatus: boolean
+  ) => {
+    void executeSetMitreisenderPacked(itemId, mitreisenderId, !currentStatus)
+  }
+
+  const handleSetMitreisenderPacked = (
+    itemId: string,
+    mitreisenderId: string,
+    gepackt: boolean
+  ) => {
+    void executeSetMitreisenderPacked(itemId, mitreisenderId, gepackt)
   }
 
   const handleSetPauschalGruppen = useCallback(
@@ -1982,12 +2021,52 @@ function HomeContent() {
     }
   }, [])
 
-  const handleToggleGruppe = async (
+  const executeSetGruppePacked = async (
+    itemId: string,
+    gruppeId: string,
+    gepackt: boolean
+  ) => {
+    pendingMutationsRef.current += 1
+    const prevItems = packingItemsRef.current
+    setPackingItems((prev) =>
+      prev.map((p) => {
+        if (p.id !== itemId) return p
+        const gruppen = (p.gruppen ?? []).map((g) =>
+          g.gruppe_id === gruppeId
+            ? gepacktRequiresParentApproval
+              ? { ...g, gepackt_vorgemerkt: gepackt }
+              : { ...g, gepackt, gepackt_vorgemerkt: false }
+            : g
+        )
+        return { ...p, gruppen }
+      })
+    )
+    try {
+      await enqueuePackingMutation(packingGruppeMutationKey(itemId, gruppeId), async () => {
+        const result = await mutate({
+          table: 'packing-items-toggle-gruppe',
+          action: 'put',
+          key: `${itemId}|${gruppeId}`,
+          payload: { packingItemId: itemId, gruppeId, gepackt },
+        })
+        if (!result.ok && !result.queued) {
+          setPackingItems(prevItems)
+        }
+      })
+    } catch (error) {
+      console.error('Failed to set gruppe packed:', error)
+      setPackingItems(prevItems)
+    } finally {
+      pendingMutationsRef.current -= 1
+    }
+  }
+
+  const handleToggleGruppe = (
     itemId: string,
     gruppeId: string,
     currentStatus: boolean
   ) => {
-    const item = packingItems.find((p) => p.id === itemId)
+    const item = packingItemsRef.current.find((p) => p.id === itemId)
     const isAdmin = !!user && isAdminRole(user.role)
     if (
       item &&
@@ -2002,51 +2081,16 @@ function HomeContent() {
         markingAsPacked: !currentStatus,
         proceed: () => {
           setAdminForeignWarn(null)
-          void executeToggleGruppe(itemId, gruppeId, currentStatus)
+          void executeSetGruppePacked(itemId, gruppeId, !currentStatus)
         },
       })
       return
     }
-    void executeToggleGruppe(itemId, gruppeId, currentStatus)
+    void executeSetGruppePacked(itemId, gruppeId, !currentStatus)
   }
 
-  const executeToggleGruppe = async (
-    itemId: string,
-    gruppeId: string,
-    currentStatus: boolean
-  ) => {
-    pendingMutationsRef.current += 1
-    const newStatus = !currentStatus
-    const prevItems = packingItems
-    setPackingItems((prev) =>
-      prev.map((p) => {
-        if (p.id !== itemId) return p
-        const gruppen = (p.gruppen ?? []).map((g) =>
-          g.gruppe_id === gruppeId
-            ? gepacktRequiresParentApproval
-              ? { ...g, gepackt_vorgemerkt: newStatus }
-              : { ...g, gepackt: newStatus, gepackt_vorgemerkt: false }
-            : g
-        )
-        return { ...p, gruppen }
-      })
-    )
-    try {
-      const result = await mutate({
-        table: 'packing-items-toggle-gruppe',
-        action: 'put',
-        key: `${itemId}|${gruppeId}`,
-        payload: { packingItemId: itemId, gruppeId, gepackt: newStatus },
-      })
-      if (!result.ok && !result.queued) {
-        setPackingItems(prevItems)
-      }
-    } catch (error) {
-      console.error('Failed to toggle gruppe:', error)
-      setPackingItems(prevItems)
-    } finally {
-      pendingMutationsRef.current -= 1
-    }
+  const handleSetGruppePacked = (itemId: string, gruppeId: string, gepackt: boolean) => {
+    void executeSetGruppePacked(itemId, gruppeId, gepackt)
   }
 
   const handleToggleMultipleMitreisende = async (packingItemId: string, updates: Array<{ mitreisenderId: string; newStatus: boolean }>) => {
@@ -2080,20 +2124,24 @@ function HomeContent() {
 
     try {
       for (const update of updates) {
-        const res = await fetch('/api/packing-items/toggle-mitreisender', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            packingItemId,
-            mitreisenderId: update.mitreisenderId,
-            gepackt: update.newStatus
-          }),
-        })
-        const data = (await res.json()) as ApiResponse<boolean>
-        if (!data.success) {
-          setPackingItems(prevItems)
-          return
-        }
+        await enqueuePackingMutation(
+          packingMitreisenderMutationKey(packingItemId, update.mitreisenderId),
+          async () => {
+            const result = await mutate({
+              table: 'packing-items-toggle-mitreisender',
+              action: 'put',
+              key: `${packingItemId}|${update.mitreisenderId}`,
+              payload: {
+                packingItemId,
+                mitreisenderId: update.mitreisenderId,
+                gepackt: update.newStatus,
+              },
+            })
+            if (!result.ok && !result.queued) {
+              throw new Error('Failed to update mitreisender status')
+            }
+          }
+        )
       }
     } catch (error) {
       console.error('Failed to toggle multiple mitreisende:', error)
@@ -2105,7 +2153,7 @@ function HomeContent() {
 
   const handleRemoveVorgemerkt = (packingItemId: string, mitreisenderId?: string) => {
     if (mitreisenderId) {
-      handleToggleMitreisender(packingItemId, mitreisenderId, true)
+      handleSetMitreisenderPacked(packingItemId, mitreisenderId, false)
     } else {
       handleSetPacked(packingItemId, false)
     }
@@ -3125,6 +3173,8 @@ function HomeContent() {
                   items={packingItems}
                   onToggle={handleTogglePacked}
                   onSetPacked={handleSetPacked}
+                  onSetMitreisenderPacked={handleSetMitreisenderPacked}
+                  onSetGruppePacked={handleSetGruppePacked}
                   onToggleMitreisender={handleToggleMitreisender}
                   onToggleMultipleMitreisende={handleToggleMultipleMitreisende}
                   onEdit={handleEditPackingItem}
