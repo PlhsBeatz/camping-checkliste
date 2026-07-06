@@ -16,7 +16,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { MoreVertical, Edit2, Trash2, RotateCcw, CheckCheck, Check, Clock, ChevronRight } from "lucide-react";
-import { useMemo, useState, useEffect, useRef, useCallback, type MutableRefObject } from "react";
+import { useMemo, useState, useEffect, useLayoutEffect, useRef, useCallback, type MutableRefObject } from "react";
 import { PackingItem as DBPackingItem, type Mitreisender, type TransportVehicle } from "@/lib/db";
 import { MarkAllConfirmationDialog, type TravelerForMarkAll } from "./mark-all-confirmation-dialog";
 import { UndoToast } from "./undo-toast";
@@ -242,6 +242,8 @@ interface PackingItemProps {
   bulkSelectable?: boolean;
   onBulkSelectionToggle?: () => void;
   onBulkSelectionStart?: () => void;
+  /** Wechsel der Hauptkategorie – kein Ausblend-Animationseffekt */
+  packListTabKey?: string;
 }
 
 const PackingItem: React.FC<PackingItemProps> = ({
@@ -287,6 +289,7 @@ const PackingItem: React.FC<PackingItemProps> = ({
   bulkSelectable = false,
   onBulkSelectionToggle,
   onBulkSelectionStart,
+  packListTabKey,
 }) => {
   const [showMarkAllDialog, setShowMarkAllDialog] = useState(false);
   const [personListPopoverOpen, setPersonListPopoverOpen] = useState(false);
@@ -294,6 +297,8 @@ const PackingItem: React.FC<PackingItemProps> = ({
   const [hasExited, setHasExited] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const previousShouldHideRef = useRef<boolean | 'init'>('init');
+  const allowHideAnimationRef = useRef(false);
+  const lastPackListTabKeyRef = useRef(packListTabKey);
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressTriggeredRef = useRef(false);
   /** Nach Long-Press den folgenden Klick ignorieren (sonst sofort wieder abgewählt). */
@@ -859,37 +864,58 @@ const PackingItem: React.FC<PackingItemProps> = ({
 
   const hidePackedActive = hidePackedItems && shouldHideInProfileView;
 
-  // Beim Wechsel Meine ↔ Alle Haushalte Ausblend-Zustand zurücksetzen
-  useEffect(() => {
-    previousShouldHideRef.current = false;
+  const requestHideAnimation = () => {
+    allowHideAnimationRef.current = true;
+  };
+
+  // Tab-Wechsel / Kontextwechsel: sofort ausblenden, keine Animation
+  useLayoutEffect(() => {
+    if (lastPackListTabKeyRef.current === packListTabKey) return;
+    lastPackListTabKeyRef.current = packListTabKey;
+    previousShouldHideRef.current = 'init';
+    allowHideAnimationRef.current = false;
     setIsExiting(false);
-    setHasExited(false);
-  }, [pauschalGruppenFilter]);
+    setHasExited(!!hidePackedActive);
+  }, [packListTabKey, hidePackedActive]);
+
+  // Beim Wechsel Meine ↔ Alle Haushalte Ausblend-Zustand zurücksetzen
+  useLayoutEffect(() => {
+    previousShouldHideRef.current = 'init';
+    allowHideAnimationRef.current = false;
+    setIsExiting(false);
+    setHasExited(!!hidePackedActive);
+  }, [pauschalGruppenFilter, hidePackedActive]);
 
   // Micro-Animation nur beim Abhaken (Übergang sichtbar → ausblenden)
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!hidePackedActive) {
       previousShouldHideRef.current = false;
+      allowHideAnimationRef.current = false;
       setIsExiting(false);
       setHasExited(false);
-      return undefined;
+      return;
     }
 
-    if (previousShouldHideRef.current === 'init') {
-      previousShouldHideRef.current = true;
-      setHasExited(true);
-      return undefined;
-    }
+    const shouldAnimate =
+      allowHideAnimationRef.current &&
+      previousShouldHideRef.current !== 'init' &&
+      previousShouldHideRef.current === false;
 
-    const wasVisible = !previousShouldHideRef.current;
     previousShouldHideRef.current = true;
-    if (wasVisible) {
+    allowHideAnimationRef.current = false;
+
+    if (shouldAnimate) {
       setIsExiting(true);
-      const t = setTimeout(() => setHasExited(true), 280);
+      setHasExited(false);
+      const t = setTimeout(() => {
+        setHasExited(true);
+        setIsExiting(false);
+      }, 280);
       return () => clearTimeout(t);
     }
+
+    setIsExiting(false);
     setHasExited(true);
-    return undefined;
   }, [hidePackedActive]);
 
   const handleGruppenMainToggle = () => {
@@ -900,6 +926,7 @@ const PackingItem: React.FC<PackingItemProps> = ({
     const wasUnpacked = !currentEffective;
     const itemId = id;
     const gruppeId = toggleGruppeId;
+    if (hidePackedItems && wasUnpacked) requestHideAnimation();
     onToggleGruppe(id, toggleGruppeId, currentEffective);
     if (hidePackedItems && wasUnpacked && onShowToast) {
       const nextGruppen = (fullItem.gruppen ?? []).map((g) => {
@@ -952,11 +979,13 @@ const PackingItem: React.FC<PackingItemProps> = ({
       return;
     }
     if (isVorgemerktPauschal && canConfirmVorgemerkt && onConfirmVorgemerkt) {
+      if (hidePackedItems) requestHideAnimation();
       onConfirmVorgemerkt(id);
       return;
     }
     const wasUnpacked = !gepackt;
     const itemId = id;
+    if (hidePackedItems && wasUnpacked) requestHideAnimation();
     onToggle(itemId);
     if (hidePackedItems && wasUnpacked && onShowToast) {
       const undoAction = () => {
@@ -977,6 +1006,7 @@ const PackingItem: React.FC<PackingItemProps> = ({
   const handleIndividualToggle = () => {
     if (selectedProfile) {
       if (selectedTravelerVorgemerkt && canConfirmVorgemerkt && onConfirmVorgemerkt) {
+        if (hidePackedItems) requestHideAnimation();
         onConfirmVorgemerkt(id, selectedProfile);
         return;
       }
@@ -985,6 +1015,7 @@ const PackingItem: React.FC<PackingItemProps> = ({
       const itemId = id;
       const profileId = selectedProfile;
       const currentStatus = currentEffective;
+      if (hidePackedItems && wasUnpacked) requestHideAnimation();
       onToggleMitreisender(itemId, profileId, currentStatus);
       if (hidePackedItems && wasUnpacked && onShowToast) {
         const undoAction = () => {
@@ -1031,7 +1062,10 @@ const PackingItem: React.FC<PackingItemProps> = ({
                 "flex items-center gap-2 px-3 py-2 text-sm",
                 canConfirmThis && "cursor-pointer hover:bg-muted/50 active:bg-muted transition-colors"
               )}
-              onClick={canConfirmThis ? () => { onConfirmVorgemerkt(id, m.mitreisender_id); } : undefined}
+              onClick={canConfirmThis ? () => {
+                if (hidePackedItems) requestHideAnimation();
+                onConfirmVorgemerkt(id, m.mitreisender_id);
+              } : undefined}
               role={canConfirmThis ? "button" : undefined}
             >
               <Checkbox
@@ -1084,8 +1118,16 @@ const PackingItem: React.FC<PackingItemProps> = ({
     return sortMitreisendenZeilenNachStammdaten(rows, vacationMitreisende);
   }, [mitreisendeRowsForScope, vacationMitreisende, isScopeFullyPackedFinal]);
 
-  // Hide if packed – nach Exit-Animation (nur solange Ausblenden aktiv ist)
-  if (hasExited && hidePackedActive) {
+  // Hide if packed – sofort beim Laden/Tab-Wechsel, Animation nur nach Abhaken
+  const tabContextChanged = packListTabKey !== lastPackListTabKeyRef.current;
+  const skipRenderForHide =
+    hidePackedActive &&
+    !isExiting &&
+    (hasExited ||
+      (tabContextChanged && !allowHideAnimationRef.current) ||
+      (previousShouldHideRef.current === 'init' && !allowHideAnimationRef.current));
+
+  if (skipRenderForHide) {
     return null;
   }
 
@@ -2705,6 +2747,7 @@ export function PackingList({
                               onBulkSelectionStart={
                                 showBulkSelectionUi ? () => startBulkSelection(item.id) : undefined
                               }
+                              packListTabKey={`${activeMainCategory}|${selectedProfile ?? 'alle'}|${pauschalGruppenFilter}`}
                             />
                           ))}
                       </CardContent>
