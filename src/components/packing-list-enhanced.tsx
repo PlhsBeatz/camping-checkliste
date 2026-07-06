@@ -299,6 +299,7 @@ const PackingItem: React.FC<PackingItemProps> = ({
   const previousShouldHideRef = useRef<boolean | 'init'>('init');
   const allowHideAnimationRef = useRef(false);
   const lastPackListTabKeyRef = useRef(packListTabKey);
+  const lastPauschalFilterRef = useRef(pauschalGruppenFilter);
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressTriggeredRef = useRef(false);
   /** Nach Long-Press den folgenden Klick ignorieren (sonst sofort wieder abgewählt). */
@@ -868,23 +869,18 @@ const PackingItem: React.FC<PackingItemProps> = ({
     allowHideAnimationRef.current = true;
   };
 
-  // Tab-Wechsel / Kontextwechsel: sofort ausblenden, keine Animation
+  // Tab- / Filterwechsel: sofort ausblenden, keine Animation (nicht bei hidePackedActive-Wechsel!)
   useLayoutEffect(() => {
-    if (lastPackListTabKeyRef.current === packListTabKey) return;
-    lastPackListTabKeyRef.current = packListTabKey;
-    previousShouldHideRef.current = 'init';
-    allowHideAnimationRef.current = false;
-    setIsExiting(false);
-    setHasExited(!!hidePackedActive);
-  }, [packListTabKey, hidePackedActive]);
+    const tabChanged = lastPackListTabKeyRef.current !== packListTabKey;
+    const filterChanged = lastPauschalFilterRef.current !== pauschalGruppenFilter;
+    if (!tabChanged && !filterChanged) return;
 
-  // Beim Wechsel Meine ↔ Alle Haushalte Ausblend-Zustand zurücksetzen
-  useLayoutEffect(() => {
+    lastPackListTabKeyRef.current = packListTabKey;
+    lastPauschalFilterRef.current = pauschalGruppenFilter;
     previousShouldHideRef.current = 'init';
     allowHideAnimationRef.current = false;
     setIsExiting(false);
-    setHasExited(!!hidePackedActive);
-  }, [pauschalGruppenFilter, hidePackedActive]);
+  }, [packListTabKey, pauschalGruppenFilter]);
 
   // Micro-Animation nur beim Abhaken (Übergang sichtbar → ausblenden)
   useLayoutEffect(() => {
