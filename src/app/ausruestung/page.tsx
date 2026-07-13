@@ -3,33 +3,24 @@ import { useAuth } from '@/components/auth-provider'
 import { Button } from '@/components/ui/button'
 import { NavigationSidebar } from '@/components/navigation-sidebar'
 import { EquipmentTable } from '@/components/equipment-table'
-import { ChevronDown, Plus, Menu, Star } from 'lucide-react'
+import { EquipmentItemFormFields } from '@/components/equipment/equipment-item-form-fields'
+import { Plus, Menu } from 'lucide-react'
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { EquipmentItem, Category, MainCategory, TransportVehicle, Tag, TagKategorie, Mitreisender } from '@/lib/db'
 import type { ApiResponse } from '@/lib/api-types'
 import { ResponsiveModal } from '@/components/ui/responsive-modal'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { WeightInput } from '@/components/ui/weight-input'
-import { Textarea } from '@/components/ui/textarea'
+import { type CategorySelectScrollTarget } from '@/components/category-select-grouped'
+import { cn } from '@/lib/utils'
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import {
-  CategorySelectGroupedItems,
-  CategoryGroupedSelectField,
-  type CategorySelectScrollTarget,
-} from '@/components/category-select-grouped'
-import { Checkbox } from '@/components/ui/checkbox'
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
-import { cn, parseWeightInput } from '@/lib/utils'
-import { MengenRegelEditor } from '@/components/mengen-regel-editor'
-import { regelToStandardAnzahl, type MengenRegel } from '@/lib/packing-quantity'
+  buildEquipmentApiPayload,
+  buildTagGroupsForEquipment,
+  createDefaultEquipmentFormValues,
+  equipmentFormValuesFromItem,
+  mitreisendenZeileAusApi,
+  type EquipmentFormValues,
+  type MitreisendenZeile,
+} from '@/lib/equipment-form'
 import {
   getCachedEquipment,
   getCachedCategories,
@@ -50,166 +41,9 @@ import {
   cacheMitreisende,
 } from '@/lib/offline-db'
 import { useReconnectRefetch } from '@/hooks/use-reconnect-refetch'
-import { sortMitreisendeNachRolleUndName } from '@/lib/mitreisenden-sort'
 
 interface CategoryWithMain extends Category {
   hauptkategorie_titel: string
-}
-
-/** shadcn-Checkbox, dunkelgrün, gleiche Größe wie zuvor (h-3 w-3) */
-const EQUIPMENT_CHIP_CHECKBOX_CLASS =
-  'h-3 w-3 shrink-0 border-[rgb(45,79,30)] data-[state=checked]:bg-[rgb(45,79,30)] data-[state=checked]:text-white data-[state=checked]:border-[rgb(45,79,30)] [&_svg]:h-2.5 [&_svg]:w-2.5'
-
-/** shadcn-Checkbox, dunkelgrün, Zeilen wie „Als Standard markieren“ (h-4 w-4) */
-const EQUIPMENT_DIALOG_ROW_CHECKBOX_CLASS =
-  'h-4 w-4 shrink-0 border-[rgb(45,79,30)] data-[state=checked]:bg-[rgb(45,79,30)] data-[state=checked]:text-white data-[state=checked]:border-[rgb(45,79,30)]'
-
-type TagGroupForEquipment = { kat: TagKategorie; tags: Tag[] }
-
-type MitreisendenZeile = {
-  id: string
-  name: string
-  urlaub_standard_mitnehmen: boolean
-  user_id?: string | null
-  user_role?: Mitreisender['user_role']
-  personentyp?: Mitreisender['personentyp']
-}
-
-function mitreisendenZeileAusApi(m: Mitreisender): MitreisendenZeile {
-  return {
-    id: m.id,
-    name: m.name,
-    urlaub_standard_mitnehmen: m.urlaub_standard_mitnehmen === true,
-    user_id: m.user_id ?? null,
-    user_role: m.user_role ?? null,
-    personentyp: m.personentyp,
-  }
-}
-
-function IndividuelleMitreisendeAuswahl({
-  mitreisende,
-  standardMitreisendeIds,
-  onStandardMitreisendeChange,
-  extraOpen,
-  onExtraOpenChange,
-}: {
-  mitreisende: MitreisendenZeile[]
-  standardMitreisendeIds: string[]
-  onStandardMitreisendeChange: (next: string[]) => void
-  extraOpen: boolean
-  onExtraOpenChange: (open: boolean) => void
-}) {
-  const standardMit = useMemo(
-    () =>
-      sortMitreisendeNachRolleUndName(mitreisende.filter((m) => m.urlaub_standard_mitnehmen)),
-    [mitreisende]
-  )
-  const weitereMit = useMemo(
-    () =>
-      sortMitreisendeNachRolleUndName(mitreisende.filter((m) => !m.urlaub_standard_mitnehmen)),
-    [mitreisende]
-  )
-  const kannEinklappen = standardMit.length > 0 && weitereMit.length > 0
-
-  const toggleOne = (id: string, checked: boolean) => {
-    if (checked) {
-      if (!standardMitreisendeIds.includes(id))
-        onStandardMitreisendeChange([...standardMitreisendeIds, id])
-    } else {
-      onStandardMitreisendeChange(standardMitreisendeIds.filter((x) => x !== id))
-    }
-  }
-
-  const renderChips = (rows: MitreisendenZeile[]) => (
-    <div className="flex flex-wrap gap-2 mt-2">
-      {rows.map((m) => (
-        <label
-          key={m.id}
-          className="flex items-center gap-1.5 text-xs bg-muted px-2 py-1 rounded cursor-pointer hover:bg-muted/80"
-        >
-          <Checkbox
-            checked={standardMitreisendeIds.includes(m.id)}
-            onCheckedChange={(c) => toggleOne(m.id, !!c)}
-            className={EQUIPMENT_CHIP_CHECKBOX_CLASS}
-          />
-          {m.name}
-        </label>
-      ))}
-    </div>
-  )
-
-  const anzuzeigen = kannEinklappen ? standardMit : sortMitreisendeNachRolleUndName(mitreisende)
-
-  return (
-    <div>
-      <Label>Mitreisende</Label>
-      {renderChips(anzuzeigen)}
-      {kannEinklappen && (
-        <Collapsible open={extraOpen} onOpenChange={onExtraOpenChange}>
-          <CollapsibleTrigger asChild>
-            <button
-              type="button"
-              className={cn(
-                'flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground mt-2',
-                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm px-1 -ml-1'
-              )}
-            >
-              <ChevronDown
-                className={cn('h-3.5 w-3.5 shrink-0 transition-transform', extraOpen && 'rotate-180')}
-              />
-              {extraOpen
-                ? 'Weniger anzeigen'
-                : `Weitere (${weitereMit.length})`}
-            </button>
-          </CollapsibleTrigger>
-          <CollapsibleContent>{renderChips(weitereMit)}</CollapsibleContent>
-        </Collapsible>
-      )}
-    </div>
-  )
-}
-
-function EquipmentTagsBlock({
-  groups,
-  selectedTagIds,
-  onToggleTag,
-  idPrefix,
-}: {
-  groups: TagGroupForEquipment[]
-  selectedTagIds: string[]
-  onToggleTag: (tagId: string, checked: boolean) => void
-  idPrefix: string
-}) {
-  return (
-    <div className="space-y-4">
-      {groups.length === 0 ? (
-        <p className="text-sm text-muted-foreground">Noch keine Tags angelegt.</p>
-      ) : (
-        groups.map(({ kat, tags: catTags }) => (
-          <div key={kat.id} className="space-y-2">
-            <Label className="text-sm font-medium">{kat.titel}</Label>
-            <div className="flex flex-wrap gap-2">
-              {catTags.map((tag) => (
-                <label
-                  key={tag.id}
-                  htmlFor={`${idPrefix}-tag-${tag.id}`}
-                  className="flex items-center gap-1.5 text-xs bg-background px-2 py-1 rounded cursor-pointer hover:bg-muted/80 border border-border/60"
-                >
-                  <Checkbox
-                    id={`${idPrefix}-tag-${tag.id}`}
-                    checked={selectedTagIds.includes(tag.id)}
-                    onCheckedChange={(c) => onToggleTag(tag.id, !!c)}
-                    className={EQUIPMENT_CHIP_CHECKBOX_CLASS}
-                  />
-                  <span>{tag.titel}</span>
-                </label>
-              ))}
-            </div>
-          </div>
-        ))
-      )}
-    </div>
-  )
 }
 
 export default function AusruestungPage() {
@@ -255,39 +89,7 @@ export default function AusruestungPage() {
     useState<CategorySelectScrollTarget | null>(null)
   
   // Form state
-  const [formData, setFormData] = useState({
-    was: '',
-    kategorie_id: '',
-    transport_id: 'none',
-    einzelgewicht: '',
-    standard_anzahl: '1',
-    status: 'Normal',
-    details: '',
-    is_standard: false,
-    erst_abreisetag_gepackt: false,
-    mitreisenden_typ: 'alle' as 'pauschal' | 'alle' | 'ausgewaehlte',
-    in_pauschale_inbegriffen: false,
-    tags: [] as string[],
-    links: [] as { url: string }[],
-    standard_mitreisende: [] as string[],
-    mengenregel: null as MengenRegel | null
-  })
-
-  /**
-   * Synchronisiert `standard_anzahl` mit der gewählten Regel.
-   * - Regel vom Typ „fest": immer gekoppelt.
-   * - Variable Regeln: Fallback auf einen plausiblen Wert (7 Tage), damit die
-   *   Gewichtsberechnung (einzelgewicht × standard_anzahl) realistisch bleibt.
-   * - Keine Regel: Feld bleibt frei editierbar.
-   */
-  const handleMengenRegelChange = (regel: MengenRegel | null) => {
-    setFormData((prev) => {
-      if (!regel) return { ...prev, mengenregel: null }
-      const curStd = parseInt(prev.standard_anzahl) || 1
-      const derived = regelToStandardAnzahl(regel, curStd)
-      return { ...prev, mengenregel: regel, standard_anzahl: String(Math.max(1, derived)) }
-    })
-  }
+  const [formData, setFormData] = useState<EquipmentFormValues>(createDefaultEquipmentFormValues())
 
   // Sidebar offen: Body-Scroll sperren
   useEffect(() => {
@@ -419,19 +221,10 @@ export default function AusruestungPage() {
     fetchTagsAndKategorien()
   }, [refetchTick])
 
-  const tagGroupsForEquipment = useMemo((): TagGroupForEquipment[] => {
-    const sortedKats = [...tagKategorien].sort(
-      (a, b) => a.reihenfolge - b.reihenfolge || a.titel.localeCompare(b.titel)
-    )
-    return sortedKats
-      .map((kat) => ({
-        kat,
-        tags: tags
-          .filter((t) => t.tag_kategorie_id === kat.id)
-          .sort((a, b) => a.reihenfolge - b.reihenfolge || a.titel.localeCompare(b.titel)),
-      }))
-      .filter((g) => g.tags.length > 0)
-  }, [tagKategorien, tags])
+  const tagGroupsForEquipment = useMemo(
+    () => buildTagGroupsForEquipment(tagKategorien, tags),
+    [tagKategorien, tags]
+  )
 
   // Fetch Mitreisende
   useEffect(() => {
@@ -465,23 +258,7 @@ export default function AusruestungPage() {
   }, [showEditDialog, editingItem, mitreisende])
 
   const resetForm = () => {
-    setFormData({
-      was: '',
-      kategorie_id: '',
-      transport_id: 'none',
-      einzelgewicht: '',
-      standard_anzahl: '1',
-      status: 'Normal',
-      details: '',
-      is_standard: false,
-      erst_abreisetag_gepackt: false,
-      mitreisenden_typ: 'alle',
-      in_pauschale_inbegriffen: false,
-      tags: [],
-      links: [],
-      standard_mitreisende: [],
-      mengenregel: null
-    })
+    setFormData(createDefaultEquipmentFormValues())
   }
 
   const handleAddEquipment = () => {
@@ -497,23 +274,7 @@ export default function AusruestungPage() {
 
   const handleEditEquipment = (item: EquipmentItem) => {
     setEditingItem(item)
-    setFormData({
-      was: item.was,
-      kategorie_id: item.kategorie_id,
-      transport_id: item.transport_id || 'none',
-      einzelgewicht: item.einzelgewicht ? String(item.einzelgewicht) : '',
-      standard_anzahl: String(item.standard_anzahl),
-      status: item.status,
-      details: item.details || '',
-      is_standard: item.is_standard || false,
-      erst_abreisetag_gepackt: item.erst_abreisetag_gepackt || false,
-      mitreisenden_typ: item.mitreisenden_typ || 'alle',
-      in_pauschale_inbegriffen: item.in_pauschale_inbegriffen || false,
-      tags: item.tags?.map((t) => (typeof t === 'object' ? t.id : t)) || [],
-      links: item.links || [],
-      standard_mitreisende: item.standard_mitreisende || [],
-      mengenregel: item.mengenregel ?? null
-    })
+    setFormData(equipmentFormValuesFromItem(item))
     setShowEditDialog(true)
   }
 
@@ -525,23 +286,7 @@ export default function AusruestungPage() {
 
     setIsSaving(true)
     try {
-      const payload = {
-        was: formData.was,
-        kategorie_id: formData.kategorie_id,
-        transport_id: formData.transport_id === 'none' ? null : formData.transport_id || null,
-        einzelgewicht: parseWeightInput(formData.einzelgewicht),
-        standard_anzahl: parseInt(formData.standard_anzahl) || 1,
-        status: formData.status,
-        details: formData.details || null,
-        is_standard: formData.is_standard,
-        erst_abreisetag_gepackt: formData.erst_abreisetag_gepackt,
-        mitreisenden_typ: formData.mitreisenden_typ,
-        in_pauschale_inbegriffen: formData.in_pauschale_inbegriffen,
-        standard_mitreisende: formData.standard_mitreisende,
-        tags: formData.tags,
-        links: formData.links.filter((link) => link.url.trim() !== '').map((link) => link.url),
-        mengenregel: formData.mengenregel
-      }
+      const payload = buildEquipmentApiPayload(formData)
 
       const res = await fetch('/api/equipment-items', {
         method: 'POST',
@@ -581,21 +326,7 @@ export default function AusruestungPage() {
     try {
       const payload = {
         id: editingItem.id,
-        was: formData.was,
-        kategorie_id: formData.kategorie_id,
-        transport_id: formData.transport_id === 'none' ? null : formData.transport_id || null,
-        einzelgewicht: parseWeightInput(formData.einzelgewicht),
-        standard_anzahl: parseInt(formData.standard_anzahl) || 1,
-        status: formData.status,
-        details: formData.details || null,
-        is_standard: formData.is_standard,
-        erst_abreisetag_gepackt: formData.erst_abreisetag_gepackt,
-        mitreisenden_typ: formData.mitreisenden_typ,
-        in_pauschale_inbegriffen: formData.in_pauschale_inbegriffen,
-        standard_mitreisende: formData.standard_mitreisende,
-        tags: formData.tags,
-        links: formData.links.filter((link) => link.url.trim() !== '').map((link) => link.url),
-        mengenregel: formData.mengenregel
+        ...buildEquipmentApiPayload(formData),
       }
 
       const res = await fetch('/api/equipment-items', {
@@ -652,34 +383,6 @@ export default function AusruestungPage() {
     } finally {
       setIsLoading(false)
     }
-  }
-
-  const hasPauschaleForCategory = (kategorieId: string) => {
-    if (!kategorieId) return false
-    const cat = categories.find((c) => c.id === kategorieId)
-    if (!cat) return false
-    if ((cat as Category & { pauschalgewicht?: number }).pauschalgewicht != null && (cat as Category & { pauschalgewicht?: number }).pauschalgewicht! > 0)
-      return true
-    const main = mainCategories.find((m) => m.id === cat.hauptkategorie_id)
-    return !!(main?.pauschalgewicht != null && main.pauschalgewicht > 0)
-  }
-
-  const addLinkField = () => {
-    setFormData({
-      ...formData,
-      links: [...formData.links, { url: '' }]
-    })
-  }
-
-  const removeLinkField = (index: number) => {
-    const newLinks = formData.links.filter((_, i) => i !== index)
-    setFormData({ ...formData, links: newLinks })
-  }
-
-  const updateLinkField = (index: number, value: string) => {
-    const newLinks = [...formData.links]
-    newLinks[index] = { url: value }
-    setFormData({ ...formData, links: newLinks })
   }
 
   return (
@@ -774,232 +477,29 @@ export default function AusruestungPage() {
         noPadding
       >
         <div className="space-y-4 px-6 pt-4 pb-6">
-            <div>
-              <Label htmlFor="was">Was *</Label>
-              <Input
-                id="was"
-                value={formData.was}
-                onChange={(e) => setFormData({ ...formData, was: e.target.value })}
-                placeholder="z.B. Zelt, Schlafsack..."
-              />
-            </div>
+          <EquipmentItemFormFields
+            value={formData}
+            onChange={setFormData}
+            idPrefix="add-eq"
+            categories={categories}
+            mainCategories={mainCategories}
+            transportVehicles={transportVehicles}
+            tagGroups={tagGroupsForEquipment}
+            mitreisende={mitreisende}
+            categorySelectScrollTarget={addEquipmentCategoryScrollTarget}
+            individuelleMitreisendeExtraOpen={individuelleMitreisendeExtraOffen}
+            onIndividuelleMitreisendeExtraOpenChange={setIndividuelleMitreisendeExtraOffen}
+          />
 
-            <div>
-              <Label htmlFor="kategorie">Kategorie *</Label>
-              <CategoryGroupedSelectField
-                value={formData.kategorie_id}
-                onValueChange={(value) => setFormData({ ...formData, kategorie_id: value })}
-                categories={categories}
-                mainCategories={mainCategories}
-                scrollTarget={addEquipmentCategoryScrollTarget}
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="gewicht">Gewicht</Label>
-                <WeightInput
-                  id="gewicht"
-                  value={formData.einzelgewicht}
-                  onChange={(val) => setFormData({ ...formData, einzelgewicht: val })}
-                  placeholder="z.B. 0,234"
-                />
-              </div>
-
-              <div>
-                <Label htmlFor="anzahl">Standard-Anzahl</Label>
-                <Input
-                  id="anzahl"
-                  type="number"
-                  min="1"
-                  value={formData.mengenregel ? '' : formData.standard_anzahl}
-                  onChange={(e) => setFormData({ ...formData, standard_anzahl: e.target.value })}
-                  disabled={!!formData.mengenregel}
-                  placeholder={formData.mengenregel ? 'dynamisch' : undefined}
-                />
-                {formData.mengenregel && (
-                  <p className="text-[11px] text-muted-foreground mt-1">
-                    Wird dynamisch aus der Mengenregel berechnet.
-                  </p>
-                )}
-              </div>
-            </div>
-
-            <MengenRegelEditor
-              value={formData.mengenregel}
-              onChange={handleMengenRegelChange}
-              kindOverrideDisabled={formData.mitreisenden_typ === 'pauschal'}
-            />
-
-            {hasPauschaleForCategory(formData.kategorie_id) && (
-              <div className="flex items-center gap-2">
-                <Checkbox
-                  id="in-pauschale"
-                  checked={formData.in_pauschale_inbegriffen}
-                  onCheckedChange={(c) => setFormData({ ...formData, in_pauschale_inbegriffen: !!c })}
-                />
-                <Label htmlFor="in-pauschale" className="cursor-pointer text-sm">
-                  In Pauschale inbegriffen (kein Einzelgewicht)
-                </Label>
-              </div>
-            )}
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="transport">Transport</Label>
-                <Select value={formData.transport_id} onValueChange={(value) => setFormData({ ...formData, transport_id: value })}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Kein Transport" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Kein Transport</SelectItem>
-                    {transportVehicles.map(tv => (
-                      <SelectItem key={tv.id} value={tv.id}>
-                        {tv.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div>
-                <Label htmlFor="status">Status</Label>
-                <Select value={formData.status} onValueChange={(value) => setFormData({ ...formData, status: value })}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Normal">Normal</SelectItem>
-                    <SelectItem value="Immer gepackt">Immer gepackt</SelectItem>
-                    <SelectItem value="Fest Installiert">Fest Installiert</SelectItem>
-                    <SelectItem value="Ausgemustert">Ausgemustert</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-4">
-                <div>
-                  <Label htmlFor="mitreisenden_typ">Gepackt für</Label>
-                  <Select value={formData.mitreisenden_typ} onValueChange={(value: 'pauschal' | 'alle' | 'ausgewaehlte') => setFormData({ ...formData, mitreisenden_typ: value })}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="alle">👥 Alle</SelectItem>
-                      <SelectItem value="pauschal">📦 Pauschal</SelectItem>
-                      <SelectItem value="ausgewaehlte">👤 Individuell</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {formData.mitreisenden_typ === 'ausgewaehlte' && (
-                  <IndividuelleMitreisendeAuswahl
-                    mitreisende={mitreisende}
-                    standardMitreisendeIds={formData.standard_mitreisende}
-                    onStandardMitreisendeChange={(next) =>
-                      setFormData((prev) => ({ ...prev, standard_mitreisende: next }))
-                    }
-                    extraOpen={individuelleMitreisendeExtraOffen}
-                    onExtraOpenChange={setIndividuelleMitreisendeExtraOffen}
-                  />
-                )}
-              </div>
-
-              <div className="min-w-0">
-                <EquipmentTagsBlock
-                  groups={tagGroupsForEquipment}
-                  selectedTagIds={formData.tags}
-                  onToggleTag={(tagId, checked) => {
-                    setFormData((prev) => ({
-                      ...prev,
-                      tags: checked ? [...prev.tags, tagId] : prev.tags.filter((id) => id !== tagId),
-                    }))
-                  }}
-                  idPrefix="add-eq"
-                />
-              </div>
-            </div>
-
-            <div>
-              <Label htmlFor="details">Details</Label>
-              <Textarea
-                id="details"
-                value={formData.details}
-                onChange={(e) => setFormData({ ...formData, details: e.target.value })}
-                placeholder="Zusätzliche Informationen..."
-                rows={3}
-              />
-            </div>
-
-            <div className="flex items-center gap-2">
-              <Checkbox
-                id="is_standard"
-                checked={formData.is_standard}
-                onCheckedChange={(c) => setFormData({ ...formData, is_standard: !!c })}
-                className={EQUIPMENT_DIALOG_ROW_CHECKBOX_CLASS}
-              />
-              <Label htmlFor="is_standard" className="cursor-pointer flex items-center gap-2">
-                <Star
-                  className="h-4 w-4"
-                  style={{ color: 'rgb(230,126,34)', fill: 'rgb(230,126,34)' }}
-                />
-                <span>Als Standard markieren</span>
-              </Label>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <Checkbox
-                id="erst_abreisetag_gepackt"
-                checked={formData.erst_abreisetag_gepackt}
-                onCheckedChange={(c) => setFormData({ ...formData, erst_abreisetag_gepackt: !!c })}
-                className={EQUIPMENT_DIALOG_ROW_CHECKBOX_CLASS}
-              />
-              <Label htmlFor="erst_abreisetag_gepackt" className="cursor-pointer">
-                Erst am Abreisetag packen
-              </Label>
-            </div>
-
-            <div>
-              <Label>Links</Label>
-              {formData.links.map((link, idx) => (
-                <div key={idx} className="flex gap-2 mt-2">
-                  <Input
-                    value={link.url}
-                    onChange={(e) => updateLinkField(idx, e.target.value)}
-                    placeholder="https://..."
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => removeLinkField(idx)}
-                  >
-                    Entfernen
-                  </Button>
-                </div>
-              ))}
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={addLinkField}
-                className="mt-2"
-              >
-                Link hinzufügen
-              </Button>
-            </div>
-
-            <div className="flex gap-2 pt-4">
-              <Button onClick={handleSaveEquipment} disabled={isSaving} className="flex-1">
-                {isSaving ? 'Speichert...' : 'Speichern'}
-              </Button>
-              <Button variant="outline" onClick={() => setShowAddDialog(false)} disabled={isSaving}>
-                Abbrechen
-              </Button>
-            </div>
+          <div className="flex gap-2 pt-4">
+            <Button onClick={handleSaveEquipment} disabled={isSaving} className="flex-1">
+              {isSaving ? 'Speichert...' : 'Speichern'}
+            </Button>
+            <Button variant="outline" onClick={() => setShowAddDialog(false)} disabled={isSaving}>
+              Abbrechen
+            </Button>
           </div>
+        </div>
       </ResponsiveModal>
 
       {/* Gegenstand löschen – Bestätigung */}
@@ -1029,233 +529,29 @@ export default function AusruestungPage() {
         noPadding
       >
         <div className="space-y-4 px-6 pt-4 pb-6">
-            <div>
-              <Label htmlFor="edit-was">Was *</Label>
-              <Input
-                id="edit-was"
-                value={formData.was}
-                onChange={(e) => setFormData({ ...formData, was: e.target.value })}
-                placeholder="z.B. Zelt, Schlafsack..."
-              />
-            </div>
+          <EquipmentItemFormFields
+            value={formData}
+            onChange={setFormData}
+            idPrefix="edit-eq"
+            categories={categories}
+            mainCategories={mainCategories}
+            transportVehicles={transportVehicles}
+            tagGroups={tagGroupsForEquipment}
+            mitreisende={mitreisende}
+            individuelleMitreisendeExtraOpen={individuelleMitreisendeExtraOffen}
+            onIndividuelleMitreisendeExtraOpenChange={setIndividuelleMitreisendeExtraOffen}
+            categorySelectMode="grouped"
+          />
 
-            <div>
-              <Label htmlFor="edit-kategorie">Kategorie *</Label>
-              <Select value={formData.kategorie_id} onValueChange={(value) => setFormData({ ...formData, kategorie_id: value })}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Kategorie wählen" />
-                </SelectTrigger>
-                <SelectContent>
-                  <CategorySelectGroupedItems categories={categories} mainCategories={mainCategories} />
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="edit-gewicht">Gewicht</Label>
-                <WeightInput
-                  id="edit-gewicht"
-                  value={formData.einzelgewicht}
-                  onChange={(val) => setFormData({ ...formData, einzelgewicht: val })}
-                  placeholder="z.B. 0,234"
-                />
-              </div>
-
-              <div>
-                <Label htmlFor="edit-anzahl">Standard-Anzahl</Label>
-                <Input
-                  id="edit-anzahl"
-                  type="number"
-                  min="1"
-                  value={formData.mengenregel ? '' : formData.standard_anzahl}
-                  onChange={(e) => setFormData({ ...formData, standard_anzahl: e.target.value })}
-                  disabled={!!formData.mengenregel}
-                  placeholder={formData.mengenregel ? 'dynamisch' : undefined}
-                />
-                {formData.mengenregel && (
-                  <p className="text-[11px] text-muted-foreground mt-1">
-                    Wird dynamisch aus der Mengenregel berechnet.
-                  </p>
-                )}
-              </div>
-            </div>
-
-            <MengenRegelEditor
-              value={formData.mengenregel}
-              onChange={handleMengenRegelChange}
-              kindOverrideDisabled={formData.mitreisenden_typ === 'pauschal'}
-            />
-
-            {hasPauschaleForCategory(formData.kategorie_id) && (
-              <div className="flex items-center gap-2">
-                <Checkbox
-                  id="edit-in-pauschale"
-                  checked={formData.in_pauschale_inbegriffen}
-                  onCheckedChange={(c) => setFormData({ ...formData, in_pauschale_inbegriffen: !!c })}
-                />
-                <Label htmlFor="edit-in-pauschale" className="cursor-pointer text-sm">
-                  In Pauschale inbegriffen (kein Einzelgewicht)
-                </Label>
-              </div>
-            )}
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="edit-transport">Transport</Label>
-                <Select value={formData.transport_id} onValueChange={(value) => setFormData({ ...formData, transport_id: value })}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Kein Transport" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Kein Transport</SelectItem>
-                    {transportVehicles.map(tv => (
-                      <SelectItem key={tv.id} value={tv.id}>
-                        {tv.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div>
-                <Label htmlFor="edit-status">Status</Label>
-                <Select value={formData.status} onValueChange={(value) => setFormData({ ...formData, status: value })}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Normal">Normal</SelectItem>
-                    <SelectItem value="Immer gepackt">Immer gepackt</SelectItem>
-                    <SelectItem value="Fest Installiert">Fest Installiert</SelectItem>
-                    <SelectItem value="Ausgemustert">Ausgemustert</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-4">
-                <div>
-                  <Label htmlFor="edit-mitreisenden_typ">Gepackt für</Label>
-                  <Select value={formData.mitreisenden_typ} onValueChange={(value: 'pauschal' | 'alle' | 'ausgewaehlte') => setFormData({ ...formData, mitreisenden_typ: value })}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="alle">👥 Alle</SelectItem>
-                      <SelectItem value="pauschal">📦 Pauschal</SelectItem>
-                      <SelectItem value="ausgewaehlte">👤 Individuell</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {formData.mitreisenden_typ === 'ausgewaehlte' && (
-                  <IndividuelleMitreisendeAuswahl
-                    mitreisende={mitreisende}
-                    standardMitreisendeIds={formData.standard_mitreisende}
-                    onStandardMitreisendeChange={(next) =>
-                      setFormData((prev) => ({ ...prev, standard_mitreisende: next }))
-                    }
-                    extraOpen={individuelleMitreisendeExtraOffen}
-                    onExtraOpenChange={setIndividuelleMitreisendeExtraOffen}
-                  />
-                )}
-              </div>
-
-              <div className="min-w-0">
-                <EquipmentTagsBlock
-                  groups={tagGroupsForEquipment}
-                  selectedTagIds={formData.tags}
-                  onToggleTag={(tagId, checked) => {
-                    setFormData((prev) => ({
-                      ...prev,
-                      tags: checked ? [...prev.tags, tagId] : prev.tags.filter((id) => id !== tagId),
-                    }))
-                  }}
-                  idPrefix="edit-eq"
-                />
-              </div>
-            </div>
-
-            <div>
-              <Label htmlFor="edit-details">Details</Label>
-              <Textarea
-                id="edit-details"
-                value={formData.details}
-                onChange={(e) => setFormData({ ...formData, details: e.target.value })}
-                placeholder="Zusätzliche Informationen..."
-                rows={3}
-              />
-            </div>
-
-            <div className="flex items-center gap-2">
-              <Checkbox
-                id="edit_is_standard"
-                checked={formData.is_standard}
-                onCheckedChange={(c) => setFormData({ ...formData, is_standard: !!c })}
-                className={EQUIPMENT_DIALOG_ROW_CHECKBOX_CLASS}
-              />
-              <Label htmlFor="edit_is_standard" className="cursor-pointer flex items-center gap-2">
-                <Star
-                  className="h-4 w-4"
-                  style={{ color: 'rgb(230,126,34)', fill: 'rgb(230,126,34)' }}
-                />
-                <span>Als Standard markieren</span>
-              </Label>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <Checkbox
-                id="edit_erst_abreisetag_gepackt"
-                checked={formData.erst_abreisetag_gepackt}
-                onCheckedChange={(c) => setFormData({ ...formData, erst_abreisetag_gepackt: !!c })}
-                className={EQUIPMENT_DIALOG_ROW_CHECKBOX_CLASS}
-              />
-              <Label htmlFor="edit_erst_abreisetag_gepackt" className="cursor-pointer">
-                Erst am Abreisetag packen
-              </Label>
-            </div>
-
-            <div>
-              <Label>Links</Label>
-              {formData.links.map((link, idx) => (
-                <div key={idx} className="flex gap-2 mt-2">
-                  <Input
-                    value={link.url}
-                    onChange={(e) => updateLinkField(idx, e.target.value)}
-                    placeholder="https://..."
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => removeLinkField(idx)}
-                  >
-                    Entfernen
-                  </Button>
-                </div>
-              ))}
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={addLinkField}
-                className="mt-2"
-              >
-                Link hinzufügen
-              </Button>
-            </div>
-
-            <div className="flex gap-2 pt-4">
-              <Button onClick={handleUpdateEquipment} disabled={isSaving} className="flex-1">
-                {isSaving ? 'Speichert...' : 'Aktualisieren'}
-              </Button>
-              <Button variant="outline" onClick={() => setShowEditDialog(false)} disabled={isSaving}>
-                Abbrechen
-              </Button>
-            </div>
+          <div className="flex gap-2 pt-4">
+            <Button onClick={handleUpdateEquipment} disabled={isSaving} className="flex-1">
+              {isSaving ? 'Speichert...' : 'Aktualisieren'}
+            </Button>
+            <Button variant="outline" onClick={() => setShowEditDialog(false)} disabled={isSaving}>
+              Abbrechen
+            </Button>
           </div>
+        </div>
       </ResponsiveModal>
     </div>
   )
