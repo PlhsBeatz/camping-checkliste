@@ -8,7 +8,7 @@ import {
 } from '@/lib/db'
 import type { CloudflareEnv } from '@/lib/db'
 import type { PushNotificationPayload } from '@/lib/push-notifications'
-import { describeVapidSetupError } from '@/lib/push-vapid-errors'
+import { describeVapidSetupError, type VapidDiagnostics } from '@/lib/push-vapid-errors'
 
 export type PushSendError = {
   endpoint: string
@@ -28,6 +28,7 @@ type PushEnv = {
   privateJwk: Record<string, unknown> | null
   privateKeyParseFailed: boolean
   subject: string
+  diagnostics: VapidDiagnostics
 }
 
 function base64UrlEncode(binary: string): string {
@@ -50,11 +51,38 @@ function derivePublicKeyFromJwk(jwk: Record<string, unknown>): string | null {
   )
 }
 
-function parsePrivateJwk(raw: string | undefined): {
+function readEnvString(value: unknown): string | undefined {
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    return trimmed || undefined
+  }
+  return undefined
+}
+
+function readPrivateKeyRaw(value: unknown): string | undefined {
+  const asString = readEnvString(value)
+  if (asString) return asString
+  if (value && typeof value === 'object') {
+    try {
+      return JSON.stringify(value)
+    } catch {
+      return undefined
+    }
+  }
+  return undefined
+}
+
+function parsePrivateJwk(raw: unknown): {
   jwk: Record<string, unknown> | null
   parseFailed: boolean
 } {
-  if (!raw?.trim()) return { jwk: null, parseFailed: false }
+  if (raw == null) return { jwk: null, parseFailed: false }
+  if (typeof raw === 'object') {
+    return { jwk: raw as Record<string, unknown>, parseFailed: false }
+  }
+  if (typeof raw !== 'string' || !raw.trim()) {
+    return { jwk: null, parseFailed: false }
+  }
   try {
     return { jwk: JSON.parse(raw) as Record<string, unknown>, parseFailed: false }
   } catch {
@@ -63,26 +91,62 @@ function parsePrivateJwk(raw: string | undefined): {
 }
 
 async function resolvePushEnv(): Promise<PushEnv> {
-  let publicKey = process.env.VAPID_PUBLIC_KEY?.trim() || null
-  let privateRaw = process.env.VAPID_PRIVATE_KEY
-  let subject = process.env.VAPID_SUBJECT?.trim() || 'mailto:admin@example.com'
+  const diagnostics: VapidDiagnostics = {
+    cloudflareContextAvailable: false,
+    publicKeyFromProcessEnv: false,
+    publicKeyFromCloudflareEnv: false,
+    privateKeyFromProcessEnv: false,
+    privateKeyFromCloudflareEnv: false,
+    subjectFromProcessEnv: false,
+    subjectFromCloudflareEnv: false,
+  }
+
+  let publicKey = readEnvString(process.env.VAPID_PUBLIC_KEY) ?? null
+  let privateRaw: unknown = process.env.VAPID_PRIVATE_KEY
+  let subject = readEnvString(process.env.VAPID_SUBJECT) ?? 'mailto:admin@example.com'
+
+  diagnostics.publicKeyFromProcessEnv = !!publicKey
+  diagnostics.privateKeyFromProcessEnv = !!readPrivateKeyRaw(privateRaw)
+  diagnostics.subjectFromProcessEnv = !!readEnvString(process.env.VAPID_SUBJECT)
 
   try {
     const { env } = await getCloudflareContext({ async: true })
+    diagnostics.cloudflareContextAvailable = true
     const cf = env as CloudflareEnv
-    publicKey = publicKey || cf.VAPID_PUBLIC_KEY?.trim() || null
-    privateRaw = privateRaw || cf.VAPID_PRIVATE_KEY
-    subject = subject || cf.VAPID_SUBJECT?.trim() || 'mailto:admin@example.com'
+
+    const cfPublic = readEnvString(cf.VAPID_PUBLIC_KEY)
+    if (cfPublic) {
+      publicKey = publicKey ?? cfPublic
+      diagnostics.publicKeyFromCloudflareEnv = true
+    }
+
+    const cfPrivate = readPrivateKeyRaw(cf.VAPID_PRIVATE_KEY)
+    if (cfPrivate) {
+      privateRaw = privateRaw ?? cfPrivate
+      diagnostics.privateKeyFromCloudflareEnv = true
+    } else if (cf.VAPID_PRIVATE_KEY && typeof cf.VAPID_PRIVATE_KEY === 'object') {
+      privateRaw = privateRaw ?? cf.VAPID_PRIVATE_KEY
+      diagnostics.privateKeyFromCloudflareEnv = true
+    }
+
+    const cfSubject = readEnvString(cf.VAPID_SUBJECT)
+    if (cfSubject) {
+      subject = cfSubject
+      diagnostics.subjectFromCloudflareEnv = true
+    }
   } catch {
     /* ohne Worker-Kontext */
   }
 
-  const { jwk, parseFailed } = parsePrivateJwk(privateRaw)
+  const privateString = readPrivateKeyRaw(privateRaw)
+  const { jwk, parseFailed } = parsePrivateJwk(privateString ?? privateRaw)
+
   return {
     publicKey,
     privateJwk: jwk,
     privateKeyParseFailed: parseFailed,
     subject,
+    diagnostics,
   }
 }
 
@@ -92,15 +156,24 @@ export async function getVapidConfigStatus(): Promise<{
   privateKeyConfigured: boolean
   privateKeyParseFailed: boolean
   keyPairMatch: boolean
+  diagnostics: VapidDiagnostics
+  setupHint: string | null
 }> {
   const env = await resolvePushEnv()
   const derived = env.privateJwk ? derivePublicKeyFromJwk(env.privateJwk) : null
-  return {
+  const status = {
     publicKey: env.publicKey,
     enabled: !!env.publicKey && !!env.privateJwk,
     privateKeyConfigured: !!env.privateJwk,
     privateKeyParseFailed: env.privateKeyParseFailed,
     keyPairMatch: !!env.publicKey && !!derived && env.publicKey === derived,
+    diagnostics: env.diagnostics,
+  }
+  return {
+    ...status,
+    setupHint: status.enabled
+      ? null
+      : describeVapidSetupError({ ...status, diagnostics: env.diagnostics }),
   }
 }
 

@@ -13,6 +13,8 @@ export async function GET() {
       privateKeyConfigured: status.privateKeyConfigured,
       privateKeyParseFailed: status.privateKeyParseFailed,
       keyPairMatch: status.keyPairMatch,
+      diagnostics: status.diagnostics,
+      setupHint: status.setupHint,
     },
   })
 }

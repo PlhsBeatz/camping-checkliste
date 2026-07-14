@@ -60,12 +60,17 @@ export function usePushSubscribe() {
             privateKeyConfigured?: boolean
             privateKeyParseFailed?: boolean
             keyPairMatch?: boolean
+            setupHint?: string | null
+            diagnostics?: import('@/lib/push-vapid-errors').VapidDiagnostics
           }
         }
         if (j.success && j.data?.publicKey) {
           setPublicKey(j.data.publicKey)
         } else if (j.success && j.data) {
-          setLastError(describeVapidSetupError(j.data))
+          setLastError(
+            j.data.setupHint ??
+              describeVapidSetupError({ ...j.data, diagnostics: j.data.diagnostics })
+          )
         }
       } catch {
         setLastError('Push-Konfiguration konnte nicht geladen werden.')

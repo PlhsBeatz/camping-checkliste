@@ -422,6 +422,10 @@ export interface CloudflareEnv {
   CAMPING_PHOTOS?: R2Bucket
   GOOGLE_MAPS_API_KEY?: string
   NEXT_PUBLIC_GOOGLE_MAPS_API_KEY?: string
+  JWT_SECRET?: string
+  VAPID_PUBLIC_KEY?: string
+  VAPID_PRIVATE_KEY?: string
+  VAPID_SUBJECT?: string
 }
 
 /**
