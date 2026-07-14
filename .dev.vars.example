@@ -4,6 +4,18 @@
 # Mind. 32 Zeichen – für JWT-Signatur der Auth-Session
 JWT_SECRET=dein-mindestens-32-zeichen-langer-geheimer-schluessel
 
+# --- Web Push (VAPID) – ein Schlüsselpaar für die gesamte PWA, nicht pro User ---
+# Schlüssel erzeugen: npx @pushforge/builder vapid
+# Danach pnpm dev neu starten. Migration: migrations/0031_push_subscriptions.sql (lokal + remote).
+# Push testen: Profil → Push-Benachrichtigungen aktivieren → Browser-Erlaubnis
+# Lokal nutzt die App dafür public/push-sw.js (Serwist-SW ist in dev absichtlich deaktiviert).
+# Migration: 0031_push_subscriptions.sql + 0032_user_push_preferences.sql + 0033_user_reise_gps_mode.sql
+# Produktion: npx wrangler secret put VAPID_PUBLIC_KEY (usw.), niemals committen
+VAPID_PUBLIC_KEY=dein-oeffentlicher-vapid-schluessel
+# Private Key als JSON – in einfache Anführungszeichen, sonst kann Wrangler den Wert falsch parsen:
+VAPID_PRIVATE_KEY='{"kty":"EC","crv":"P-256","x":"...","y":"...","d":"..."}'
+VAPID_SUBJECT=mailto:deine@email.de
+
 # --- Optional: Camping-Foto-Nachkomprimierung (Admin /datensicherung) ---
 # Free Tier: Standard 1 Foto je Request (Workers CPU + Subrequests). Auf Paid höher möglich.
 # REOPTIMIZE_BATCH_SIZE=1

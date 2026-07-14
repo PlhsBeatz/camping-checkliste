@@ -12,6 +12,8 @@ import { cn } from '@/lib/utils'
 import type { ApiResponse } from '@/lib/api-types'
 import { HomeAddressAutocomplete } from '@/components/home-address-autocomplete'
 import { ThemeToggle } from '@/components/theme-toggle'
+import { PushNotificationSettings } from '@/components/push-notification-settings'
+import { ReiseGpsSettings } from '@/components/reise-gps-settings'
 import { getCachedHomeLocation } from '@/lib/offline-sync'
 import { cacheHomeLocation } from '@/lib/offline-db'
 import { useReconnectRefetch } from '@/hooks/use-reconnect-refetch'
@@ -167,6 +169,10 @@ export default function ProfilPage() {
               <ThemeToggle className="max-w-xs" />
             </CardContent>
           </Card>
+
+          <ReiseGpsSettings />
+
+          <PushNotificationSettings />
 
           <Card className="min-w-0 overflow-hidden">
             <CardHeader>

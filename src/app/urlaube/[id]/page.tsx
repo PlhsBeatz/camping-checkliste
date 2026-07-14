@@ -12,6 +12,7 @@ import { UrlaubOverviewMap } from '@/components/urlaub-overview-map'
 import {
   ArrowLeft,
   ListChecks,
+  Map as MapIcon,
   Menu,
   MoreVertical,
   Pencil,
@@ -21,7 +22,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { ApiResponse } from '@/lib/api-types'
-import { Vacation, Mitreisender, Campingplatz, VacationCampingStay } from '@/lib/db'
+import { Vacation, Mitreisender, Campingplatz, VacationCampingStay, Rastplatz } from '@/lib/db'
 import Image from 'next/image'
 import { campingplatzListThumbnailSrc } from '@/lib/campingplatz-photo-url'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
@@ -40,9 +41,21 @@ import {
   getCachedVacationMitreisende,
 } from '@/lib/offline-sync'
 import { useReconnectRefetch } from '@/hooks/use-reconnect-refetch'
-import { openCampingplatzInAdacMaps } from '@/lib/adac-maps'
 import { getVacationCountdown } from '@/lib/vacation-helpers'
 import { groupAllMitreisendeByGruppe } from '@/lib/pack-profile-groups'
+import {
+  buildReturnHomeSegment,
+  buildVacationSegments,
+  getTravelLegPhases,
+  type TravelLegPhase,
+  type TravelSegment,
+} from '@/lib/travel-segment'
+import {
+  countSegmentEmpfehlungen,
+  openSegmentInAdacMaps,
+  openSegmentInGoogleMaps,
+} from '@/lib/maps-export'
+import { SegmentRastSuggestions } from '@/components/segment-rast-suggestions'
 
 type CampingplatzRouteInfo = {
   distanceKm: number
@@ -145,12 +158,24 @@ function CountdownHeader({ vacation }: { vacation: Vacation }) {
 function RouteLeg({
   label,
   route,
-  onOpenAdac,
+  segment,
+  rastplaetze,
 }: {
   label: string
   route: CampingplatzRouteInfo | undefined
-  onOpenAdac?: () => void
+  segment: TravelSegment | null
+  rastplaetze: Rastplatz[]
 }) {
+  const empfehlungsCount = useMemo(() => {
+    if (!segment) return 0
+    return countSegmentEmpfehlungen(segment, rastplaetze)
+  }, [segment, rastplaetze])
+
+  const waypointHint =
+    empfehlungsCount > 0
+      ? ` (${empfehlungsCount} Empfehlung${empfehlungsCount === 1 ? '' : 'en'})`
+      : ''
+
   return (
     <div className="flex items-center gap-2 py-1.5 pl-4 pr-1 text-xs text-muted-foreground">
       <div className="flex flex-col items-center self-stretch">
@@ -168,7 +193,7 @@ function RouteLeg({
           <span className="ml-1.5 italic opacity-70">Route wird berechnet…</span>
         )}
       </div>
-      {onOpenAdac && (
+      {segment && (
         <DropdownMenu modal={false}>
           <DropdownMenuTrigger asChild>
             <Button
@@ -182,9 +207,17 @@ function RouteLeg({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="z-30">
-            <DropdownMenuItem onSelect={() => onOpenAdac()}>
+            <DropdownMenuItem
+              onSelect={() => openSegmentInGoogleMaps(segment, rastplaetze)}
+            >
+              <MapIcon className="h-4 w-4 mr-2" />
+              Google Maps{waypointHint}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onSelect={() => openSegmentInAdacMaps(segment, rastplaetze)}
+            >
               <Route className="h-4 w-4 mr-2" />
-              ADAC Routenplanung öffnen
+              ADAC Routenplanung{waypointHint}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -218,6 +251,7 @@ export default function UrlaubDetailPage() {
     lng: number
     label?: string
   } | null>(null)
+  const [rastplaetze, setRastplaetze] = useState<Rastplatz[]>([])
   const routeInfoRef = useRef(routeInfo)
   routeInfoRef.current = routeInfo
 
@@ -317,6 +351,44 @@ export default function UrlaubDetailPage() {
       aborted = true
     }
   }, [])
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const r = await fetch('/api/rastplaetze')
+        const j = (await r.json()) as ApiResponse<Rastplatz[]>
+        if (j.success && j.data) setRastplaetze(j.data)
+      } catch {
+        /* ignore */
+      }
+    })()
+  }, [])
+
+  const travelSegments = useMemo(
+    () => buildVacationSegments(stays, homeCoords),
+    [stays, homeCoords]
+  )
+
+  const returnHomeSegment = useMemo(() => {
+    const lastStay = stays[stays.length - 1]
+    if (!homeCoords || !lastStay) return null
+    return buildReturnHomeSegment(lastStay.campingplatz, homeCoords)
+  }, [stays, homeCoords])
+
+  const travelLegPhases = useMemo(() => {
+    if (!vacation) return new Map<string, TravelLegPhase>()
+    return getTravelLegPhases(vacation, stays, travelSegments, returnHomeSegment)
+  }, [vacation, stays, travelSegments, returnHomeSegment])
+
+  const segmentForLeg = useCallback(
+    (fromId: string, toId: string) =>
+      travelSegments.find(
+        (s) =>
+          (s.from.campingplatzId === fromId || s.from.kind === 'home') &&
+          s.to.campingplatzId === toId
+      ) ?? null,
+    [travelSegments]
+  )
 
   useEffect(() => {
     if (campingplaetze.length === 0) return
@@ -600,17 +672,29 @@ export default function UrlaubDetailPage() {
                       <div>
                         {(() => {
                           const firstStay = stays[0]
+                          const homeSegment =
+                            firstStay &&
+                            travelSegments.find(
+                              (s) =>
+                                s.from.kind === 'home' &&
+                                s.to.campingplatzId === firstStay.campingplatz.id
+                            )
                           return homeCoords && firstStay && firstStay.campingplatz.lat != null ? (
-                            <RouteLeg
-                              label="Von zu Hause"
-                              route={routeInfo[firstStay.campingplatz.id]}
-                              onOpenAdac={() =>
-                                void openCampingplatzInAdacMaps(firstStay.campingplatz, {
-                                  lat: homeCoords.lat,
-                                  lng: homeCoords.lng,
-                                })
-                              }
-                            />
+                            <>
+                              <RouteLeg
+                                label="Von zu Hause"
+                                route={routeInfo[firstStay.campingplatz.id]}
+                                segment={homeSegment ?? null}
+                                rastplaetze={rastplaetze}
+                              />
+                              {homeSegment ? (
+                                <SegmentRastSuggestions
+                                  segment={homeSegment}
+                                  rastplaetze={rastplaetze}
+                                  phase={travelLegPhases.get(homeSegment.id) ?? 'future'}
+                                />
+                              ) : null}
+                            </>
                           ) : null
                         })()}
                         {stays.map((stay, index) => {
@@ -664,22 +748,32 @@ export default function UrlaubDetailPage() {
                                 </div>
                               </Link>
                               {showLeg && next && (
-                                <RouteLeg
-                                  label="Weiterfahrt"
-                                  route={
-                                    segmentRouteInfo[
-                                      segmentKey(cp.id, next.campingplatz.id)
-                                    ]
-                                  }
-                                  onOpenAdac={() =>
-                                    void openCampingplatzInAdacMaps(
-                                      next.campingplatz,
-                                      cp.lat != null && cp.lng != null
-                                        ? { lat: cp.lat, lng: cp.lng }
-                                        : null
+                                <>
+                                  {(() => {
+                                    const legSegment = segmentForLeg(cp.id, next.campingplatz.id)
+                                    return (
+                                      <>
+                                        <RouteLeg
+                                          label="Weiterfahrt"
+                                          route={
+                                            segmentRouteInfo[
+                                              segmentKey(cp.id, next.campingplatz.id)
+                                            ]
+                                          }
+                                          segment={legSegment}
+                                          rastplaetze={rastplaetze}
+                                        />
+                                        {legSegment ? (
+                                          <SegmentRastSuggestions
+                                            segment={legSegment}
+                                            rastplaetze={rastplaetze}
+                                            phase={travelLegPhases.get(legSegment.id) ?? 'future'}
+                                          />
+                                        ) : null}
+                                      </>
                                     )
-                                  }
-                                />
+                                  })()}
+                                </>
                               )}
                               {next && next.campingplatz.id === cp.id && (
                                 <div className="py-1.5 pl-4 text-xs italic text-muted-foreground">
@@ -692,16 +786,21 @@ export default function UrlaubDetailPage() {
                         {(() => {
                           const lastStay = stays[stays.length - 1]
                           return homeCoords && lastStay && lastStay.campingplatz.lat != null ? (
-                            <RouteLeg
-                              label="Zurück nach Hause"
-                              route={routeInfo[lastStay.campingplatz.id]}
-                              onOpenAdac={() =>
-                                void openCampingplatzInAdacMaps(lastStay.campingplatz, {
-                                  lat: homeCoords.lat,
-                                  lng: homeCoords.lng,
-                                })
-                              }
-                            />
+                            <>
+                              <RouteLeg
+                                label="Zurück nach Hause"
+                                route={routeInfo[lastStay.campingplatz.id]}
+                                segment={returnHomeSegment}
+                                rastplaetze={rastplaetze}
+                              />
+                              {returnHomeSegment ? (
+                                <SegmentRastSuggestions
+                                  segment={returnHomeSegment}
+                                  rastplaetze={rastplaetze}
+                                  phase={travelLegPhases.get(returnHomeSegment.id) ?? 'future'}
+                                />
+                              ) : null}
+                            </>
                           ) : null
                         })()}
                       </div>

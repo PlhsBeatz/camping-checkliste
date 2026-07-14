@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { dedupePlacePhotos } from '@/lib/google-place-photos-merge'
+import { importGoogleMapsLibrary, loadGoogleMapsScript } from '@/lib/google-maps-script'
 
 type PlaceLocation = {
   lat?: number | (() => number)
@@ -35,6 +36,8 @@ type NewPlace = {
   /** Legacy / REST-bezogene Schreibweisen (Abwärtskompatibilität) */
   website?: string
   websiteUri?: string
+  types?: string[]
+  primaryType?: string
   fetchFields?: (opts: { fields: string[] }) => Promise<void>
 }
 
@@ -49,6 +52,12 @@ export type CampingplatzAddressResolve = {
   placeName?: string
   /** Von Google hinterlegte Website-URL (falls vorhanden) */
   website?: string | null
+  /** Google Place ID (ChIJ…), falls aus Autocomplete */
+  googlePlaceId?: string | null
+  /** Google-Typen (z. B. aus Link-Import) */
+  googleTypes?: string[]
+  /** Primärtyp laut Google (z. B. restaurant) */
+  primaryType?: string
 }
 
 export type PlacePhotoForPicker = { name: string; authorAttributions?: string[] }
@@ -61,7 +70,25 @@ interface CampingplatzAddressAutocompleteProps {
   onElementReady?: (el: HTMLElement | null) => void
   /** Optional: Fotos des gewählten Ortes (alle von Google gelieferten, typisch bis zu 10 pro API) */
   onPlacePhotos?: (photos: PlacePhotoForPicker[]) => void
+  /** Primärtypen für Autocomplete (max. 5). Standard: Campingplätze */
+  includedPrimaryTypes?: string[]
+  /** Zweite Suchstufe: weitere Primärtypen (max. 5), z. B. Restaurant/Café */
+  expandedPrimaryTypes?: string[]
+  /** Hinweis auf dem Button zur erweiterten Typ-Suche (zweite Stufe) */
+  expandTypesSearchLabel?: string
+  /** Hinweis auf dem Button zur Suche ohne Typ-Filter (alle Orte) */
+  expandSearchLabel?: string
+  /** Meldung wenn keine Treffer in der Typ-Suche */
+  noResultsExpandLabel?: string
+  /** Google-Maps-Link-Import */
+  enableGoogleLinkImport?: boolean
+  /** Beschriftung des Link-Import-Buttons */
+  googleLinkImportLabel?: string
+  /** Hinweis über der Trefferliste bei zweiter Suchstufe */
+  expandedSearchHint?: string
 }
+
+type SearchTier = 'primary' | 'secondary' | 'all'
 
 const DEBOUNCE_MS = 400
 const STRICT_TYPES: string[] = ['campground', 'rv_park']
@@ -136,27 +163,37 @@ type PlacesLib = {
 }
 
 async function loadPlacesLibrary(): Promise<PlacesLib | null> {
-  const w = window as typeof window & { google?: { maps?: { importLibrary?: (name: string) => Promise<PlacesLib> } } }
-  if (!w.google?.maps?.importLibrary) return null
-  try {
-    const lib = await w.google.maps.importLibrary('places')
-    return lib as PlacesLib
-  } catch {
-    return null
-  }
+  return importGoogleMapsLibrary<PlacesLib>('places')
 }
 
 export function CampingplatzAddressAutocomplete(props: CampingplatzAddressAutocompleteProps) {
-  const { value, onChange, onResolve, placeholder, onElementReady, onPlacePhotos } = props
+  const {
+    value,
+    onChange,
+    onResolve,
+    placeholder,
+    onElementReady,
+    onPlacePhotos,
+    includedPrimaryTypes,
+    expandedPrimaryTypes,
+    expandTypesSearchLabel = 'Kein Treffer. Suche mit weiteren Ortstypen?',
+    expandSearchLabel = 'Suche auf alle Orte ausweiten',
+    noResultsExpandLabel = 'Kein Campingplatz gefunden. Suche auf alle Orte ausweiten?',
+    enableGoogleLinkImport = true,
+    googleLinkImportLabel = 'Campingplatz per Google-Maps-Link hinzufügen',
+    expandedSearchHint,
+  } = props
+  const primaryTypes = includedPrimaryTypes ?? STRICT_TYPES
+  const secondaryTypes = expandedPrimaryTypes?.length ? expandedPrimaryTypes : undefined
   const wrapperRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
-  const [scriptLoaded, setScriptLoaded] = useState(false)
   const [placesAvailable, setPlacesAvailable] = useState(false)
+  const [mapsLoadFailed, setMapsLoadFailed] = useState(false)
   const [suggestions, setSuggestions] = useState<Array<{ placePrediction?: PlacePrediction }>>([])
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [dropdownOpen, setDropdownOpen] = useState(false)
-  const [isExpandedSearch, setIsExpandedSearch] = useState(false)
+  const [searchTier, setSearchTier] = useState<SearchTier>('primary')
   const [showLinkImport, setShowLinkImport] = useState(false)
   const [googleMapsLink, setGoogleMapsLink] = useState('')
   const sessionTokenRef = useRef<unknown>(null)
@@ -166,40 +203,34 @@ export function CampingplatzAddressAutocomplete(props: CampingplatzAddressAutoco
 
   useEffect(() => {
     if (typeof window === 'undefined') return
-    const anyWindow = window as typeof window & { google?: { maps?: unknown } }
-    if (anyWindow.google?.maps) {
-      setScriptLoaded(true)
-      return
-    }
-    const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
-    if (!apiKey) {
-      setScriptLoaded(true)
-      return
-    }
-    const scriptId = 'google-maps-places-script'
-    if (document.getElementById(scriptId)) {
-      setScriptLoaded(true)
-      return
-    }
-    const script = document.createElement('script')
-    script.id = scriptId
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&language=de&v=weekly`
-    script.async = true
-    script.onload = () => setScriptLoaded(true)
-    script.onerror = () => setScriptLoaded(true)
-    document.head.appendChild(script)
-  }, [])
-
-  useEffect(() => {
-    if (!scriptLoaded) return
     let cancelled = false
-    loadPlacesLibrary().then((lib) => {
+
+    void (async () => {
+      const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY?.trim()
+      if (!apiKey) {
+        if (!cancelled) setMapsLoadFailed(true)
+        return
+      }
+
+      const loaded = await loadGoogleMapsScript()
+      if (cancelled) return
+      if (!loaded) {
+        setMapsLoadFailed(true)
+        return
+      }
+
+      const lib = await loadPlacesLibrary()
       if (cancelled) return
       placesLibRef.current = lib
-      setPlacesAvailable(!!lib?.AutocompleteSuggestion)
-    })
-    return () => { cancelled = true }
-  }, [scriptLoaded])
+      const available = !!lib?.AutocompleteSuggestion
+      setPlacesAvailable(available)
+      setMapsLoadFailed(!available)
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const resetSessionToken = useCallback(() => {
     if (!placesLibRef.current?.AutocompleteSessionToken) return
@@ -207,7 +238,7 @@ export function CampingplatzAddressAutocomplete(props: CampingplatzAddressAutoco
   }, [])
 
   const fetchSuggestions = useCallback(
-    async (input: string, expanded: boolean) => {
+    async (input: string, tier: SearchTier) => {
       const lib = placesLibRef.current
       if (!lib?.AutocompleteSuggestion || !input.trim()) {
         setSuggestions([])
@@ -224,29 +255,32 @@ export function CampingplatzAddressAutocomplete(props: CampingplatzAddressAutoco
           sessionToken: sessionTokenRef.current ?? undefined,
           language: 'de',
         }
-        if (!expanded) {
-          request.includedPrimaryTypes = STRICT_TYPES
+        if (tier === 'primary') {
+          request.includedPrimaryTypes = primaryTypes
+        } else if (tier === 'secondary' && secondaryTypes?.length) {
+          request.includedPrimaryTypes = secondaryTypes
         }
         const result = await lib.AutocompleteSuggestion.fetchAutocompleteSuggestions(request)
         if (requestId !== lastRequestIdRef.current) return
         setSuggestions(result.suggestions ?? [])
         setError(null)
-      } catch {
+      } catch (err) {
         if (requestId !== lastRequestIdRef.current) return
         setSuggestions([])
+        console.error('[Places Autocomplete]', err)
         setError('Suche derzeit nicht verfügbar. Bitte später erneut versuchen.')
       } finally {
         if (requestId === lastRequestIdRef.current) setIsLoading(false)
       }
     },
-    [resetSessionToken]
+    [resetSessionToken, primaryTypes, secondaryTypes]
   )
 
   useEffect(() => {
     if (!placesAvailable || !value.trim()) {
       setSuggestions([])
       setError(null)
-      setIsExpandedSearch(false)
+      setSearchTier('primary')
       if (debounceRef.current) {
         clearTimeout(debounceRef.current)
         debounceRef.current = null
@@ -256,7 +290,7 @@ export function CampingplatzAddressAutocomplete(props: CampingplatzAddressAutoco
     if (debounceRef.current) clearTimeout(debounceRef.current)
     debounceRef.current = setTimeout(() => {
       debounceRef.current = null
-      fetchSuggestions(value, isExpandedSearch)
+      fetchSuggestions(value, searchTier)
     }, DEBOUNCE_MS)
     return () => {
       if (debounceRef.current) {
@@ -264,11 +298,12 @@ export function CampingplatzAddressAutocomplete(props: CampingplatzAddressAutoco
         debounceRef.current = null
       }
     }
-  }, [value, placesAvailable, fetchSuggestions, isExpandedSearch])
+  }, [value, placesAvailable, fetchSuggestions, searchTier])
 
-  const handleExpandSearch = useCallback(() => {
-    setIsExpandedSearch(true)
-    if (value.trim() && placesLibRef.current?.AutocompleteSuggestion) {
+  const runTierSearch = useCallback(
+    (tier: SearchTier) => {
+      setSearchTier(tier)
+      if (!value.trim() || !placesLibRef.current?.AutocompleteSuggestion) return
       setIsLoading(true)
       setError(null)
       const requestId = ++lastRequestIdRef.current
@@ -277,21 +312,35 @@ export function CampingplatzAddressAutocomplete(props: CampingplatzAddressAutoco
         sessionToken: sessionTokenRef.current ?? undefined,
         language: 'de',
       }
-      placesLibRef.current.AutocompleteSuggestion.fetchAutocompleteSuggestions(request).then(
-        (result) => {
+      if (tier === 'primary') {
+        request.includedPrimaryTypes = primaryTypes
+      } else if (tier === 'secondary' && secondaryTypes?.length) {
+        request.includedPrimaryTypes = secondaryTypes
+      }
+      placesLibRef.current.AutocompleteSuggestion.fetchAutocompleteSuggestions(request)
+        .then((result) => {
           if (requestId !== lastRequestIdRef.current) return
           setSuggestions(result.suggestions ?? [])
           setError(null)
-        },
-        () => {
+        })
+        .catch(() => {
           if (requestId !== lastRequestIdRef.current) return
           setError('Suche derzeit nicht verfügbar.')
-        }
-      ).finally(() => {
-        if (requestId === lastRequestIdRef.current) setIsLoading(false)
-      })
-    }
-  }, [value])
+        })
+        .finally(() => {
+          if (requestId === lastRequestIdRef.current) setIsLoading(false)
+        })
+    },
+    [value, primaryTypes, secondaryTypes]
+  )
+
+  const handleExpandToSecondary = useCallback(() => {
+    runTierSearch('secondary')
+  }, [runTierSearch])
+
+  const handleExpandToAll = useCallback(() => {
+    runTierSearch('all')
+  }, [runTierSearch])
 
   const handleImportFromGoogleMapsLink = useCallback(async () => {
     const url = googleMapsLink.trim()
@@ -329,7 +378,7 @@ export function CampingplatzAddressAutocomplete(props: CampingplatzAddressAutoco
       sessionTokenRef.current = null
       setDropdownOpen(false)
       setSuggestions([])
-      setIsExpandedSearch(false)
+      setSearchTier('primary')
       setShowLinkImport(false)
       setGoogleMapsLink('')
       onElementReady?.(inputRef.current ?? null)
@@ -351,6 +400,8 @@ export function CampingplatzAddressAutocomplete(props: CampingplatzAddressAutoco
             'addressComponents',
             'photos',
             'websiteURI',
+            'types',
+            'primaryType',
           ],
         })
         const addr = (place.formattedAddress ?? value) as string
@@ -379,6 +430,9 @@ export function CampingplatzAddressAutocomplete(props: CampingplatzAddressAutoco
           land,
           placeName,
           website,
+          googlePlaceId: rawGooglePlaceIdFromPlace(place),
+          googleTypes: place.types,
+          primaryType: place.primaryType,
         })
         const photos = place.photos ?? []
         const forPicker: PlacePhotoForPicker[] = dedupePlacePhotos(
@@ -414,7 +468,7 @@ export function CampingplatzAddressAutocomplete(props: CampingplatzAddressAutoco
         sessionTokenRef.current = null
         setDropdownOpen(false)
         setSuggestions([])
-        setIsExpandedSearch(false)
+        setSearchTier('primary')
         onElementReady?.(inputRef.current ?? null)
       } catch {
         setError('Details konnten nicht geladen werden.')
@@ -428,19 +482,20 @@ export function CampingplatzAddressAutocomplete(props: CampingplatzAddressAutoco
     return () => onElementReady?.(null)
   }, [onElementReady, placesAvailable])
 
+  const showNoResultsActions =
+    !isLoading && !error && !!value.trim() && suggestions.length === 0
+
   const showDropdown =
     dropdownOpen &&
-    (suggestions.length > 0 ||
-      isLoading ||
-      !!error ||
-      (!!value.trim() && !isLoading && suggestions.length === 0 && !isExpandedSearch))
+    (suggestions.length > 0 || isLoading || !!error || showNoResultsActions)
 
-  const showFallbackButton =
-    !isLoading &&
-    !error &&
-    value.trim() &&
-    suggestions.length === 0 &&
-    !isExpandedSearch
+  const showSecondaryExpand =
+    showNoResultsActions && searchTier === 'primary' && !!secondaryTypes?.length
+
+  const showAllExpand =
+    showNoResultsActions &&
+    searchTier !== 'all' &&
+    (searchTier === 'secondary' || !secondaryTypes?.length)
 
   const handleBlur = useCallback(
     (e: FocusEvent<HTMLInputElement>) => {
@@ -455,17 +510,64 @@ export function CampingplatzAddressAutocomplete(props: CampingplatzAddressAutoco
 
   if (!placesAvailable) {
     return (
-      <Input
-        ref={inputRef}
-        value={value}
-        onChange={(e) => {
-          const v = e.target.value
-          onChange(v)
-          onResolve({ address: v, lat: null, lng: null, ort: null, bundesland: null, land: null })
-        }}
-        placeholder={placeholder ?? 'Adresse eingeben'}
-        autoComplete="off"
-      />
+      <div className="space-y-1">
+        <Input
+          ref={inputRef}
+          value={value}
+          onChange={(e) => {
+            const v = e.target.value
+            onChange(v)
+            onResolve({ address: v, lat: null, lng: null, ort: null, bundesland: null, land: null })
+          }}
+          placeholder={placeholder ?? 'Adresse eingeben'}
+          autoComplete="off"
+        />
+        {mapsLoadFailed && (
+          <p className="text-xs text-amber-700">
+            Google-Ortssuche nicht verfügbar
+            {process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
+              ? ' (Maps-Skript konnte nicht geladen werden – Seite neu laden oder API-Key prüfen).'
+              : ' (NEXT_PUBLIC_GOOGLE_MAPS_API_KEY fehlt in .dev.vars).'}
+          </p>
+        )}
+        {mapsLoadFailed && enableGoogleLinkImport && (
+          <div className="pt-2 space-y-1">
+            <button
+              type="button"
+              className="text-xs text-brand-heading font-medium hover:underline"
+              onClick={() => setShowLinkImport((prev) => !prev)}
+            >
+              {googleLinkImportLabel}
+            </button>
+            {showLinkImport && (
+              <div className="flex items-center gap-2">
+                <Input
+                  value={googleMapsLink}
+                  onChange={(e) => setGoogleMapsLink(e.target.value)}
+                  placeholder="https://maps.app.goo.gl/..."
+                  className="h-8 text-sm"
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      void handleImportFromGoogleMapsLink()
+                    }
+                  }}
+                />
+                <Button
+                  type="button"
+                  size="sm"
+                  className="h-8 px-3 text-xs"
+                  onClick={() => void handleImportFromGoogleMapsLink()}
+                >
+                  OK
+                </Button>
+              </div>
+            )}
+            {error && <p className="text-xs text-amber-700">{error}</p>}
+          </div>
+        )}
+      </div>
     )
   }
 
@@ -505,7 +607,12 @@ export function CampingplatzAddressAutocomplete(props: CampingplatzAddressAutoco
           )}
           {!isLoading && !error && suggestions.length > 0 && (
             <>
-              {isExpandedSearch && (
+              {searchTier === 'secondary' && expandedSearchHint && (
+                <div className="px-3 pt-3 pb-0 text-xs text-muted-foreground">
+                  {expandedSearchHint}
+                </div>
+              )}
+              {searchTier === 'all' && (
                 <div className="px-3 pt-3 pb-0 text-xs text-muted-foreground">
                   Suche auf alle Orte ausgeweitet
                 </div>
@@ -534,64 +641,81 @@ export function CampingplatzAddressAutocomplete(props: CampingplatzAddressAutoco
               })}
             </>
           )}
-          {showFallbackButton && (
+          {showNoResultsActions && (showSecondaryExpand || showAllExpand || enableGoogleLinkImport) && (
             <div className="pt-4">
-              <button
-                type="button"
-                className="w-full text-left px-3 py-2 text-sm text-brand-heading hover:bg-muted focus:bg-muted focus:outline-none font-medium"
-                onClick={() => {
-                  handleExpandSearch()
-                }}
-              >
-                Kein Campingplatz gefunden. Suche auf alle Orte ausweiten?
-              </button>
-              <button
-                type="button"
-                className="w-full text-left px-3 py-1.5 text-sm text-brand-heading hover:bg-muted focus:bg-muted focus:outline-none"
-                onClick={() => {
-                  setShowLinkImport((prev) => !prev)
-                  if (!showLinkImport) {
-                    setGoogleMapsLink('')
-                  }
-                }}
-              >
-                Campingplatz per Google-Maps-Link hinzufügen
-              </button>
-              {showLinkImport && (
-                <div className="px-3 pb-2 pt-1 space-y-1">
-                  <div className="flex items-center gap-2">
-                    <Input
-                      value={googleMapsLink}
-                      onChange={(e) => setGoogleMapsLink(e.target.value)}
-                      placeholder="https://maps.app.goo.gl/..."
-                      className="h-8 text-sm"
-                      autoFocus
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault()
-                          handleImportFromGoogleMapsLink()
-                        } else if (e.key === 'Escape') {
-                          e.preventDefault()
-                          setShowLinkImport(false)
-                          setGoogleMapsLink('')
-                        }
-                      }}
-                    />
-                    <Button
-                      type="button"
-                      size="sm"
-                      className="h-8 px-3 text-xs bg-[rgb(45,79,30)] hover:bg-[rgb(45,79,30)]/90 text-white"
-                      onClick={() => {
-                        handleImportFromGoogleMapsLink()
-                      }}
-                    >
-                      OK
-                    </Button>
-                  </div>
-                  <p className="text-[11px] leading-snug text-muted-foreground">
-                    Tipp: In Google Maps den Platz öffnen, auf „Teilen“ klicken und den Link hier einfügen.
-                  </p>
-                </div>
+              {showSecondaryExpand && (
+                <button
+                  type="button"
+                  className="w-full text-left px-3 py-2 text-sm text-brand-heading hover:bg-muted focus:bg-muted focus:outline-none font-medium"
+                  onClick={() => {
+                    handleExpandToSecondary()
+                  }}
+                >
+                  {expandTypesSearchLabel}
+                </button>
+              )}
+              {showAllExpand && (
+                <button
+                  type="button"
+                  className="w-full text-left px-3 py-2 text-sm text-brand-heading hover:bg-muted focus:bg-muted focus:outline-none font-medium"
+                  onClick={() => {
+                    handleExpandToAll()
+                  }}
+                >
+                  {secondaryTypes?.length ? noResultsExpandLabel : expandSearchLabel}
+                </button>
+              )}
+              {enableGoogleLinkImport && (
+                <>
+                  <button
+                    type="button"
+                    className="w-full text-left px-3 py-1.5 text-sm text-brand-heading hover:bg-muted focus:bg-muted focus:outline-none"
+                    onClick={() => {
+                      setShowLinkImport((prev) => !prev)
+                      if (!showLinkImport) {
+                        setGoogleMapsLink('')
+                      }
+                    }}
+                  >
+                    {googleLinkImportLabel}
+                  </button>
+                  {showLinkImport && (
+                    <div className="px-3 pb-2 pt-1 space-y-1">
+                      <div className="flex items-center gap-2">
+                        <Input
+                          value={googleMapsLink}
+                          onChange={(e) => setGoogleMapsLink(e.target.value)}
+                          placeholder="https://maps.app.goo.gl/..."
+                          className="h-8 text-sm"
+                          autoFocus
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault()
+                              handleImportFromGoogleMapsLink()
+                            } else if (e.key === 'Escape') {
+                              e.preventDefault()
+                              setShowLinkImport(false)
+                              setGoogleMapsLink('')
+                            }
+                          }}
+                        />
+                        <Button
+                          type="button"
+                          size="sm"
+                          className="h-8 px-3 text-xs bg-[rgb(45,79,30)] hover:bg-[rgb(45,79,30)]/90 text-white"
+                          onClick={() => {
+                            handleImportFromGoogleMapsLink()
+                          }}
+                        >
+                          OK
+                        </Button>
+                      </div>
+                      <p className="text-[11px] leading-snug text-muted-foreground">
+                        Tipp: In Google Maps den Ort öffnen, auf „Teilen“ klicken und den Link hier einfügen.
+                      </p>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           )}

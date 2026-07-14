@@ -53,6 +53,12 @@ export function NavigationSidebar({ isOpen, onClose }: NavigationSidebarProps) {
       label: 'CAMPINGPLÄTZE',
       href: '/campingplaetze',
       active: pathname.startsWith('/campingplaetze')
+    },
+    {
+      icon: 'local_parking',
+      label: 'RASTPLÄTZE',
+      href: '/rastplaetze',
+      active: pathname.startsWith('/rastplaetze')
     }
   ]
 

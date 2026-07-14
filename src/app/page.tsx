@@ -9,7 +9,7 @@ import { NavigationSidebar } from '@/components/navigation-sidebar'
 import { PackingSettingsSidebar } from '@/components/packing-settings-sidebar'
 import { Plus, Sparkles, Menu, Search, Users } from 'lucide-react'
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
-import { Vacation, PackingItem, TransportVehicle, Mitreisender, EquipmentItem, Category, MainCategory } from '@/lib/db'
+import { Vacation, PackingItem, TransportVehicle, Mitreisender, EquipmentItem, Category, MainCategory, Rastplatz, VacationCampingStay } from '@/lib/db'
 import type { ApiResponse } from '@/lib/api-types'
 import { berechneAnzahl, berechneReiseTage, istKind, regelKurzLabel } from '@/lib/packing-quantity'
 import { packingItemsEqual } from '@/lib/packing-items-equal'
@@ -72,6 +72,14 @@ import {
   type PauschalGruppenAssignmentPayload,
 } from '@/lib/pauschal-gruppen'
 import { AdminFremdeGruppeWarningDialog } from '@/components/admin-fremde-gruppe-warning-dialog'
+import { ReiseRastPanel } from '@/components/reise-rast-panel'
+import { useReiseModus } from '@/hooks/use-reise-modus'
+import { useRastNearbyAlert } from '@/hooks/use-rast-nearby-alert'
+import { useUserReiseGpsSettings } from '@/hooks/use-user-reise-gps-settings'
+import { useUserPushSettings } from '@/hooks/use-user-push-settings'
+import { usePushSubscribe } from '@/hooks/use-push-subscribe'
+import { PushDeviceActivatePrompt } from '@/components/push-device-activate'
+import { Navigation } from 'lucide-react'
 import type { BulkPackingPatch } from '@/components/bulk-packing-edit-modal'
 import {
   applyBulkDeleteToItem,
@@ -213,6 +221,10 @@ function HomeContent() {
     return packProfileScopeMitreisende
   }, [user, vacationMitreisende, packProfileScopeMitreisende])
   const [selectedVacationId, setSelectedVacationId] = useState<string | null>(null)
+  const [vacationStays, setVacationStays] = useState<VacationCampingStay[]>([])
+  const [homeCoords, setHomeCoords] = useState<{ lat: number; lng: number } | null>(null)
+  const [rastplaetze, setRastplaetze] = useState<Rastplatz[]>([])
+  const [rastPanelDismissed, setRastPanelDismissed] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   
   // Equipment data for FAB modal
@@ -1208,6 +1220,76 @@ function HomeContent() {
       packliste_default_ansicht: 'packliste',
     }
   }, [selectedVacationId, vacations])
+
+  const { mode: reiseGpsMode } = useUserReiseGpsSettings()
+  const reiseModus = useReiseModus(vacations, vacationStays, homeCoords, reiseGpsMode)
+  const pushSubscribe = usePushSubscribe()
+  const { settings: pushSettings, canReceivePush } = useUserPushSettings(pushSubscribe.subscribed)
+  const { nearbyEmpfehlung, nearbyDistanceKm } = useRastNearbyAlert({
+    enabled: reiseModus.featureActive,
+    position: reiseModus.position,
+    rastplaetze,
+    activeSegment: reiseModus.activeSegment,
+    pushEnabled: canReceivePush,
+  })
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const r = await fetch('/api/profile/home-location')
+        const j = (await r.json()) as ApiResponse<{
+          heimat_lat: number | null
+          heimat_lng: number | null
+        }>
+        if (j.success && j.data?.heimat_lat != null && j.data.heimat_lng != null) {
+          setHomeCoords({ lat: j.data.heimat_lat, lng: j.data.heimat_lng })
+        }
+      } catch {
+        /* ignore */
+      }
+    })()
+  }, [])
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const r = await fetch('/api/rastplaetze')
+        const j = (await r.json()) as ApiResponse<Rastplatz[]>
+        if (j.success && j.data) setRastplaetze(j.data)
+      } catch {
+        /* ignore */
+      }
+    })()
+  }, [])
+
+  useEffect(() => {
+    if (!selectedVacationId) {
+      setVacationStays([])
+      return
+    }
+    void (async () => {
+      try {
+        const r = await fetch(`/api/vacations/${selectedVacationId}`)
+        const j = (await r.json()) as ApiResponse<{ stays?: VacationCampingStay[] }>
+        if (j.success && j.data?.stays) setVacationStays(j.data.stays)
+        else setVacationStays([])
+      } catch {
+        setVacationStays([])
+      }
+    })()
+  }, [selectedVacationId])
+
+  const showRastPanel =
+    reiseModus.featureActive &&
+    reiseModus.onRoute &&
+    reiseModus.isStationary &&
+    reiseModus.position != null &&
+    !rastPanelDismissed &&
+    canAccessConfig
+
+  useEffect(() => {
+    if (!reiseModus.isStationary) setRastPanelDismissed(false)
+  }, [reiseModus.isStationary])
 
   // Beim Wechsel des Urlaubs: gespeicherte UI laden (nur wenn Urlaub wechselt – nicht bei Reconnect-Refetch)
   useEffect(() => {
@@ -3099,7 +3181,7 @@ function HomeContent() {
         "flex-1 transition-all duration-300 min-w-0",
         "lg:ml-[280px]"
       )}>
-        <div className={cn("min-w-0", currentVacation ? "h-dvh overflow-hidden flex flex-col" : "h-full")}>
+        <div className={cn("min-w-0 bg-scroll-pattern", currentVacation ? "h-dvh overflow-hidden flex flex-col" : "h-full")}>
           {/* Vacation Selected */}
           {currentVacation && (
             <div className="flex-1 min-h-0 flex flex-col min-w-0">
@@ -3166,6 +3248,36 @@ function HomeContent() {
                     </button>
                   )}
                 </div>
+
+                {reiseModus.featureActive && pushSettings?.enabled && (
+                  <PushDeviceActivatePrompt
+                    accountPushEnabled={pushSettings.enabled}
+                    deviceSubscribed={pushSubscribe.subscribed}
+                    pushSupported={pushSubscribe.supported}
+                    onActivate={pushSubscribe.subscribe}
+                    activateError={pushSubscribe.lastError}
+                    variant="banner"
+                  />
+                )}
+
+                {reiseModus.featureActive && reiseModus.gpsError && (
+                  <div className="px-4 pb-2 border-b border-border/60">
+                    <span className="text-xs text-destructive">{reiseModus.gpsError}</span>
+                  </div>
+                )}
+
+                {nearbyEmpfehlung && (
+                  <div className="mx-4 mb-2 p-2 rounded-lg bg-green-50 border border-green-200 text-sm flex items-center gap-2">
+                    <Navigation className="h-4 w-4 text-green-700 shrink-0" />
+                    <span className="truncate">
+                      Empfehlung
+                      {nearbyDistanceKm != null
+                        ? ` in ca. ${nearbyDistanceKm >= 10 ? Math.round(nearbyDistanceKm) : Math.round(nearbyDistanceKm * 10) / 10} km`
+                        : ''}
+                      : <strong>{nearbyEmpfehlung.name}</strong>
+                    </span>
+                  </div>
+                )}
               </div>
 
               {/* Packing List: Progress + Tabs fix oben, Inhalt scrollt */}
@@ -3753,6 +3865,16 @@ function HomeContent() {
           if (eqData.success && eqData.data) setEquipmentItems(eqData.data)
         }}
       />
+
+      {reiseModus.position && (
+        <ReiseRastPanel
+          visible={showRastPanel}
+          position={reiseModus.position}
+          vacationId={reiseModus.relevantVacation?.id ?? selectedVacationId}
+          onDismiss={() => setRastPanelDismissed(true)}
+          onSaved={(r) => setRastplaetze((prev) => [...prev.filter((x) => x.id !== r.id), r])}
+        />
+      )}
     </div>
   )
 }

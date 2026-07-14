@@ -11,6 +11,7 @@ export const BACKUP_TABLE_ORDER: string[] = [
   'kategorien',
   'tags',
   'campingplaetze',
+  'rastplaetze',
   'packlisten_vorlagen',
   'einladungen',
   'mitreisende_berechtigungen',

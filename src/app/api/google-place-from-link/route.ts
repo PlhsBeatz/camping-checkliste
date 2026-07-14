@@ -20,6 +20,8 @@ type PlaceServer = {
     authorAttributions?: Array<{ displayName?: string } | string>
   }>
   websiteUri?: string
+  types?: string[]
+  primaryType?: string
 }
 
 type PlacesSearchTextResponse = {
@@ -35,6 +37,9 @@ type CampingplatzAddressResolve = {
   land: string | null
   placeName?: string
   website?: string | null
+  googlePlaceId?: string | null
+  googleTypes?: string[]
+  primaryType?: string
 }
 
 type PlacePhotoForPicker = { name: string; authorAttributions?: string[] }
@@ -59,6 +64,13 @@ function deriveOrt(comps: PlaceAddressComponentServer[] | undefined): string | n
     pickComponent(comps, 'sublocality') ??
     pickComponent(comps, 'sublocality_level_1')
   )
+}
+
+function rawGooglePlaceIdFromPlaceResource(name?: string): string | null {
+  const id = name?.trim()
+  if (id?.startsWith('places/')) return id.slice('places/'.length)
+  if (id && !id.includes('/')) return id
+  return null
 }
 
 export async function POST(request: NextRequest) {
@@ -224,6 +236,8 @@ export async function POST(request: NextRequest) {
       'addressComponents',
       'photos',
       'websiteUri',
+      'types',
+      'primaryType',
     ]
     const placeDetailsFieldMask = fieldMaskList.join(',')
     const searchTextFieldMask = fieldMaskList.map((f) => `places.${f}`).join(',')
@@ -400,6 +414,9 @@ export async function POST(request: NextRequest) {
       land,
       placeName,
       website,
+      googlePlaceId: rawGooglePlaceIdFromPlaceResource(place.name) ?? placeId ?? null,
+      googleTypes: place.types,
+      primaryType: place.primaryType,
     }
 
     const fromNew: PlacePhotoForPicker[] = (place.photos ?? [])

@@ -23,6 +23,7 @@ import {
   cacheCampingplaetze,
   cacheCampingplatz,
   cacheCampingplatzFotos,
+  cacheRastplaetze,
   cacheRoute,
   cacheHomeLocation,
   cacheAuthUser,
@@ -45,6 +46,7 @@ import type {
   CampingplatzFoto,
   CampingplatzRouteCacheEntry,
   PackStatusData,
+  Rastplatz,
 } from './db'
 
 /** Wie `getPackingItems` in `db.ts` nach dem Merge (Hauptkat → Kategorie → Titel). */
@@ -279,6 +281,11 @@ export async function getCachedCampingplatz(id: string): Promise<Campingplatz | 
   return row
     ? normalizeCampingplatzForOfflineCache(stripMeta(row) as Campingplatz)
     : null
+}
+
+export async function getCachedRastplaetze(): Promise<Rastplatz[]> {
+  const rows = await offlineDb.rastplaetze.toArray()
+  return rows.map(stripMeta) as Rastplatz[]
 }
 
 export async function getCachedCampingplatzFotos(

@@ -32,6 +32,9 @@ importers:
       '@next/env':
         specifier: ^16.1.6
         version: 16.1.6
+      '@pushforge/builder':
+        specifier: ^2.0.5
+        version: 2.0.5
       '@radix-ui/react-accordion':
         specifier: ^1.2.2
         version: 1.2.12(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
@@ -1343,6 +1346,11 @@ packages:
 
   '@poppinss/exception@1.2.3':
     resolution: {integrity: sha512-dCED+QRChTVatE9ibtoaxc+WkdzOSjYTKi/+uacHWIsfodVfpsueo3+DKpgU5Px8qXjgmXkSvhXvSCz3fnP9lw==}
+
+  '@pushforge/builder@2.0.5':
+    resolution: {integrity: sha512-9Q6lBFWUMKUL5vBknwAt+nlS7eWCrNuf1lCMAhC1Iypn8gtYJ0rdVHAnsGFMxPKhbtgkgpU3r6UVduDTQ8jgzw==}
+    engines: {node: '>=20.0.0'}
+    hasBin: true
 
   '@radix-ui/number@1.1.1':
     resolution: {integrity: sha512-MkKCwxlXTgz6CFoJx3pCwn07GKp36+aZyu/u2Ln2VrA5DcdyCZkASEDBTd8x5whTQQL5CiYf4prXKLcgQdv29g==}
@@ -6364,6 +6372,8 @@ snapshots:
       supports-color: 10.2.2
 
   '@poppinss/exception@1.2.3': {}
+
+  '@pushforge/builder@2.0.5': {}
 
   '@radix-ui/number@1.1.1': {}
 

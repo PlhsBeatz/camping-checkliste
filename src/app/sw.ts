@@ -1,6 +1,11 @@
 import { defaultCache } from '@serwist/next/worker'
 import type { PrecacheEntry, RuntimeCaching, SerwistGlobalConfig } from 'serwist'
 import { ExpirationPlugin, NetworkFirst, NetworkOnly, Serwist, StaleWhileRevalidate } from 'serwist'
+import {
+  isPushNotificationPayload,
+  toServiceWorkerNotification,
+  type PushNotificationPayload,
+} from '@/lib/push-notifications'
 
 declare global {
   interface WorkerGlobalScope extends SerwistGlobalConfig {
@@ -126,5 +131,59 @@ self.addEventListener('sync', (event: ExtendableEvent & { tag?: string }) => {
           c.postMessage({ type: 'PROCESS_SYNC_QUEUE' })
         }
       })
+  )
+})
+
+self.addEventListener('push', (event: PushEvent) => {
+  if (!event.data) return
+
+  let payload: PushNotificationPayload | null = null
+  try {
+    const raw: unknown = event.data.json()
+    if (isPushNotificationPayload(raw)) {
+      payload = raw
+    }
+  } catch {
+    /* Legacy-Fallback */
+  }
+
+  if (payload) {
+    const { title, options } = toServiceWorkerNotification(payload)
+    event.waitUntil(self.registration.showNotification(title, options))
+    return
+  }
+
+  const fallbackBody = event.data.text()
+  event.waitUntil(
+    self.registration.showNotification('Camping Packliste', {
+      body: fallbackBody || '',
+      icon: '/icons/192?v=5',
+      badge: '/icons/192?v=5',
+      tag: 'generic',
+      data: { url: '/', type: 'generic' },
+    })
+  )
+})
+
+self.addEventListener('notificationclick', (event: NotificationEvent) => {
+  event.notification.close()
+  const data = event.notification.data as {
+    url?: string
+    type?: string
+    rastplatz_id?: string
+  } | undefined
+  const url = data?.url || '/'
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
+      for (const client of clients) {
+        if ('focus' in client && client.url.includes(self.location.origin)) {
+          return client.focus()
+        }
+      }
+      if (self.clients.openWindow) {
+        return self.clients.openWindow(url)
+      }
+      return undefined
+    })
   )
 })

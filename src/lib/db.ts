@@ -8,6 +8,8 @@ import { D1Database, R2Bucket } from '@cloudflare/workers-types'
 import { getCloudflareContext } from '@opennextjs/cloudflare'
 import type { MengenRegel } from './packing-quantity'
 import { parseRegel, serializeRegel } from './packing-quantity'
+import type { UserPushSettings } from './push-settings'
+import { DEFAULT_REISE_GPS_MODE, parseReiseGpsMode, type ReiseGpsMode } from './reise-gps-settings'
 
 export interface Vacation {
   id: string
@@ -288,6 +290,46 @@ export interface CampingplatzSegmentRouteCacheEntry {
   updated_at: string
 }
 
+export type RastplatzBewertung = 'empfehlung' | 'no_go'
+
+export type RastplatzKategorie =
+  | 'rastplatz'
+  | 'tankstelle'
+  | 'parkplatz'
+  | 'autohof'
+  | 'restaurant'
+  | 'sonstiges'
+
+export interface Rastplatz {
+  id: string
+  name: string
+  bewertung: RastplatzBewertung
+  kategorie: RastplatzKategorie
+  merkmale: string[]
+  bemerkungen: string | null
+  adresse: string | null
+  ort: string | null
+  land: string | null
+  bundesland: string | null
+  lat: number
+  lng: number
+  google_place_id: string | null
+  entdeckt_urlaub_id: string | null
+  entdeckt_am: string | null
+  is_archived: boolean
+  created_at: string
+  updated_at?: string
+}
+
+export interface PushSubscriptionRow {
+  id: string
+  user_id: string
+  endpoint: string
+  subscription_json: string
+  created_at: string
+  updated_at: string
+}
+
 /**
  * Eine konkrete Zuordnung eines Campingplatzes zu einem Urlaub inkl. Aufenthaltsdauer.
  * Ein Campingplatz kann einem Urlaub mehrfach zugeordnet sein (jeweils eigene `id`).
@@ -320,6 +362,12 @@ export interface User {
   heimat_adresse?: string | null
   heimat_lat?: number | null
   heimat_lng?: number | null
+  /** Profil: Push-Benachrichtigungen grundsätzlich aktiv */
+  push_notifications_enabled?: number
+  /** Profil: Rastplatz-Empfehlungen per Push */
+  push_rastplatz_nearby?: number
+  /** Profil: GPS-Modus – auto | on | off */
+  reise_gps_mode?: string
   created_at: string
   updated_at: string
 }
@@ -4355,6 +4403,86 @@ export async function updateUserHomeLocation(
   }
 }
 
+export async function getUserPushSettings(
+  db: D1Database,
+  userId: string
+): Promise<(UserPushSettings & { browserSubscribed: boolean }) | null> {
+  try {
+    const row = await db
+      .prepare(
+        `SELECT push_notifications_enabled, push_rastplatz_nearby,
+          (SELECT COUNT(*) FROM push_subscriptions ps WHERE ps.user_id = users.id) AS sub_count
+         FROM users WHERE id = ?`
+      )
+      .bind(userId)
+      .first<{ push_notifications_enabled: number; push_rastplatz_nearby: number; sub_count: number }>()
+    if (!row) return null
+    return {
+      enabled: row.push_notifications_enabled === 1,
+      rastplatzNearby: row.push_rastplatz_nearby !== 0,
+      browserSubscribed: (row.sub_count ?? 0) > 0,
+    }
+  } catch (error) {
+    console.error('Error fetching user push settings:', error)
+    return null
+  }
+}
+
+export async function updateUserPushSettings(
+  db: D1Database,
+  userId: string,
+  settings: UserPushSettings
+): Promise<boolean> {
+  try {
+    await db
+      .prepare(
+        `UPDATE users SET push_notifications_enabled = ?, push_rastplatz_nearby = ?, updated_at = datetime('now') WHERE id = ?`
+      )
+      .bind(settings.enabled ? 1 : 0, settings.rastplatzNearby ? 1 : 0, userId)
+      .run()
+    return true
+  } catch (error) {
+    console.error('Error updating user push settings:', error)
+    return false
+  }
+}
+
+export async function getUserReiseGpsMode(
+  db: D1Database,
+  userId: string
+): Promise<ReiseGpsMode | null> {
+  try {
+    const row = await db
+      .prepare('SELECT reise_gps_mode FROM users WHERE id = ?')
+      .bind(userId)
+      .first<{ reise_gps_mode: string | null }>()
+    if (!row) return null
+    return parseReiseGpsMode(row.reise_gps_mode ?? DEFAULT_REISE_GPS_MODE)
+  } catch (error) {
+    console.error('Error fetching user reise gps mode:', error)
+    return null
+  }
+}
+
+export async function updateUserReiseGpsMode(
+  db: D1Database,
+  userId: string,
+  mode: ReiseGpsMode
+): Promise<boolean> {
+  try {
+    await db
+      .prepare(
+        `UPDATE users SET reise_gps_mode = ?, updated_at = datetime('now') WHERE id = ?`
+      )
+      .bind(mode, userId)
+      .run()
+    return true
+  } catch (error) {
+    console.error('Error updating user reise gps mode:', error)
+    return false
+  }
+}
+
 export async function getUsersCount(db: D1Database): Promise<number> {
   const r = await db.prepare('SELECT COUNT(*) as c FROM users').first<{ c: number }>()
   return r?.c ?? 0
@@ -5970,5 +6098,308 @@ export async function resetChecklisteErledigt(db: D1Database, checklistId: strin
   } catch (error) {
     console.error('Error resetChecklisteErledigt:', error)
     return false
+  }
+}
+
+// --- Rastplätze ---
+
+function mapRastplatzRow(row: Record<string, unknown>): Rastplatz {
+  let merkmale: string[] = []
+  if (row.merkmale) {
+    try {
+      merkmale = JSON.parse(String(row.merkmale))
+    } catch {
+      merkmale = []
+    }
+  }
+  return {
+    id: String(row.id),
+    name: String(row.name),
+    bewertung: String(row.bewertung) as RastplatzBewertung,
+    kategorie: String(row.kategorie) as RastplatzKategorie,
+    merkmale,
+    bemerkungen: row.bemerkungen != null ? String(row.bemerkungen) : null,
+    adresse: row.adresse != null ? String(row.adresse) : null,
+    ort: row.ort != null ? String(row.ort) : null,
+    land: row.land != null ? String(row.land) : null,
+    bundesland: row.bundesland != null ? String(row.bundesland) : null,
+    lat: Number(row.lat),
+    lng: Number(row.lng),
+    google_place_id: row.google_place_id != null ? String(row.google_place_id) : null,
+    entdeckt_urlaub_id:
+      row.entdeckt_urlaub_id != null ? String(row.entdeckt_urlaub_id) : null,
+    entdeckt_am: row.entdeckt_am != null ? String(row.entdeckt_am) : null,
+    is_archived: !!(row.is_archived ?? 0),
+    created_at: String(row.created_at || ''),
+    updated_at: row.updated_at != null ? String(row.updated_at) : undefined,
+  }
+}
+
+export async function getRastplaetze(
+  db: D1Database,
+  options?: { includeArchived?: boolean }
+): Promise<Rastplatz[]> {
+  try {
+    const includeArchived = options?.includeArchived ?? false
+    const query = includeArchived
+      ? `SELECT * FROM rastplaetze ORDER BY land, ort, name`
+      : `SELECT * FROM rastplaetze WHERE is_archived = 0 ORDER BY land, ort, name`
+    const result = await db.prepare(query).all<Record<string, unknown>>()
+    return (result.results || []).map((row) => mapRastplatzRow(row))
+  } catch (error) {
+    console.error('Error fetching rastplaetze:', error)
+    return []
+  }
+}
+
+export async function getRastplatzById(db: D1Database, id: string): Promise<Rastplatz | null> {
+  try {
+    const row = await db
+      .prepare('SELECT * FROM rastplaetze WHERE id = ?')
+      .bind(id)
+      .first<Record<string, unknown>>()
+    if (!row) return null
+    return mapRastplatzRow(row)
+  } catch (error) {
+    console.error('Error fetching rastplatz by id:', error)
+    return null
+  }
+}
+
+export async function createRastplatz(
+  db: D1Database,
+  data: {
+    name: string
+    bewertung: RastplatzBewertung
+    kategorie: RastplatzKategorie
+    merkmale?: string[]
+    bemerkungen?: string | null
+    adresse?: string | null
+    ort?: string | null
+    land?: string | null
+    bundesland?: string | null
+    lat: number
+    lng: number
+    google_place_id?: string | null
+    entdeckt_urlaub_id?: string | null
+    entdeckt_am?: string | null
+  }
+): Promise<Rastplatz | null> {
+  try {
+    const id = crypto.randomUUID()
+    const now = new Date().toISOString()
+    await db
+      .prepare(
+        `INSERT INTO rastplaetze
+         (id, name, bewertung, kategorie, merkmale, bemerkungen, adresse, ort, land, bundesland,
+          lat, lng, google_place_id, entdeckt_urlaub_id, entdeckt_am, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .bind(
+        id,
+        data.name,
+        data.bewertung,
+        data.kategorie,
+        JSON.stringify(data.merkmale ?? []),
+        data.bemerkungen ?? null,
+        data.adresse ?? null,
+        data.ort ?? null,
+        data.land ?? null,
+        data.bundesland ?? null,
+        data.lat,
+        data.lng,
+        data.google_place_id ?? null,
+        data.entdeckt_urlaub_id ?? null,
+        data.entdeckt_am ?? now,
+        now,
+        now
+      )
+      .run()
+    return getRastplatzById(db, id)
+  } catch (error) {
+    console.error('Error creating rastplatz:', error)
+    return null
+  }
+}
+
+export async function updateRastplatz(
+  db: D1Database,
+  id: string,
+  updates: Partial<{
+    name: string
+    bewertung: RastplatzBewertung
+    kategorie: RastplatzKategorie
+    merkmale: string[]
+    bemerkungen: string | null
+    adresse: string | null
+    ort: string | null
+    land: string | null
+    bundesland: string | null
+    lat: number
+    lng: number
+    google_place_id: string | null
+    is_archived: boolean
+  }>
+): Promise<Rastplatz | null> {
+  try {
+    const fields: string[] = []
+    const values: (string | number | null)[] = []
+
+    if (updates.name !== undefined) {
+      fields.push('name = ?')
+      values.push(updates.name)
+    }
+    if (updates.bewertung !== undefined) {
+      fields.push('bewertung = ?')
+      values.push(updates.bewertung)
+    }
+    if (updates.kategorie !== undefined) {
+      fields.push('kategorie = ?')
+      values.push(updates.kategorie)
+    }
+    if (updates.merkmale !== undefined) {
+      fields.push('merkmale = ?')
+      values.push(JSON.stringify(updates.merkmale))
+    }
+    if (updates.bemerkungen !== undefined) {
+      fields.push('bemerkungen = ?')
+      values.push(updates.bemerkungen)
+    }
+    if (updates.adresse !== undefined) {
+      fields.push('adresse = ?')
+      values.push(updates.adresse)
+    }
+    if (updates.ort !== undefined) {
+      fields.push('ort = ?')
+      values.push(updates.ort)
+    }
+    if (updates.land !== undefined) {
+      fields.push('land = ?')
+      values.push(updates.land)
+    }
+    if (updates.bundesland !== undefined) {
+      fields.push('bundesland = ?')
+      values.push(updates.bundesland)
+    }
+    if (updates.lat !== undefined) {
+      fields.push('lat = ?')
+      values.push(updates.lat)
+    }
+    if (updates.lng !== undefined) {
+      fields.push('lng = ?')
+      values.push(updates.lng)
+    }
+    if (updates.google_place_id !== undefined) {
+      fields.push('google_place_id = ?')
+      values.push(updates.google_place_id)
+    }
+    if (updates.is_archived !== undefined) {
+      fields.push('is_archived = ?')
+      values.push(updates.is_archived ? 1 : 0)
+    }
+
+    if (fields.length === 0) return getRastplatzById(db, id)
+
+    fields.push("updated_at = datetime('now')")
+    values.push(id)
+
+    await db
+      .prepare(`UPDATE rastplaetze SET ${fields.join(', ')} WHERE id = ?`)
+      .bind(...values)
+      .run()
+    return getRastplatzById(db, id)
+  } catch (error) {
+    console.error('Error updating rastplatz:', error)
+    return null
+  }
+}
+
+export async function archiveRastplatz(db: D1Database, id: string): Promise<boolean> {
+  const updated = await updateRastplatz(db, id, { is_archived: true })
+  return updated != null
+}
+
+export async function deleteRastplatz(db: D1Database, id: string): Promise<boolean> {
+  try {
+    const r = await db.prepare('DELETE FROM rastplaetze WHERE id = ?').bind(id).run()
+    return r.success && (r.meta?.changes ?? 0) > 0
+  } catch (error) {
+    console.error('Error deleting rastplatz:', error)
+    return false
+  }
+}
+
+// --- Web Push Subscriptions ---
+
+export async function upsertPushSubscription(
+  db: D1Database,
+  userId: string,
+  subscription: { endpoint: string; keys: { p256dh: string; auth: string } }
+): Promise<boolean> {
+  try {
+    const existing = await db
+      .prepare('SELECT id FROM push_subscriptions WHERE endpoint = ?')
+      .bind(subscription.endpoint)
+      .first<{ id: string }>()
+    const json = JSON.stringify(subscription)
+    if (existing?.id) {
+      await db
+        .prepare(
+          `UPDATE push_subscriptions SET user_id = ?, subscription_json = ?, updated_at = datetime('now') WHERE id = ?`
+        )
+        .bind(userId, json, existing.id)
+        .run()
+      return true
+    }
+    const id = crypto.randomUUID()
+    await db
+      .prepare(
+        `INSERT INTO push_subscriptions (id, user_id, endpoint, subscription_json) VALUES (?, ?, ?, ?)`
+      )
+      .bind(id, userId, subscription.endpoint, json)
+      .run()
+    return true
+  } catch (error) {
+    console.error('Error upserting push subscription:', error)
+    return false
+  }
+}
+
+export async function deletePushSubscriptionByEndpoint(
+  db: D1Database,
+  endpoint: string
+): Promise<boolean> {
+  try {
+    await db.prepare('DELETE FROM push_subscriptions WHERE endpoint = ?').bind(endpoint).run()
+    return true
+  } catch (error) {
+    console.error('Error deleting push subscription:', error)
+    return false
+  }
+}
+
+export async function getPushSubscriptionsForUser(
+  db: D1Database,
+  userId: string
+): Promise<PushSubscriptionRow[]> {
+  try {
+    const result = await db
+      .prepare('SELECT * FROM push_subscriptions WHERE user_id = ?')
+      .bind(userId)
+      .all<PushSubscriptionRow>()
+    return result.results || []
+  } catch (error) {
+    console.error('Error fetching push subscriptions:', error)
+    return []
+  }
+}
+
+export async function getAllPushSubscriptions(db: D1Database): Promise<PushSubscriptionRow[]> {
+  try {
+    const result = await db.prepare('SELECT * FROM push_subscriptions').all<PushSubscriptionRow>()
+    return result.results || []
+  } catch (error) {
+    console.error('Error fetching all push subscriptions:', error)
+    return []
   }
 }

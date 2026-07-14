@@ -5,6 +5,7 @@ import { ThemeProvider } from '@/components/theme-provider'
 import { AuthProvider } from '@/components/auth-provider'
 import { MustChangePasswordGuard } from '@/components/must-change-password-guard'
 import { OfflineBanner } from '@/components/offline-banner'
+import { Toaster } from '@/components/ui/sonner'
 import './globals.css'
 
 const geistSans = Geist({
@@ -68,6 +69,7 @@ export default function RootLayout({
               </div>
             </MustChangePasswordGuard>
             <PwaUpdatePrompt />
+            <Toaster richColors closeButton position="top-center" />
           </AuthProvider>
         </ThemeProvider>
       </body>

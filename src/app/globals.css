@@ -350,46 +350,57 @@ gmp-place-autocomplete::part(prediction-item) {
 }
 
 /* Leaflet-Z-Index im Container halten – sonst überlagert die Karte Menü (z-50) und Dialoge */
-.urlaub-map-root {
+.urlaub-map-root,
+.rastplatz-map-root {
   position: relative;
   z-index: 0;
   isolation: isolate;
 }
 
-.urlaub-leaflet-map.leaflet-container {
+.urlaub-leaflet-map.leaflet-container,
+.rastplatz-leaflet-map.leaflet-container {
   z-index: 0 !important;
   font-family: inherit;
 }
 
-.urlaub-leaflet-map .leaflet-pane {
+.urlaub-leaflet-map .leaflet-pane,
+.rastplatz-leaflet-map .leaflet-pane {
   z-index: 1 !important;
 }
 
-.urlaub-leaflet-map .leaflet-tile-pane {
+.urlaub-leaflet-map .leaflet-tile-pane,
+.rastplatz-leaflet-map .leaflet-tile-pane {
   z-index: 1 !important;
 }
 
-.urlaub-leaflet-map .leaflet-overlay-pane {
+.urlaub-leaflet-map .leaflet-overlay-pane,
+.rastplatz-leaflet-map .leaflet-overlay-pane {
   z-index: 2 !important;
 }
 
-.urlaub-leaflet-map .leaflet-shadow-pane {
+.urlaub-leaflet-map .leaflet-shadow-pane,
+.rastplatz-leaflet-map .leaflet-shadow-pane {
   z-index: 3 !important;
 }
 
-.urlaub-leaflet-map .leaflet-marker-pane {
+.urlaub-leaflet-map .leaflet-marker-pane,
+.rastplatz-leaflet-map .leaflet-marker-pane {
   z-index: 4 !important;
 }
 
-.urlaub-leaflet-map .leaflet-tooltip-pane {
+.urlaub-leaflet-map .leaflet-tooltip-pane,
+.rastplatz-leaflet-map .leaflet-tooltip-pane {
   z-index: 5 !important;
 }
 
-.urlaub-leaflet-map .leaflet-popup-pane {
+.urlaub-leaflet-map .leaflet-popup-pane,
+.rastplatz-leaflet-map .leaflet-popup-pane {
   z-index: 6 !important;
 }
 
 .urlaub-leaflet-map .leaflet-top,
-.urlaub-leaflet-map .leaflet-bottom {
+.urlaub-leaflet-map .leaflet-bottom,
+.rastplatz-leaflet-map .leaflet-top,
+.rastplatz-leaflet-map .leaflet-bottom {
   z-index: 7 !important;
 }

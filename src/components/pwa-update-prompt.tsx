@@ -19,11 +19,17 @@ export function PwaUpdatePrompt() {
   useEffect(() => {
     if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return
 
-    /** Unter `next dev` darf kein SW aktiv sein: alter Prod-/Preview-SW auf localhost cached Navigation &
-     * `_next`-Chunks falsch → „unstyled“ Login und falscher Offline-Zustand. */
+    /** Unter `next dev` kein Serwist-SW – aber push-sw.js für Push-Tests behalten. */
     if (process.env.NODE_ENV === 'development') {
       void navigator.serviceWorker.getRegistrations().then((regs) =>
-        Promise.all(regs.map((r) => r.unregister())),
+        Promise.all(
+          regs
+            .filter((r) => {
+              const url = r.active?.scriptURL ?? r.installing?.scriptURL ?? ''
+              return !url.includes('push-sw')
+            })
+            .map((r) => r.unregister())
+        )
       )
       return
     }

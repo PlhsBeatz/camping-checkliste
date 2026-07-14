@@ -2563,7 +2563,7 @@ export function PackingList({
 
       {/* Scrollbarer Bereich: Inhalt oder "Alles gepackt"-Ansicht – Wischgeste wechselt Tab */}
       <div
-        className="flex-1 min-h-0 overflow-y-auto overflow-x-clip"
+        className="flex-1 min-h-0 overflow-y-auto overflow-x-clip bg-scroll-pattern"
         onTouchStart={(e) => {
           const t = e.targetTouches[0];
           if (t) contentTouchStart.current = { x: t.clientX, y: t.clientY };
@@ -2585,7 +2585,7 @@ export function PackingList({
       >
         <div
           className={cn(
-            "min-h-full bg-scroll-pattern px-4 sm:px-6 pt-6 pb-6 select-none [webkit-touch-callout:none]",
+            "min-h-full px-4 sm:px-6 pt-6 pb-6 select-none [webkit-touch-callout:none]",
             bulkSelectionMode && "pb-24 touch-manipulation",
             tabSwipeDirection === 'left' && "animate-tab-swipe-in-from-right",
             tabSwipeDirection === 'right' && "animate-tab-swipe-in-from-left"

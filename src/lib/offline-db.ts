@@ -2,7 +2,7 @@
  * IndexedDB (Dexie) für Offline-Cache der D1-Daten.
  * Speichert: Urlaube, Ausrüstung, Kategorien, Tags, Mitreisende, Transportmittel, Packlisten-Einträge,
  * Tools-Checklisten, letzte GPS-Position, Tag-Kategorien, Pack-Status, Campingplätze (+ Fotos),
- * Routen, Profil-Heimat-Adresse und letzte Auth-Session.
+ * Routen, Profil-Heimat-Adresse, Rastplätze und letzte Auth-Session.
  *
  * Außerdem: Sync-Queue für Mutationen, die bei Reconnect mit Last-Write-Wins gesendet werden.
  */
@@ -25,6 +25,7 @@ import type {
   CampingplatzFoto,
   CampingplatzRouteCacheEntry,
   PackStatusData,
+  Rastplatz,
 } from './db'
 
 export interface CachedVacation extends Vacation {
@@ -127,6 +128,11 @@ export interface CachedCampingplatzFoto extends CampingplatzFoto {
   _updatedAt: number
 }
 
+export interface CachedRastplatz extends Rastplatz {
+  _cachedAt: number
+  _updatedAt: number
+}
+
 /** Routen-Cache: Schlüssel `${userId}|${campingplatzId}` */
 export interface CachedRoute extends CampingplatzRouteCacheEntry {
   /** `${userId}|${campingplatzId}` */
@@ -193,6 +199,7 @@ export class OfflineDB extends Dexie {
   packStatus!: EntityTable<CachedPackStatus, 'id'>
   campingplaetze!: EntityTable<CachedCampingplatz, 'id'>
   campingplaetzeFotos!: EntityTable<CachedCampingplatzFoto, 'id'>
+  rastplaetze!: EntityTable<CachedRastplatz, 'id'>
   routes!: EntityTable<CachedRoute, 'id'>
   homeLocation!: EntityTable<CachedHomeLocation, 'id'>
   authUser!: EntityTable<CachedAuthUser, 'id'>
@@ -266,6 +273,30 @@ export class OfflineDB extends Dexie {
       packStatus: 'id, _cachedAt, _updatedAt',
       campingplaetze: 'id, _cachedAt, _updatedAt',
       campingplaetzeFotos: 'id, campingplatz_id, _cachedAt, _updatedAt',
+      routes: 'id, _cachedAt',
+      homeLocation: 'id, _cachedAt, _updatedAt',
+      authUser: 'id, _cachedAt',
+      syncQueue: '++id, table, timestamp, attempts',
+    })
+    // Version 5: Rastplätze
+    this.version(5).stores({
+      vacations: 'id, _cachedAt, _updatedAt',
+      equipment: 'id, _cachedAt, _updatedAt',
+      categories: 'id, _cachedAt, _updatedAt',
+      mainCategories: 'id, _cachedAt, _updatedAt',
+      tags: 'id, _cachedAt, _updatedAt',
+      tagKategorien: 'id, reihenfolge, _cachedAt, _updatedAt',
+      mitreisende: 'id, _cachedAt, _updatedAt',
+      mitreisendenGruppen: 'id, sort_order, _cachedAt, _updatedAt',
+      vacationMitreisende: 'id_compound, _vacationId, _cachedAt, _updatedAt',
+      transportVehicles: 'id, _cachedAt, _updatedAt',
+      packingItems: 'id, packliste_id, _vacationId, _cachedAt, _updatedAt',
+      checklisten: 'id, reihenfolge, _cachedAt, _updatedAt',
+      lastPosition: 'id, _cachedAt',
+      packStatus: 'id, _cachedAt, _updatedAt',
+      campingplaetze: 'id, _cachedAt, _updatedAt',
+      campingplaetzeFotos: 'id, campingplatz_id, _cachedAt, _updatedAt',
+      rastplaetze: 'id, bewertung, kategorie, _cachedAt, _updatedAt',
       routes: 'id, _cachedAt',
       homeLocation: 'id, _cachedAt, _updatedAt',
       authUser: 'id, _cachedAt',
@@ -441,6 +472,15 @@ export async function cacheCampingplatz(
   await offlineDb.campingplaetze.put(
     withMeta(normalizeCampingplatzForOfflineCache(item)) as CachedCampingplatz
   )
+}
+
+export async function cacheRastplaetze(items: Rastplatz[]): Promise<void> {
+  const withMetaItems = items.map((v) => withMeta(v)) as CachedRastplatz[]
+  await snapshotReplace(offlineDb.rastplaetze, withMetaItems)
+}
+
+export async function cacheRastplatz(item: Rastplatz): Promise<void> {
+  await offlineDb.rastplaetze.put(withMeta(item) as CachedRastplatz)
 }
 
 /** Fotos für genau einen Campingplatz spiegeln */

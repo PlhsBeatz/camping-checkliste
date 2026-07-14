@@ -12,4 +12,7 @@ interface CloudflareEnv {
 	NEXTJS_ENV?: string;
 	NEXT_PUBLIC_GOOGLE_MAPS_API_KEY?: string;
 	GOOGLE_MAPS_API_KEY?: string;
+	VAPID_PUBLIC_KEY?: string;
+	VAPID_PRIVATE_KEY?: string;
+	VAPID_SUBJECT?: string;
 }

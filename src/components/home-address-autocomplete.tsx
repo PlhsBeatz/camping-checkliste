@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { Input } from '@/components/ui/input'
+import { importGoogleMapsLibrary, loadGoogleMapsScript } from '@/lib/google-maps-script'
 
 interface HomeAddressAutocompleteProps {
   value: string
@@ -14,56 +15,29 @@ export function HomeAddressAutocomplete(props: HomeAddressAutocompleteProps) {
   const { value, onChange, onResolve, placeholder } = props
   const containerRef = useRef<HTMLDivElement | null>(null)
   const elementRef = useRef<HTMLElement | null>(null)
-  const [scriptLoaded, setScriptLoaded] = useState(false)
   const [placesAvailable, setPlacesAvailable] = useState(false)
 
-  // Gemeinsames Laden des JS-SDK
   useEffect(() => {
     if (typeof window === 'undefined') return
+    let cancelled = false
 
-    const anyWindow = window as typeof window & {
-      google?: { maps?: { places?: unknown } }
-    }
-    if (anyWindow.google?.maps?.places) {
-      setScriptLoaded(true)
-      setPlacesAvailable(true)
-      return
-    }
+    void (async () => {
+      const loaded = await loadGoogleMapsScript()
+      if (cancelled || !loaded) return
 
-    const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
-    if (!apiKey) {
-      setScriptLoaded(true)
-      setPlacesAvailable(false)
-      return
-    }
+      const places = await importGoogleMapsLibrary<{ PlaceAutocompleteElement?: new (opts?: unknown) => HTMLElement }>('places')
+      if (cancelled) return
+      setPlacesAvailable(!!places?.PlaceAutocompleteElement)
+    })()
 
-    const scriptId = 'google-maps-places-script'
-    if (document.getElementById(scriptId)) {
-      setScriptLoaded(true)
-      return
+    return () => {
+      cancelled = true
     }
-
-    const script = document.createElement('script')
-    script.id = scriptId
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&language=de&v=weekly`
-    script.async = true
-    script.onload = () => {
-      setScriptLoaded(true)
-      const w = window as typeof window & {
-        google?: { maps?: { places?: { PlaceAutocompleteElement?: unknown } } }
-      }
-      setPlacesAvailable(!!w.google?.maps?.places?.PlaceAutocompleteElement)
-    }
-    script.onerror = () => {
-      setScriptLoaded(true)
-      setPlacesAvailable(false)
-    }
-    document.head.appendChild(script)
   }, [])
 
   // PlaceAutocompleteElement nutzen
   useEffect(() => {
-    if (!scriptLoaded || !placesAvailable || !containerRef.current) return
+    if (!placesAvailable || !containerRef.current) return
     if (elementRef.current) return
 
     const w = window as typeof window & {
@@ -144,7 +118,7 @@ export function HomeAddressAutocomplete(props: HomeAddressAutocompleteProps) {
     }
   // value bewusst nicht in deps: wird im separaten Effect synchron gehalten; sonst würde das Element bei jeder Änderung neu erstellt
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scriptLoaded, placesAvailable, onChange, onResolve, placeholder])
+  }, [placesAvailable, onChange, onResolve, placeholder])
 
   // Wert vom Prop ins Google-Element übernehmen (ohne Effect neu zu starten)
   useEffect(() => {
