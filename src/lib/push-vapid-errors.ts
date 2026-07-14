@@ -49,10 +49,14 @@ export function describeVapidSetupError(status: VapidConfigStatusHint): string {
       return 'VAPID_PUBLIC_KEY ist da, VAPID_PRIVATE_KEY fehlt – als Geheimnis am Worker setzen (Typ Geheimnis, JSON-Inhalt als Text).'
     }
     if (!publicOk && privateOk) {
-      return 'VAPID_PRIVATE_KEY ist da, VAPID_PUBLIC_KEY fehlt – als Text-Variable am Worker setzen.'
+      return (
+        'VAPID_PUBLIC_KEY fehlt am Worker. Entweder als Geheimnis setzen: npx wrangler secret put VAPID_PUBLIC_KEY ' +
+        '(Klartext-Variablen im Dashboard erscheinen nicht in „wrangler secret list“). ' +
+        'Nach dem nächsten Deploy wird der Public Key alternativ aus dem Private Key abgeleitet.'
+      )
     }
     if (!d.subjectFromProcessEnv && !d.subjectFromCloudflareEnv) {
-      return 'VAPID_SUBJECT fehlt (z. B. mailto:deine@email.de als Text-Variable).'
+      return 'VAPID_SUBJECT fehlt – als Geheimnis setzen: npx wrangler secret put VAPID_SUBJECT (z. B. mailto:deine@email.de).'
     }
   }
 

@@ -25,6 +25,7 @@ export type PushSendResult = {
 
 type PushEnv = {
   publicKey: string | null
+  explicitPublicKey: string | null
   privateJwk: Record<string, unknown> | null
   privateKeyParseFailed: boolean
   subject: string
@@ -140,9 +141,15 @@ async function resolvePushEnv(): Promise<PushEnv> {
 
   const privateString = readPrivateKeyRaw(privateRaw)
   const { jwk, parseFailed } = parsePrivateJwk(privateString ?? privateRaw)
+  const explicitPublicKey = publicKey
+
+  if (!publicKey && jwk && !parseFailed) {
+    publicKey = derivePublicKeyFromJwk(jwk)
+  }
 
   return {
     publicKey,
+    explicitPublicKey,
     privateJwk: jwk,
     privateKeyParseFailed: parseFailed,
     subject,
@@ -166,7 +173,10 @@ export async function getVapidConfigStatus(): Promise<{
     enabled: !!env.publicKey && !!env.privateJwk,
     privateKeyConfigured: !!env.privateJwk,
     privateKeyParseFailed: env.privateKeyParseFailed,
-    keyPairMatch: !!env.publicKey && !!derived && env.publicKey === derived,
+    keyPairMatch:
+      !!env.privateJwk &&
+      !!derived &&
+      (!env.explicitPublicKey || env.explicitPublicKey === derived),
     diagnostics: env.diagnostics,
   }
   return {
