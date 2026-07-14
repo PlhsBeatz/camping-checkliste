@@ -60,6 +60,8 @@ export async function POST(request: NextRequest) {
         distanceKm: entry.distance_km,
         durationMinutes: entry.duration_min,
         provider: entry.provider,
+        encodedPolyline: entry.encoded_polyline ?? null,
+        returnEncodedPolyline: entry.return_encoded_polyline ?? null,
       },
     })
   } catch (error: unknown) {

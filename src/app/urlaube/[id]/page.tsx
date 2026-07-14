@@ -14,6 +14,7 @@ import {
   ListChecks,
   Map as MapIcon,
   Menu,
+  ChevronRight,
   MoreVertical,
   Pencil,
   Route,
@@ -55,11 +56,42 @@ import {
   openSegmentInAdacMaps,
   openSegmentInGoogleMaps,
 } from '@/lib/maps-export'
-import { SegmentRastSuggestions } from '@/components/segment-rast-suggestions'
+import {
+  getRastplaetzeAlongSegment,
+  getVisibleRastplaetzeForExpandedSegments,
+  resolveSegmentRastOpen,
+  SegmentRastSuggestions,
+  type SegmentRouteMatchOptions,
+} from '@/components/segment-rast-suggestions'
+import { isUsableRoutePolyline } from '@/lib/route-polyline'
 
 type CampingplatzRouteInfo = {
   distanceKm: number
   durationMinutes: number
+  provider?: 'google' | 'haversine'
+  encodedPolyline?: string | null
+  returnEncodedPolyline?: string | null
+}
+
+function sanitizeRoutePolyline(encoded: string | null | undefined): string | null {
+  return isUsableRoutePolyline(encoded) ? encoded!.trim() : null
+}
+
+function mergeCampingplatzRouteInfo(
+  existing: CampingplatzRouteInfo | undefined,
+  incoming: CampingplatzRouteInfo
+): CampingplatzRouteInfo {
+  const incomingPolyline = sanitizeRoutePolyline(incoming.encodedPolyline)
+  const existingPolyline = sanitizeRoutePolyline(existing?.encodedPolyline)
+  const incomingReturn = sanitizeRoutePolyline(incoming.returnEncodedPolyline)
+  const existingReturn = sanitizeRoutePolyline(existing?.returnEncodedPolyline)
+  return {
+    distanceKm: incoming.distanceKm,
+    durationMinutes: incoming.durationMinutes,
+    provider: incoming.provider ?? existing?.provider,
+    encodedPolyline: incomingPolyline ?? existingPolyline ?? null,
+    returnEncodedPolyline: incomingReturn ?? existingReturn ?? null,
+  }
 }
 
 function segmentKey(fromId: string, toId: string) {
@@ -160,16 +192,30 @@ function RouteLeg({
   route,
   segment,
   rastplaetze,
+  routeMatch,
+  rastOpen,
+  onRastOpenToggle,
 }: {
   label: string
   route: CampingplatzRouteInfo | undefined
   segment: TravelSegment | null
   rastplaetze: Rastplatz[]
+  routeMatch?: SegmentRouteMatchOptions
+  rastOpen: boolean
+  onRastOpenToggle: () => void
 }) {
+  const rastCount = useMemo(() => {
+    if (!segment) return 0
+    return getRastplaetzeAlongSegment(segment, rastplaetze, routeMatch).length
+  }, [routeMatch, segment, rastplaetze])
+
   const empfehlungsCount = useMemo(() => {
     if (!segment) return 0
-    return countSegmentEmpfehlungen(segment, rastplaetze)
-  }, [segment, rastplaetze])
+    return countSegmentEmpfehlungen(segment, rastplaetze, routeMatch)
+  }, [routeMatch, segment, rastplaetze])
+
+  const hasRast = rastCount > 0
+  const showRastPanel = hasRast && rastOpen
 
   const waypointHint =
     empfehlungsCount > 0
@@ -177,52 +223,98 @@ function RouteLeg({
       : ''
 
   return (
-    <div className="flex items-center gap-2 py-1.5 pl-4 pr-1 text-xs text-muted-foreground">
-      <div className="flex flex-col items-center self-stretch">
-        <span className="w-px flex-1 bg-border" />
-        <Route className="my-0.5 h-3.5 w-3.5 shrink-0 text-brand-heading" />
-        <span className="w-px flex-1 bg-border" />
-      </div>
-      <div className="min-w-0 flex-1">
-        <span className="font-medium text-foreground/70">{label}</span>
-        {route ? (
-          <span className="ml-1.5">
-            {Math.round(route.distanceKm)} km · {formatDurationMinutes(route.durationMinutes)}
-          </span>
-        ) : (
-          <span className="ml-1.5 italic opacity-70">Route wird berechnet…</span>
+    <>
+      <div className="flex items-center gap-2 py-1.5 pl-4 pr-1 text-xs text-muted-foreground">
+        <div className="flex flex-col items-center self-stretch">
+          <span className="w-px flex-1 bg-border" />
+          <Route className="my-0.5 h-3.5 w-3.5 shrink-0 text-brand-heading" />
+          <span className="w-px flex-1 bg-border" />
+        </div>
+        <button
+          type="button"
+          disabled={!hasRast}
+          onClick={hasRast ? onRastOpenToggle : undefined}
+          className={cn(
+            'min-w-0 flex-1 text-left',
+            hasRast && 'cursor-pointer hover:text-foreground/80'
+          )}
+          aria-expanded={hasRast ? rastOpen : undefined}
+          aria-label={
+            hasRast ? (rastOpen ? 'Rastplätze ausblenden' : 'Rastplätze anzeigen') : undefined
+          }
+        >
+          <span className="font-medium text-foreground/70">{label}</span>
+          {route ? (
+            <span className="ml-1.5">
+              {Math.round(route.distanceKm)} km · {formatDurationMinutes(route.durationMinutes)}
+            </span>
+          ) : (
+            <span className="ml-1.5 italic opacity-70">Route wird berechnet…</span>
+          )}
+          {hasRast && (
+            <ChevronRight
+              className={cn(
+                'ml-1 inline h-3 w-3 shrink-0 align-middle opacity-60 transition-transform',
+                rastOpen && 'rotate-90'
+              )}
+              aria-hidden
+            />
+          )}
+        </button>
+        {segment && (
+          <DropdownMenu modal={false}>
+            <DropdownMenuTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 w-7 shrink-0 p-0 text-muted-foreground"
+                aria-label="Routenoptionen"
+              >
+                <MoreVertical className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="z-30">
+              <DropdownMenuItem
+                onSelect={() =>
+                  openSegmentInGoogleMaps(
+                    segment,
+                    rastplaetze,
+                    undefined,
+                    routeMatch?.encodedPolyline,
+                    routeMatch?.routeProvider
+                  )
+                }
+              >
+                <MapIcon className="h-4 w-4 mr-2" />
+                Google Maps{waypointHint}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() =>
+                  openSegmentInAdacMaps(
+                    segment,
+                    rastplaetze,
+                    undefined,
+                    routeMatch?.encodedPolyline,
+                    routeMatch?.routeProvider
+                  )
+                }
+              >
+                <Route className="h-4 w-4 mr-2" />
+                ADAC Routenplanung{waypointHint}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         )}
       </div>
-      {segment && (
-        <DropdownMenu modal={false}>
-          <DropdownMenuTrigger asChild>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-7 w-7 shrink-0 p-0 text-muted-foreground"
-              aria-label="Routenoptionen"
-            >
-              <MoreVertical className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="z-30">
-            <DropdownMenuItem
-              onSelect={() => openSegmentInGoogleMaps(segment, rastplaetze)}
-            >
-              <MapIcon className="h-4 w-4 mr-2" />
-              Google Maps{waypointHint}
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onSelect={() => openSegmentInAdacMaps(segment, rastplaetze)}
-            >
-              <Route className="h-4 w-4 mr-2" />
-              ADAC Routenplanung{waypointHint}
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      )}
-    </div>
+      {showRastPanel && segment ? (
+        <SegmentRastSuggestions
+          segment={segment}
+          rastplaetze={rastplaetze}
+          routeMatch={routeMatch}
+        />
+      ) : null}
+    </>
   )
 }
 
@@ -380,6 +472,91 @@ export default function UrlaubDetailPage() {
     return getTravelLegPhases(vacation, stays, travelSegments, returnHomeSegment)
   }, [vacation, stays, travelSegments, returnHomeSegment])
 
+  const [segmentRastExpanded, setSegmentRastExpanded] = useState<Record<string, boolean>>({})
+
+  const toggleSegmentRast = useCallback((segmentId: string, phase: TravelLegPhase) => {
+    setSegmentRastExpanded((prev) => ({
+      ...prev,
+      [segmentId]: !resolveSegmentRastOpen(segmentId, phase, prev),
+    }))
+  }, [])
+
+  const allTravelSegments = useMemo(() => {
+    const list = [...travelSegments]
+    if (returnHomeSegment) list.push(returnHomeSegment)
+    return list
+  }, [travelSegments, returnHomeSegment])
+
+  const segmentRouteMatchBySegmentId = useMemo(() => {
+    const map = new Map<string, SegmentRouteMatchOptions>()
+    const sorted = [...stays].sort((a, b) => (a.sort_index ?? 0) - (b.sort_index ?? 0))
+    const firstStay = sorted[0]
+    const lastStay = sorted[sorted.length - 1]
+
+    if (firstStay) {
+      const homeSeg = travelSegments.find(
+        (s) =>
+          s.from.kind === 'home' && s.to.campingplatzId === firstStay.campingplatz.id
+      )
+      const homeRoute = routeInfo[firstStay.campingplatz.id]
+      if (homeSeg && homeRoute) {
+        map.set(homeSeg.id, {
+          encodedPolyline: sanitizeRoutePolyline(homeRoute.encodedPolyline),
+          routeProvider: homeRoute.provider ?? null,
+        })
+      }
+    }
+
+    for (let i = 0; i < sorted.length - 1; i++) {
+      const fromStay = sorted[i]
+      const toStay = sorted[i + 1]
+      if (!fromStay || !toStay || fromStay.campingplatz.id === toStay.campingplatz.id) continue
+      const seg = travelSegments.find(
+        (s) =>
+          s.from.campingplatzId === fromStay.campingplatz.id &&
+          s.to.campingplatzId === toStay.campingplatz.id
+      )
+      const legRoute =
+        segmentRouteInfo[segmentKey(fromStay.campingplatz.id, toStay.campingplatz.id)]
+      if (seg && legRoute) {
+        map.set(seg.id, {
+          encodedPolyline: sanitizeRoutePolyline(legRoute.encodedPolyline),
+          routeProvider: legRoute.provider ?? null,
+        })
+      }
+    }
+
+    if (returnHomeSegment && lastStay) {
+      const returnRoute = routeInfo[lastStay.campingplatz.id]
+      if (returnRoute) {
+        map.set(returnHomeSegment.id, {
+          encodedPolyline: sanitizeRoutePolyline(returnRoute.returnEncodedPolyline),
+          routeProvider: returnRoute.provider ?? null,
+        })
+      }
+    }
+
+    return map
+  }, [stays, travelSegments, returnHomeSegment, routeInfo, segmentRouteInfo])
+
+  const mapVisibleRastplaetze = useMemo(
+    () =>
+      getVisibleRastplaetzeForExpandedSegments(
+        allTravelSegments,
+        rastplaetze,
+        travelLegPhases,
+        segmentRastExpanded,
+        segmentRouteMatchBySegmentId
+      ),
+    [
+      allTravelSegments,
+      rastplaetze,
+      travelLegPhases,
+      segmentRastExpanded,
+      segmentRouteMatchBySegmentId,
+    ]
+  )
+
   const segmentForLeg = useCallback(
     (fromId: string, toId: string) =>
       travelSegments.find(
@@ -390,16 +567,23 @@ export default function UrlaubDetailPage() {
     [travelSegments]
   )
 
+  const vacationCampingplatzIds = useMemo(
+    () => new Set(stays.map((s) => s.campingplatz.id)),
+    [stays]
+  )
+
   useEffect(() => {
-    if (campingplaetze.length === 0) return
+    if (campingplaetze.length === 0 || vacationCampingplatzIds.size === 0) return
     let aborted = false
     const controller = new AbortController()
 
     const loadRoutes = async () => {
       for (const cp of campingplaetze) {
         if (aborted) return
+        if (!vacationCampingplatzIds.has(cp.id)) continue
         if (!cp.lat || !cp.lng) continue
-        if (routeInfoRef.current[cp.id]) continue
+        const existing = routeInfoRef.current[cp.id]
+        if (isUsableRoutePolyline(existing?.encodedPolyline)) continue
         try {
           const res = await fetch('/api/routes/campingplatz', {
             method: 'POST',
@@ -410,12 +594,24 @@ export default function UrlaubDetailPage() {
           if (!res.ok || aborted) continue
           const data = (await res.json()) as {
             success?: boolean
-            data?: CampingplatzRouteInfo
+            data?: CampingplatzRouteInfo & {
+              provider?: 'google' | 'haversine'
+              encodedPolyline?: string | null
+              returnEncodedPolyline?: string | null
+            }
           }
           if (!data.success || !data.data) continue
-          setRouteInfo((prev) =>
-            prev[cp.id] ? prev : { ...prev, [cp.id]: data.data! }
-          )
+          const incoming: CampingplatzRouteInfo = {
+            distanceKm: data.data.distanceKm,
+            durationMinutes: data.data.durationMinutes,
+            provider: data.data.provider,
+            encodedPolyline: data.data.encodedPolyline ?? null,
+            returnEncodedPolyline: data.data.returnEncodedPolyline ?? null,
+          }
+          setRouteInfo((prev) => ({
+            ...prev,
+            [cp.id]: mergeCampingplatzRouteInfo(prev[cp.id], incoming),
+          }))
         } catch {
           if (aborted) return
         }
@@ -427,7 +623,7 @@ export default function UrlaubDetailPage() {
       aborted = true
       controller.abort()
     }
-  }, [campingplaetze])
+  }, [campingplaetze, vacationCampingplatzIds])
 
   // Segment-Routen (Campingplatz → Campingplatz) für aufeinanderfolgende Aufenthalte laden
   useEffect(() => {
@@ -446,7 +642,7 @@ export default function UrlaubDetailPage() {
         if (from.id === to.id) continue
         if (!from.lat || !from.lng || !to.lat || !to.lng) continue
         const key = segmentKey(from.id, to.id)
-        if (segmentRouteInfoRef.current[key]) continue
+        if (isUsableRoutePolyline(segmentRouteInfoRef.current[key]?.encodedPolyline)) continue
         try {
           const res = await fetch('/api/routes/segment', {
             method: 'POST',
@@ -457,12 +653,22 @@ export default function UrlaubDetailPage() {
           if (!res.ok || aborted) continue
           const data = (await res.json()) as {
             success?: boolean
-            data?: CampingplatzRouteInfo
+            data?: CampingplatzRouteInfo & {
+              provider?: 'google' | 'haversine'
+              encodedPolyline?: string | null
+            }
           }
           if (!data.success || !data.data) continue
-          setSegmentRouteInfo((prev) =>
-            prev[key] ? prev : { ...prev, [key]: data.data! }
-          )
+          const incoming: CampingplatzRouteInfo = {
+            distanceKm: data.data.distanceKm,
+            durationMinutes: data.data.durationMinutes,
+            provider: data.data.provider,
+            encodedPolyline: data.data.encodedPolyline ?? null,
+          }
+          setSegmentRouteInfo((prev) => ({
+            ...prev,
+            [key]: mergeCampingplatzRouteInfo(prev[key], incoming),
+          }))
         } catch {
           if (aborted) return
         }
@@ -686,14 +892,28 @@ export default function UrlaubDetailPage() {
                                 route={routeInfo[firstStay.campingplatz.id]}
                                 segment={homeSegment ?? null}
                                 rastplaetze={rastplaetze}
+                                routeMatch={
+                                  homeSegment
+                                    ? segmentRouteMatchBySegmentId.get(homeSegment.id)
+                                    : undefined
+                                }
+                                rastOpen={
+                                  homeSegment
+                                    ? resolveSegmentRastOpen(
+                                        homeSegment.id,
+                                        travelLegPhases.get(homeSegment.id) ?? 'future',
+                                        segmentRastExpanded
+                                      )
+                                    : false
+                                }
+                                onRastOpenToggle={() => {
+                                  if (!homeSegment) return
+                                  toggleSegmentRast(
+                                    homeSegment.id,
+                                    travelLegPhases.get(homeSegment.id) ?? 'future'
+                                  )
+                                }}
                               />
-                              {homeSegment ? (
-                                <SegmentRastSuggestions
-                                  segment={homeSegment}
-                                  rastplaetze={rastplaetze}
-                                  phase={travelLegPhases.get(homeSegment.id) ?? 'future'}
-                                />
-                              ) : null}
                             </>
                           ) : null
                         })()}
@@ -751,6 +971,9 @@ export default function UrlaubDetailPage() {
                                 <>
                                   {(() => {
                                     const legSegment = segmentForLeg(cp.id, next.campingplatz.id)
+                                    const legPhase = legSegment
+                                      ? travelLegPhases.get(legSegment.id) ?? 'future'
+                                      : 'future'
                                     return (
                                       <>
                                         <RouteLeg
@@ -762,14 +985,25 @@ export default function UrlaubDetailPage() {
                                           }
                                           segment={legSegment}
                                           rastplaetze={rastplaetze}
+                                          routeMatch={
+                                            legSegment
+                                              ? segmentRouteMatchBySegmentId.get(legSegment.id)
+                                              : undefined
+                                          }
+                                          rastOpen={
+                                            legSegment
+                                              ? resolveSegmentRastOpen(
+                                                  legSegment.id,
+                                                  legPhase,
+                                                  segmentRastExpanded
+                                                )
+                                              : false
+                                          }
+                                          onRastOpenToggle={() => {
+                                            if (!legSegment) return
+                                            toggleSegmentRast(legSegment.id, legPhase)
+                                          }}
                                         />
-                                        {legSegment ? (
-                                          <SegmentRastSuggestions
-                                            segment={legSegment}
-                                            rastplaetze={rastplaetze}
-                                            phase={travelLegPhases.get(legSegment.id) ?? 'future'}
-                                          />
-                                        ) : null}
                                       </>
                                     )
                                   })()}
@@ -792,14 +1026,28 @@ export default function UrlaubDetailPage() {
                                 route={routeInfo[lastStay.campingplatz.id]}
                                 segment={returnHomeSegment}
                                 rastplaetze={rastplaetze}
+                                routeMatch={
+                                  returnHomeSegment
+                                    ? segmentRouteMatchBySegmentId.get(returnHomeSegment.id)
+                                    : undefined
+                                }
+                                rastOpen={
+                                  returnHomeSegment
+                                    ? resolveSegmentRastOpen(
+                                        returnHomeSegment.id,
+                                        travelLegPhases.get(returnHomeSegment.id) ?? 'future',
+                                        segmentRastExpanded
+                                      )
+                                    : false
+                                }
+                                onRastOpenToggle={() => {
+                                  if (!returnHomeSegment) return
+                                  toggleSegmentRast(
+                                    returnHomeSegment.id,
+                                    travelLegPhases.get(returnHomeSegment.id) ?? 'future'
+                                  )
+                                }}
                               />
-                              {returnHomeSegment ? (
-                                <SegmentRastSuggestions
-                                  segment={returnHomeSegment}
-                                  rastplaetze={rastplaetze}
-                                  phase={travelLegPhases.get(returnHomeSegment.id) ?? 'future'}
-                                />
-                              ) : null}
                             </>
                           ) : null
                         })()}
@@ -809,6 +1057,13 @@ export default function UrlaubDetailPage() {
                       <UrlaubOverviewMap
                         home={homeCoords}
                         campingplaetze={mapCampingplaetze}
+                        rastplaetze={mapVisibleRastplaetze.map((r) => ({
+                          id: r.id,
+                          lat: r.lat!,
+                          lng: r.lng!,
+                          name: r.name,
+                          bewertung: r.bewertung,
+                        }))}
                         title={vacation.titel}
                       />
                     )}

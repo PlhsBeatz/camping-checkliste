@@ -8,6 +8,8 @@ import 'leaflet/dist/leaflet.css'
 
 const CAMPING_GREEN = 'rgb(45, 79, 30)'
 const HOME_ORANGE = 'rgb(230, 126, 34)'
+const RAST_EMPFEHLUNG_GREEN = 'rgb(34, 139, 34)'
+const RAST_NO_GO_RED = 'rgb(200, 50, 50)'
 const DE_OSM_TILE_URL = 'https://{s}.tile.openstreetmap.de/tiles/osmde/{z}/{x}/{y}.png'
 const MAP_ATTRIBUTION =
   '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> ' +
@@ -18,7 +20,8 @@ type MapPoint = {
   lat: number
   lng: number
   label: string
-  kind: 'home' | 'camping'
+  kind: 'home' | 'camping' | 'rast'
+  bewertung?: 'empfehlung' | 'no_go'
 }
 
 type FitOptions = {
@@ -62,6 +65,24 @@ function createPinIcon(kind: 'home' | 'camping') {
     iconSize: [32, 40],
     iconAnchor: [16, 40],
     popupAnchor: [0, -38],
+  })
+}
+
+function rastPinSvg(bewertung: 'empfehlung' | 'no_go') {
+  const fill = bewertung === 'empfehlung' ? RAST_EMPFEHLUNG_GREEN : RAST_NO_GO_RED
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="22" height="28" viewBox="0 0 22 28" style="display:block;filter:drop-shadow(0 1px 2px rgba(0,0,0,.2))">
+    <path d="M11 28C11 28 1.2 15.2 1.2 9.4A9.8 9.8 0 1 1 20.8 9.4C20.8 15.2 11 28 11 28Z" fill="${fill}" stroke="white" stroke-width="1.2"/>
+    <circle cx="11" cy="9.4" r="4.2" fill="white"/>
+  </svg>`
+}
+
+function createRastPinIcon(bewertung: 'empfehlung' | 'no_go') {
+  return L.divIcon({
+    html: `<div style="width:22px;height:28px;line-height:0">${rastPinSvg(bewertung)}</div>`,
+    className: 'urlaub-leaflet-rast-pin',
+    iconSize: [22, 28],
+    iconAnchor: [11, 28],
+    popupAnchor: [0, -26],
   })
 }
 
@@ -222,9 +243,14 @@ function UrlaubLeafletMap({
       addGermanTileLayer(map)
 
       for (const p of points) {
+        const icon =
+          p.kind === 'rast'
+            ? createRastPinIcon(p.bewertung ?? 'empfehlung')
+            : createPinIcon(p.kind)
         L.marker([p.lat, p.lng], {
-          icon: createPinIcon(p.kind),
+          icon,
           title: p.label,
+          zIndexOffset: p.kind === 'rast' ? 100 : p.kind === 'home' ? 200 : 150,
         }).addTo(map)
       }
 
@@ -313,13 +339,22 @@ function MapPreviewFrame({
   )
 }
 
+export type UrlaubOverviewMapRastplatz = {
+  id: string
+  lat: number
+  lng: number
+  name: string
+  bewertung: 'empfehlung' | 'no_go'
+}
+
 export type UrlaubOverviewMapProps = {
   home: { lat: number; lng: number; label?: string } | null
   campingplaetze: { id: string; lat: number; lng: number; name: string }[]
+  rastplaetze?: UrlaubOverviewMapRastplatz[]
   title?: string
 }
 
-export function UrlaubOverviewMap({ home, campingplaetze, title }: UrlaubOverviewMapProps) {
+export function UrlaubOverviewMap({ home, campingplaetze, rastplaetze = [], title }: UrlaubOverviewMapProps) {
   const [interactiveOpen, setInteractiveOpen] = useState(false)
   useMobileMapHistorySync(interactiveOpen, setInteractiveOpen)
 
@@ -345,8 +380,19 @@ export function UrlaubOverviewMap({ home, campingplaetze, title }: UrlaubOvervie
         kind: 'camping',
       })
     }
+    for (const r of rastplaetze) {
+      const { lat, lng } = normalizeCoords(r.lat, r.lng)
+      list.push({
+        id: `rast-${r.id}`,
+        lat,
+        lng,
+        label: r.name,
+        kind: 'rast',
+        bewertung: r.bewertung,
+      })
+    }
     return list
-  }, [home, campingplaetze])
+  }, [home, campingplaetze, rastplaetze])
 
   if (points.length === 0) {
     return null
@@ -373,8 +419,8 @@ export function UrlaubOverviewMap({ home, campingplaetze, title }: UrlaubOvervie
             {title ? `Route: ${title}` : 'Interaktive Karte'}
           </DialogTitle>
           <DialogDescription className="sr-only">
-            Verschiebbare OpenStreetMap-Karte mit Zoom und Markierungen für Heimatadresse
-            und Campingplätze.
+            Verschiebbare OpenStreetMap-Karte mit Zoom und Markierungen für Heimatadresse,
+            Campingplätze und Rastplätze entlang aufgeklappter Streckenabschnitte.
           </DialogDescription>
           {interactiveOpen ? (
             <div className="map-embed relative min-h-0 flex-1 overflow-hidden rounded-lg border border-subtle bg-muted">

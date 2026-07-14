@@ -251,7 +251,7 @@ function isTravelSegmentPast(
   if (segment.from.kind === 'home') {
     const firstStay = sorted[0]
     const arrival = normalizeCalendarDate(firstStay?.start_datum)
-    if (arrival) return today >= arrival
+    if (arrival) return today > arrival
     const departure = normalizeCalendarDate(getDepartureDate(vacation))
     return departure ? today > departure : false
   }
@@ -259,7 +259,7 @@ function isTravelSegmentPast(
   const destinationId = segment.to.campingplatzId
   const toStay = sorted.find((s) => s.campingplatz.id === destinationId)
   const arrival = normalizeCalendarDate(toStay?.start_datum)
-  if (arrival) return today >= arrival
+  if (arrival) return today > arrival
 
   return false
 }

@@ -8,6 +8,7 @@ import {
   getSegmentRoute,
   setSegmentRoute,
 } from '@/lib/db'
+import { isUsableRoutePolyline } from '@/lib/route-polyline'
 
 const EARTH_RADIUS_KM = 6371
 
@@ -42,11 +43,74 @@ export function estimateRouteFromHaversine(distanceKm: number): {
   }
 }
 
+function getGoogleMapsApiKey(): string | null {
+  return process.env.GOOGLE_MAPS_API_KEY || process.env.GOOGLE_DISTANCE_MATRIX_API_KEY || null
+}
+
+type DirectionsResult = {
+  distanceKm: number
+  durationMinutes: number
+  encodedPolyline: string
+}
+
+export async function callGoogleDirections(
+  origin: { lat: number; lng: number },
+  destination: { lat: number; lng: number }
+): Promise<DirectionsResult | null> {
+  const apiKey = getGoogleMapsApiKey()
+  if (!apiKey) return null
+
+  const url = new URL('https://maps.googleapis.com/maps/api/directions/json')
+  url.searchParams.set('origin', `${origin.lat},${origin.lng}`)
+  url.searchParams.set('destination', `${destination.lat},${destination.lng}`)
+  url.searchParams.set('key', apiKey)
+  url.searchParams.set('mode', 'driving')
+
+  const res = await fetch(url.toString())
+  if (!res.ok) return null
+
+  type DirectionsLeg = {
+    distance?: { value: number }
+    duration?: { value: number }
+    steps?: Array<{ polyline?: { points?: string } }>
+  }
+
+  type DirectionsResponse = {
+    status: string
+    routes?: Array<{
+      overview_polyline?: { points?: string }
+      legs?: DirectionsLeg[]
+    }>
+  }
+
+  const json = (await res.json()) as DirectionsResponse
+  if (json.status !== 'OK' || !json.routes?.[0]) return null
+
+  const route = json.routes[0]
+  const encodedPolyline = route.overview_polyline?.points
+  if (!encodedPolyline) return null
+
+  let distanceMeters = 0
+  let durationSeconds = 0
+  for (const leg of route.legs ?? []) {
+    distanceMeters += leg.distance?.value ?? 0
+    durationSeconds += leg.duration?.value ?? 0
+  }
+  if (distanceMeters <= 0 || durationSeconds <= 0) return null
+
+  return {
+    distanceKm: distanceMeters / 1000,
+    durationMinutes: (durationSeconds / 60) * 1.3,
+    encodedPolyline,
+  }
+}
+
+/** @deprecated Nur Fallback, wenn Directions fehlschlägt */
 export async function callGoogleDistanceMatrix(
   origin: { lat: number; lng: number },
   destination: { lat: number; lng: number }
 ): Promise<{ distanceKm: number; durationMinutes: number } | null> {
-  const apiKey = process.env.GOOGLE_MAPS_API_KEY || process.env.GOOGLE_DISTANCE_MATRIX_API_KEY
+  const apiKey = getGoogleMapsApiKey()
   if (!apiKey) return null
 
   const url = new URL('https://maps.googleapis.com/maps/api/distancematrix/json')
@@ -89,6 +153,14 @@ export async function callGoogleDistanceMatrix(
   return { distanceKm, durationMinutes }
 }
 
+function routeCacheComplete(entry: CampingplatzRouteCacheEntry): boolean {
+  return isUsableRoutePolyline(entry.encoded_polyline)
+}
+
+function segmentCacheComplete(entry: CampingplatzSegmentRouteCacheEntry): boolean {
+  return isUsableRoutePolyline(entry.encoded_polyline)
+}
+
 export async function calculateRouteWithCaching(params: {
   db: D1Database
   userId: string
@@ -99,55 +171,80 @@ export async function calculateRouteWithCaching(params: {
   const { db, userId, campingplatz, userLat, userLng } = params
 
   const existing = await getRouteForUserAndCampingplatz(db, userId, campingplatz.id)
-  if (existing) {
+  if (existing && routeCacheComplete(existing)) {
     return existing
   }
 
-  if (campingplatz.lat != null && campingplatz.lng != null) {
-    const fromGoogle = await callGoogleDistanceMatrix(
-      { lat: userLat, lng: userLng },
-      { lat: campingplatz.lat, lng: campingplatz.lng }
-    )
-    if (fromGoogle) {
-      const entry: CampingplatzRouteCacheEntry = {
-        user_id: userId,
-        campingplatz_id: campingplatz.id,
-        distance_km: fromGoogle.distanceKm,
-        duration_min: fromGoogle.durationMinutes,
-        provider: 'google',
-        updated_at: new Date().toISOString(),
-      }
-      await setRouteForUserAndCampingplatz(db, entry)
-      return entry
-    }
+  if (campingplatz.lat == null || campingplatz.lng == null) {
+    return existing
   }
 
-  if (campingplatz.lat != null && campingplatz.lng != null) {
-    const baseDistanceKm = haversineDistanceKm({
-      lat1: userLat,
-      lng1: userLng,
-      lat2: campingplatz.lat,
-      lng2: campingplatz.lng,
-    })
-    const est = estimateRouteFromHaversine(baseDistanceKm)
+  const origin = { lat: userLat, lng: userLng }
+  const destination = { lat: campingplatz.lat, lng: campingplatz.lng }
+
+  const [forward, reverse] = await Promise.all([
+    callGoogleDirections(origin, destination),
+    callGoogleDirections(destination, origin),
+  ])
+
+  if (forward) {
     const entry: CampingplatzRouteCacheEntry = {
       user_id: userId,
       campingplatz_id: campingplatz.id,
-      distance_km: est.distanceKm,
-      duration_min: est.durationMinutes,
-      provider: 'haversine',
+      distance_km: forward.distanceKm,
+      duration_min: forward.durationMinutes,
+      provider: 'google',
+      encoded_polyline: forward.encodedPolyline,
+      return_encoded_polyline: reverse?.encodedPolyline ?? null,
       updated_at: new Date().toISOString(),
     }
     await setRouteForUserAndCampingplatz(db, entry)
     return entry
   }
 
-  return null
+  if (existing?.distance_km) {
+    return existing
+  }
+
+  const fromGoogle = await callGoogleDistanceMatrix(origin, destination)
+  if (fromGoogle) {
+    const entry: CampingplatzRouteCacheEntry = {
+      user_id: userId,
+      campingplatz_id: campingplatz.id,
+      distance_km: fromGoogle.distanceKm,
+      duration_min: fromGoogle.durationMinutes,
+      provider: 'google',
+      encoded_polyline: null,
+      return_encoded_polyline: null,
+      updated_at: new Date().toISOString(),
+    }
+    await setRouteForUserAndCampingplatz(db, entry)
+    return entry
+  }
+
+  const baseDistanceKm = haversineDistanceKm({
+    lat1: userLat,
+    lng1: userLng,
+    lat2: campingplatz.lat,
+    lng2: campingplatz.lng,
+  })
+  const est = estimateRouteFromHaversine(baseDistanceKm)
+  const entry: CampingplatzRouteCacheEntry = {
+    user_id: userId,
+    campingplatz_id: campingplatz.id,
+    distance_km: est.distanceKm,
+    duration_min: est.durationMinutes,
+    provider: 'haversine',
+    encoded_polyline: null,
+    return_encoded_polyline: null,
+    updated_at: new Date().toISOString(),
+  }
+  await setRouteForUserAndCampingplatz(db, entry)
+  return entry
 }
 
 /**
  * Route zwischen zwei Campingplätzen (geografisch, nutzerunabhängig) – mit Caching.
- * Gleiche Berechnungslogik wie Heimat→Platz (Google Distance Matrix, sonst Haversine-Schätzung).
  */
 export async function calculateSegmentRouteWithCaching(params: {
   db: D1Database
@@ -157,15 +254,15 @@ export async function calculateSegmentRouteWithCaching(params: {
   const { db, from, to } = params
 
   const existing = await getSegmentRoute(db, from.id, to.id)
-  if (existing) {
+  if (existing && segmentCacheComplete(existing)) {
     return existing
   }
 
   if (from.lat == null || from.lng == null || to.lat == null || to.lng == null) {
-    return null
+    return existing
   }
 
-  const fromGoogle = await callGoogleDistanceMatrix(
+  const fromGoogle = await callGoogleDirections(
     { lat: from.lat, lng: from.lng },
     { lat: to.lat, lng: to.lng }
   )
@@ -176,6 +273,29 @@ export async function calculateSegmentRouteWithCaching(params: {
       distance_km: fromGoogle.distanceKm,
       duration_min: fromGoogle.durationMinutes,
       provider: 'google',
+      encoded_polyline: fromGoogle.encodedPolyline,
+      updated_at: new Date().toISOString(),
+    }
+    await setSegmentRoute(db, entry)
+    return entry
+  }
+
+  if (existing?.distance_km) {
+    return existing
+  }
+
+  const fromMatrix = await callGoogleDistanceMatrix(
+    { lat: from.lat, lng: from.lng },
+    { lat: to.lat, lng: to.lng }
+  )
+  if (fromMatrix) {
+    const entry: CampingplatzSegmentRouteCacheEntry = {
+      from_campingplatz_id: from.id,
+      to_campingplatz_id: to.id,
+      distance_km: fromMatrix.distanceKm,
+      duration_min: fromMatrix.durationMinutes,
+      provider: 'google',
+      encoded_polyline: null,
       updated_at: new Date().toISOString(),
     }
     await setSegmentRoute(db, entry)
@@ -195,9 +315,9 @@ export async function calculateSegmentRouteWithCaching(params: {
     distance_km: est.distanceKm,
     duration_min: est.durationMinutes,
     provider: 'haversine',
+    encoded_polyline: null,
     updated_at: new Date().toISOString(),
   }
   await setSegmentRoute(db, entry)
   return entry
 }
-

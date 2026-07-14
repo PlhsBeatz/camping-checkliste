@@ -277,6 +277,8 @@ export interface CampingplatzRouteCacheEntry {
   distance_km: number
   duration_min: number
   provider: 'google' | 'haversine'
+  encoded_polyline?: string | null
+  return_encoded_polyline?: string | null
   updated_at: string
 }
 
@@ -287,6 +289,7 @@ export interface CampingplatzSegmentRouteCacheEntry {
   distance_km: number
   duration_min: number
   provider: 'google' | 'haversine'
+  encoded_polyline?: string | null
   updated_at: string
 }
 
@@ -5306,12 +5309,14 @@ export async function setRouteForUserAndCampingplatz(
     await db
       .prepare(
         `INSERT INTO campingplatz_routen_cache 
-           (user_id, campingplatz_id, distance_km, duration_min, provider, updated_at)
-         VALUES (?, ?, ?, ?, ?, datetime('now'))
+           (user_id, campingplatz_id, distance_km, duration_min, provider, encoded_polyline, return_encoded_polyline, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
          ON CONFLICT(user_id, campingplatz_id) DO UPDATE SET
            distance_km = excluded.distance_km,
            duration_min = excluded.duration_min,
            provider = excluded.provider,
+           encoded_polyline = excluded.encoded_polyline,
+           return_encoded_polyline = excluded.return_encoded_polyline,
            updated_at = datetime('now')`
       )
       .bind(
@@ -5319,7 +5324,9 @@ export async function setRouteForUserAndCampingplatz(
         entry.campingplatz_id,
         entry.distance_km,
         entry.duration_min,
-        entry.provider
+        entry.provider,
+        entry.encoded_polyline ?? null,
+        entry.return_encoded_polyline ?? null
       )
       .run()
     return true
@@ -5389,12 +5396,13 @@ export async function setSegmentRoute(
     await db
       .prepare(
         `INSERT INTO campingplatz_segment_routen_cache
-           (from_campingplatz_id, to_campingplatz_id, distance_km, duration_min, provider, updated_at)
-         VALUES (?, ?, ?, ?, ?, datetime('now'))
+           (from_campingplatz_id, to_campingplatz_id, distance_km, duration_min, provider, encoded_polyline, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
          ON CONFLICT(from_campingplatz_id, to_campingplatz_id) DO UPDATE SET
            distance_km = excluded.distance_km,
            duration_min = excluded.duration_min,
            provider = excluded.provider,
+           encoded_polyline = excluded.encoded_polyline,
            updated_at = datetime('now')`
       )
       .bind(
@@ -5402,7 +5410,8 @@ export async function setSegmentRoute(
         entry.to_campingplatz_id,
         entry.distance_km,
         entry.duration_min,
-        entry.provider
+        entry.provider,
+        entry.encoded_polyline ?? null
       )
       .run()
     return true

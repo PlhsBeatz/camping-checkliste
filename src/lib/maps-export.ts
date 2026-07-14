@@ -1,6 +1,7 @@
 import { buildAdacRouteUrl, formatAdacPlace, openPlaceInAdacMaps } from '@/lib/adac-maps'
 import type { Rastplatz } from '@/lib/db'
 import { haversineDistanceKm } from '@/lib/routes'
+import { isPointNearEncodedPolyline } from '@/lib/route-polyline'
 import { isPointInSegmentCorridor, type TravelSegment } from '@/lib/travel-segment'
 
 export const GOOGLE_MAPS_MAX_WAYPOINTS_DESKTOP = 9
@@ -67,19 +68,29 @@ export function buildAdacRouteUrlWithWaypoints(params: {
 export function selectRastplaetzeForSegment(
   segment: TravelSegment,
   rastplaetze: Rastplatz[],
-  options?: { onlyEmpfehlung?: boolean; maxCount?: number }
+  options?: {
+    onlyEmpfehlung?: boolean
+    maxCount?: number
+    encodedPolyline?: string | null
+    routeProvider?: 'google' | 'haversine' | null
+  }
 ): Rastplatz[] {
   const onlyEmpfehlung = options?.onlyEmpfehlung !== false
   const maxCount = options?.maxCount ?? 9
+  const encodedPolyline = options?.encodedPolyline
+  const routeProvider = options?.routeProvider
   const filtered = rastplaetze.filter((r) => {
     if (r.is_archived) return false
     if (onlyEmpfehlung && r.bewertung !== 'empfehlung') return false
     if (r.lat == null || r.lng == null) return false
-    return isPointInSegmentCorridor(
-      { lat: r.lat, lng: r.lng },
-      segment.from,
-      segment.to
-    )
+    const point = { lat: r.lat, lng: r.lng }
+    if (encodedPolyline?.trim()) {
+      return isPointNearEncodedPolyline(point, encodedPolyline)
+    }
+    if (routeProvider === 'haversine') {
+      return isPointInSegmentCorridor(point, segment.from, segment.to)
+    }
+    return false
   })
 
   const scored = filtered
@@ -120,25 +131,44 @@ function segmentRouteEndpoints(segment: TravelSegment): {
 export function getSegmentEmpfehlungsWaypoints(
   segment: TravelSegment,
   rastplaetze: Rastplatz[],
-  maxCount: number
+  maxCount: number,
+  encodedPolyline?: string | null,
+  routeProvider?: 'google' | 'haversine' | null
 ): RouteWaypoint[] {
-  return selectRastplaetzeForSegment(segment, rastplaetze, { maxCount }).map(rastplatzToWaypoint)
+  return selectRastplaetzeForSegment(segment, rastplaetze, {
+    maxCount,
+    encodedPolyline,
+    routeProvider,
+  }).map(rastplatzToWaypoint)
 }
 
 export function countSegmentEmpfehlungen(
   segment: TravelSegment,
-  rastplaetze: Rastplatz[]
+  rastplaetze: Rastplatz[],
+  match?: { encodedPolyline?: string | null; routeProvider?: 'google' | 'haversine' | null }
 ): number {
-  return selectRastplaetzeForSegment(segment, rastplaetze, { maxCount: 999 }).length
+  return selectRastplaetzeForSegment(segment, rastplaetze, {
+    maxCount: 999,
+    encodedPolyline: match?.encodedPolyline,
+    routeProvider: match?.routeProvider,
+  }).length
 }
 
 export function openSegmentInGoogleMaps(
   segment: TravelSegment,
   rastplaetze: Rastplatz[],
-  maxWaypoints = GOOGLE_MAPS_MAX_WAYPOINTS_DESKTOP
+  maxWaypoints = GOOGLE_MAPS_MAX_WAYPOINTS_DESKTOP,
+  encodedPolyline?: string | null,
+  routeProvider?: 'google' | 'haversine' | null
 ): void {
   const { origin, destination } = segmentRouteEndpoints(segment)
-  const waypoints = getSegmentEmpfehlungsWaypoints(segment, rastplaetze, maxWaypoints)
+  const waypoints = getSegmentEmpfehlungsWaypoints(
+    segment,
+    rastplaetze,
+    maxWaypoints,
+    encodedPolyline,
+    routeProvider
+  )
   window.open(
     buildGoogleMapsRouteUrl({ origin, destination, waypoints }),
     '_blank'
@@ -148,10 +178,18 @@ export function openSegmentInGoogleMaps(
 export function openSegmentInAdacMaps(
   segment: TravelSegment,
   rastplaetze: Rastplatz[],
-  maxWaypoints = ADAC_MAX_WAYPOINTS
+  maxWaypoints = ADAC_MAX_WAYPOINTS,
+  encodedPolyline?: string | null,
+  routeProvider?: 'google' | 'haversine' | null
 ): void {
   const { origin, destination } = segmentRouteEndpoints(segment)
-  const waypoints = getSegmentEmpfehlungsWaypoints(segment, rastplaetze, maxWaypoints)
+  const waypoints = getSegmentEmpfehlungsWaypoints(
+    segment,
+    rastplaetze,
+    maxWaypoints,
+    encodedPolyline,
+    routeProvider
+  )
   window.open(
     buildAdacRouteUrlWithWaypoints({ origin, destination, waypoints }),
     '_blank'

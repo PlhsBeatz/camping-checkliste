@@ -1,12 +1,9 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import type { Rastplatz } from '@/lib/db'
-import {
-  isPointInSegmentCorridor,
-  type TravelLegPhase,
-  type TravelSegment,
-} from '@/lib/travel-segment'
+import { isPointInSegmentCorridor, type TravelLegPhase, type TravelSegment } from '@/lib/travel-segment'
+import { isPointNearEncodedPolyline } from '@/lib/route-polyline'
 import {
   ADAC_MAX_WAYPOINTS,
   GOOGLE_MAPS_MAX_WAYPOINTS_MOBILE,
@@ -14,38 +11,94 @@ import {
   openSegmentInGoogleMaps,
 } from '@/lib/maps-export'
 import { Button } from '@/components/ui/button'
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from '@/components/ui/collapsible'
-import { ThumbsUp, ThumbsDown, ExternalLink, ChevronDown, ChevronRight } from 'lucide-react'
+import { ThumbsUp, ThumbsDown, ExternalLink } from 'lucide-react'
 import { merkmalLabel } from '@/lib/rastplatz-merkmale'
 import { cn } from '@/lib/utils'
+
+export type SegmentRouteMatchOptions = {
+  encodedPolyline?: string | null
+  routeProvider?: 'google' | 'haversine' | null
+}
+
+export function isRastplatzOnTravelSegment(
+  r: Rastplatz,
+  segment: TravelSegment,
+  match?: SegmentRouteMatchOptions | string | null
+): boolean {
+  if (r.is_archived || r.lat == null || r.lng == null) return false
+  const point = { lat: r.lat, lng: r.lng }
+  const options: SegmentRouteMatchOptions =
+    typeof match === 'string' || match === null || match === undefined
+      ? { encodedPolyline: match }
+      : match
+
+  const encodedPolyline = options.encodedPolyline
+  if (encodedPolyline?.trim()) {
+    return isPointNearEncodedPolyline(point, encodedPolyline)
+  }
+  // Ohne Polyline: nur bei Haversine-Fallback (keine echte Route). Während des Ladens nichts anzeigen.
+  if (options.routeProvider === 'haversine') {
+    return isPointInSegmentCorridor(point, segment.from, segment.to)
+  }
+  return false
+}
+
+export function getRastplaetzeAlongSegment(
+  segment: TravelSegment,
+  rastplaetze: Rastplatz[],
+  match?: SegmentRouteMatchOptions | string | null
+): Rastplatz[] {
+  return rastplaetze.filter((r) => isRastplatzOnTravelSegment(r, segment, match))
+}
+
+export function defaultSegmentRastOpen(phase: TravelLegPhase): boolean {
+  return phase === 'next'
+}
+
+export function resolveSegmentRastOpen(
+  segmentId: string,
+  phase: TravelLegPhase,
+  overrides: Record<string, boolean>
+): boolean {
+  const override = overrides[segmentId]
+  if (override !== undefined) return override
+  return defaultSegmentRastOpen(phase)
+}
+
+export function getVisibleRastplaetzeForExpandedSegments(
+  segments: TravelSegment[],
+  rastplaetze: Rastplatz[],
+  phases: Map<string, TravelLegPhase>,
+  expandedOverrides: Record<string, boolean>,
+  segmentRouteMatch: Map<string, SegmentRouteMatchOptions>
+): Rastplatz[] {
+  const byId = new Map<string, Rastplatz>()
+  for (const segment of segments) {
+    const phase = phases.get(segment.id) ?? 'future'
+    if (!resolveSegmentRastOpen(segment.id, phase, expandedOverrides)) continue
+    const match = segmentRouteMatch.get(segment.id)
+    for (const r of getRastplaetzeAlongSegment(segment, rastplaetze, match)) {
+      byId.set(r.id, r)
+    }
+  }
+  return [...byId.values()]
+}
 
 interface SegmentRastSuggestionsProps {
   segment: TravelSegment
   rastplaetze: Rastplatz[]
-  phase?: TravelLegPhase
+  routeMatch?: SegmentRouteMatchOptions
 }
 
 export function SegmentRastSuggestions({
   segment,
   rastplaetze,
-  phase = 'next',
+  routeMatch,
 }: SegmentRastSuggestionsProps) {
-  const [open, setOpen] = useState(false)
-
-  const alongRoute = useMemo(() => {
-    return rastplaetze.filter((r) => {
-      if (r.is_archived || r.lat == null || r.lng == null) return false
-      return isPointInSegmentCorridor(
-        { lat: r.lat, lng: r.lng },
-        segment.from,
-        segment.to
-      )
-    })
-  }, [rastplaetze, segment])
+  const alongRoute = useMemo(
+    () => getRastplaetzeAlongSegment(segment, rastplaetze, routeMatch),
+    [routeMatch, rastplaetze, segment]
+  )
 
   const empfehlungen = alongRoute.filter((r) => r.bewertung === 'empfehlung')
   const noGos = alongRoute.filter((r) => r.bewertung === 'no_go')
@@ -53,27 +106,29 @@ export function SegmentRastSuggestions({
   if (alongRoute.length === 0) return null
 
   const openGoogleWithWaypoints = () => {
-    openSegmentInGoogleMaps(segment, rastplaetze, GOOGLE_MAPS_MAX_WAYPOINTS_MOBILE)
+    openSegmentInGoogleMaps(
+      segment,
+      rastplaetze,
+      GOOGLE_MAPS_MAX_WAYPOINTS_MOBILE,
+      routeMatch?.encodedPolyline,
+      routeMatch?.routeProvider
+    )
   }
 
   const openAdacWithWaypoints = () => {
-    openSegmentInAdacMaps(segment, rastplaetze, ADAC_MAX_WAYPOINTS)
+    openSegmentInAdacMaps(
+      segment,
+      rastplaetze,
+      ADAC_MAX_WAYPOINTS,
+      routeMatch?.encodedPolyline,
+      routeMatch?.routeProvider
+    )
   }
 
-  const summaryParts = [
-    `${alongRoute.length} Rastplatz${alongRoute.length === 1 ? '' : 'e'}`,
-    empfehlungen.length > 0
-      ? `${empfehlungen.length} Empfehlung${empfehlungen.length === 1 ? '' : 'en'}`
-      : null,
-  ].filter(Boolean)
-
-  const content = (
-    <div className="space-y-1">
+  return (
+    <div className="ml-8 mr-2 mb-2 pl-2 border-l-2 border-dashed border-muted-foreground/30 space-y-1">
       {empfehlungen.map((r) => (
-        <div
-          key={r.id}
-          className="text-xs flex items-center gap-1 text-green-800"
-        >
+        <div key={r.id} className="text-xs flex items-center gap-1 text-green-800">
           <ThumbsUp className="h-3 w-3 shrink-0" />
           <span className="truncate">{r.name}</span>
           {r.merkmale.slice(0, 2).map((m) => (
@@ -107,33 +162,5 @@ export function SegmentRastSuggestions({
         </p>
       )}
     </div>
-  )
-
-  if (phase === 'next') {
-    return (
-      <div className="ml-8 mr-2 mb-2 pl-2 border-l-2 border-dashed border-muted-foreground/30 space-y-1">
-        <p className="text-xs font-medium text-muted-foreground">Rastplätze entlang der Strecke</p>
-        {content}
-      </div>
-    )
-  }
-
-  return (
-    <Collapsible open={open} onOpenChange={setOpen} className="ml-8 mr-2 mb-2">
-      <CollapsibleTrigger className="flex w-full items-center gap-1.5 rounded-md py-1 pl-2 text-left text-xs font-medium text-muted-foreground hover:text-foreground">
-        {open ? (
-          <ChevronDown className="h-3.5 w-3.5 shrink-0" />
-        ) : (
-          <ChevronRight className="h-3.5 w-3.5 shrink-0" />
-        )}
-        <span>Rastplätze entlang der Strecke</span>
-        <span className="font-normal opacity-80">({summaryParts.join(' · ')})</span>
-      </CollapsibleTrigger>
-      <CollapsibleContent>
-        <div className="mt-1 pl-2 border-l-2 border-dashed border-muted-foreground/30">
-          {content}
-        </div>
-      </CollapsibleContent>
-    </Collapsible>
   )
 }

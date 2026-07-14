@@ -1,5 +1,8 @@
 -- Einmalig ausführen, wenn Schema schon manuell angewendet wurde, d1_migrations aber leer ist.
--- Danach: npx wrangler d1 migrations list camping-db --remote  → sollte leer sein.
+-- Lokal UND remote getrennt ausführen (zwei getrennte D1-Instanzen):
+--   npx wrangler d1 execute camping-db --local  --file=scripts/baseline-d1-migrations-record.sql
+--   npx wrangler d1 execute camping-db --remote --file=scripts/baseline-d1-migrations-record.sql
+-- Danach: npx wrangler d1 migrations list camping-db --local|--remote
 -- NICHT in migrations/ ablegen – Wrangler würde es sonst als neue Migration behandeln.
 
 INSERT INTO d1_migrations (name) VALUES
