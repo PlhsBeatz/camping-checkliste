@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ensurePushServiceWorker } from '@/lib/push-service-worker'
+import { describeVapidSetupError } from '@/lib/push-vapid-errors'
 
 function urlBase64ToUint8Array(base64String: string): BufferSource {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4)
@@ -53,12 +54,18 @@ export function usePushSubscribe() {
         const r = await fetch('/api/push/subscribe', { credentials: 'include' })
         const j = (await r.json()) as {
           success?: boolean
-          data?: { publicKey?: string | null; enabled?: boolean }
+          data?: {
+            publicKey?: string | null
+            enabled?: boolean
+            privateKeyConfigured?: boolean
+            privateKeyParseFailed?: boolean
+            keyPairMatch?: boolean
+          }
         }
         if (j.success && j.data?.publicKey) {
           setPublicKey(j.data.publicKey)
-        } else if (j.success && !j.data?.publicKey) {
-          setLastError('VAPID_PUBLIC_KEY fehlt in .dev.vars (pnpm dev neu starten).')
+        } else if (j.success && j.data) {
+          setLastError(describeVapidSetupError(j.data))
         }
       } catch {
         setLastError('Push-Konfiguration konnte nicht geladen werden.')

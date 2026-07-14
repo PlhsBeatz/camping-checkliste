@@ -8,6 +8,7 @@ import {
 } from '@/lib/db'
 import type { CloudflareEnv } from '@/lib/db'
 import type { PushNotificationPayload } from '@/lib/push-notifications'
+import { describeVapidSetupError } from '@/lib/push-vapid-errors'
 
 export type PushSendError = {
   endpoint: string
@@ -97,7 +98,7 @@ export async function getVapidConfigStatus(): Promise<{
   return {
     publicKey: env.publicKey,
     enabled: !!env.publicKey && !!env.privateJwk,
-    privateKeyConfigured: !!process.env.VAPID_PRIVATE_KEY?.trim(),
+    privateKeyConfigured: !!env.privateJwk,
     privateKeyParseFailed: env.privateKeyParseFailed,
     keyPairMatch: !!env.publicKey && !!derived && env.publicKey === derived,
   }
@@ -140,9 +141,12 @@ export async function sendPushToSubscriptions(
   const errors: PushSendError[] = []
 
   if (!pushEnv.privateJwk) {
-    const detail = pushEnv.privateKeyParseFailed
-      ? 'VAPID_PRIVATE_KEY ist kein gültiges JSON – in .dev.vars in einfache Anführungszeichen setzen.'
-      : 'VAPID_PRIVATE_KEY fehlt – pnpm dev neu starten.'
+    const detail = describeVapidSetupError({
+      publicKey: pushEnv.publicKey,
+      privateKeyConfigured: false,
+      privateKeyParseFailed: pushEnv.privateKeyParseFailed,
+      enabled: false,
+    })
     for (const row of subscriptions) {
       errors.push({ endpoint: shortEndpoint(row.endpoint), detail })
     }
