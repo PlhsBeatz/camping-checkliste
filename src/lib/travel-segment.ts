@@ -185,6 +185,9 @@ export function findCampingToCampingSegment(
     ) ?? null
   )
 }
+
+/** Liegt Position auf einem Reisesegment des Urlaubs? */
+export function isOnVacationRoute(
   segments: TravelSegment[],
   position: { lat: number; lng: number },
   maxKm = 20
