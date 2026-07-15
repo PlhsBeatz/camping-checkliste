@@ -47,7 +47,8 @@ import { groupAllMitreisendeByGruppe } from '@/lib/pack-profile-groups'
 import {
   buildReturnHomeSegment,
   buildVacationSegments,
-  findCampingToCampingSegment,
+  findHomeToFirstStaySegment,
+  findSegmentForStayPair,
   getTravelLegPhases,
   type TravelLegPhase,
   type TravelSegment,
@@ -95,8 +96,8 @@ function mergeCampingplatzRouteInfo(
   }
 }
 
-function segmentKey(fromId: string, toId: string) {
-  return `${fromId}|${toId}`
+function stayLegKey(fromStayId: string, toStayId: string) {
+  return `${fromStayId}|${toStayId}`
 }
 
 function formatStayDateRange(start: string | null, end: string | null) {
@@ -457,21 +458,26 @@ export default function UrlaubDetailPage() {
     })()
   }, [])
 
+  const sortedStays = useMemo(
+    () => [...stays].sort((a, b) => (a.sort_index ?? 0) - (b.sort_index ?? 0)),
+    [stays]
+  )
+
   const travelSegments = useMemo(
-    () => buildVacationSegments(stays, homeCoords),
-    [stays, homeCoords]
+    () => buildVacationSegments(sortedStays, homeCoords),
+    [sortedStays, homeCoords]
   )
 
   const returnHomeSegment = useMemo(() => {
-    const lastStay = stays[stays.length - 1]
+    const lastStay = sortedStays[sortedStays.length - 1]
     if (!homeCoords || !lastStay) return null
-    return buildReturnHomeSegment(lastStay.campingplatz, homeCoords)
-  }, [stays, homeCoords])
+    return buildReturnHomeSegment(lastStay, homeCoords)
+  }, [sortedStays, homeCoords])
 
   const travelLegPhases = useMemo(() => {
     if (!vacation) return new Map<string, TravelLegPhase>()
-    return getTravelLegPhases(vacation, stays, travelSegments, returnHomeSegment)
-  }, [vacation, stays, travelSegments, returnHomeSegment])
+    return getTravelLegPhases(vacation, sortedStays, travelSegments, returnHomeSegment)
+  }, [vacation, sortedStays, travelSegments, returnHomeSegment])
 
   const [segmentRastExpanded, setSegmentRastExpanded] = useState<Record<string, boolean>>({})
 
@@ -490,15 +496,11 @@ export default function UrlaubDetailPage() {
 
   const segmentRouteMatchBySegmentId = useMemo(() => {
     const map = new Map<string, SegmentRouteMatchOptions>()
-    const sorted = [...stays].sort((a, b) => (a.sort_index ?? 0) - (b.sort_index ?? 0))
-    const firstStay = sorted[0]
-    const lastStay = sorted[sorted.length - 1]
+    const firstStay = sortedStays[0]
+    const lastStay = sortedStays[sortedStays.length - 1]
 
     if (firstStay) {
-      const homeSeg = travelSegments.find(
-        (s) =>
-          s.from.kind === 'home' && s.to.campingplatzId === firstStay.campingplatz.id
-      )
+      const homeSeg = findHomeToFirstStaySegment(travelSegments, firstStay.id)
       const homeRoute = routeInfo[firstStay.campingplatz.id]
       if (homeSeg && homeRoute) {
         map.set(homeSeg.id, {
@@ -508,17 +510,12 @@ export default function UrlaubDetailPage() {
       }
     }
 
-    for (let i = 0; i < sorted.length - 1; i++) {
-      const fromStay = sorted[i]
-      const toStay = sorted[i + 1]
+    for (let i = 0; i < sortedStays.length - 1; i++) {
+      const fromStay = sortedStays[i]
+      const toStay = sortedStays[i + 1]
       if (!fromStay || !toStay || fromStay.campingplatz.id === toStay.campingplatz.id) continue
-      const seg = findCampingToCampingSegment(
-        travelSegments,
-        fromStay.campingplatz.id,
-        toStay.campingplatz.id
-      )
-      const legRoute =
-        segmentRouteInfo[segmentKey(fromStay.campingplatz.id, toStay.campingplatz.id)]
+      const seg = findSegmentForStayPair(travelSegments, fromStay.id, toStay.id)
+      const legRoute = segmentRouteInfo[stayLegKey(fromStay.id, toStay.id)]
       if (seg && legRoute) {
         map.set(seg.id, {
           encodedPolyline: sanitizeRoutePolyline(legRoute.encodedPolyline),
@@ -538,7 +535,7 @@ export default function UrlaubDetailPage() {
     }
 
     return map
-  }, [stays, travelSegments, returnHomeSegment, routeInfo, segmentRouteInfo])
+  }, [sortedStays, travelSegments, returnHomeSegment, routeInfo, segmentRouteInfo])
 
   const mapVisibleRastplaetze = useMemo(
     () =>
@@ -558,15 +555,9 @@ export default function UrlaubDetailPage() {
     ]
   )
 
-  const segmentForLeg = useCallback(
-    (fromId: string, toId: string) =>
-      findCampingToCampingSegment(travelSegments, fromId, toId),
-    [travelSegments]
-  )
-
   const vacationCampingplatzIds = useMemo(
-    () => new Set(stays.map((s) => s.campingplatz.id)),
-    [stays]
+    () => new Set(sortedStays.map((s) => s.campingplatz.id)),
+    [sortedStays]
   )
 
   useEffect(() => {
@@ -624,21 +615,21 @@ export default function UrlaubDetailPage() {
 
   // Segment-Routen (Campingplatz → Campingplatz) für aufeinanderfolgende Aufenthalte laden
   useEffect(() => {
-    if (stays.length < 2) return
+    if (sortedStays.length < 2) return
     let aborted = false
     const controller = new AbortController()
 
     const loadSegments = async () => {
-      for (let i = 0; i < stays.length - 1; i++) {
+      for (let i = 0; i < sortedStays.length - 1; i++) {
         if (aborted) return
-        const fromStay = stays[i]
-        const toStay = stays[i + 1]
+        const fromStay = sortedStays[i]
+        const toStay = sortedStays[i + 1]
         if (!fromStay || !toStay) continue
         const from = fromStay.campingplatz
         const to = toStay.campingplatz
         if (from.id === to.id) continue
         if (!from.lat || !from.lng || !to.lat || !to.lng) continue
-        const key = segmentKey(from.id, to.id)
+        const key = stayLegKey(fromStay.id, toStay.id)
         if (isUsableRoutePolyline(segmentRouteInfoRef.current[key]?.encodedPolyline)) continue
         try {
           const res = await fetch('/api/routes/segment', {
@@ -677,7 +668,7 @@ export default function UrlaubDetailPage() {
       aborted = true
       controller.abort()
     }
-  }, [stays])
+  }, [sortedStays])
 
   const mitreisendeByGruppe = useMemo(
     () => groupAllMitreisendeByGruppe(mitreisende),
@@ -867,21 +858,17 @@ export default function UrlaubDetailPage() {
 
                   <section className="space-y-3">
                     <h2 className="text-sm font-semibold text-brand-heading">Campingplätze</h2>
-                    {stays.length === 0 ? (
+                    {sortedStays.length === 0 ? (
                       <p className="text-sm text-muted-foreground">
                         Noch keine Campingplätze zugeordnet.
                       </p>
                     ) : (
                       <div>
                         {(() => {
-                          const firstStay = stays[0]
+                          const firstStay = sortedStays[0]
                           const homeSegment =
                             firstStay &&
-                            travelSegments.find(
-                              (s) =>
-                                s.from.kind === 'home' &&
-                                s.to.campingplatzId === firstStay.campingplatz.id
-                            )
+                            findHomeToFirstStaySegment(travelSegments, firstStay.id)
                           return homeCoords && firstStay && firstStay.campingplatz.lat != null ? (
                             <>
                               <RouteLeg
@@ -914,11 +901,11 @@ export default function UrlaubDetailPage() {
                             </>
                           ) : null
                         })()}
-                        {stays.map((stay, index) => {
+                        {sortedStays.map((stay, index) => {
                           const cp = stay.campingplatz
                           const photoUrl = campingplatzListThumbnailSrc(cp)
                           const nights = stayNights(stay.start_datum, stay.end_datum)
-                          const next = stays[index + 1]
+                          const next = sortedStays[index + 1]
                           const showLeg =
                             next &&
                             next.campingplatz.id !== cp.id &&
@@ -967,7 +954,11 @@ export default function UrlaubDetailPage() {
                               {showLeg && next && (
                                 <>
                                   {(() => {
-                                    const legSegment = segmentForLeg(cp.id, next.campingplatz.id)
+                                    const legSegment = findSegmentForStayPair(
+                                      travelSegments,
+                                      stay.id,
+                                      next.id
+                                    )
                                     const legPhase = legSegment
                                       ? travelLegPhases.get(legSegment.id) ?? 'future'
                                       : 'future'
@@ -976,9 +967,7 @@ export default function UrlaubDetailPage() {
                                         <RouteLeg
                                           label="Weiterfahrt"
                                           route={
-                                            segmentRouteInfo[
-                                              segmentKey(cp.id, next.campingplatz.id)
-                                            ]
+                                            segmentRouteInfo[stayLegKey(stay.id, next.id)]
                                           }
                                           segment={legSegment}
                                           rastplaetze={rastplaetze}
@@ -1015,7 +1004,7 @@ export default function UrlaubDetailPage() {
                           )
                         })}
                         {(() => {
-                          const lastStay = stays[stays.length - 1]
+                          const lastStay = sortedStays[sortedStays.length - 1]
                           return homeCoords && lastStay && lastStay.campingplatz.lat != null ? (
                             <>
                               <RouteLeg

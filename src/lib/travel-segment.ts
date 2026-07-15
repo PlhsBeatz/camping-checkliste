@@ -118,11 +118,20 @@ export function buildVacationSegments(
     if (p) points.push(p)
   }
   const segments: TravelSegment[] = []
+  const hasHome = homeCoords?.lat != null && homeCoords?.lng != null
   for (let i = 0; i < points.length - 1; i++) {
     const from = points[i]!
     const to = points[i + 1]!
+    let id: string
+    if (from.kind === 'home') {
+      id = `home-to-${sorted[0]!.id}`
+    } else {
+      const fromStayIndex = hasHome ? i - 1 : i
+      const toStayIndex = fromStayIndex + 1
+      id = `${sorted[fromStayIndex]!.id}-to-${sorted[toStayIndex]!.id}`
+    }
     segments.push({
-      id: `${from.kind}-${i}-${to.kind}-${i + 1}`,
+      id,
       from,
       to,
       label: `${from.label} → ${to.label}`,
@@ -133,13 +142,13 @@ export function buildVacationSegments(
 
 /** Fahrtsegment vom letzten Campingplatz zurück nach Hause. */
 export function buildReturnHomeSegment(
-  lastCamping: Campingplatz,
+  lastStay: VacationCampingStay,
   homeCoords: { lat: number; lng: number }
 ): TravelSegment | null {
-  const from = campingToPoint(lastCamping)
+  const from = campingToPoint(lastStay.campingplatz)
   if (!from) return null
   return {
-    id: 'return-home',
+    id: `return-home-from-${lastStay.id}`,
     from,
     to: {
       lat: homeCoords.lat,
@@ -149,6 +158,42 @@ export function buildReturnHomeSegment(
     },
     label: `${from.label} → Zuhause`,
   }
+}
+
+export function isReturnHomeSegment(segment: TravelSegment): boolean {
+  return segment.id === 'return-home' || segment.id.startsWith('return-home-from-')
+}
+
+/** Fahrtsegment Heimat → erster Aufenthalt. */
+export function findHomeToFirstStaySegment(
+  travelSegments: TravelSegment[],
+  firstStayId: string
+): TravelSegment | null {
+  return travelSegments.find((s) => s.id === `home-to-${firstStayId}`) ?? null
+}
+
+/** Fahrtsegment zwischen zwei aufeinanderfolgenden Aufenthalten (eindeutig auch bei gleichem Campingplatz). */
+export function findSegmentForStayPair(
+  travelSegments: TravelSegment[],
+  fromStayId: string,
+  toStayId: string
+): TravelSegment | null {
+  return travelSegments.find((s) => s.id === `${fromStayId}-to-${toStayId}`) ?? null
+}
+
+/** @deprecated Nutze findSegmentForStayPair – Campingplatz-IDs sind bei Wiederholungen nicht eindeutig. */
+export function findCampingToCampingSegment(
+  travelSegments: TravelSegment[],
+  fromCampingplatzId: string,
+  toCampingplatzId: string
+): TravelSegment | null {
+  return (
+    travelSegments.find(
+      (s) =>
+        s.from.campingplatzId === fromCampingplatzId &&
+        s.to.campingplatzId === toCampingplatzId
+    ) ?? null
+  )
 }
 
 /** Aktives Segment anhand GPS-Position (nächstes Segment). */
@@ -169,21 +214,6 @@ export function findActiveSegment(
     }
   }
   return best
-}
-
-/** Fahrtsegment zwischen zwei Campingplätzen (nicht Heimat). */
-export function findCampingToCampingSegment(
-  travelSegments: TravelSegment[],
-  fromCampingplatzId: string,
-  toCampingplatzId: string
-): TravelSegment | null {
-  return (
-    travelSegments.find(
-      (s) =>
-        s.from.campingplatzId === fromCampingplatzId &&
-        s.to.campingplatzId === toCampingplatzId
-    ) ?? null
-  )
 }
 
 /** Liegt Position auf einem Reisesegment des Urlaubs? */
@@ -223,10 +253,7 @@ export function collectDisplayedTravelSegments(
 
   const firstStay = sorted[0]
   if (firstStay) {
-    const homeSeg = travelSegments.find(
-      (s) =>
-        s.from.kind === 'home' && s.to.campingplatzId === firstStay.campingplatz.id
-    )
+    const homeSeg = findHomeToFirstStaySegment(travelSegments, firstStay.id)
     if (homeSeg) result.push(homeSeg)
   }
 
@@ -234,11 +261,7 @@ export function collectDisplayedTravelSegments(
     const fromStay = sorted[i]!
     const toStay = sorted[i + 1]!
     if (fromStay.campingplatz.id === toStay.campingplatz.id) continue
-    const seg = findCampingToCampingSegment(
-      travelSegments,
-      fromStay.campingplatz.id,
-      toStay.campingplatz.id
-    )
+    const seg = findSegmentForStayPair(travelSegments, fromStay.id, toStay.id)
     if (seg) result.push(seg)
   }
 
@@ -255,8 +278,13 @@ function isTravelSegmentPast(
 ): boolean {
   const sorted = sortedStays(stays)
 
-  if (segment.id === 'return-home') {
-    const lastStay = sorted[sorted.length - 1]
+  if (isReturnHomeSegment(segment)) {
+    const lastStayId = segment.id.startsWith('return-home-from-')
+      ? segment.id.slice('return-home-from-'.length)
+      : null
+    const lastStay =
+      (lastStayId ? sorted.find((s) => s.id === lastStayId) : null) ??
+      sorted[sorted.length - 1]
     const endDate = normalizeCalendarDate(lastStay?.end_datum || vacation.enddatum)
     if (endDate) return today > endDate
     const vacationEnd = normalizeCalendarDate(vacation.enddatum)
@@ -264,11 +292,24 @@ function isTravelSegmentPast(
   }
 
   if (segment.from.kind === 'home') {
-    const firstStay = sorted[0]
+    const homeStayId = segment.id.startsWith('home-to-')
+      ? segment.id.slice('home-to-'.length)
+      : null
+    const firstStay =
+      (homeStayId ? sorted.find((s) => s.id === homeStayId) : null) ?? sorted[0]
     const arrival = normalizeCalendarDate(firstStay?.start_datum)
     if (arrival) return today > arrival
     const departure = normalizeCalendarDate(getDepartureDate(vacation))
     return departure ? today > departure : false
+  }
+
+  const stayPairMatch = /^(.+)-to-(.+)$/.exec(segment.id)
+  if (stayPairMatch) {
+    const toStayId = stayPairMatch[2]!
+    const toStay = sorted.find((s) => s.id === toStayId)
+    const arrival = normalizeCalendarDate(toStay?.start_datum)
+    if (arrival) return today > arrival
+    return false
   }
 
   const destinationId = segment.to.campingplatzId
