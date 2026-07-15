@@ -8,7 +8,7 @@ import {
   getSegmentRoute,
   setSegmentRoute,
 } from '@/lib/db'
-import { isUsableRoutePolyline } from '@/lib/route-polyline'
+import { isUsableRoutePolyline, isHomeRouteCacheComplete } from '@/lib/route-polyline'
 
 const EARTH_RADIUS_KM = 6371
 
@@ -153,10 +153,6 @@ export async function callGoogleDistanceMatrix(
   return { distanceKm, durationMinutes }
 }
 
-function routeCacheComplete(entry: CampingplatzRouteCacheEntry): boolean {
-  return isUsableRoutePolyline(entry.encoded_polyline)
-}
-
 function segmentCacheComplete(entry: CampingplatzSegmentRouteCacheEntry): boolean {
   return isUsableRoutePolyline(entry.encoded_polyline)
 }
@@ -171,7 +167,7 @@ export async function calculateRouteWithCaching(params: {
   const { db, userId, campingplatz, userLat, userLng } = params
 
   const existing = await getRouteForUserAndCampingplatz(db, userId, campingplatz.id)
-  if (existing && routeCacheComplete(existing)) {
+  if (existing && isHomeRouteCacheComplete(existing)) {
     return existing
   }
 
@@ -182,20 +178,25 @@ export async function calculateRouteWithCaching(params: {
   const origin = { lat: userLat, lng: userLng }
   const destination = { lat: campingplatz.lat, lng: campingplatz.lng }
 
+  const needsForward = !isUsableRoutePolyline(existing?.encoded_polyline)
+  const needsReturn = !isUsableRoutePolyline(existing?.return_encoded_polyline)
+
   const [forward, reverse] = await Promise.all([
-    callGoogleDirections(origin, destination),
-    callGoogleDirections(destination, origin),
+    needsForward ? callGoogleDirections(origin, destination) : Promise.resolve(null),
+    needsReturn ? callGoogleDirections(destination, origin) : Promise.resolve(null),
   ])
 
-  if (forward) {
+  if (forward || reverse || existing?.distance_km) {
     const entry: CampingplatzRouteCacheEntry = {
       user_id: userId,
       campingplatz_id: campingplatz.id,
-      distance_km: forward.distanceKm,
-      duration_min: forward.durationMinutes,
-      provider: 'google',
-      encoded_polyline: forward.encodedPolyline,
-      return_encoded_polyline: reverse?.encodedPolyline ?? null,
+      distance_km: forward?.distanceKm ?? existing?.distance_km ?? 0,
+      duration_min: forward?.durationMinutes ?? existing?.duration_min ?? 0,
+      provider: forward || reverse ? 'google' : (existing?.provider ?? 'google'),
+      encoded_polyline:
+        forward?.encodedPolyline ?? existing?.encoded_polyline ?? null,
+      return_encoded_polyline:
+        reverse?.encodedPolyline ?? existing?.return_encoded_polyline ?? null,
       updated_at: new Date().toISOString(),
     }
     await setRouteForUserAndCampingplatz(db, entry)

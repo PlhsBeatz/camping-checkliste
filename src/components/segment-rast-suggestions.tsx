@@ -3,7 +3,7 @@
 import { useMemo } from 'react'
 import type { Rastplatz } from '@/lib/db'
 import { isPointInSegmentCorridor, type TravelLegPhase, type TravelSegment } from '@/lib/travel-segment'
-import { isPointNearEncodedPolyline } from '@/lib/route-polyline'
+import { isPointNearAnyEncodedPolyline, isPointNearEncodedPolyline } from '@/lib/route-polyline'
 import {
   ADAC_MAX_WAYPOINTS,
   GOOGLE_MAPS_MAX_WAYPOINTS_MOBILE,
@@ -17,6 +17,8 @@ import { cn } from '@/lib/utils'
 
 export type SegmentRouteMatchOptions = {
   encodedPolyline?: string | null
+  /** Zusätzliche Polylines (z. B. Hinfahrt bei Roundtrip zum selben Platz). */
+  alternateEncodedPolylines?: Array<string | null | undefined>
   routeProvider?: 'google' | 'haversine' | null
 }
 
@@ -32,9 +34,13 @@ export function isRastplatzOnTravelSegment(
       ? { encodedPolyline: match }
       : match
 
-  const encodedPolyline = options.encodedPolyline
-  if (encodedPolyline?.trim()) {
-    return isPointNearEncodedPolyline(point, encodedPolyline)
+  const polylines = [
+    options.encodedPolyline,
+    ...(options.alternateEncodedPolylines ?? []),
+  ].filter((p): p is string => !!p?.trim())
+
+  if (polylines.length > 0) {
+    return isPointNearAnyEncodedPolyline(point, polylines)
   }
   // Ohne Polyline: nur bei Haversine-Fallback (keine echte Route). Während des Ladens nichts anzeigen.
   if (options.routeProvider === 'haversine') {

@@ -65,7 +65,7 @@ import {
   SegmentRastSuggestions,
   type SegmentRouteMatchOptions,
 } from '@/components/segment-rast-suggestions'
-import { isUsableRoutePolyline } from '@/lib/route-polyline'
+import { isUsableRoutePolyline, isHomeRouteCacheComplete } from '@/lib/route-polyline'
 
 type CampingplatzRouteInfo = {
   distanceKm: number
@@ -527,10 +527,25 @@ export default function UrlaubDetailPage() {
     if (returnHomeSegment && lastStay) {
       const returnRoute = routeInfo[lastStay.campingplatz.id]
       if (returnRoute) {
-        map.set(returnHomeSegment.id, {
-          encodedPolyline: sanitizeRoutePolyline(returnRoute.returnEncodedPolyline),
-          routeProvider: returnRoute.provider ?? null,
-        })
+        const forwardPolyline = sanitizeRoutePolyline(returnRoute.encodedPolyline)
+        const returnPolyline = sanitizeRoutePolyline(returnRoute.returnEncodedPolyline)
+        const roundTripSameCamp =
+          !!firstStay && firstStay.campingplatz.id === lastStay.campingplatz.id
+        const polylines = roundTripSameCamp
+          ? [returnPolyline, forwardPolyline]
+          : [returnPolyline]
+        const usable = polylines.filter((p): p is string => !!p)
+        if (usable.length > 0) {
+          map.set(returnHomeSegment.id, {
+            encodedPolyline: usable[0],
+            alternateEncodedPolylines: usable.slice(1),
+            routeProvider: returnRoute.provider ?? null,
+          })
+        } else if (returnRoute.provider === 'haversine') {
+          map.set(returnHomeSegment.id, {
+            routeProvider: 'haversine',
+          })
+        }
       }
     }
 
@@ -560,18 +575,24 @@ export default function UrlaubDetailPage() {
     [sortedStays]
   )
 
+  const campingRouteIdsNeedingFetch = useMemo(() => {
+    const ids: string[] = []
+    for (const cpId of vacationCampingplatzIds) {
+      if (!isHomeRouteCacheComplete(routeInfo[cpId])) ids.push(cpId)
+    }
+    return ids
+  }, [vacationCampingplatzIds, routeInfo])
+
   useEffect(() => {
-    if (campingplaetze.length === 0 || vacationCampingplatzIds.size === 0) return
+    if (campingplaetze.length === 0 || campingRouteIdsNeedingFetch.length === 0) return
     let aborted = false
     const controller = new AbortController()
 
     const loadRoutes = async () => {
-      for (const cp of campingplaetze) {
+      for (const cpId of campingRouteIdsNeedingFetch) {
         if (aborted) return
-        if (!vacationCampingplatzIds.has(cp.id)) continue
-        if (!cp.lat || !cp.lng) continue
-        const existing = routeInfoRef.current[cp.id]
-        if (isUsableRoutePolyline(existing?.encodedPolyline)) continue
+        const cp = campingplaetze.find((c) => c.id === cpId)
+        if (!cp?.lat || !cp.lng) continue
         try {
           const res = await fetch('/api/routes/campingplatz', {
             method: 'POST',
@@ -611,7 +632,7 @@ export default function UrlaubDetailPage() {
       aborted = true
       controller.abort()
     }
-  }, [campingplaetze, vacationCampingplatzIds])
+  }, [campingplaetze, campingRouteIdsNeedingFetch])
 
   // Segment-Routen (Campingplatz → Campingplatz) für aufeinanderfolgende Aufenthalte laden
   useEffect(() => {

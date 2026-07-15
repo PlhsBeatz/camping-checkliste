@@ -36,6 +36,32 @@ export function isUsableRoutePolyline(encoded: string | null | undefined): boole
   return !!encoded?.trim() && encoded.length <= MAX_USABLE_POLYLINE_CHARS
 }
 
+/** Heimat↔Platz-Cache: Hin- und Rück-Polyline (bei Google) nötig. */
+export function isHomeRouteCacheComplete(
+  entry:
+    | {
+        provider?: string | null
+        encoded_polyline?: string | null
+        return_encoded_polyline?: string | null
+        encodedPolyline?: string | null
+        returnEncodedPolyline?: string | null
+        distance_km?: number | null
+        distanceKm?: number | null
+      }
+    | null
+    | undefined
+): boolean {
+  if (!entry) return false
+  const provider = entry.provider
+  const distance = entry.distance_km ?? entry.distanceKm
+  const forward = entry.encoded_polyline ?? entry.encodedPolyline
+  const reverse = entry.return_encoded_polyline ?? entry.returnEncodedPolyline
+  if (provider === 'haversine') {
+    return typeof distance === 'number' && distance >= 0
+  }
+  return isUsableRoutePolyline(forward) && isUsableRoutePolyline(reverse)
+}
+
 /** Google encoded polyline → Koordinatenliste. */
 export function decodeGooglePolyline(encoded: string): LatLng[] {
   const points: LatLng[] = []
@@ -242,4 +268,16 @@ export function isPointNearEncodedPolyline(
   } catch {
     return false
   }
+}
+
+/** Punkt nahe mindestens einer der Polylines (z. B. Hin- und Rückroute Heimat↔Platz). */
+export function isPointNearAnyEncodedPolyline(
+  point: LatLng,
+  encodedPolylines: Array<string | null | undefined>,
+  maxKm = ROUTE_POLYLINE_CORRIDOR_KM
+): boolean {
+  for (const encoded of encodedPolylines) {
+    if (isPointNearEncodedPolyline(point, encoded, maxKm)) return true
+  }
+  return false
 }
