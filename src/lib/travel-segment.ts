@@ -171,8 +171,20 @@ export function findActiveSegment(
   return best
 }
 
-/** Liegt Position auf einem Reisesegment des Urlaubs? */
-export function isOnVacationRoute(
+/** Fahrtsegment zwischen zwei Campingplätzen (nicht Heimat). */
+export function findCampingToCampingSegment(
+  travelSegments: TravelSegment[],
+  fromCampingplatzId: string,
+  toCampingplatzId: string
+): TravelSegment | null {
+  return (
+    travelSegments.find(
+      (s) =>
+        s.from.campingplatzId === fromCampingplatzId &&
+        s.to.campingplatzId === toCampingplatzId
+    ) ?? null
+  )
+}
   segments: TravelSegment[],
   position: { lat: number; lng: number },
   maxKm = 20
@@ -219,10 +231,10 @@ export function collectDisplayedTravelSegments(
     const fromStay = sorted[i]!
     const toStay = sorted[i + 1]!
     if (fromStay.campingplatz.id === toStay.campingplatz.id) continue
-    const seg = travelSegments.find(
-      (s) =>
-        s.from.campingplatzId === fromStay.campingplatz.id &&
-        s.to.campingplatzId === toStay.campingplatz.id
+    const seg = findCampingToCampingSegment(
+      travelSegments,
+      fromStay.campingplatz.id,
+      toStay.campingplatz.id
     )
     if (seg) result.push(seg)
   }

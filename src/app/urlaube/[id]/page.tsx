@@ -47,6 +47,7 @@ import { groupAllMitreisendeByGruppe } from '@/lib/pack-profile-groups'
 import {
   buildReturnHomeSegment,
   buildVacationSegments,
+  findCampingToCampingSegment,
   getTravelLegPhases,
   type TravelLegPhase,
   type TravelSegment,
@@ -511,10 +512,10 @@ export default function UrlaubDetailPage() {
       const fromStay = sorted[i]
       const toStay = sorted[i + 1]
       if (!fromStay || !toStay || fromStay.campingplatz.id === toStay.campingplatz.id) continue
-      const seg = travelSegments.find(
-        (s) =>
-          s.from.campingplatzId === fromStay.campingplatz.id &&
-          s.to.campingplatzId === toStay.campingplatz.id
+      const seg = findCampingToCampingSegment(
+        travelSegments,
+        fromStay.campingplatz.id,
+        toStay.campingplatz.id
       )
       const legRoute =
         segmentRouteInfo[segmentKey(fromStay.campingplatz.id, toStay.campingplatz.id)]
@@ -559,11 +560,7 @@ export default function UrlaubDetailPage() {
 
   const segmentForLeg = useCallback(
     (fromId: string, toId: string) =>
-      travelSegments.find(
-        (s) =>
-          (s.from.campingplatzId === fromId || s.from.kind === 'home') &&
-          s.to.campingplatzId === toId
-      ) ?? null,
+      findCampingToCampingSegment(travelSegments, fromId, toId),
     [travelSegments]
   )
 
