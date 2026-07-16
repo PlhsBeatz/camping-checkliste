@@ -12,6 +12,18 @@ import { isUsableRoutePolyline, isHomeRouteCacheComplete } from '@/lib/route-pol
 
 const EARTH_RADIUS_KM = 6371
 
+/** Kein erneuter Google-Rückweg-Abruf innerhalb dieser Zeit (Server-Schutz). */
+const RETURN_FETCH_COOLDOWN_MS = 6 * 60 * 60 * 1000
+
+function shouldAttemptReturnFetch(existing: CampingplatzRouteCacheEntry | null): boolean {
+  if (!existing) return true
+  if (isUsableRoutePolyline(existing.return_encoded_polyline)) return false
+  if (!isUsableRoutePolyline(existing.encoded_polyline)) return true
+  if (!existing.updated_at) return true
+  const ageMs = Date.now() - new Date(existing.updated_at).getTime()
+  return ageMs >= RETURN_FETCH_COOLDOWN_MS
+}
+
 export function haversineDistanceKm(params: {
   lat1: number
   lng1: number
@@ -179,7 +191,9 @@ export async function calculateRouteWithCaching(params: {
   const destination = { lat: campingplatz.lat, lng: campingplatz.lng }
 
   const needsForward = !isUsableRoutePolyline(existing?.encoded_polyline)
-  const needsReturn = !isUsableRoutePolyline(existing?.return_encoded_polyline)
+  const needsReturn =
+    !isUsableRoutePolyline(existing?.return_encoded_polyline) &&
+    shouldAttemptReturnFetch(existing)
 
   const [forward, reverse] = await Promise.all([
     needsForward ? callGoogleDirections(origin, destination) : Promise.resolve(null),

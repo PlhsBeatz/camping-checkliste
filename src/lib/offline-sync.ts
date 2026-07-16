@@ -25,6 +25,7 @@ import {
   cacheCampingplatzFotos,
   cacheRastplaetze,
   cacheRoute,
+  cacheSegmentRoute,
   cacheHomeLocation,
   cacheAuthUser,
   type SyncQueueEntry,
@@ -311,6 +312,8 @@ export async function getCachedRoute(
   return rest as CampingplatzRouteCacheEntry
 }
 
+export { getCachedSegmentRoute } from './offline-db'
+
 export async function getCachedHomeLocation(): Promise<{
   heimat_adresse: string | null
   heimat_lat: number | null
@@ -374,6 +377,7 @@ export const cacheFns = {
   campingplatz: cacheCampingplatz,
   campingplatzFotos: cacheCampingplatzFotos,
   route: cacheRoute,
+  segmentRoute: cacheSegmentRoute,
   homeLocation: cacheHomeLocation,
   authUser: cacheAuthUser,
 }

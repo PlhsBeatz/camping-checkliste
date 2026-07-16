@@ -23,21 +23,24 @@ import {
 import { Suspense, useState, useEffect, useRef, useMemo } from 'react'
 import { Vacation, Campingplatz } from '@/lib/db'
 import type { ApiResponse } from '@/lib/api-types'
-
-/** Maximale gleichzeitige Routen-API-Anfragen (Campingplatz → Entfernung/Dauer). */
-const ROUTE_INFO_FETCH_CONCURRENCY = 6
-
-type CampingplatzRouteInfo = {
-  distanceKm: number
-  durationMinutes: number
-  provider: string
-}
+import {
+  type CampingplatzRouteInfo,
+  cacheEntryToRouteInfo,
+  isOverviewRouteComplete,
+  mergeCampingplatzRouteInfo,
+  OVERVIEW_MAX_ROUTE_API_FETCHES,
+  parseCampingplatzRouteApiData,
+  recordRouteFetchAttempt,
+  routeFetchKey,
+  routeInfoToCacheEntry,
+  shouldFetchRoute,
+} from '@/lib/client-route-info'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { cn } from '@/lib/utils'
 import { campingplatzListThumbnailSrc } from '@/lib/campingplatz-photo-url'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { getCachedVacations, getCachedCampingplaetze } from '@/lib/offline-sync'
-import { cacheVacations, cacheCampingplaetze } from '@/lib/offline-db'
+import { getCachedVacations, getCachedCampingplaetze, getCachedRoute } from '@/lib/offline-sync'
+import { cacheVacations, cacheCampingplaetze, cacheRoute } from '@/lib/offline-db'
 import { useReconnectRefetch } from '@/hooks/use-reconnect-refetch'
 import { notifyVacationSearchParamChanged } from '@/hooks/use-vacation-search-param'
 import { format, isSameMonth, isSameYear } from 'date-fns'
@@ -46,7 +49,7 @@ import Image from 'next/image'
 import { useAuth } from '@/components/auth-provider'
 
 function UrlaubePageContent() {
-  const { canAccessConfig } = useAuth()
+  const { canAccessConfig, user } = useAuth()
   const router = useRouter()
   const searchParams = useSearchParams()
   const filterCampingplatzId = searchParams.get('campingplatz')
@@ -169,62 +172,99 @@ function UrlaubePageContent() {
     return () => controller.abort()
   }, [vacations])
 
-  // Routeninfo (Entfernung / Fahrzeit) für alle in Urlaube eingebundenen Campingplätze lazy laden
+  const uniqueVacationCampingplatzIds = useMemo(() => {
+    const seen = new Set<string>()
+    for (const cp of Object.values(vacationCampingplaetze).flat()) {
+      if (cp.lat && cp.lng) seen.add(cp.id)
+    }
+    return [...seen].sort()
+  }, [vacationCampingplaetze])
+
+  const uniqueVacationCampingplatzIdsKey = uniqueVacationCampingplatzIds.join(',')
+
+  // Offline-Cache zuerst (Entfernung/Fahrzeit für Übersicht)
   useEffect(() => {
+    if (!user?.id || !uniqueVacationCampingplatzIdsKey) return
+    let aborted = false
+    const userId = user.id
+
+    void (async () => {
+      for (const cpId of uniqueVacationCampingplatzIds) {
+        if (aborted) return
+        if (isOverviewRouteComplete(routeInfoRef.current[cpId])) continue
+        const cached = await getCachedRoute(userId, cpId)
+        if (!cached || aborted) continue
+        setRouteInfo((prev) => ({
+          ...prev,
+          [cpId]: mergeCampingplatzRouteInfo(prev[cpId], cacheEntryToRouteInfo(cached)),
+        }))
+      }
+    })()
+
+    return () => {
+      aborted = true
+    }
+  }, [user?.id, uniqueVacationCampingplatzIdsKey, uniqueVacationCampingplatzIds])
+
+  // Max. wenige neue Routen-API-Calls pro Seitenbesuch
+  useEffect(() => {
+    if (!user?.id || !uniqueVacationCampingplatzIdsKey) return
     let aborted = false
     const controller = new AbortController()
+    const userId = user.id
 
-    const loadRoutes = async () => {
-      const seen = new Set<string>()
-      const pending: Campingplatz[] = []
-      for (const cp of Object.values(vacationCampingplaetze).flat()) {
-        if (!cp.lat || !cp.lng) continue
-        if (seen.has(cp.id)) continue
-        seen.add(cp.id)
-        if (routeInfoRef.current[cp.id]) continue
-        pending.push(cp)
-      }
+    void (async () => {
+      let apiCalls = 0
+      for (const cpId of uniqueVacationCampingplatzIds) {
+        if (aborted || apiCalls >= OVERVIEW_MAX_ROUTE_API_FETCHES) break
+        if (isOverviewRouteComplete(routeInfoRef.current[cpId])) continue
+        const fetchKey = routeFetchKey('camping', cpId)
+        if (!shouldFetchRoute(fetchKey)) continue
+        const cp = Object.values(vacationCampingplaetze)
+          .flat()
+          .find((c) => c.id === cpId)
+        if (!cp?.lat || !cp.lng) continue
 
-      const fetchOne = async (cp: Campingplatz) => {
-        if (aborted) return
+        recordRouteFetchAttempt(fetchKey)
+        apiCalls++
         try {
           const res = await fetch('/api/routes/campingplatz', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ campingplatzId: cp.id }),
+            body: JSON.stringify({ campingplatzId: cpId }),
             signal: controller.signal,
           })
-          if (!res.ok || aborted) return
+          if (!res.ok || aborted) continue
           const data = (await res.json()) as {
             success?: boolean
-            data?: CampingplatzRouteInfo
+            data?: CampingplatzRouteInfo & {
+              provider?: 'google' | 'haversine'
+              encodedPolyline?: string | null
+              returnEncodedPolyline?: string | null
+            }
           }
-          if (!data.success || !data.data) return
-          setRouteInfo((prev) =>
-            prev[cp.id]
-              ? prev
-              : {
-                  ...prev,
-                  [cp.id]: data.data!,
-                }
-          )
+          const incoming = parseCampingplatzRouteApiData(data.data)
+          if (!data.success || !incoming || aborted) continue
+          setRouteInfo((prev) => ({
+            ...prev,
+            [cpId]: mergeCampingplatzRouteInfo(prev[cpId], incoming),
+          }))
+          try {
+            await cacheRoute(userId, routeInfoToCacheEntry(userId, cpId, incoming))
+          } catch (cacheErr) {
+            console.warn('cacheRoute failed:', cacheErr)
+          }
         } catch {
           if (aborted) return
         }
       }
+    })()
 
-      for (let i = 0; i < pending.length; i += ROUTE_INFO_FETCH_CONCURRENCY) {
-        if (aborted) break
-        await Promise.all(pending.slice(i, i + ROUTE_INFO_FETCH_CONCURRENCY).map((cp) => fetchOne(cp)))
-      }
-    }
-
-    void loadRoutes()
     return () => {
       aborted = true
       controller.abort()
     }
-  }, [vacationCampingplaetze])
+  }, [user?.id, uniqueVacationCampingplatzIdsKey, uniqueVacationCampingplatzIds, vacationCampingplaetze])
 
   const campingAssignmentsReady =
     vacations.length === 0 ||

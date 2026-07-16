@@ -59,6 +59,12 @@ import {
   cacheHomeLocation,
 } from '@/lib/offline-db'
 import { useReconnectRefetch } from '@/hooks/use-reconnect-refetch'
+import {
+  cacheEntryToRouteInfo,
+  parseCampingplatzRouteApiData,
+  routeInfoToCacheEntry,
+  type CampingplatzRouteInfo,
+} from '@/lib/client-route-info'
 
 function CampingplatzDetailEditModalGate({
   detailId,
@@ -322,6 +328,19 @@ export default function CampingplatzDetailPage() {
     const cpId = campingplatz.id
     let cancelled = false
     void (async () => {
+      const applyRouteInfo = (info: CampingplatzRouteInfo) => {
+        if (cancelled) return
+        setRouteInfo({
+          distanceKm: info.distanceKm,
+          durationMinutes: info.durationMinutes,
+        })
+      }
+
+      const cached = await getCachedRoute(userId, cpId)
+      if (cached && !cancelled) {
+        applyRouteInfo(cacheEntryToRouteInfo(cached))
+      }
+
       try {
         const res = await fetch('/api/routes/campingplatz', {
           method: 'POST',
@@ -330,37 +349,24 @@ export default function CampingplatzDetailPage() {
         })
         const data = (await res.json()) as {
           success?: boolean
-          data?: { distanceKm: number; durationMinutes: number }
+          data?: CampingplatzRouteInfo & {
+            provider?: 'google' | 'haversine'
+            encodedPolyline?: string | null
+            returnEncodedPolyline?: string | null
+          }
         }
-        if (!cancelled && data.success && data.data) {
-          setRouteInfo({
-            distanceKm: data.data.distanceKm,
-            durationMinutes: data.data.durationMinutes,
-          })
-          // Routen-Snapshot pro user|campingplatz cachen
+        const incoming = parseCampingplatzRouteApiData(data.data)
+        if (!cancelled && data.success && incoming) {
+          applyRouteInfo(incoming)
           try {
-            await cacheRoute(userId, {
-              user_id: userId,
-              campingplatz_id: cpId,
-              distance_km: data.data.distanceKm,
-              duration_min: data.data.durationMinutes,
-              provider: 'google',
-              updated_at: new Date().toISOString(),
-            })
+            await cacheRoute(userId, routeInfoToCacheEntry(userId, cpId, incoming))
           } catch (cacheErr) {
             console.warn('cacheRoute failed:', cacheErr)
           }
         }
       } catch {
         if (cancelled) return
-        // Offline → letzten bekannten Routen-Wert anzeigen
-        const cached = await getCachedRoute(userId, cpId)
-        if (cached) {
-          setRouteInfo({
-            distanceKm: cached.distance_km,
-            durationMinutes: cached.duration_min,
-          })
-        } else {
+        if (!cached) {
           setRouteInfo(null)
         }
       }

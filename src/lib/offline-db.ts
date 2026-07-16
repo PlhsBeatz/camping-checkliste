@@ -24,6 +24,7 @@ import type {
   Campingplatz,
   CampingplatzFoto,
   CampingplatzRouteCacheEntry,
+  CampingplatzSegmentRouteCacheEntry,
   PackStatusData,
   Rastplatz,
 } from './db'
@@ -133,6 +134,12 @@ export interface CachedRastplatz extends Rastplatz {
   _updatedAt: number
 }
 
+/** Segment-Routen-Cache: Schlüssel `${fromId}|${toId}` */
+export interface CachedSegmentRoute extends CampingplatzSegmentRouteCacheEntry {
+  id: string
+  _cachedAt: number
+}
+
 /** Routen-Cache: Schlüssel `${userId}|${campingplatzId}` */
 export interface CachedRoute extends CampingplatzRouteCacheEntry {
   /** `${userId}|${campingplatzId}` */
@@ -202,6 +209,7 @@ export class OfflineDB extends Dexie {
   rastplaetze!: EntityTable<CachedRastplatz, 'id'>
   routes!: EntityTable<CachedRoute, 'id'>
   homeLocation!: EntityTable<CachedHomeLocation, 'id'>
+  segmentRoutes!: EntityTable<CachedSegmentRoute, 'id'>
   authUser!: EntityTable<CachedAuthUser, 'id'>
   syncQueue!: EntityTable<SyncQueueEntry, 'id'>
 
@@ -298,6 +306,31 @@ export class OfflineDB extends Dexie {
       campingplaetzeFotos: 'id, campingplatz_id, _cachedAt, _updatedAt',
       rastplaetze: 'id, bewertung, kategorie, _cachedAt, _updatedAt',
       routes: 'id, _cachedAt',
+      homeLocation: 'id, _cachedAt, _updatedAt',
+      authUser: 'id, _cachedAt',
+      syncQueue: '++id, table, timestamp, attempts',
+    })
+    // Version 6: Segment-Routen (Campingplatz → Campingplatz)
+    this.version(6).stores({
+      vacations: 'id, _cachedAt, _updatedAt',
+      equipment: 'id, _cachedAt, _updatedAt',
+      categories: 'id, _cachedAt, _updatedAt',
+      mainCategories: 'id, _cachedAt, _updatedAt',
+      tags: 'id, _cachedAt, _updatedAt',
+      tagKategorien: 'id, reihenfolge, _cachedAt, _updatedAt',
+      mitreisende: 'id, _cachedAt, _updatedAt',
+      mitreisendenGruppen: 'id, sort_order, _cachedAt, _updatedAt',
+      vacationMitreisende: 'id_compound, _vacationId, _cachedAt, _updatedAt',
+      transportVehicles: 'id, _cachedAt, _updatedAt',
+      packingItems: 'id, packliste_id, _vacationId, _cachedAt, _updatedAt',
+      checklisten: 'id, reihenfolge, _cachedAt, _updatedAt',
+      lastPosition: 'id, _cachedAt',
+      packStatus: 'id, _cachedAt, _updatedAt',
+      campingplaetze: 'id, _cachedAt, _updatedAt',
+      campingplaetzeFotos: 'id, campingplatz_id, _cachedAt, _updatedAt',
+      rastplaetze: 'id, bewertung, kategorie, _cachedAt, _updatedAt',
+      routes: 'id, _cachedAt',
+      segmentRoutes: 'id, _cachedAt',
       homeLocation: 'id, _cachedAt, _updatedAt',
       authUser: 'id, _cachedAt',
       syncQueue: '++id, table, timestamp, attempts',
@@ -508,6 +541,34 @@ export async function cacheRoute(
     id: `${userId}|${entry.campingplatz_id}`,
     _cachedAt: now(),
   })
+}
+
+export function segmentRouteCacheId(fromId: string, toId: string): string {
+  return `${fromId}|${toId}`
+}
+
+/** Segment-Routen-Cache für `${fromId}|${toId}` schreiben. */
+export async function cacheSegmentRoute(
+  entry: CampingplatzSegmentRouteCacheEntry
+): Promise<void> {
+  await offlineDb.segmentRoutes.put({
+    ...entry,
+    id: segmentRouteCacheId(entry.from_campingplatz_id, entry.to_campingplatz_id),
+    _cachedAt: now(),
+  })
+}
+
+/** Segment-Route aus Offline-Cache lesen. */
+export async function getCachedSegmentRoute(
+  fromId: string,
+  toId: string
+): Promise<CampingplatzSegmentRouteCacheEntry | null> {
+  const row = await offlineDb.segmentRoutes.get(segmentRouteCacheId(fromId, toId))
+  if (!row) return null
+  const { _cachedAt, id, ...rest } = row
+  void _cachedAt
+  void id
+  return rest as CampingplatzSegmentRouteCacheEntry
 }
 
 /** Heimat-Adresse des Users (eine Zeile pro Gerät) */
