@@ -6,6 +6,7 @@ import { findRelevantVacation, getTripPhase } from '@/lib/trip-readiness'
 import {
   buildVacationSegments,
   findActiveSegment,
+  isEligibleForRastCapture,
   isOnVacationRoute,
   isTravelDayToday,
   type TravelSegment,
@@ -38,6 +39,8 @@ export type ReiseModusState = {
   segments: TravelSegment[]
   activeSegment: TravelSegment | null
   onRoute: boolean
+  /** Rast-Panel: auf Route, aber nicht zuhause und nicht kurz vor dem Ziel */
+  canCaptureRast: boolean
   isTravelContext: boolean
 }
 
@@ -76,6 +79,9 @@ export function useReiseModus(
 
   const activeSegment = position ? findActiveSegment(segments, position) : null
   const onRoute = position ? isOnVacationRoute(segments, position) : false
+  const canCaptureRast = position
+    ? isEligibleForRastCapture(position, activeSegment, homeCoords)
+    : false
 
   const gpsActive = useMemo(
     () => isReiseGpsActive(gpsMode, isTravelContext),
@@ -199,6 +205,7 @@ export function useReiseModus(
     segments,
     activeSegment,
     onRoute,
+    canCaptureRast,
     isTravelContext,
   }
 }

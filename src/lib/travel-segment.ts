@@ -227,6 +227,55 @@ export function isOnVacationRoute(
   )
 }
 
+/** Mindestabstand von Zuhause, bevor „Rast erfassen“ angeboten wird. */
+export const RAST_CAPTURE_MIN_KM_FROM_HOME = 15
+
+/** Mindestabstand zum Ziel des aktiven Streckenabschnitts. */
+export const RAST_CAPTURE_MIN_KM_TO_DESTINATION = 15
+
+/**
+ * Darf das Reise-Rast-Panel angezeigt werden?
+ * Nicht zuhause und nicht in den letzten 15 km vor dem Ziel des aktiven Abschnitts.
+ */
+export function isEligibleForRastCapture(
+  position: { lat: number; lng: number },
+  activeSegment: TravelSegment | null,
+  homeCoords?: { lat: number; lng: number } | null,
+  corridorMaxKm = 20
+): boolean {
+  if (!activeSegment) return false
+  if (
+    !isPointInSegmentCorridor(
+      position,
+      activeSegment.from,
+      activeSegment.to,
+      corridorMaxKm
+    )
+  ) {
+    return false
+  }
+
+  if (homeCoords?.lat != null && homeCoords.lng != null) {
+    const distHomeKm = haversineDistanceKm({
+      lat1: homeCoords.lat,
+      lng1: homeCoords.lng,
+      lat2: position.lat,
+      lng2: position.lng,
+    })
+    if (distHomeKm < RAST_CAPTURE_MIN_KM_FROM_HOME) return false
+  }
+
+  const distToDestKm = haversineDistanceKm({
+    lat1: activeSegment.to.lat,
+    lng1: activeSegment.to.lng,
+    lat2: position.lat,
+    lng2: position.lng,
+  })
+  if (distToDestKm < RAST_CAPTURE_MIN_KM_TO_DESTINATION) return false
+
+  return true
+}
+
 /** Heute ein Reisetag (Abfahrt bis Ende)? */
 export function isTravelDayToday(vacation: Vacation, now = new Date()): boolean {
   const today = todayInAppTimezone(now)

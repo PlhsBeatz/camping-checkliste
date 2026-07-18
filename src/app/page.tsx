@@ -1281,7 +1281,7 @@ function HomeContent() {
 
   const showRastPanel =
     reiseModus.featureActive &&
-    reiseModus.onRoute &&
+    reiseModus.canCaptureRast &&
     reiseModus.isStationary &&
     reiseModus.position != null &&
     !rastPanelDismissed &&
