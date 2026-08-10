@@ -1050,9 +1050,13 @@ const PackingItem: React.FC<PackingItemProps> = ({
     setShowMarkAllDialog(false);
   };
 
+  /** Alle Urlaubs-Mitreisenden – gleiche Kürzel-Logik wie Sidebar (Luca/Luisa → LC/LI) */
   const personInitialsContext = useMemo(
-    () => mitreisendeFuerPopover.map((m) => m.mitreisender_name),
-    [mitreisendeFuerPopover]
+    () =>
+      vacationMitreisende.length > 0
+        ? vacationMitreisende.map((m) => m.name)
+        : mitreisendeFuerPopover.map((m) => m.mitreisender_name),
+    [vacationMitreisende, mitreisendeFuerPopover]
   );
 
   const renderPersonListPopoverContent = () => (
