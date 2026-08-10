@@ -224,13 +224,27 @@ function polylineLengthKm(points: LatLng[]): number {
 }
 
 /** Liegt der Punkt im Korridor entlang der decodierten Routen-Polyline? */
-export function isPointNearRoutePolyline(
+export function getPointPositionOnRoutePolyline(
   point: LatLng,
   polylinePoints: LatLng[],
   maxKm = ROUTE_POLYLINE_CORRIDOR_KM,
   endpointBufferKm = ROUTE_ENDPOINT_BUFFER_KM
-): boolean {
-  if (polylinePoints.length < 2) return false
+): {
+  nearRoute: boolean
+  crossTrackKm: number
+  alongFromStartKm: number
+  alongToEndKm: number
+  totalLengthKm: number
+} {
+  if (polylinePoints.length < 2) {
+    return {
+      nearRoute: false,
+      crossTrackKm: Infinity,
+      alongFromStartKm: 0,
+      alongToEndKm: 0,
+      totalLengthKm: 0,
+    }
+  }
 
   let minCross = Infinity
   let bestAlong = 0
@@ -248,12 +262,47 @@ export function isPointNearRoutePolyline(
     cumulative += segLenKm
   }
 
-  if (minCross > maxKm) return false
-
   const totalLen = polylineLengthKm(polylinePoints)
-  return (
-    bestAlong <= totalLen + endpointBufferKm && bestAlong >= -endpointBufferKm
-  )
+  const nearRoute =
+    minCross <= maxKm &&
+    bestAlong <= totalLen + endpointBufferKm &&
+    bestAlong >= -endpointBufferKm
+
+  return {
+    nearRoute,
+    crossTrackKm: minCross,
+    alongFromStartKm: Math.max(0, bestAlong),
+    alongToEndKm: Math.max(0, totalLen - bestAlong),
+    totalLengthKm: totalLen,
+  }
+}
+
+export function isPointNearRoutePolyline(
+  point: LatLng,
+  polylinePoints: LatLng[],
+  maxKm = ROUTE_POLYLINE_CORRIDOR_KM,
+  endpointBufferKm = ROUTE_ENDPOINT_BUFFER_KM
+): boolean {
+  return getPointPositionOnRoutePolyline(
+    point,
+    polylinePoints,
+    maxKm,
+    endpointBufferKm
+  ).nearRoute
+}
+
+export function getPointPositionOnEncodedPolyline(
+  point: LatLng,
+  encodedPolyline: string | null | undefined,
+  maxKm = ROUTE_POLYLINE_CORRIDOR_KM
+): ReturnType<typeof getPointPositionOnRoutePolyline> | null {
+  if (!isUsableRoutePolyline(encodedPolyline)) return null
+  try {
+    const points = getCachedDecodedPolyline(encodedPolyline!)
+    return getPointPositionOnRoutePolyline(point, points, maxKm)
+  } catch {
+    return null
+  }
 }
 
 export function isPointNearEncodedPolyline(

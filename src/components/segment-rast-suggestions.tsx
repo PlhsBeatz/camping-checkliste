@@ -78,32 +78,67 @@ export function getVisibleRastplaetzeForExpandedSegments(
   expandedOverrides: Record<string, boolean>,
   segmentRouteMatch: Map<string, SegmentRouteMatchOptions>
 ): Rastplatz[] {
-  const byId = new Map<string, Rastplatz>()
-  for (const segment of segments) {
-    const phase = phases.get(segment.id) ?? 'future'
-    if (!resolveSegmentRastOpen(segment.id, phase, expandedOverrides)) continue
-    const match = segmentRouteMatch.get(segment.id)
-    for (const r of getRastplaetzeAlongSegment(segment, rastplaetze, match)) {
-      byId.set(r.id, r)
+  return [...getRastplaetzeBySegmentDeduped(
+    segments,
+    rastplaetze,
+    phases,
+    expandedOverrides,
+    segmentRouteMatch
+  ).values()].flat()
+}
+
+const SEGMENT_PHASE_PRIORITY: TravelLegPhase[] = ['next', 'future', 'past']
+
+/**
+ * Jeder Rastplatz höchstens einem sichtbaren Abschnitt zuordnen (Hin-/Rückfahrt teilen oft dieselbe Strecke).
+ * Priorität: aktueller Abschnitt („next“) vor späteren und vergangenen.
+ */
+export function getRastplaetzeBySegmentDeduped(
+  segments: TravelSegment[],
+  rastplaetze: Rastplatz[],
+  phases: Map<string, TravelLegPhase>,
+  expandedOverrides: Record<string, boolean>,
+  segmentRouteMatch: Map<string, SegmentRouteMatchOptions>
+): Map<string, Rastplatz[]> {
+  const bySegment = new Map<string, Rastplatz[]>()
+  const usedIds = new Set<string>()
+
+  for (const phase of SEGMENT_PHASE_PRIORITY) {
+    for (const segment of segments) {
+      if ((phases.get(segment.id) ?? 'future') !== phase) continue
+      if (!resolveSegmentRastOpen(segment.id, phase, expandedOverrides)) continue
+      const match = segmentRouteMatch.get(segment.id)
+      const along = getRastplaetzeAlongSegment(segment, rastplaetze, match).filter(
+        (r) => !usedIds.has(r.id)
+      )
+      if (along.length === 0) continue
+      bySegment.set(segment.id, along)
+      for (const r of along) usedIds.add(r.id)
     }
   }
-  return [...byId.values()]
+
+  return bySegment
 }
 
 interface SegmentRastSuggestionsProps {
   segment: TravelSegment
   rastplaetze: Rastplatz[]
   routeMatch?: SegmentRouteMatchOptions
+  /** Bereits gefilterte Liste (z. B. nach segmentübergreifender Deduplizierung). */
+  rastplaetzeAlongRoute?: Rastplatz[]
 }
 
 export function SegmentRastSuggestions({
   segment,
   rastplaetze,
   routeMatch,
+  rastplaetzeAlongRoute,
 }: SegmentRastSuggestionsProps) {
   const alongRoute = useMemo(
-    () => getRastplaetzeAlongSegment(segment, rastplaetze, routeMatch),
-    [routeMatch, rastplaetze, segment]
+    () =>
+      rastplaetzeAlongRoute ??
+      getRastplaetzeAlongSegment(segment, rastplaetze, routeMatch),
+    [rastplaetzeAlongRoute, routeMatch, rastplaetze, segment]
   )
 
   const empfehlungen = alongRoute.filter((r) => r.bewertung === 'empfehlung')

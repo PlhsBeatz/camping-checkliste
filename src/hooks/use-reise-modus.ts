@@ -4,11 +4,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Vacation, VacationCampingStay } from '@/lib/db'
 import { findRelevantVacation, getTripPhase } from '@/lib/trip-readiness'
 import {
-  buildVacationSegments,
+  buildReiseModusSegments,
   findActiveSegment,
   isEligibleForRastCapture,
   isOnVacationRoute,
   isTravelDayToday,
+  type SegmentRoutePolylines,
   type TravelSegment,
 } from '@/lib/travel-segment'
 import { cacheLastPosition } from '@/lib/offline-db'
@@ -55,7 +56,8 @@ export function useReiseModus(
   vacations: Vacation[],
   stays: VacationCampingStay[],
   homeCoords: { lat: number; lng: number } | null,
-  gpsMode: ReiseGpsMode = DEFAULT_REISE_GPS_MODE
+  gpsMode: ReiseGpsMode = DEFAULT_REISE_GPS_MODE,
+  polylinesBySegmentId?: Map<string, SegmentRoutePolylines>
 ): ReiseModusState {
   const [position, setPosition] = useState<{ lat: number; lng: number } | null>(null)
   const [isStationary, setIsStationary] = useState(false)
@@ -75,12 +77,23 @@ export function useReiseModus(
     isTravelDayToday(relevantVacation)
 
   const segments =
-    relevantVacation && stays.length > 0 ? buildVacationSegments(stays, homeCoords) : []
+    relevantVacation && stays.length > 0
+      ? buildReiseModusSegments(stays, homeCoords)
+      : []
 
-  const activeSegment = position ? findActiveSegment(segments, position) : null
-  const onRoute = position ? isOnVacationRoute(segments, position) : false
+  const activeSegment = position
+    ? findActiveSegment(segments, position, polylinesBySegmentId)
+    : null
+  const onRoute = position
+    ? activeSegment != null || isOnVacationRoute(segments, position)
+    : false
   const canCaptureRast = position
-    ? isEligibleForRastCapture(position, activeSegment, homeCoords)
+    ? isEligibleForRastCapture(
+        position,
+        activeSegment,
+        homeCoords,
+        polylinesBySegmentId
+      )
     : false
 
   const gpsActive = useMemo(

@@ -1,4 +1,9 @@
 import { haversineDistanceKm } from '@/lib/routes'
+import {
+  getPointPositionOnEncodedPolyline,
+  isUsableRoutePolyline,
+  ROUTE_POLYLINE_CORRIDOR_KM,
+} from '@/lib/route-polyline'
 import type { Campingplatz, Vacation, VacationCampingStay } from '@/lib/db'
 import { normalizeCalendarDate, todayInAppTimezone } from '@/lib/app-timezone'
 import { getDepartureDate } from '@/lib/trip-readiness'
@@ -140,6 +145,123 @@ export function buildVacationSegments(
   return segments
 }
 
+/** Alle Fahrtsegmente inkl. Rückweg (für GPS/Reise-Modus). */
+export function buildReiseModusSegments(
+  stays: VacationCampingStay[],
+  homeCoords?: { lat: number; lng: number } | null
+): TravelSegment[] {
+  const travel = buildVacationSegments(stays, homeCoords)
+  const sorted = [...stays].sort((a, b) => (a.sort_index ?? 0) - (b.sort_index ?? 0))
+  const lastStay = sorted[sorted.length - 1]
+  if (homeCoords?.lat != null && homeCoords.lng != null && lastStay) {
+    const ret = buildReturnHomeSegment(lastStay, homeCoords)
+    if (ret) return [...travel, ret]
+  }
+  return travel
+}
+
+export type SegmentRoutePolylines = {
+  polylines: string[]
+  provider?: 'google' | 'haversine' | null
+}
+
+export type SegmentPolylineSource = {
+  encodedPolyline?: string | null
+  returnEncodedPolyline?: string | null
+  provider?: 'google' | 'haversine' | null
+}
+
+function sanitizePolyline(encoded: string | null | undefined): string | null {
+  return isUsableRoutePolyline(encoded) ? encoded!.trim() : null
+}
+
+/** Polylines pro Segment-ID für GPS-Matching und Rast-Erfassung. */
+export function buildSegmentPolylinesMap(
+  stays: VacationCampingStay[],
+  homeCoords: { lat: number; lng: number } | null,
+  homeRouteByCampingplatzId: Record<string, SegmentPolylineSource>,
+  legRouteByStayPairKey: Record<string, SegmentPolylineSource>
+): Map<string, SegmentRoutePolylines> {
+  const map = new Map<string, SegmentRoutePolylines>()
+  const sorted = [...stays].sort((a, b) => (a.sort_index ?? 0) - (b.sort_index ?? 0))
+  const firstStay = sorted[0]
+  const lastStay = sorted[sorted.length - 1]
+
+  if (firstStay) {
+    const homeSegId = `home-to-${firstStay.id}`
+    const homeRoute = homeRouteByCampingplatzId[firstStay.campingplatz.id]
+    const forward = sanitizePolyline(homeRoute?.encodedPolyline)
+    if (forward) {
+      map.set(homeSegId, { polylines: [forward], provider: homeRoute?.provider ?? 'google' })
+    } else if (homeRoute?.provider === 'haversine') {
+      map.set(homeSegId, { polylines: [], provider: 'haversine' })
+    }
+  }
+
+  for (let i = 0; i < sorted.length - 1; i++) {
+    const fromStay = sorted[i]
+    const toStay = sorted[i + 1]
+    if (!fromStay || !toStay || fromStay.campingplatz.id === toStay.campingplatz.id) continue
+    const segId = `${fromStay.id}-to-${toStay.id}`
+    const legRoute = legRouteByStayPairKey[`${fromStay.id}|${toStay.id}`]
+    const encoded = sanitizePolyline(legRoute?.encodedPolyline)
+    if (encoded) {
+      map.set(segId, { polylines: [encoded], provider: legRoute?.provider ?? 'google' })
+    } else if (legRoute?.provider === 'haversine') {
+      map.set(segId, { polylines: [], provider: 'haversine' })
+    }
+  }
+
+  if (lastStay && homeCoords) {
+    const retSegId = `return-home-from-${lastStay.id}`
+    const returnRoute = homeRouteByCampingplatzId[lastStay.campingplatz.id]
+    const returnPolyline = sanitizePolyline(returnRoute?.returnEncodedPolyline)
+    if (returnPolyline) {
+      map.set(retSegId, {
+        polylines: [returnPolyline],
+        provider: returnRoute?.provider ?? 'google',
+      })
+    } else if (returnRoute?.provider === 'haversine') {
+      map.set(retSegId, { polylines: [], provider: 'haversine' })
+    }
+  }
+
+  void homeCoords
+  return map
+}
+
+function getBestPolylinePositionOnSegment(
+  position: { lat: number; lng: number },
+  routePolylines: SegmentRoutePolylines | undefined,
+  corridorMaxKm: number
+): {
+  nearRoute: boolean
+  crossTrackKm: number
+  alongFromStartKm: number
+  alongToEndKm: number
+} | null {
+  if (!routePolylines?.polylines.length) return null
+  let best: {
+    nearRoute: boolean
+    crossTrackKm: number
+    alongFromStartKm: number
+    alongToEndKm: number
+  } | null = null
+  for (const encoded of routePolylines.polylines) {
+    const pos = getPointPositionOnEncodedPolyline(position, encoded, corridorMaxKm)
+    if (!pos?.nearRoute) continue
+    if (!best || pos.crossTrackKm < best.crossTrackKm) {
+      best = {
+        nearRoute: true,
+        crossTrackKm: pos.crossTrackKm,
+        alongFromStartKm: pos.alongFromStartKm,
+        alongToEndKm: pos.alongToEndKm,
+      }
+    }
+  }
+  return best
+}
+
 /** Fahrtsegment vom letzten Campingplatz zurück nach Hause. */
 export function buildReturnHomeSegment(
   lastStay: VacationCampingStay,
@@ -199,9 +321,34 @@ export function findCampingToCampingSegment(
 /** Aktives Segment anhand GPS-Position (nächstes Segment). */
 export function findActiveSegment(
   segments: TravelSegment[],
-  position: { lat: number; lng: number }
+  position: { lat: number; lng: number },
+  polylinesBySegmentId?: Map<string, SegmentRoutePolylines>,
+  corridorMaxKm = ROUTE_POLYLINE_CORRIDOR_KM
 ): TravelSegment | null {
   if (segments.length === 0) return null
+
+  if (polylinesBySegmentId && polylinesBySegmentId.size > 0) {
+    let best: TravelSegment | null = null
+    let bestScore = Infinity
+    for (const seg of segments) {
+      const routePolylines = polylinesBySegmentId.get(seg.id)
+      const polyPos = getBestPolylinePositionOnSegment(position, routePolylines, corridorMaxKm)
+      if (polyPos?.nearRoute && polyPos.crossTrackKm < bestScore) {
+        bestScore = polyPos.crossTrackKm
+        best = seg
+        continue
+      }
+      if (routePolylines?.provider === 'haversine' || routePolylines?.polylines.length === 0) {
+        const cross = crossTrackDistanceKm(position, seg.from, seg.to)
+        if (isPointInSegmentCorridor(position, seg.from, seg.to) && cross < bestScore) {
+          bestScore = cross
+          best = seg
+        }
+      }
+    }
+    if (best) return best
+  }
+
   let best: TravelSegment | null = null
   let bestScore = Infinity
   for (const seg of segments) {
@@ -236,20 +383,41 @@ export const RAST_CAPTURE_MIN_KM_TO_DESTINATION = 15
 /**
  * Darf das Reise-Rast-Panel angezeigt werden?
  * Nicht zuhause und nicht in den letzten 15 km vor dem Ziel des aktiven Abschnitts.
+ * Nutzt echte Routen-Polylines wenn verfügbar (Autobahn-Rastplätze liegen selten auf der Luftlinie).
  */
 export function isEligibleForRastCapture(
   position: { lat: number; lng: number },
   activeSegment: TravelSegment | null,
   homeCoords?: { lat: number; lng: number } | null,
-  corridorMaxKm = 20
+  polylinesBySegmentId?: Map<string, SegmentRoutePolylines>,
+  straightCorridorMaxKm = 20,
+  polylineCorridorMaxKm = ROUTE_POLYLINE_CORRIDOR_KM
 ): boolean {
   if (!activeSegment) return false
+
+  const routePolylines = polylinesBySegmentId?.get(activeSegment.id)
+  const polyPos = getBestPolylinePositionOnSegment(
+    position,
+    routePolylines,
+    polylineCorridorMaxKm
+  )
+
+  if (polyPos?.nearRoute) {
+    if (polyPos.alongFromStartKm < RAST_CAPTURE_MIN_KM_FROM_HOME) return false
+    if (polyPos.alongToEndKm < RAST_CAPTURE_MIN_KM_TO_DESTINATION) return false
+    return true
+  }
+
+  if (routePolylines?.polylines.length) {
+    return false
+  }
+
   if (
     !isPointInSegmentCorridor(
       position,
       activeSegment.from,
       activeSegment.to,
-      corridorMaxKm
+      straightCorridorMaxKm
     )
   ) {
     return false

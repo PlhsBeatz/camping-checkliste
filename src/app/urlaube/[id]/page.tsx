@@ -72,13 +72,12 @@ import {
   type TravelSegment,
 } from '@/lib/travel-segment'
 import {
-  countSegmentEmpfehlungen,
   openSegmentInAdacMaps,
   openSegmentInGoogleMaps,
 } from '@/lib/maps-export'
 import {
   getRastplaetzeAlongSegment,
-  getVisibleRastplaetzeForExpandedSegments,
+  getRastplaetzeBySegmentDeduped,
   resolveSegmentRastOpen,
   SegmentRastSuggestions,
   type SegmentRouteMatchOptions,
@@ -186,6 +185,7 @@ function RouteLeg({
   route,
   segment,
   rastplaetze,
+  segmentRastplaetze,
   routeMatch,
   rastOpen,
   onRastOpenToggle,
@@ -194,19 +194,23 @@ function RouteLeg({
   route: CampingplatzRouteInfo | undefined
   segment: TravelSegment | null
   rastplaetze: Rastplatz[]
+  /** Deduplizierte Rastplätze für diesen Abschnitt (falls gesetzt). */
+  segmentRastplaetze?: Rastplatz[]
   routeMatch?: SegmentRouteMatchOptions
   rastOpen: boolean
   onRastOpenToggle: () => void
 }) {
-  const rastCount = useMemo(() => {
-    if (!segment) return 0
-    return getRastplaetzeAlongSegment(segment, rastplaetze, routeMatch).length
-  }, [routeMatch, segment, rastplaetze])
+  const alongRoute = useMemo(() => {
+    if (segmentRastplaetze) return segmentRastplaetze
+    if (!segment) return []
+    return getRastplaetzeAlongSegment(segment, rastplaetze, routeMatch)
+  }, [segmentRastplaetze, routeMatch, segment, rastplaetze])
+
+  const rastCount = alongRoute.length
 
   const empfehlungsCount = useMemo(() => {
-    if (!segment) return 0
-    return countSegmentEmpfehlungen(segment, rastplaetze, routeMatch)
-  }, [routeMatch, segment, rastplaetze])
+    return alongRoute.filter((r) => r.bewertung === 'empfehlung').length
+  }, [alongRoute])
 
   const hasRast = rastCount > 0
   const showRastPanel = hasRast && rastOpen
@@ -306,6 +310,7 @@ function RouteLeg({
           segment={segment}
           rastplaetze={rastplaetze}
           routeMatch={routeMatch}
+          rastplaetzeAlongRoute={alongRoute}
         />
       ) : null}
     </>
@@ -544,9 +549,9 @@ export default function UrlaubDetailPage() {
     return map
   }, [sortedStays, travelSegments, returnHomeSegment, routeInfo, segmentRouteInfo])
 
-  const mapVisibleRastplaetze = useMemo(
+  const rastplaetzeBySegmentId = useMemo(
     () =>
-      getVisibleRastplaetzeForExpandedSegments(
+      getRastplaetzeBySegmentDeduped(
         allTravelSegments,
         rastplaetze,
         travelLegPhases,
@@ -560,6 +565,11 @@ export default function UrlaubDetailPage() {
       segmentRastExpanded,
       segmentRouteMatchBySegmentId,
     ]
+  )
+
+  const mapVisibleRastplaetze = useMemo(
+    () => [...rastplaetzeBySegmentId.values()].flat(),
+    [rastplaetzeBySegmentId]
   )
 
   const vacationCampingplatzIds = useMemo(
@@ -988,6 +998,11 @@ export default function UrlaubDetailPage() {
                                 route={routeInfo[firstStay.campingplatz.id]}
                                 segment={homeSegment ?? null}
                                 rastplaetze={rastplaetze}
+                                segmentRastplaetze={
+                                  homeSegment
+                                    ? rastplaetzeBySegmentId.get(homeSegment.id)
+                                    : undefined
+                                }
                                 routeMatch={
                                   homeSegment
                                     ? segmentRouteMatchBySegmentId.get(homeSegment.id)
@@ -1083,6 +1098,11 @@ export default function UrlaubDetailPage() {
                                           }
                                           segment={legSegment}
                                           rastplaetze={rastplaetze}
+                                          segmentRastplaetze={
+                                            legSegment
+                                              ? rastplaetzeBySegmentId.get(legSegment.id)
+                                              : undefined
+                                          }
                                           routeMatch={
                                             legSegment
                                               ? segmentRouteMatchBySegmentId.get(legSegment.id)
@@ -1124,6 +1144,11 @@ export default function UrlaubDetailPage() {
                                 route={routeInfo[lastStay.campingplatz.id]}
                                 segment={returnHomeSegment}
                                 rastplaetze={rastplaetze}
+                                segmentRastplaetze={
+                                  returnHomeSegment
+                                    ? rastplaetzeBySegmentId.get(returnHomeSegment.id)
+                                    : undefined
+                                }
                                 routeMatch={
                                   returnHomeSegment
                                     ? segmentRouteMatchBySegmentId.get(returnHomeSegment.id)

@@ -75,6 +75,16 @@ import { AdminFremdeGruppeWarningDialog } from '@/components/admin-fremde-gruppe
 import { ReiseRastPanel } from '@/components/reise-rast-panel'
 import { useReiseModus } from '@/hooks/use-reise-modus'
 import { useRastNearbyAlert } from '@/hooks/use-rast-nearby-alert'
+import {
+  buildSegmentPolylinesMap,
+  type SegmentPolylineSource,
+  type SegmentRoutePolylines,
+} from '@/lib/travel-segment'
+import {
+  parseCampingplatzRouteApiData,
+  routeInfoToCacheEntry,
+  routeInfoToSegmentCacheEntry,
+} from '@/lib/client-route-info'
 import { useUserReiseGpsSettings } from '@/hooks/use-user-reise-gps-settings'
 import { useUserPushSettings } from '@/hooks/use-user-push-settings'
 import { usePushSubscribe } from '@/hooks/use-push-subscribe'
@@ -107,6 +117,8 @@ import {
   getCachedMainCategories,
   getCachedTransportVehicles,
   getCachedVacationMitreisende,
+  getCachedRoute,
+  getCachedSegmentRoute,
   subscribeToOnlineStatus,
   getSyncQueueCount,
   OUTBOX_SYNCED_EVENT_NAME,
@@ -128,6 +140,8 @@ import {
   cacheMainCategories,
   cacheTransportVehicles,
   cacheVacationMitreisende,
+  cacheRoute,
+  cacheSegmentRoute,
 } from '@/lib/offline-db'
 
 const PACKABLE_STATUSES: readonly string[] = ['Normal', 'Immer gepackt']
@@ -1221,8 +1235,135 @@ function HomeContent() {
     }
   }, [selectedVacationId, vacations])
 
+  const [reisePolylines, setReisePolylines] = useState<Map<string, SegmentRoutePolylines>>(
+    () => new Map()
+  )
+
+  useEffect(() => {
+    if (!user?.id || vacationStays.length === 0) {
+      setReisePolylines(new Map())
+      return
+    }
+    let cancelled = false
+    const userId = user.id
+
+    void (async () => {
+      const sorted = [...vacationStays].sort((a, b) => (a.sort_index ?? 0) - (b.sort_index ?? 0))
+      const homeRouteByCp: Record<string, SegmentPolylineSource> = {}
+      const legRouteByPair: Record<string, SegmentPolylineSource> = {}
+
+      const loadHomeRoute = async (cpId: string) => {
+        if (homeRouteByCp[cpId]) return
+        const cached = await getCachedRoute(userId, cpId)
+        if (cached) {
+          homeRouteByCp[cpId] = {
+            encodedPolyline: cached.encoded_polyline,
+            returnEncodedPolyline: cached.return_encoded_polyline,
+            provider: cached.provider,
+          }
+          return
+        }
+        if (typeof navigator !== 'undefined' && !navigator.onLine) return
+        try {
+          const res = await fetch('/api/routes/campingplatz', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ campingplatzId: cpId }),
+          })
+          const data = (await res.json()) as {
+            success?: boolean
+            data?: {
+              distanceKm: number
+              durationMinutes: number
+              provider?: 'google' | 'haversine'
+              encodedPolyline?: string | null
+              returnEncodedPolyline?: string | null
+            }
+          }
+          const incoming = parseCampingplatzRouteApiData(data.data)
+          if (!data.success || !incoming) return
+          homeRouteByCp[cpId] = incoming
+          await cacheRoute(userId, routeInfoToCacheEntry(userId, cpId, incoming))
+        } catch {
+          /* ignore */
+        }
+      }
+
+      for (const stay of sorted) {
+        await loadHomeRoute(stay.campingplatz.id)
+      }
+
+      for (let i = 0; i < sorted.length - 1; i++) {
+        const fromStay = sorted[i]
+        const toStay = sorted[i + 1]
+        if (!fromStay || !toStay || fromStay.campingplatz.id === toStay.campingplatz.id) continue
+        const pairKey = `${fromStay.id}|${toStay.id}`
+        if (legRouteByPair[pairKey]) continue
+        const cached = await getCachedSegmentRoute(
+          fromStay.campingplatz.id,
+          toStay.campingplatz.id
+        )
+        if (cached) {
+          legRouteByPair[pairKey] = {
+            encodedPolyline: cached.encoded_polyline,
+            provider: cached.provider,
+          }
+          continue
+        }
+        if (typeof navigator !== 'undefined' && !navigator.onLine) continue
+        try {
+          const res = await fetch('/api/routes/segment', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              fromId: fromStay.campingplatz.id,
+              toId: toStay.campingplatz.id,
+            }),
+          })
+          const data = (await res.json()) as {
+            success?: boolean
+            data?: {
+              distanceKm: number
+              durationMinutes: number
+              provider?: 'google' | 'haversine'
+              encodedPolyline?: string | null
+            }
+          }
+          const incoming = parseCampingplatzRouteApiData(data.data)
+          if (!data.success || !incoming) continue
+          legRouteByPair[pairKey] = incoming
+          await cacheSegmentRoute(
+            routeInfoToSegmentCacheEntry(
+              fromStay.campingplatz.id,
+              toStay.campingplatz.id,
+              incoming
+            )
+          )
+        } catch {
+          /* ignore */
+        }
+      }
+
+      if (!cancelled) {
+        setReisePolylines(
+          buildSegmentPolylinesMap(vacationStays, homeCoords, homeRouteByCp, legRouteByPair)
+        )
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [user?.id, vacationStays, homeCoords])
+
   const { mode: reiseGpsMode } = useUserReiseGpsSettings()
-  const reiseModus = useReiseModus(vacations, vacationStays, homeCoords, reiseGpsMode)
+  const reiseModus = useReiseModus(
+    vacations,
+    vacationStays,
+    homeCoords,
+    reiseGpsMode,
+    reisePolylines
+  )
   const pushSubscribe = usePushSubscribe()
   const { settings: pushSettings, canReceivePush } = useUserPushSettings(pushSubscribe.subscribed)
   const { nearbyEmpfehlung, nearbyDistanceKm } = useRastNearbyAlert({
