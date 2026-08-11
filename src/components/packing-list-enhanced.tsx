@@ -51,7 +51,6 @@ import {
   getVacationGruppenMap,
   hasMultipleVacationGroups,
   isPauschalGruppenFeatureActive,
-  passesPauschalGruppenFilter,
   canTogglePauschalForOwnGruppe,
   canToggleGruppeCheckbox,
   resolveActiveGruppeIdForPacking,
@@ -65,72 +64,27 @@ import {
   type PauschalGruppenFilter,
 } from '@/lib/pauschal-gruppen';
 
-type VisibleItemsFilterOpts = {
+import {
+  passesBaseVisibleFilters,
+  passesProfileScopeFilters,
+  isItemFullyPackedForProfile,
+  matchesPacklistSearchQuery,
+  type ProfileScopeFilterOpts,
+} from '@/lib/packlist-visibility';
+
+type VisibleItemsFilterOpts = ProfileScopeFilterOpts & {
   listDisplayMode: 'alles' | 'packliste';
   abreiseDatum?: string | null;
-  toYYYYMMDD: (d: string) => string;
-  canEditPauschalEntries: boolean;
-  vacationMitreisende: Mitreisender[];
-  /** Im Modus „Alle“: nur Einträge dieser Personen (null = alle am Urlaub) */
-  alleScopeIds?: Set<string> | null;
-  pauschalGruppenFilter?: PauschalGruppenFilter;
-  multiGroupActive?: boolean;
-  ownGruppeId?: string | null;
 };
-
-function passesBaseVisibleFilters(
-  item: DBPackingItem,
-  opts: Pick<VisibleItemsFilterOpts, 'listDisplayMode' | 'abreiseDatum' | 'toYYYYMMDD'>
-): boolean {
-  const { listDisplayMode, abreiseDatum, toYYYYMMDD } = opts;
-  if (listDisplayMode === 'packliste' && String(item.status || '').trim() === 'Immer gepackt') return false;
-  const isErstAbreisetag = !!item.erst_abreisetag_gepackt;
-  if (listDisplayMode === 'packliste' && isErstAbreisetag && abreiseDatum) {
-    const now = new Date();
-    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-    const abreiseStr = toYYYYMMDD(abreiseDatum);
-    if (abreiseStr && todayStr !== abreiseStr) return false;
-  }
-  return true;
-}
 
 function filterVisibleItemsForProfile(
   items: DBPackingItem[],
   selectedProfile: string | null,
   opts: VisibleItemsFilterOpts
 ): DBPackingItem[] {
-  const { canEditPauschalEntries, vacationMitreisende, alleScopeIds, pauschalGruppenFilter = 'alle', multiGroupActive = false, ownGruppeId = null } = opts;
-  const filterGruppeId = resolveActiveGruppeIdForPacking(
-    selectedProfile,
-    vacationMitreisende,
-    ownGruppeId ?? null
-  );
-
-  return items.filter(item => {
+  return items.filter((item) => {
     if (!passesBaseVisibleFilters(item, opts)) return false;
-    if (multiGroupActive && !passesPauschalGruppenFilter(item, pauschalGruppenFilter, filterGruppeId)) {
-      return false;
-    }
-
-    if (!selectedProfile) {
-      if (alleScopeIds === null || alleScopeIds === undefined) return true;
-      if (item.mitreisenden_typ === 'pauschal') return canEditPauschalEntries;
-      if (item.mitreisende?.length) {
-        return item.mitreisende.some(m => alleScopeIds.has(m.mitreisender_id));
-      }
-      if (item.mitreisenden_typ === 'alle') return alleScopeIds.size > 0;
-      return false;
-    }
-    if (item.mitreisenden_typ === 'pauschal') {
-      return canEditPauschalEntries;
-    }
-    const personAssigned = item.mitreisende?.some(m => m.mitreisender_id === selectedProfile);
-    if (personAssigned) return true;
-    if (item.mitreisenden_typ === 'alle' && (!item.mitreisende || item.mitreisende.length === 0)) {
-      if (vacationMitreisende.length === 0) return true;
-      return vacationMitreisende.some(m => m.id === selectedProfile);
-    }
-    return false;
+    return passesProfileScopeFilters(item, selectedProfile, opts);
   });
 }
 
@@ -140,57 +94,10 @@ function filterPersonAssignedItems(
   personId: string
 ): DBPackingItem[] {
   return profileVisible.filter(
-    item =>
+    (item) =>
       item.mitreisenden_typ !== 'pauschal' &&
-      item.mitreisende?.some(m => m.mitreisender_id === personId)
+      item.mitreisende?.some((m) => m.mitreisender_id === personId)
   );
-}
-
-function isItemFullyPackedForProfile(
-  item: DBPackingItem,
-  selectedProfile: string | null,
-  canConfirmVorgemerkt: boolean,
-  ownGruppeId?: string | null,
-  multiGroupActive?: boolean,
-  pauschalGruppenFilter?: PauschalGruppenFilter,
-  alleScopeIds?: Set<string> | null,
-  allVacationGruppeIds?: string[],
-  vacationMitreisende: Mitreisender[] = []
-): boolean {
-  if (item.mitreisenden_typ === 'pauschal') {
-    const filterGruppeId = resolveActiveGruppeIdForPacking(
-      selectedProfile,
-      vacationMitreisende,
-      ownGruppeId ?? null
-    );
-    const hidePacked = resolvePauschalHidePacked(item, {
-      multiGroupActive: !!multiGroupActive,
-      pauschalGruppenFilter: pauschalGruppenFilter ?? 'eigene',
-      filterGruppeId: filterGruppeId,
-      canConfirmVorgemerkt,
-      finalOnly: canConfirmVorgemerkt,
-      allVacationGruppeIds,
-    });
-    if (hidePacked !== null) return hidePacked;
-    if (canConfirmVorgemerkt) return item.gepackt;
-    return item.gepackt || !!item.gepackt_vorgemerkt;
-  }
-  if (selectedProfile) {
-    const m = item.mitreisende?.find(t => t.mitreisender_id === selectedProfile);
-    if (!m) return true;
-    return canConfirmVorgemerkt ? m.gepackt : (m.gepackt || !!m.gepackt_vorgemerkt);
-  }
-  if (item.mitreisende?.length) {
-    const relevant = alleScopeIds
-      ? item.mitreisende.filter((m) => alleScopeIds.has(m.mitreisender_id))
-      : item.mitreisende;
-    if (relevant.length === 0) return true;
-    return relevant.every((m) =>
-      canConfirmVorgemerkt ? m.gepackt : (m.gepackt || !!m.gepackt_vorgemerkt)
-    );
-  }
-  if (item.mitreisenden_typ === 'alle') return false;
-  return true;
 }
 
 interface PackingItemProps {
@@ -248,6 +155,8 @@ interface PackingItemProps {
   onBulkSelectionStart?: () => void;
   /** Wechsel der Hauptkategorie – kein Ausblend-Animationseffekt */
   packListTabKey?: string;
+  /** Kurz hervorheben nach Sidebar-Suchtreffer */
+  searchFocusHighlight?: boolean;
 }
 
 const PackingItem: React.FC<PackingItemProps> = ({
@@ -296,6 +205,7 @@ const PackingItem: React.FC<PackingItemProps> = ({
   onBulkSelectionToggle,
   onBulkSelectionStart,
   packListTabKey,
+  searchFocusHighlight = false,
 }) => {
   const [showMarkAllDialog, setShowMarkAllDialog] = useState(false);
   const [personListPopoverOpen, setPersonListPopoverOpen] = useState(false);
@@ -918,6 +828,7 @@ const PackingItem: React.FC<PackingItemProps> = ({
 
     setIsExiting(false);
     setHasExited(true);
+    return undefined;
   }, [hidePackedActive]);
 
   const handleGruppenMainToggle = () => {
@@ -1148,10 +1059,12 @@ const PackingItem: React.FC<PackingItemProps> = ({
   return (
     <>
       <div
+        data-packing-item-id={id}
         className={cn(
           "relative p-4 mb-3 bg-card rounded-xl border shadow-sm transition-colors duration-200 overflow-hidden box-border",
           isExiting && "animate-pack-item-out",
           !isExiting && justUpdated && "animate-pack-item-update",
+          !isExiting && searchFocusHighlight && "ring-2 ring-[rgb(230,126,34)] border-[rgb(230,126,34)]/50",
           !isExiting && isPackedForOpacity && "opacity-60",
           !bulkSelected && "border-subtle dark:border-white/10",
           bulkSelectionMode && bulkSelectable && !bulkSelected && "border-dashed border-[rgb(45,79,30)]/30",
@@ -1600,8 +1513,13 @@ interface PackingListProps {
   packProfileScopeMitreisende?: Mitreisender[];
   /** Farbe des gewählten Packprofils (Mitreisender) für Fortschrittsbalken „nur eigene“ */
   selectedProfileColor?: string | null;
-  /** Urlaubs-Abreisedatum (abfahrtdatum ?? startdatum) – für erst_abreisetag_gepackt im Packliste-Modus */
+  /** Urlaubs-Abreisedatum (abfahrtdatum ?? startdatum) – für erst_abreisetag_gepackt */
   abreiseDatum?: string | null;
+  /** Sidebar-Suche: sichtbare Liste auf Treffer einengen */
+  searchQuery?: string;
+  /** Nach Sidebar-Treffer: Eintrag kurz hervorheben und hinscrollen */
+  focusItemId?: string | null;
+  onFocusItemHandled?: () => void;
   /** Callback wenn sich die sichtbare Kategorie ändert (für Add-Dialog-Scroll) */
   onScrollContextChange?: (ctx: { mainCategory: string; category: string } | null) => void;
   /** Admin: andere Packprofile wählbar – bei „alles gepackt“ im Profil ggf. Team-Übersicht */
@@ -1656,6 +1574,9 @@ export function PackingList({
   transportVehicles = [],
   selectedProfileColor = null,
   abreiseDatum,
+  searchQuery = '',
+  focusItemId = null,
+  onFocusItemHandled,
   onScrollContextChange,
   canSelectOtherProfiles = false,
   onProfileChange,
@@ -1966,39 +1887,69 @@ export function PackingList({
     setProgressBarMode('all');
   }, [selectedProfile]);
 
-  // Datum zu YYYY-MM-DD normalisieren (ISO, DE DD.MM.YYYY, etc.)
-  const toYYYYMMDD = useMemo(() => {
-    return (d: string): string => {
-      if (!d) return '';
-      const s = String(d).trim();
-      const iso = /^\d{4}-\d{2}-\d{2}/.exec(s);
-      if (iso) return iso[0]!;
-      const de = /^(\d{1,2})\.(\d{1,2})\.(\d{4})/.exec(s);
-      if (de) return `${de[3]!}-${de[2]!.padStart(2, '0')}-${de[1]!.padStart(2, '0')}`;
-      const parsed = new Date(s);
-      if (!Number.isNaN(parsed.getTime())) {
-        return parsed.toISOString().slice(0, 10);
-      }
-      return '';
-    };
-  }, []);
-
   const visibleItemsFilterOpts = useMemo((): VisibleItemsFilterOpts => ({
     listDisplayMode,
     abreiseDatum,
-    toYYYYMMDD,
     canEditPauschalEntries,
     vacationMitreisende: effectiveScopeMitreisende,
     alleScopeIds,
     pauschalGruppenFilter,
     multiGroupActive,
     ownGruppeId,
-  }), [listDisplayMode, abreiseDatum, toYYYYMMDD, canEditPauschalEntries, effectiveScopeMitreisende, alleScopeIds, pauschalGruppenFilter, multiGroupActive, ownGruppeId]);
+  }), [listDisplayMode, abreiseDatum, canEditPauschalEntries, effectiveScopeMitreisende, alleScopeIds, pauschalGruppenFilter, multiGroupActive, ownGruppeId]);
 
-  const visibleItems = useMemo(
+  const searchQueryTrimmed = searchQuery.trim();
+  const searchActive = searchQueryTrimmed.length >= 1;
+
+  const profileVisibleItems = useMemo(
     () => filterVisibleItemsForProfile(items, selectedProfile, visibleItemsFilterOpts),
     [items, selectedProfile, visibleItemsFilterOpts]
   );
+
+  const visibleItems = useMemo(() => {
+    if (!searchActive) return profileVisibleItems;
+    return profileVisibleItems.filter((item) =>
+      matchesPacklistSearchQuery(item, searchQueryTrimmed)
+    );
+  }, [profileVisibleItems, searchActive, searchQueryTrimmed]);
+
+  const [highlightedItemId, setHighlightedItemId] = useState<string | null>(null);
+
+  // Sidebar-Suchtreffer: Kategorie wechseln, scrollen, kurz hervorheben
+  useEffect(() => {
+    if (!focusItemId) return;
+    const target = items.find((i) => i.id === focusItemId);
+    if (!target) {
+      onFocusItemHandled?.();
+      return;
+    }
+    const mainCat = target.hauptkategorie ?? 'Sonstiges';
+    setActiveMainCategory(mainCat);
+    setHighlightedItemId(focusItemId);
+
+    let cancelled = false;
+    const scrollTimer = window.setTimeout(() => {
+      if (cancelled) return;
+      const el = document.querySelector<HTMLElement>(
+        `[data-packing-item-id="${CSS.escape(focusItemId)}"]`
+      );
+      el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 120);
+
+    const clearTimer = window.setTimeout(() => {
+      if (cancelled) return;
+      setHighlightedItemId((current) => (current === focusItemId ? null : current));
+      onFocusItemHandled?.();
+    }, 2200);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(scrollTimer);
+      window.clearTimeout(clearTimer);
+    };
+    // items bewusst nicht als Dependency: sonst bricht Sync den Highlight-Timer ab
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- nur bei neuem focusItemId
+  }, [focusItemId, setActiveMainCategory, onFocusItemHandled]);
 
   // Group items by main category and category (nur sichtbare)
   const itemsByMainCategory = useMemo(() => {
@@ -2400,10 +2351,17 @@ export function PackingList({
 
   const isProgressBarClickable = !!(selectedProfile && canEditPauschalEntries);
 
-  const hasItems = visibleItems.length > 0;
-  const allPackedFromCurrentView = hasItems && visibleItems.every(item => isItemFullyPackedForView(item));
+  const hasItems = profileVisibleItems.length > 0;
+  const allPackedFromCurrentView =
+    !searchActive &&
+    hasItems &&
+    profileVisibleItems.every((item) => isItemFullyPackedForView(item));
   const showTeamPackOverview = allPackedFromCurrentView && hidePackedItems && canSelectOtherProfiles && !allPersonsFullyPacked;
   const showAllPackedCelebration = allPackedFromCurrentView && hidePackedItems && (!canSelectOtherProfiles || allPersonsFullyPacked);
+  const hasDisplayableSearchHits =
+    visibleItems.length > 0 &&
+    (!hidePackedItems || visibleItems.some((item) => !isItemFullyPackedForView(item)));
+  const showNoSearchResults = searchActive && !hasDisplayableSearchHits;
   const currentProfileName = selectedProfile
     ? vacationMitreisende.find(m => m.id === selectedProfile)?.name
     : null;
@@ -2688,6 +2646,15 @@ export function PackingList({
               </CardContent>
             </Card>
           </div>
+        ) : showNoSearchResults ? (
+          <div className="flex flex-col items-center justify-center min-h-[40vh] py-12 px-4 text-center">
+            <p className="text-sm text-muted-foreground">
+              Keine Treffer für „{searchQueryTrimmed}“
+            </p>
+            <p className="text-xs text-muted-foreground mt-2 max-w-sm">
+              In der Sidebar sehen Sie ggf. ausgeblendete Einträge und den Filtergrund.
+            </p>
+          </div>
         ) : (
         <>
         {tabsForSwipe.map(mainCat => (
@@ -2768,6 +2735,7 @@ export function PackingList({
                                 showBulkSelectionUi ? () => startBulkSelection(item.id) : undefined
                               }
                               packListTabKey={`${activeMainCategory}|${selectedProfile ?? 'alle'}|${pauschalGruppenFilter}`}
+                              searchFocusHighlight={highlightedItemId === item.id}
                             />
                           ))}
                       </CardContent>

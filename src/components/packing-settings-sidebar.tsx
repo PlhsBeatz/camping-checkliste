@@ -1,14 +1,20 @@
 'use client'
 
 import { useMemo } from 'react'
-import { X } from 'lucide-react'
+import { Search, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { cn } from '@/lib/utils'
 import type { Mitreisender } from '@/lib/db'
 import { buildPackProfileGroups } from '@/lib/pack-profile-groups'
 import { PackProfilePersonGroups } from '@/components/pack-profile-person-groups'
 import type { PauschalGruppenFilter } from '@/lib/pauschal-gruppen'
+import {
+  formatPacklistDateDe,
+  type PacklistHideReason,
+  type PacklistSearchHit,
+} from '@/lib/packlist-visibility'
 
 interface PackingSettingsSidebarProps {
   isOpen: boolean
@@ -32,6 +38,11 @@ interface PackingSettingsSidebarProps {
   pauschalGruppenFilter?: PauschalGruppenFilter
   onPauschalGruppenFilterChange?: (filter: PauschalGruppenFilter) => void
   unassignedPauschalCount?: number
+  /** Packlisten-Suche (session-lokal) */
+  searchQuery?: string
+  onSearchQueryChange?: (query: string) => void
+  searchHits?: PacklistSearchHit[]
+  onSearchHitSelect?: (hit: PacklistSearchHit) => void
 }
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
@@ -84,6 +95,24 @@ function SegmentToggle({
   )
 }
 
+function hideReasonLabel(reason: PacklistHideReason): string {
+  switch (reason) {
+    case 'dauerausstattung':
+      return 'Dauerausstattung'
+    case 'abreisetag':
+      return 'Erst am Abreisetag'
+    case 'gepackt':
+      return 'Bereits gepackt'
+  }
+}
+
+function primaryHideReason(hit: PacklistSearchHit): PacklistHideReason | null {
+  if (hit.hideReasons.includes('dauerausstattung')) return 'dauerausstattung'
+  if (hit.hideReasons.includes('abreisetag')) return 'abreisetag'
+  if (hit.hideReasons.includes('gepackt')) return 'gepackt'
+  return null
+}
+
 export function PackingSettingsSidebar({
   isOpen,
   onClose,
@@ -102,6 +131,10 @@ export function PackingSettingsSidebar({
   pauschalGruppenFilter = 'alle',
   onPauschalGruppenFilterChange,
   unassignedPauschalCount = 0,
+  searchQuery = '',
+  onSearchQueryChange,
+  searchHits = [],
+  onSearchHitSelect,
 }: PackingSettingsSidebarProps) {
   const { ownGroup, otherGroups } = useMemo(
     () => buildPackProfileGroups(vacationMitreisende, ownGruppeId),
@@ -109,6 +142,7 @@ export function PackingSettingsSidebar({
   )
 
   const showUnassignedFilter = unassignedPauschalCount > 0
+  const searchActive = searchQuery.trim().length >= 1
 
   const pauschalHelpText =
     pauschalGruppenFilter === 'alle'
@@ -118,6 +152,14 @@ export function PackingSettingsSidebar({
         : unassignedPauschalCount > 0
           ? `${unassignedPauschalCount} nicht zugeordnet – Badge tippen zum Zuweisen`
           : 'Keine nicht zugeordneten Einträge'
+
+  const handleRevealForHit = (hit: PacklistSearchHit, reason: PacklistHideReason) => {
+    if (reason === 'dauerausstattung') {
+      onListDisplayModeChange('alles')
+    } else if (reason === 'gepackt') {
+      onHidePackedChange(false)
+    }
+  }
 
   return (
     <>
@@ -199,6 +241,95 @@ export function PackingSettingsSidebar({
             <div className="mt-6 pt-5 border-t-2 border-border/80 space-y-4 rounded-lg bg-muted/20 px-3 pb-3 -mx-1 dark:bg-muted/10">
               <SectionLabel>Ansicht</SectionLabel>
 
+              {onSearchQueryChange && (
+                <div>
+                  <SectionLabel>Suche</SectionLabel>
+                  <div className="relative">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                    <Input
+                      value={searchQuery}
+                      onChange={(e) => onSearchQueryChange(e.target.value)}
+                      placeholder="Gegenstand suchen…"
+                      className="pl-8 pr-8 h-9 bg-card"
+                      autoComplete="off"
+                    />
+                    {searchQuery.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => onSearchQueryChange('')}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                        aria-label="Suche leeren"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
+
+                  {searchActive && (
+                    <div className="mt-2 rounded-lg border border-border/80 bg-card overflow-hidden">
+                      {searchHits.length === 0 ? (
+                        <p className="px-3 py-2.5 text-xs text-muted-foreground">
+                          Kein Eintrag gefunden
+                        </p>
+                      ) : (
+                        <ul className="max-h-56 overflow-y-auto divide-y divide-border/60">
+                          {searchHits.map((hit) => {
+                            const reason = primaryHideReason(hit)
+                            return (
+                              <li key={hit.id} className="px-3 py-2.5">
+                                {hit.visible ? (
+                                  <button
+                                    type="button"
+                                    className="w-full text-left"
+                                    onClick={() => onSearchHitSelect?.(hit)}
+                                  >
+                                    <div className="text-sm font-medium text-foreground truncate">
+                                      {hit.was}
+                                    </div>
+                                    <div className="text-xs text-muted-foreground mt-0.5">
+                                      sichtbar · {hit.kategorie}
+                                    </div>
+                                  </button>
+                                ) : (
+                                  <div>
+                                    <div className="text-sm font-medium text-foreground truncate">
+                                      {hit.was}
+                                    </div>
+                                    <div className="text-xs text-muted-foreground mt-0.5">
+                                      ausgeblendet
+                                      {reason ? ` · ${hideReasonLabel(reason)}` : ''}
+                                      {!reason ? ` · ${hit.kategorie}` : ''}
+                                    </div>
+                                    {reason === 'abreisetag' && (
+                                      <p className="text-xs text-muted-foreground mt-1 leading-tight">
+                                        {hit.abreiseDatumYmd
+                                          ? `Erst am ${formatPacklistDateDe(hit.abreiseDatumYmd)}`
+                                          : 'Erst am Abreisetag'}
+                                      </p>
+                                    )}
+                                    {(reason === 'dauerausstattung' || reason === 'gepackt') && (
+                                      <button
+                                        type="button"
+                                        className="mt-1 text-xs font-medium text-[rgb(230,126,34)] underline underline-offset-2 hover:no-underline"
+                                        onClick={() => handleRevealForHit(hit, reason)}
+                                      >
+                                        {reason === 'dauerausstattung'
+                                          ? 'Dauerausstattung anzeigen'
+                                          : 'Gepacktes anzeigen'}
+                                      </button>
+                                    )}
+                                  </div>
+                                )}
+                              </li>
+                            )
+                          })}
+                        </ul>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {showPauschalGruppenFilter && onPauschalGruppenFilterChange && (
                 <div>
                   <SectionLabel>Gemeinsame Einträge</SectionLabel>
@@ -236,7 +367,7 @@ export function PackingSettingsSidebar({
               )}
 
               <div>
-                <SectionLabel>Dauerausstattung anzeigen</SectionLabel>
+                <SectionLabel>Dauerausstattung</SectionLabel>
                 <SegmentToggle
                   options={[
                     {
@@ -255,8 +386,8 @@ export function PackingSettingsSidebar({
                 />
                 <p className="text-xs text-muted-foreground mt-1.5 min-h-[2.5rem] leading-tight">
                   {listDisplayMode === 'alles'
-                    ? 'Alle Einträge inkl. „Immer gepackt"'
-                    : 'Ohne „Immer gepackt" (Wohnwagen-Dauerausstattung)'}
+                    ? 'Wohnwagen-Dauerausstattung („Immer gepackt“) mit anzeigen'
+                    : 'Dauerausstattung ausblenden – Abreise-Einträge erscheinen automatisch am Abreisetag'}
                 </p>
               </div>
 

@@ -1200,8 +1200,8 @@ export default function UrlaubDetailPage() {
                     <p className="text-sm text-muted-foreground">
                       Standardansicht:{' '}
                       {vacation.packliste_default_ansicht === 'alles'
-                        ? 'Alles anzeigen'
-                        : 'Nur Packliste'}
+                        ? 'Mit Dauerausstattung'
+                        : 'Ohne Dauerausstattung'}
                     </p>
                     <Button
                       variant="outline"

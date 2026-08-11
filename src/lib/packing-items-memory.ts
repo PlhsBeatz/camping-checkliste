@@ -10,6 +10,9 @@ const itemsByVacation = new Map<string, PackingItem[]>()
  * verwirft und beim Zurückkehren neu startet. IndexedDB wäre verfügbar, ist aber asynchron
  * und führt zu einem kurzen leeren „Lädt…"-Moment. localStorage ist synchron und erlaubt
  * daher beim allerersten Render sofort die letzte Liste – kein sichtbarer Neuaufbau.
+ *
+ * Leere Listen werden explizit gelöscht (Map + localStorage), damit das Löschen des
+ * letzten Eintrags nach Reload nicht durch stale Cache wiederbelebt wird.
  */
 const LS_PREFIX = 'packlist:items:'
 const LS_INDEX_KEY = 'packlist:items:__index__'
@@ -48,6 +51,16 @@ function touchIndex(vacationId: string): void {
   }
 }
 
+function removeFromIndex(vacationId: string): void {
+  if (!lsAvailable()) return
+  try {
+    const next = readIndex().filter((id) => id !== vacationId)
+    window.localStorage.setItem(LS_INDEX_KEY, JSON.stringify(next))
+  } catch {
+    // ignore
+  }
+}
+
 function readFromLocalStorage(vacationId: string): PackingItem[] | undefined {
   if (!lsAvailable()) return undefined
   try {
@@ -73,6 +86,16 @@ function writeToLocalStorage(vacationId: string, items: PackingItem[]): void {
   }
 }
 
+function clearFromLocalStorage(vacationId: string): void {
+  if (!lsAvailable()) return
+  try {
+    window.localStorage.removeItem(LS_PREFIX + vacationId)
+    removeFromIndex(vacationId)
+  } catch {
+    // ignore
+  }
+}
+
 export function getPackingItemsMemory(vacationId: string): PackingItem[] | undefined {
   const mem = itemsByVacation.get(vacationId)
   if (mem && mem.length > 0) return mem
@@ -82,7 +105,9 @@ export function getPackingItemsMemory(vacationId: string): PackingItem[] | undef
     itemsByVacation.set(vacationId, persisted)
     return persisted
   }
-  return mem
+  // Explizit geleerte Liste (letzter Eintrag gelöscht): nicht aus LS wiederbeleben.
+  if (mem && mem.length === 0) return mem
+  return undefined
 }
 
 export function setPackingItemsMemory(
@@ -92,7 +117,11 @@ export function setPackingItemsMemory(
   if (items.length > 0) {
     itemsByVacation.set(vacationId, items)
     writeToLocalStorage(vacationId, items)
+    return
   }
+  // Leere Liste: stale Cache entfernen, aber leeres Array merken (Remount/Reload-Schutz).
+  itemsByVacation.set(vacationId, [])
+  clearFromLocalStorage(vacationId)
 }
 
 /** Memory zuerst, dann IndexedDB – für Offline ohne Netzwerk-Request. */
@@ -101,6 +130,8 @@ export async function loadLocalPackingItems(
 ): Promise<PackingItem[] | null> {
   const mem = getPackingItemsMemory(vacationId)
   if (mem && mem.length > 0) return mem
+  // Explizit leer gehalten – nicht IndexedDB-Stale als Wahrheit nehmen.
+  if (mem && mem.length === 0) return []
   const cached = await getCachedPackingItems(vacationId)
   if (cached.length > 0) {
     setPackingItemsMemory(vacationId, cached)
@@ -114,7 +145,5 @@ export function snapshotPackingItemsToMemory(
   vacationId: string,
   items: PackingItem[]
 ): void {
-  if (items.length > 0) {
-    setPackingItemsMemory(vacationId, items)
-  }
+  setPackingItemsMemory(vacationId, items)
 }

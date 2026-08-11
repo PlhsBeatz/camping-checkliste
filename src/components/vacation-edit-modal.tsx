@@ -1248,7 +1248,7 @@ export function VacationEditModal({
               Standardansicht der Packliste
             </Label>
             <p className="text-xs text-muted-foreground mt-0.5 mb-2">
-              Welche Ansicht beim Öffnen der Packliste standardmäßig angezeigt wird.
+              Ob Dauerausstattung („Immer gepackt“) beim Öffnen der Packliste standardmäßig mit angezeigt wird.
             </p>
             <div className="segment-toggle-track">
               <button
@@ -1266,7 +1266,7 @@ export function VacationEditModal({
                     : 'text-muted-foreground hover:text-foreground'
                 )}
               >
-                Packliste
+                Ohne Dauerausstattung
               </button>
               <button
                 type="button"
@@ -1283,7 +1283,7 @@ export function VacationEditModal({
                     : 'text-muted-foreground hover:text-foreground'
                 )}
               >
-                Alles
+                Mit Dauerausstattung
               </button>
             </div>
           </div>

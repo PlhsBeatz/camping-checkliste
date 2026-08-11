@@ -61,6 +61,7 @@ import {
 import {
   getForeignGruppeNameForWarning,
   getVacationGruppenMap,
+  getVacationGruppeIds,
   hasMultipleVacationGroups,
   isAdminForeignWarnSuppressed,
   shouldWarnAdminForeignGruppe,
@@ -71,6 +72,10 @@ import {
   type PauschalGruppenFilter,
   type PauschalGruppenAssignmentPayload,
 } from '@/lib/pauschal-gruppen'
+import {
+  buildPacklistSearchHits,
+  type PacklistSearchHit,
+} from '@/lib/packlist-visibility'
 import { AdminFremdeGruppeWarningDialog } from '@/components/admin-fremde-gruppe-warning-dialog'
 import { ReiseRastPanel } from '@/components/reise-rast-panel'
 import { useReiseModus } from '@/hooks/use-reise-modus'
@@ -276,6 +281,8 @@ function HomeContent() {
   const [listDisplayMode, setListDisplayMode] = useState<'alles' | 'packliste'>(
     defaultPacklistUi.listDisplayMode
   )
+  const [packlistSearchQuery, setPacklistSearchQuery] = useState('')
+  const [packlistFocusItemId, setPacklistFocusItemId] = useState<string | null>(null)
   const [pauschalGruppenFilter, setPauschalGruppenFilter] = useState<PauschalGruppenFilter>(
     defaultPacklistUi.pauschalGruppenFilter
   )
@@ -498,13 +505,16 @@ function HomeContent() {
       if (!selectedVacationId) return
       packingListReadyVacationIdRef.current = selectedVacationId
       setPackingItems((prev) => {
-        if (next.length === 0 && prev.length > 0) return prev
+        // Leere Antwort während eigener laufender Mutation nicht übernehmen (Race).
+        if (next.length === 0 && prev.length > 0 && pendingMutationsRef.current > 0) {
+          return prev
+        }
         if (packingItemsEqual(prev, next)) return prev
+        setPackingItemsMemory(selectedVacationId, next)
         if (next.length > 0) {
           packingHadContentRef.current = true
-          setPackingItemsMemory(selectedVacationId, next)
-          lastPackingFetchAtRef.current = Date.now()
         }
+        lastPackingFetchAtRef.current = Date.now()
         return next
       })
     },
@@ -758,7 +768,7 @@ function HomeContent() {
     [applyPackingItemsFromFetch, preservePackingSnapshot]
   )
 
-  // Fetch Packing Items: offline nur lokal; online mit Cache-Fallback; nie [] über bestehende Liste
+  // Fetch Packing Items: offline nur lokal; online Server inkl. leerer Liste als Wahrheit
   const fetchPackingItemsNow = useCallback(async () => {
     if (!selectedVacationId) return
     const vacationId = selectedVacationId
@@ -770,12 +780,9 @@ function HomeContent() {
         return
       }
 
-      const { data } = await fetchAndCache<PackingItem[]>(
+      const { data, fromCache, ok } = await fetchAndCache<PackingItem[]>(
         `/api/packing-items?vacationId=${vacationId}`,
-        (items) =>
-          items.length > 0
-            ? cachePackingItems(vacationId, items)
-            : Promise.resolve(),
+        (items) => cachePackingItems(vacationId, items),
         () => getCachedPackingItems(vacationId),
         { cache: 'no-store' }
       )
@@ -783,6 +790,12 @@ function HomeContent() {
 
       if (typeof navigator !== 'undefined' && !navigator.onLine) {
         await restorePackingFromLocal(vacationId, myVersion)
+        return
+      }
+
+      // Autoritative Server-Antwort (auch leere Packliste nach Löschen des letzten Eintrags)
+      if (ok && data !== null && !fromCache) {
+        applyPackingItemsFromFetch(data)
         return
       }
 
@@ -878,6 +891,12 @@ function HomeContent() {
       packingHadContentRef.current = true
       setPackingItemsMemory(selectedVacationId, packingItems)
       void cachePackingItems(selectedVacationId, packingItems)
+      return
+    }
+    // Nach bekanntem Inhalt: leere Liste auch lokal persistieren (letzter Eintrag gelöscht)
+    if (packingHadContentRef.current) {
+      setPackingItemsMemory(selectedVacationId, [])
+      void cachePackingItems(selectedVacationId, [])
     }
   }, [selectedVacationId, packingItems])
 
@@ -1235,6 +1254,72 @@ function HomeContent() {
     }
   }, [selectedVacationId, vacations])
 
+
+  const abreiseDatumForPacklist = useMemo(
+    () => currentVacation?.abfahrtdatum?.trim() || currentVacation?.startdatum || null,
+    [currentVacation]
+  )
+
+  const packlistSearchHits = useMemo(() => {
+    if (packlistSearchQuery.trim().length < 1) return [] as PacklistSearchHit[]
+    let alleScopeIds: Set<string> | null | undefined = undefined
+    if (selectedPackProfile === null) {
+      if (
+        packProfileScopeMitreisende.length >= vacationMitreisende.length &&
+        vacationMitreisende.length > 0
+      ) {
+        alleScopeIds = null
+      } else {
+        alleScopeIds = packProfileScopeIdSet
+      }
+    }
+    const scopeMitreisende =
+      selectedPackProfile === null
+        ? (packProfileScopeMitreisende.length > 0 ? packProfileScopeMitreisende : vacationMitreisende)
+        : vacationMitreisende
+    return buildPacklistSearchHits(packingItems, packlistSearchQuery, {
+      selectedProfile: selectedPackProfile,
+      listDisplayMode,
+      abreiseDatum: abreiseDatumForPacklist,
+      hidePackedItems,
+      canConfirmVorgemerkt: canSelectOtherProfiles,
+      allVacationGruppeIds: getVacationGruppeIds(vacationMitreisende),
+      scope: {
+        canEditPauschalEntries,
+        vacationMitreisende: scopeMitreisende,
+        alleScopeIds,
+        pauschalGruppenFilter,
+        multiGroupActive: multiGroupVacation,
+        ownGruppeId,
+      },
+    })
+  }, [
+    packingItems,
+    packlistSearchQuery,
+    selectedPackProfile,
+    listDisplayMode,
+    abreiseDatumForPacklist,
+    hidePackedItems,
+    canSelectOtherProfiles,
+    vacationMitreisende,
+    packProfileScopeMitreisende,
+    packProfileScopeIdSet,
+    canEditPauschalEntries,
+    pauschalGruppenFilter,
+    multiGroupVacation,
+    ownGruppeId,
+  ])
+
+  const handlePacklistSearchHitSelect = useCallback((hit: PacklistSearchHit) => {
+    if (!hit.visible) return
+    setPacklistFocusItemId(hit.id)
+    setShowPackSettings(false)
+  }, [])
+
+  const handlePacklistFocusItemHandled = useCallback(() => {
+    setPacklistFocusItemId(null)
+  }, [])
+
   const [reisePolylines, setReisePolylines] = useState<Map<string, SegmentRoutePolylines>>(
     () => new Map()
   )
@@ -1461,6 +1546,8 @@ function HomeContent() {
     } else {
       setActiveMainCategory('')
     }
+    setPacklistSearchQuery('')
+    setPacklistFocusItemId(null)
   }, [selectedVacationId, vacations, canEditPauschalEntries])
 
   /** Nach Packlisten-Laden: Standard-Filter + erster Tab (nicht aus Storage). */
@@ -3447,7 +3534,10 @@ function HomeContent() {
                   visiblePackProfileMitreisende={packProfileScopeMitreisende}
                   ownGruppeId={ownGruppeId}
                   packProfileScopeMitreisende={packProfileScopeMitreisende}
-                  abreiseDatum={currentVacation?.abfahrtdatum?.trim() || currentVacation?.startdatum || null}
+                  abreiseDatum={abreiseDatumForPacklist}
+                  searchQuery={packlistSearchQuery}
+                  focusItemId={packlistFocusItemId}
+                  onFocusItemHandled={handlePacklistFocusItemHandled}
                   onScrollContextChange={handleScrollContextChange}
                   canSelectOtherProfiles={canSelectOtherProfiles}
                   activeMainCategory={activeMainCategory}
@@ -3796,6 +3886,10 @@ function HomeContent() {
         pauschalGruppenFilter={pauschalGruppenFilter}
         onPauschalGruppenFilterChange={handlePauschalGruppenFilterChange}
         unassignedPauschalCount={unassignedPauschalCount}
+        searchQuery={packlistSearchQuery}
+        onSearchQueryChange={setPacklistSearchQuery}
+        searchHits={packlistSearchHits}
+        onSearchHitSelect={handlePacklistSearchHitSelect}
       />
 
       {/* FAB: Gegenstände hinzufügen – Admin/Erwachsene (Kinder: nur abhaken, nicht Struktur ändern) */}
