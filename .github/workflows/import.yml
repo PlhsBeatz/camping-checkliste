@@ -1,4 +1,4 @@
-name: Import Issues
+name: Import Issues (Resume)
 on: workflow_dispatch
 jobs:
   import:
@@ -8,7 +8,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      - name: Import via Python
+      - name: Import via Python (Fortsetzung)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -17,11 +17,27 @@ jobs:
           import subprocess
           import time
 
-          # utf-8-sig filtert eventuelle unsichtbare Zeichen am Dateianfang heraus
+          # Zuweisung der Unterkategorien zu deinen 5 Haupt-Labels
+          label_map = {
+              "scope: campingplätze": "scope: urlaube",
+              "scope: rastplätze": "scope: urlaube",
+              "scope: transportmittel": "scope: urlaube",
+              "scope: checklisten": "scope: packliste",
+              "scope: mein-profil": "scope: config",
+              "scope: konfiguration": "scope: config",
+              "scope: integrationen": "scope: config",
+              "scope: integration": "scope: config",
+              "scope: kategorien": "scope: config",
+              "scope: tags": "scope: config",
+              "scope: mitreisende": "scope: config",
+              "scope: datensicherung": "scope: config"
+          }
+
           with open('camping_app_issues.json', 'r', encoding='utf-8-sig') as f:
               issues = json.load(f)
 
-          for i, issue in enumerate(issues, 1):
+          # Startet exakt bei Index 36 (also dem 37. Issue in der Liste)
+          for i, issue in enumerate(issues[36:], 37):
               print(f"[{i}/{len(issues)}] Erstelle: {issue['title'][:50]}...")
               
               cmd = [
@@ -30,12 +46,13 @@ jobs:
                   '--body', issue['body']
               ]
               
-              # Labels einzeln anhängen
               for label in issue['labels']:
-                  cmd.extend(['--label', label])
+                  # Tauscht das Label aus, falls es im Dictionary steht
+                  mapped_label = label_map.get(label, label)
+                  cmd.extend(['--label', mapped_label])
                   
               subprocess.run(cmd, check=True)
-              time.sleep(1.5)  # Kurze Pause für das GitHub API-Limit
+              time.sleep(1.5)
           EOF
           
           python import.py
