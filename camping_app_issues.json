@@ -1,0 +1,1474 @@
+[
+  {
+    "title": "Status in Navigation \"Online und Synchronisiert\" entfernen oder funkti...",
+    "body": "Status in Navigation \"Online und Synchronisiert\" entfernen oder funktional ausprägen",
+    "labels": [
+      "type: bug",
+      "scope: allgemein"
+    ]
+  },
+  {
+    "title": "Login prüfen: Mehrere Nutzer können sich mit demselben Kennwort einlog...",
+    "body": "Login prüfen: Mehrere Nutzer können sich mit demselben Kennwort einloggen, obwohl der Hash ein anderer ist. Mein altes Kennwort funktioniert nicht mehr.",
+    "labels": [
+      "type: bug",
+      "scope: allgemein"
+    ]
+  },
+  {
+    "title": "Zurück Button vom Smartphone schließt Drawer nicht mehr",
+    "body": "Zurück Button vom Smartphone schließt Drawer nicht mehr",
+    "labels": [
+      "type: bug",
+      "scope: allgemein"
+    ]
+  },
+  {
+    "title": "Rückgängig funktioniert bei pauschalen Einträgen nicht",
+    "body": "Rückgängig funktioniert bei pauschalen Einträgen nicht",
+    "labels": [
+      "type: bug",
+      "scope: packliste"
+    ]
+  },
+  {
+    "title": "Schaltfläche \"Automatisch generieren\" nur wenn Liste leer ist anzeigen",
+    "body": "Schaltfläche \"Automatisch generieren\" nur wenn Liste leer ist anzeigen",
+    "labels": [
+      "type: bug",
+      "scope: packliste"
+    ]
+  },
+  {
+    "title": "Einbeziehung der Stati \"Immer gepackt\" und \"Fest verbaut\" in die Logik...",
+    "body": "Einbeziehung der Stati \"Immer gepackt\" und \"Fest verbaut\" in die Logik der Packliste (Filterung, Fortschritt, Gewicht)",
+    "labels": [
+      "type: bug",
+      "scope: packliste"
+    ]
+  },
+  {
+    "title": "Anzahl von einzelnen Einträgen in Packliste individualisieren (ggf. so...",
+    "body": "Anzahl von einzelnen Einträgen in Packliste individualisieren (ggf. sogar pro Person)",
+    "labels": [
+      "type: bug",
+      "scope: packliste"
+    ]
+  },
+  {
+    "title": "Automatische Generierung: Keine Zuordnung zu Personen bei Individuell",
+    "body": "Automatische Generierung: Keine Zuordnung zu Personen bei Individuell",
+    "labels": [
+      "type: bug",
+      "scope: packliste"
+    ]
+  },
+  {
+    "title": "Transport kann nur für pauschal oder Alle geändert werden, nicht aus e...",
+    "body": "Transport kann nur für pauschal oder Alle geändert werden, nicht aus einem Packprofil heraus",
+    "labels": [
+      "type: bug",
+      "scope: packliste"
+    ]
+  },
+  {
+    "title": "Im Packprofil Alle: Wenn alle nicht gepackten vorgemerkt sind, wird ei...",
+    "body": "Im Packprofil Alle: Wenn alle nicht gepackten vorgemerkt sind, wird ein grüner Haken angezeigt und es kann zurückgesetzt werden. Stattdessen sollte ein grauer Kasten angezeigt werden (es sind ja nicht alle gepackt) und die Option, noch nicht gepackten (vorgemerkt ist nicht gepackt) abzuhaken. Beispiel: Melli gepackt, Luisa vorgemerkt und keine weiteren Personen zugeordnet.",
+    "labels": [
+      "type: bug",
+      "scope: packliste"
+    ]
+  },
+  {
+    "title": "Beim Hinzufügen und Packprofil einer Person ausgewählt: Es werden paus...",
+    "body": "Beim Hinzufügen und Packprofil einer Person ausgewählt: Es werden pauschale Einträge angezeigt, die schon auf der Packliste stehen",
+    "labels": [
+      "type: bug",
+      "scope: packliste"
+    ]
+  },
+  {
+    "title": "Die Liste der Einträge zum Hinzufügen enthält Einträge, auf die man ni...",
+    "body": "Die Liste der Einträge zum Hinzufügen enthält Einträge, auf die man nicht berechtigt ist (Pauschale Einträge)",
+    "labels": [
+      "type: bug",
+      "scope: packliste"
+    ]
+  },
+  {
+    "title": "Pauschale Einträge können nicht gelöscht werden, wenn man in einem Per...",
+    "body": "Pauschale Einträge können nicht gelöscht werden, wenn man in einem Personenprofil ist. Korrigieren, wenn die Person berechtigt ist, pauschale Einträge zu bearbeiten.",
+    "labels": [
+      "type: bug",
+      "scope: packliste"
+    ]
+  },
+  {
+    "title": "Warnung beim Löschen auf dem Profil \"Alle\", wenn bereits für eine Pers...",
+    "body": "Warnung beim Löschen auf dem Profil \"Alle\", wenn bereits für eine Person gepackt oder vorgemerkt.",
+    "labels": [
+      "type: bug",
+      "scope: packliste"
+    ]
+  },
+  {
+    "title": "Packliste funktioniert im Offline Betrieb nicht mehr. Es steht dort \"L...",
+    "body": "Packliste funktioniert im Offline Betrieb nicht mehr. Es steht dort \"Lädt...\"",
+    "labels": [
+      "type: bug",
+      "scope: packliste"
+    ]
+  },
+  {
+    "title": "Packprofil \"Alle\" und Rolle Admin-Systemadmin bei personenbezogenen Ei...",
+    "body": "Packprofil \"Alle\" und Rolle Admin-Systemadmin bei personenbezogenen Einträgen",
+    "labels": [
+      "type: bug",
+      "scope: packliste"
+    ]
+  },
+  {
+    "title": "Grundsatz: Diese Rollen können zwar Einträge von Personen anderer Grup...",
+    "body": "Grundsatz: Diese Rollen können zwar Einträge von Personen anderer Gruppen bearbeiten, sollen dies aber explizit nur aus dem Personenprofil heraus (Anlegen, Bearbeiten, Löschen, Abhaken). In erster Linie sind sie Mitglieder eines Haushalts.",
+    "labels": [
+      "type: bug",
+      "scope: packliste"
+    ]
+  },
+  {
+    "title": "Dialog Alle abhaken/löschen zeigt alle Mitreisenden -> reduzieren auf ...",
+    "body": "Dialog Alle abhaken/löschen zeigt alle Mitreisenden -> reduzieren auf eigene Gruppe",
+    "labels": [
+      "type: bug",
+      "scope: packliste"
+    ]
+  },
+  {
+    "title": "Im Fortschrittsbalken nur Personenprofile der eigenen Gruppe berücksic...",
+    "body": "Im Fortschrittsbalken nur Personenprofile der eigenen Gruppe berücksichtigen",
+    "labels": [
+      "type: bug",
+      "scope: packliste"
+    ]
+  },
+  {
+    "title": "Auswahl der Tabs funktioniert nicht mehr, beim Neuladen (App neu gelad...",
+    "body": "Auswahl der Tabs funktioniert nicht mehr, beim Neuladen (App neu geladen, Urlaub neu gewählt, …). Es soll immer der erste sichtbare Tab geladen werden. Wenn manuell auf einen Tab gewechselt wurde, soll dieser beibehalten werden, sofort dieser sichtbar bleibt.",
+    "labels": [
+      "type: bug",
+      "scope: packliste"
+    ]
+  },
+  {
+    "title": "Urlaub mit mehreren Haushalten: Bei der Auswahl eines Packprofil eines...",
+    "body": "Urlaub mit mehreren Haushalten: Bei der Auswahl eines Packprofil eines anderen Haushalt  und Filter auf \"Meine\" werden trotz Einträge angezeigt, die nur meinem Haushalt zugeordnet sind. Die Ansicht sollte die Einträge anzeigen, die der Gruppe des Person zugeordnet sind. Der Filter \"Meine\" soll nur Einträge zeigen, die der Gruppe der Person des gewählten Packprofil zugeordnet sind.",
+    "labels": [
+      "type: bug",
+      "scope: packliste"
+    ]
+  },
+  {
+    "title": "Transport oder Bemerkungen ändern geht nur, wenn man gleichzeitig die ...",
+    "body": "Transport oder Bemerkungen ändern geht nur, wenn man gleichzeitig die Anzahl ändert.",
+    "labels": [
+      "type: bug",
+      "scope: packliste"
+    ]
+  },
+  {
+    "title": "Bei Urlauben mit nur einer Reisegruppe: Pauschale Einträge werden nich...",
+    "body": "Bei Urlauben mit nur einer Reisegruppe: Pauschale Einträge werden nicht mehr ausgeblendet (erst seit Integration des Reisegruppen-Feature)",
+    "labels": [
+      "type: bug",
+      "scope: packliste"
+    ]
+  },
+  {
+    "title": "Dialog Neu: Am Smartphone zu viel Platz nach unten? Lässt sich wegscro...",
+    "body": "Dialog Neu: Am Smartphone zu viel Platz nach unten? Lässt sich wegscrollen",
+    "labels": [
+      "type: bug",
+      "scope: urlaube"
+    ]
+  },
+  {
+    "title": "Filter Status: Einträge nicht mit Optionen der Gegenstände konsistent",
+    "body": "Filter Status: Einträge nicht mit Optionen der Gegenstände konsistent",
+    "labels": [
+      "type: bug",
+      "scope: ausrüstung"
+    ]
+  },
+  {
+    "title": "Ändern der Tags wird erst nach Reload sichtbar",
+    "body": "Ändern der Tags wird erst nach Reload sichtbar",
+    "labels": [
+      "type: bug",
+      "scope: ausrüstung"
+    ]
+  },
+  {
+    "title": "Löschen von Tags an einem Gegenstand nicht möglich",
+    "body": "Löschen von Tags an einem Gegenstand nicht möglich",
+    "labels": [
+      "type: bug",
+      "scope: ausrüstung"
+    ]
+  },
+  {
+    "title": "Hauptüberschrift fehlt in Tabelle",
+    "body": "Hauptüberschrift fehlt in Tabelle",
+    "labels": [
+      "type: bug",
+      "scope: ausrüstung"
+    ]
+  },
+  {
+    "title": "0 vor dem Titel, wenn nicht Standard",
+    "body": "0 vor dem Titel, wenn nicht Standard",
+    "labels": [
+      "type: bug",
+      "scope: ausrüstung"
+    ]
+  },
+  {
+    "title": "Standard beim Anlegen neuer Gegenstände ändern: Status auf \"Normal\"",
+    "body": "Standard beim Anlegen neuer Gegenstände ändern: Status auf \"Normal\"",
+    "labels": [
+      "type: bug",
+      "scope: ausrüstung"
+    ]
+  },
+  {
+    "title": "Geisterzeilen als Überschrift (Doppelanzeige)",
+    "body": "Geisterzeilen als Überschrift (Doppelanzeige)",
+    "labels": [
+      "type: bug",
+      "scope: ausrüstung"
+    ]
+  },
+  {
+    "title": "Leere Zeilen bei gefilterter Ansicht",
+    "body": "Leere Zeilen bei gefilterter Ansicht",
+    "labels": [
+      "type: bug",
+      "scope: ausrüstung"
+    ]
+  },
+  {
+    "title": "Änderungen werden manchmal nicht gespeichert",
+    "body": "Änderungen werden manchmal nicht gespeichert",
+    "labels": [
+      "type: bug",
+      "scope: ausrüstung"
+    ]
+  },
+  {
+    "title": "Änderungen werden nicht immer übernommen",
+    "body": "Änderungen werden nicht immer übernommen",
+    "labels": [
+      "type: bug",
+      "scope: ausrüstung"
+    ]
+  },
+  {
+    "title": "Beim Klick auf Drei-Punkte-Menü oder Link Symbol: nur am PC: Leiste Sp...",
+    "body": "Beim Klick auf Drei-Punkte-Menü oder Link Symbol: nur am PC: Leiste Springt etwas Header verschwindet.",
+    "labels": [
+      "type: bug",
+      "scope: ausrüstung"
+    ]
+  },
+  {
+    "title": "Links nicht sichtbar am Smartphone",
+    "body": "Links nicht sichtbar am Smartphone",
+    "labels": [
+      "type: bug",
+      "scope: ausrüstung"
+    ]
+  },
+  {
+    "title": "Seite lässt sich auf dem Smartphone nicht scrollen",
+    "body": "Seite lässt sich auf dem Smartphone nicht scrollen",
+    "labels": [
+      "type: bug",
+      "scope: campingplätze"
+    ]
+  },
+  {
+    "title": "Neuer Platz: Autocomplete findet TerSpergelt nicht",
+    "body": "Neuer Platz: Autocomplete findet TerSpergelt nicht",
+    "labels": [
+      "type: bug",
+      "scope: campingplätze"
+    ]
+  },
+  {
+    "title": "Fallback: Eingabe/Import über Google Maps link. Anzeige, wenn keine Su...",
+    "body": "Fallback: Eingabe/Import über Google Maps link. Anzeige, wenn keine Suchergebnisse gefunden werden.",
+    "labels": [
+      "type: bug",
+      "scope: campingplätze"
+    ]
+  },
+  {
+    "title": "Für manche Einträge funktioniert das nicht, z.B. Union Lido, Fehler be...",
+    "body": "Für manche Einträge funktioniert das nicht, z.B. Union Lido, Fehler bei Google Maps",
+    "labels": [
+      "type: bug",
+      "scope: campingplätze"
+    ]
+  },
+  {
+    "title": "Erkennung, wenn man auf einem Rastplatz ist, funktioniert nicht. Es wi...",
+    "body": "Erkennung, wenn man auf einem Rastplatz ist, funktioniert nicht. Es wird kein Toast mehr angezeigt.",
+    "labels": [
+      "type: bug",
+      "scope: rastplätze"
+    ]
+  },
+  {
+    "title": "Ein Rastplatz wird auf einem Streckenabschnitt doppelt angezeigt. Sieh...",
+    "body": "Ein Rastplatz wird auf einem Streckenabschnitt doppelt angezeigt. Siehe Screenshot.",
+    "labels": [
+      "type: bug",
+      "scope: rastplätze"
+    ]
+  },
+  {
+    "title": "Seite zu breit (Adress-Eingabefeld)",
+    "body": "Seite zu breit (Adress-Eingabefeld)",
+    "labels": [
+      "type: bug",
+      "scope: mein-profil"
+    ]
+  },
+  {
+    "title": "Webhoock: Bei Packlistenänderung kommt der Fortschritt nicht in Homeas...",
+    "body": "Webhoock: Bei Packlistenänderung kommt der Fortschritt nicht in Homeassistent an",
+    "labels": [
+      "type: bug",
+      "scope: integrationen"
+    ]
+  },
+  {
+    "title": "Tage bis zur Abreise - Zeitzone prüfen, um 00:05 liefert die API den f...",
+    "body": "Tage bis zur Abreise - Zeitzone prüfen, um 00:05 liefert die API den falschen Wert.",
+    "labels": [
+      "type: bug",
+      "scope: integrationen"
+    ]
+  },
+  {
+    "title": "Fehlermeldung bei API Vorschau: Berechtigung System Admin erforderlich...",
+    "body": "Fehlermeldung bei API Vorschau: Berechtigung System Admin erforderlich, obwohl ich als System Admin eingeloggt bin.",
+    "labels": [
+      "type: bug",
+      "scope: integrationen"
+    ]
+  },
+  {
+    "title": "Anzeige \"Noch keine aktiven Tokens.\", obwohl es einen Token gibt, Bere...",
+    "body": "Anzeige \"Noch keine aktiven Tokens.\", obwohl es einen Token gibt, Berechtigungsfehler, s.o.?",
+    "labels": [
+      "type: bug",
+      "scope: integrationen"
+    ]
+  },
+  {
+    "title": "Header wird ausgeblendet, wenn man Drop-down öffnet.",
+    "body": "Header wird ausgeblendet, wenn man Drop-down öffnet.",
+    "labels": [
+      "type: bug",
+      "scope: integrationen"
+    ]
+  },
+  {
+    "title": "Header einheitlicher Gestalten (z.B. weiß) - Designvorschläge recherch...",
+    "body": "Header einheitlicher Gestalten (z.B. weiß) - Designvorschläge recherchieren oder erstellen lassen.",
+    "labels": [
+      "type: enhancement",
+      "scope: allgemein"
+    ]
+  },
+  {
+    "title": "Logo entwickeln und überall einbinden.",
+    "body": "Logo entwickeln und überall einbinden.",
+    "labels": [
+      "type: enhancement",
+      "scope: allgemein"
+    ]
+  },
+  {
+    "title": "Kein Scrolling der Seite auf Navigationsleiste",
+    "body": "Kein Scrolling der Seite auf Navigationsleiste",
+    "labels": [
+      "type: enhancement",
+      "scope: allgemein"
+    ]
+  },
+  {
+    "title": "PWA aktivieren (Volle App Funktion und Offline-Funktionalität (Prüfen ...",
+    "body": "PWA aktivieren (Volle App Funktion und Offline-Funktionalität (Prüfen und Alternativen abwägen: @ducanh2912/next-pwa)",
+    "labels": [
+      "type: enhancement",
+      "scope: allgemein"
+    ]
+  },
+  {
+    "title": "Updates erkennen und bereitstellen (Über Button), Versionsnummern manu...",
+    "body": "Updates erkennen und bereitstellen (Über Button), Versionsnummern manuell gesteuert oder automatisch bei jedem Build)",
+    "labels": [
+      "type: enhancement",
+      "scope: allgemein"
+    ]
+  },
+  {
+    "title": "Menü: Aktuelle Packliste in Packliste umbenennen",
+    "body": "Menü: Aktuelle Packliste in Packliste umbenennen",
+    "labels": [
+      "type: enhancement",
+      "scope: allgemein"
+    ]
+  },
+  {
+    "title": "Dreipunkte-Menü soll ausgeblendet werden, wenn man auf Bearbeiten geht...",
+    "body": "Dreipunkte-Menü soll ausgeblendet werden, wenn man auf Bearbeiten geht.",
+    "labels": [
+      "type: enhancement",
+      "scope: allgemein"
+    ]
+  },
+  {
+    "title": "Drawer am Handy: Zurück Button vom Handy soll nur den Drawer schließen...",
+    "body": "Drawer am Handy: Zurück Button vom Handy soll nur den Drawer schließen.",
+    "labels": [
+      "type: enhancement",
+      "scope: allgemein"
+    ]
+  },
+  {
+    "title": "In allen Dialogen den gelben Stern durch orange ersetzen",
+    "body": "In allen Dialogen den gelben Stern durch orange ersetzen",
+    "labels": [
+      "type: enhancement",
+      "scope: allgemein"
+    ]
+  },
+  {
+    "title": "Funktion zum Zurücksetzen des Kennworts für Admins. Dabei soll ein zuf...",
+    "body": "Funktion zum Zurücksetzen des Kennworts für Admins. Dabei soll ein zufälliges Kennwort generiert werden, dass man mit dem Nutzer teilen kann (Copy-Funktion). Es muss die Option geben, dass der Nutzer dessen Kennwort man zurücksetzt nach der nächsten Anmeldung sein Kennwort ändern muss.",
+    "labels": [
+      "type: enhancement",
+      "scope: allgemein"
+    ]
+  },
+  {
+    "title": "Dialog zum Ändern des Kennworts. Gesamtdialog für Profil aufbauen, ggf...",
+    "body": "Dialog zum Ändern des Kennworts. Gesamtdialog für Profil aufbauen, ggf. Kommen später mehr Erweiterungen dazu.",
+    "labels": [
+      "type: enhancement",
+      "scope: allgemein"
+    ]
+  },
+  {
+    "title": "Duration Objects Limit überschritten: Grund ist die dauerhaft geöffnet...",
+    "body": "Duration Objects Limit überschritten: Grund ist die dauerhaft geöffnete WebSocket, die ComputeTime verbraucht, solange sie geöffnet ist. Lösung: Hibernate nutzen.",
+    "labels": [
+      "type: enhancement",
+      "scope: allgemein"
+    ]
+  },
+  {
+    "title": "Potenzielle Ausbaustufe: Sync auf Diff umstellen, anstatt die gesamte ...",
+    "body": "Potenzielle Ausbaustufe: Sync auf Diff umstellen, anstatt die gesamte Liste zu pushen.",
+    "labels": [
+      "type: enhancement",
+      "scope: allgemein"
+    ]
+  },
+  {
+    "title": "Alle Seiten Offline verfügbar, insb. Sonnenausrichtung",
+    "body": "Alle Seiten Offline verfügbar, insb. Sonnenausrichtung",
+    "labels": [
+      "type: enhancement",
+      "scope: allgemein"
+    ]
+  },
+  {
+    "title": "Verwaltung von Ablauf-Daten, z.B. Gasschlauch, ...",
+    "body": "Verwaltung von Ablauf-Daten, z.B. Gasschlauch, ...",
+    "labels": [
+      "type: enhancement",
+      "scope: allgemein"
+    ]
+  },
+  {
+    "title": "Bewertung nach dem Urlaub: Was wurde nicht benötigt?",
+    "body": "Bewertung nach dem Urlaub: Was wurde nicht benötigt?",
+    "labels": [
+      "type: enhancement",
+      "scope: allgemein"
+    ]
+  },
+  {
+    "title": "Dark Mode",
+    "body": "Dark Mode",
+    "labels": [
+      "type: enhancement",
+      "scope: allgemein"
+    ]
+  },
+  {
+    "title": "Export/Import von Packlisten (PDF, Excel, JSON)",
+    "body": "Export/Import von Packlisten (PDF, Excel, JSON)",
+    "labels": [
+      "type: enhancement",
+      "scope: allgemein"
+    ]
+  },
+  {
+    "title": "Name auf Login-Screen in weißer Schrift nicht lesbar",
+    "body": "Name auf Login-Screen in weißer Schrift nicht lesbar",
+    "labels": [
+      "type: enhancement",
+      "scope: allgemein"
+    ]
+  },
+  {
+    "title": "Webhook für Smart Home – Wenn 100% gepackt, dann Webhook an Home Assis...",
+    "body": "Webhook für Smart Home – Wenn 100% gepackt, dann Webhook an Home Assistant => Urlaubsmodus",
+    "labels": [
+      "type: enhancement",
+      "scope: allgemein"
+    ]
+  },
+  {
+    "title": "Neue Rolle \"System Admin\". Admins können Personen einladen und die Kon...",
+    "body": "Neue Rolle \"System Admin\". Admins können Personen einladen und die Konfiguration (Stammdaten) bearbeiten. System Admin kann Integrationen bearbeiten und die Datensicherung verwalten. Siehe auch \"Mitreisende gruppieren\"",
+    "labels": [
+      "type: enhancement",
+      "scope: allgemein"
+    ]
+  },
+  {
+    "title": "Erkennung Packprofil teilweise langsam",
+    "body": "Erkennung Packprofil teilweise langsam",
+    "labels": [
+      "type: enhancement",
+      "scope: allgemein"
+    ]
+  },
+  {
+    "title": "Merken von guten Rastplätzen, direkt vor Ort mit Standort-Erkennung un...",
+    "body": "Merken von guten Rastplätzen, direkt vor Ort mit Standort-Erkennung und Google Maps Anbindung",
+    "labels": [
+      "type: enhancement",
+      "scope: allgemein"
+    ]
+  },
+  {
+    "title": "Integration in Navigation, idealerweise als Zwischenziel in Google Map...",
+    "body": "Integration in Navigation, idealerweise als Zwischenziel in Google Maps oder Export in Google Maps Favoriten",
+    "labels": [
+      "type: enhancement",
+      "scope: allgemein"
+    ]
+  },
+  {
+    "title": "Auch No-Go Rastplätze merken und warnen, wenn man ihn ansteuert",
+    "body": "Auch No-Go Rastplätze merken und warnen, wenn man ihn ansteuert",
+    "labels": [
+      "type: enhancement",
+      "scope: allgemein"
+    ]
+  },
+  {
+    "title": "Optimierungsliste anlegen, Checklisten sind nicht sehr praktisch für d...",
+    "body": "Optimierungsliste anlegen, Checklisten sind nicht sehr praktisch für diese Funktion, ggf. auch mit Option für die Checklisten (nur Abhaken vs. Liste Pflegen).",
+    "labels": [
+      "type: enhancement",
+      "scope: allgemein"
+    ]
+  },
+  {
+    "title": "Integration der dynamischen Regel (siehe Ausrüstung)",
+    "body": "Integration der dynamischen Regel (siehe Ausrüstung)",
+    "labels": [
+      "type: enhancement",
+      "scope: packliste"
+    ]
+  },
+  {
+    "title": "Dialog \"Hinzufügen\" am Smartphone: Etwas mehr Platz, damit Suchergebni...",
+    "body": "Dialog \"Hinzufügen\" am Smartphone: Etwas mehr Platz, damit Suchergebnisse bei geöffneter Tastatur auch sichtbar sind.",
+    "labels": [
+      "type: enhancement",
+      "scope: packliste"
+    ]
+  },
+  {
+    "title": "Tabs für Hauptkategorien schöner gestalten (Scrollbalken überlagert Un...",
+    "body": "Tabs für Hauptkategorien schöner gestalten (Scrollbalken überlagert Unterstrich)",
+    "labels": [
+      "type: enhancement",
+      "scope: packliste"
+    ]
+  },
+  {
+    "title": "Symbolbild/Initialen bei Packprofil harmonisieren (Auswahl Profil, But...",
+    "body": "Symbolbild/Initialen bei Packprofil harmonisieren (Auswahl Profil, Button zum Öffnen der Sidebar, Konfiguration Mitreisende)",
+    "labels": [
+      "type: enhancement",
+      "scope: packliste"
+    ]
+  },
+  {
+    "title": "Wechsel zwischen Anzeige \"Alles\" und \"Packliste\": Beschreibung sollte ...",
+    "body": "Wechsel zwischen Anzeige \"Alles\" und \"Packliste\": Beschreibung sollte in beiden Fällen nur eine Zeile haben.",
+    "labels": [
+      "type: enhancement",
+      "scope: packliste"
+    ]
+  },
+  {
+    "title": "Optionales ausblenden von \"nur am Abreisetag relevanter\" Items, ggf. a...",
+    "body": "Optionales ausblenden von \"nur am Abreisetag relevanter\" Items, ggf. an \"Packliste\"/\"Alles\" verknüpfen.",
+    "labels": [
+      "type: enhancement",
+      "scope: packliste"
+    ]
+  },
+  {
+    "title": "Löschbestätigung nicht als Systemdialog, sondern als Modal bzw. von un...",
+    "body": "Löschbestätigung nicht als Systemdialog, sondern als Modal bzw. von unten auf dem Smartphone.",
+    "labels": [
+      "type: enhancement",
+      "scope: packliste"
+    ]
+  },
+  {
+    "title": "Hinzufügen einzelner Gegenstände: Zu der ausgewählten Kategorie scroll...",
+    "body": "Hinzufügen einzelner Gegenstände: Zu der ausgewählten Kategorie scrollen (Tab Klamotten > In Liste dahin scrollen)",
+    "labels": [
+      "type: enhancement",
+      "scope: packliste"
+    ]
+  },
+  {
+    "title": "Micro-Animation beim Abhaken",
+    "body": "Micro-Animation beim Abhaken",
+    "labels": [
+      "type: enhancement",
+      "scope: packliste"
+    ]
+  },
+  {
+    "title": "Hauptkategorien, die vollständig abgehakt sind, sollen ausgeblendet we...",
+    "body": "Hauptkategorien, die vollständig abgehakt sind, sollen ausgeblendet werden, wenn \"Gepacktes ausblenden\" aktiviert ist.",
+    "labels": [
+      "type: enhancement",
+      "scope: packliste"
+    ]
+  },
+  {
+    "title": "Packfortschritt soll beim Packprofil den prozentualen Fortschritt nur ...",
+    "body": "Packfortschritt soll beim Packprofil den prozentualen Fortschritt nur die das gewählte Packprofil zeigen.",
+    "labels": [
+      "type: enhancement",
+      "scope: packliste"
+    ]
+  },
+  {
+    "title": "Für Kinder / Gäste Admins (nochmal besprechen, ob das sinnvoll ist, ir...",
+    "body": "Für Kinder / Gäste Admins (nochmal besprechen, ob das sinnvoll ist, irgendjemand muss den Gesamtüberblick haben)",
+    "labels": [
+      "type: enhancement",
+      "scope: packliste"
+    ]
+  },
+  {
+    "title": "Dialog Alle Abhaken ändern: Alle betroffenen Mitreisenden werden aufge...",
+    "body": "Dialog Alle Abhaken ändern: Alle betroffenen Mitreisenden werden aufgelistet und sind standardmäßig markiert. Alle markierten werden nach Bestätigung abgehakt.",
+    "labels": [
+      "type: enhancement",
+      "scope: packliste"
+    ]
+  },
+  {
+    "title": "Temporäre Ausrüstungsgegenstände ergänzen, z.B. Lebensmittel, Einträge...",
+    "body": "Temporäre Ausrüstungsgegenstände ergänzen, z.B. Lebensmittel, Einträge landen nicht in der Ausrüstungsliste",
+    "labels": [
+      "type: enhancement",
+      "scope: packliste"
+    ]
+  },
+  {
+    "title": "Ausrüstungsgegenstände aus dem Dialog Neu der Packliste hinzufügen",
+    "body": "Ausrüstungsgegenstände aus dem Dialog Neu der Packliste hinzufügen",
+    "labels": [
+      "type: enhancement",
+      "scope: packliste"
+    ]
+  },
+  {
+    "title": "Zurück Button (Smartphone) soll auch bei Hinzufügen>Neu nur den Drawer...",
+    "body": "Zurück Button (Smartphone) soll auch bei Hinzufügen>Neu nur den Drawer schließen (Hier öffnen sich zwei Drawer übereinander)",
+    "labels": [
+      "type: enhancement",
+      "scope: packliste"
+    ]
+  },
+  {
+    "title": "Temporäre Ausrüstung auch für Personen",
+    "body": "Temporäre Ausrüstung auch für Personen",
+    "labels": [
+      "type: enhancement",
+      "scope: packliste"
+    ]
+  },
+  {
+    "title": "Temporäre Ausrüstung von Packliste löschen",
+    "body": "Temporäre Ausrüstung von Packliste löschen",
+    "labels": [
+      "type: enhancement",
+      "scope: packliste"
+    ]
+  },
+  {
+    "title": "Im Packprofil \"Alle\" soll beim Tippen auf 2/4 Personen angezeigt werde...",
+    "body": "Im Packprofil \"Alle\" soll beim Tippen auf 2/4 Personen angezeigt werden, für wen das gepackt ist. Es sollen ein kleines Popupfenster aufgehen, dass alle Mitreisenden auflistet und den Packstatus je Person zeigt.",
+    "labels": [
+      "type: enhancement",
+      "scope: packliste"
+    ]
+  },
+  {
+    "title": "Hauptkategorien sollen per Wischgesten nach rechts und links gewechsel...",
+    "body": "Hauptkategorien sollen per Wischgesten nach rechts und links gewechselt werden können, dabei sollen die jeweils verfügbaren Tabs durchgeschaltet werden.",
+    "labels": [
+      "type: enhancement",
+      "scope: packliste"
+    ]
+  },
+  {
+    "title": "Microanimation ausblenden nur bei abgehakt",
+    "body": "Microanimation ausblenden nur bei abgehakt",
+    "labels": [
+      "type: enhancement",
+      "scope: packliste"
+    ]
+  },
+  {
+    "title": "Neue Microanimation für Swipe der Hauptkategorie/Tabs",
+    "body": "Neue Microanimation für Swipe der Hauptkategorie/Tabs",
+    "labels": [
+      "type: enhancement",
+      "scope: packliste"
+    ]
+  },
+  {
+    "title": "Neuer temporärer Artikel: Übernahme Suchbegriff auch, wenn ein Eintrag...",
+    "body": "Neuer temporärer Artikel: Übernahme Suchbegriff auch, wenn ein Eintrag gefunden wurde und der Neu Button gedrückt wird. z.B. Suche nach Pizza liefert Pizzakit, aber nicht Pizza",
+    "labels": [
+      "type: enhancement",
+      "scope: packliste"
+    ]
+  },
+  {
+    "title": "Wenn man in einem Packprofil einer Person ist und alle persönlichen Sa...",
+    "body": "Wenn man in einem Packprofil einer Person ist und alle persönlichen Sachen gepackt hat, Meldung entfernen (erst anzeigen, wenn wirklich alles gepackt ist, abhängig von den Berechtigungen) oder Meldung ändern, dass alle persönlichen Sachen gepackt sind plus Button, wieder die Kategorie mit allgemeinen Sachen anzeigen.",
+    "labels": [
+      "type: enhancement",
+      "scope: packliste"
+    ]
+  },
+  {
+    "title": "Fortschrittsbalken soll bei Personen-Packprofilen Werte für die berech...",
+    "body": "Fortschrittsbalken soll bei Personen-Packprofilen Werte für die berechtigten Einträge zeigen, nicht nur für die eigenen.",
+    "labels": [
+      "type: enhancement",
+      "scope: packliste"
+    ]
+  },
+  {
+    "title": "Fortschrittsbalken ist umschaltbar (berechtigte Einträge/nur die eigen...",
+    "body": "Fortschrittsbalken ist umschaltbar (berechtigte Einträge/nur die eigenen).",
+    "labels": [
+      "type: enhancement",
+      "scope: packliste"
+    ]
+  },
+  {
+    "title": "Tag-Kategorien bei der dynamischen Erstellung der Packliste anzeigen",
+    "body": "Tag-Kategorien bei der dynamischen Erstellung der Packliste anzeigen",
+    "labels": [
+      "type: enhancement",
+      "scope: packliste"
+    ]
+  },
+  {
+    "title": "Bei neuen Einträgen zur aktuellen Hauptkategorie scrollen",
+    "body": "Bei neuen Einträgen zur aktuellen Hauptkategorie scrollen",
+    "labels": [
+      "type: enhancement",
+      "scope: packliste"
+    ]
+  },
+  {
+    "title": "Neue Einträge - Kategorie erkennen und Vorschlagen",
+    "body": "Neue Einträge - Kategorie erkennen und Vorschlagen",
+    "labels": [
+      "type: enhancement",
+      "scope: packliste"
+    ]
+  },
+  {
+    "title": "Rückgängig - Toast wegwischen",
+    "body": "Rückgängig - Toast wegwischen",
+    "labels": [
+      "type: enhancement",
+      "scope: packliste"
+    ]
+  },
+  {
+    "title": "Überblick über Status ohne Popup im Packprofil Alle, anstelle von 3/4",
+    "body": "Überblick über Status ohne Popup im Packprofil Alle, anstelle von 3/4",
+    "labels": [
+      "type: enhancement",
+      "scope: packliste"
+    ]
+  },
+  {
+    "title": "Offene Einträge anderer Personen anzeigen, wenn man im eigenen Packpro...",
+    "body": "Offene Einträge anderer Personen anzeigen, wenn man im eigenen Packprofil ist und schon alles gepackt hat (Sicherstellen, dass tatsächlich alles gepackt wird).",
+    "labels": [
+      "type: enhancement",
+      "scope: packliste"
+    ]
+  },
+  {
+    "title": "Kein Reload der Seite nach Wechsel zw. Online und Offline",
+    "body": "Kein Reload der Seite nach Wechsel zw. Online und Offline",
+    "labels": [
+      "type: enhancement",
+      "scope: packliste"
+    ]
+  },
+  {
+    "title": "Änderungen an der Ausrüstung sofort übernehmen. Ich müsste nach dem Lö...",
+    "body": "Änderungen an der Ausrüstung sofort übernehmen. Ich müsste nach dem Löschen einer Ausrüstung erst die Packliste neu laden (Im Dialog: Hinzufügen neuer Einträge)",
+    "labels": [
+      "type: enhancement",
+      "scope: packliste"
+    ]
+  },
+  {
+    "title": "Zuordnung pauschaler Einträge, wenn mehrere Gruppen mitfahren (Tisch n...",
+    "body": "Zuordnung pauschaler Einträge, wenn mehrere Gruppen mitfahren (Tisch nimmt jeder für sich selbst mit, Kaffee nehmen wir mit, Filtertüten -> Oma/Opa)",
+    "labels": [
+      "type: enhancement",
+      "scope: packliste"
+    ]
+  },
+  {
+    "title": "Bei anderem Pack-Profil: Eintrag aus Gruppe abhaken (Mit Warnhinweis)",
+    "body": "Bei anderem Pack-Profil: Eintrag aus Gruppe abhaken (Mit Warnhinweis)",
+    "labels": [
+      "type: enhancement",
+      "scope: packliste"
+    ]
+  },
+  {
+    "title": "Fehler bei Worker prüfen (zu viele Einträge zugeordnet, ca. 150 in kur...",
+    "body": "Fehler bei Worker prüfen (zu viele Einträge zugeordnet, ca. 150 in kurzer Zeit)",
+    "labels": [
+      "type: enhancement",
+      "scope: packliste"
+    ]
+  },
+  {
+    "title": "Mehrfachauswahl: Checkbox gleich groß, damit die Größe der Einträge id...",
+    "body": "Mehrfachauswahl: Checkbox gleich groß, damit die Größe der Einträge identisch bleibt. Rahmen markierter Einträge sauberer gestalten",
+    "labels": [
+      "type: enhancement",
+      "scope: packliste"
+    ]
+  },
+  {
+    "title": "Bearbeiten auch für Personenbezogene Einträge und Urlaube nur mit uns",
+    "body": "Bearbeiten auch für Personenbezogene Einträge und Urlaube nur mit uns",
+    "labels": [
+      "type: enhancement",
+      "scope: packliste"
+    ]
+  },
+  {
+    "title": "Rückgängig -Toast auch bei von Packliste löschen.",
+    "body": "Rückgängig -Toast auch bei von Packliste löschen.",
+    "labels": [
+      "type: enhancement",
+      "scope: packliste"
+    ]
+  },
+  {
+    "title": "Titel des zu löschenden Eintrags in Bestätigung anzeigen.",
+    "body": "Titel des zu löschenden Eintrags in Bestätigung anzeigen.",
+    "labels": [
+      "type: enhancement",
+      "scope: packliste"
+    ]
+  },
+  {
+    "title": "Suche Integrieren, ggf. auch Filter",
+    "body": "Suche Integrieren, ggf. auch Filter",
+    "labels": [
+      "type: enhancement",
+      "scope: packliste"
+    ]
+  },
+  {
+    "title": "Anlegen in Ausrüstung: Datenfelder nicht identisch zu Ausrüstung. Idea...",
+    "body": "Anlegen in Ausrüstung: Datenfelder nicht identisch zu Ausrüstung. Ideal wäre eine gemeinsam genutzte Komponente. Aktuell fehlt z.B. Links",
+    "labels": [
+      "type: enhancement",
+      "scope: packliste"
+    ]
+  },
+  {
+    "title": "Manchmal wird Luisa mit LI, manchmal mit LC abgekürzt. Das scheint abh...",
+    "body": "Manchmal wird Luisa mit LI, manchmal mit LC abgekürzt. Das scheint abhängig pro Eintrag zu sein, ob der Eintrag auch für Luca auf der Liste steht oder nicht. Es soll eine einheitliche Abkürzung genutzt werden, bei Luisa immer LI, so wie im Profil",
+    "labels": [
+      "type: enhancement",
+      "scope: packliste"
+    ]
+  },
+  {
+    "title": "Die Umbenennung von Packliste/Alles in Dauerausstattung anzeigen/ausbl...",
+    "body": "Die Umbenennung von Packliste/Alles in Dauerausstattung anzeigen/ausblenden ist verwirrend in Bezug auf Einträge die mit Abreisetag gekennzeichnet sind.",
+    "labels": [
+      "type: enhancement",
+      "scope: packliste"
+    ]
+  },
+  {
+    "title": "Alte Urlaube ausblenden",
+    "body": "Alte Urlaube ausblenden",
+    "labels": [
+      "type: enhancement",
+      "scope: urlaube"
+    ]
+  },
+  {
+    "title": "Optional: Urlaubsarchiv einblendbar machen",
+    "body": "Optional: Urlaubsarchiv einblendbar machen",
+    "labels": [
+      "type: enhancement",
+      "scope: urlaube"
+    ]
+  },
+  {
+    "title": "Seite schöner gestalten (nur die wichtigsten Details (Titel, Ziel, Dat...",
+    "body": "Seite schöner gestalten (nur die wichtigsten Details (Titel, Ziel, Datum), moderner)",
+    "labels": [
+      "type: enhancement",
+      "scope: urlaube"
+    ]
+  },
+  {
+    "title": "Löschbestätigung nicht als Systemdialog, sondern als Modal bzw. von un...",
+    "body": "Löschbestätigung nicht als Systemdialog, sondern als Modal bzw. von unten auf dem Smartphone.",
+    "labels": [
+      "type: enhancement",
+      "scope: urlaube"
+    ]
+  },
+  {
+    "title": "Dialog Neu: abweichendes Abreisedatum dezenter und Dialog analog des R...",
+    "body": "Dialog Neu: abweichendes Abreisedatum dezenter und Dialog analog des Reisedatums (nur ohne Zeitraum)",
+    "labels": [
+      "type: enhancement",
+      "scope: urlaube"
+    ]
+  },
+  {
+    "title": "Dialog Neu: Auf dem Smartphone rechts und links etwas zu viel Rand (an...",
+    "body": "Dialog Neu: Auf dem Smartphone rechts und links etwas zu viel Rand (an Packliste orientieren)",
+    "labels": [
+      "type: enhancement",
+      "scope: urlaube"
+    ]
+  },
+  {
+    "title": "Reiseroute: Falls man mehrere Campingplätze ansteuert",
+    "body": "Reiseroute: Falls man mehrere Campingplätze ansteuert",
+    "labels": [
+      "type: enhancement",
+      "scope: urlaube"
+    ]
+  },
+  {
+    "title": "Abweichendes Abreisedatum passender benennen (Abreise wird mit Heimrei...",
+    "body": "Abweichendes Abreisedatum passender benennen (Abreise wird mit Heimreise verbunden)",
+    "labels": [
+      "type: enhancement",
+      "scope: urlaube"
+    ]
+  },
+  {
+    "title": "Datumsauswahl nicht vollständig sichtbar, zwei Monate passen nicht bei...",
+    "body": "Datumsauswahl nicht vollständig sichtbar, zwei Monate passen nicht beim Smartphone",
+    "labels": [
+      "type: enhancement",
+      "scope: urlaube"
+    ]
+  },
+  {
+    "title": "Auswahl Campingplätze verbessern: Keine große Liste mehr, stattdessen ...",
+    "body": "Auswahl Campingplätze verbessern: Keine große Liste mehr, stattdessen Suche mit Autocomplete",
+    "labels": [
+      "type: enhancement",
+      "scope: urlaube"
+    ]
+  },
+  {
+    "title": "Auswahl Campingplätze verbessern, z.B. Favoriten direkt in Liste",
+    "body": "Auswahl Campingplätze verbessern, z.B. Favoriten direkt in Liste",
+    "labels": [
+      "type: enhancement",
+      "scope: urlaube"
+    ]
+  },
+  {
+    "title": "Auswahl Campingplätze: Option, neue CPs anlegen",
+    "body": "Auswahl Campingplätze: Option, neue CPs anlegen",
+    "labels": [
+      "type: enhancement",
+      "scope: urlaube"
+    ]
+  },
+  {
+    "title": "Auswahl Campingplätze: Reihenfolge",
+    "body": "Auswahl Campingplätze: Reihenfolge",
+    "labels": [
+      "type: enhancement",
+      "scope: urlaube"
+    ]
+  },
+  {
+    "title": "Auswahl Campingplätze: Dauer od. Zeitraum festlegen",
+    "body": "Auswahl Campingplätze: Dauer od. Zeitraum festlegen",
+    "labels": [
+      "type: enhancement",
+      "scope: urlaube"
+    ]
+  },
+  {
+    "title": "Auswahl Campingplätze in Bearbeiten Dialog verschieben",
+    "body": "Auswahl Campingplätze in Bearbeiten Dialog verschieben",
+    "labels": [
+      "type: enhancement",
+      "scope: urlaube"
+    ]
+  },
+  {
+    "title": "Reiseziel, Adresse, Land / Region entfallen lassen, stattdessen die Ca...",
+    "body": "Reiseziel, Adresse, Land / Region entfallen lassen, stattdessen die Campingplatz Auswahl",
+    "labels": [
+      "type: enhancement",
+      "scope: urlaube"
+    ]
+  },
+  {
+    "title": "Details zur Buchung am Campingplatz hinterlegen (Platznummer, Buchungs...",
+    "body": "Details zur Buchung am Campingplatz hinterlegen (Platznummer, Buchungs-E-Mail)",
+    "labels": [
+      "type: enhancement",
+      "scope: urlaube"
+    ]
+  },
+  {
+    "title": "Ggf. mit Platzplan und Navigation dort hin",
+    "body": "Ggf. mit Platzplan und Navigation dort hin",
+    "labels": [
+      "type: enhancement",
+      "scope: urlaube"
+    ]
+  },
+  {
+    "title": "Ergänzung: Wann sind neue Gegenstände dazugekommen, wann wurden sie au...",
+    "body": "Ergänzung: Wann sind neue Gegenstände dazugekommen, wann wurden sie ausgemustert",
+    "labels": [
+      "type: enhancement",
+      "scope: ausrüstung"
+    ]
+  },
+  {
+    "title": "Dynamische Regel für die Anzahl, z.B. 1 St. Pro Tag + Reserve",
+    "body": "Dynamische Regel für die Anzahl, z.B. 1 St. Pro Tag + Reserve",
+    "labels": [
+      "type: enhancement",
+      "scope: ausrüstung"
+    ]
+  },
+  {
+    "title": "Markierung für \"Wird erst am Abreisetag gepackt\"",
+    "body": "Markierung für \"Wird erst am Abreisetag gepackt\"",
+    "labels": [
+      "type: enhancement",
+      "scope: ausrüstung"
+    ]
+  },
+  {
+    "title": "Löschbestätigung nicht als Systemdialog, sondern als Modal bzw. von un...",
+    "body": "Löschbestätigung nicht als Systemdialog, sondern als Modal bzw. von unten auf dem Smartphone.",
+    "labels": [
+      "type: enhancement",
+      "scope: ausrüstung"
+    ]
+  },
+  {
+    "title": "Spaltenbreite Status auf 135px erhöhen: Damit \"Immer gepackt\" in eine ...",
+    "body": "Spaltenbreite Status auf 135px erhöhen: Damit \"Immer gepackt\" in eine Zeile passt",
+    "labels": [
+      "type: enhancement",
+      "scope: ausrüstung"
+    ]
+  },
+  {
+    "title": "Sticky Header beim Scrollen",
+    "body": "Sticky Header beim Scrollen",
+    "labels": [
+      "type: enhancement",
+      "scope: ausrüstung"
+    ]
+  },
+  {
+    "title": "Kategorien und Hauptkategorien als Sticky darstellen",
+    "body": "Kategorien und Hauptkategorien als Sticky darstellen",
+    "labels": [
+      "type: enhancement",
+      "scope: ausrüstung"
+    ]
+  },
+  {
+    "title": "Stern für Standard auf orange ändern",
+    "body": "Stern für Standard auf orange ändern",
+    "labels": [
+      "type: enhancement",
+      "scope: ausrüstung"
+    ]
+  },
+  {
+    "title": "Symbol Links in grün oder orange",
+    "body": "Symbol Links in grün oder orange",
+    "labels": [
+      "type: enhancement",
+      "scope: ausrüstung"
+    ]
+  },
+  {
+    "title": "Dialog Neu: Auf dem Smartphone rechts und links etwas zu viel Rand (an...",
+    "body": "Dialog Neu: Auf dem Smartphone rechts und links etwas zu viel Rand (an Packliste orientieren)",
+    "labels": [
+      "type: enhancement",
+      "scope: ausrüstung"
+    ]
+  },
+  {
+    "title": "Bei neuen Einträgen zur aktuellen Hauptkategorie scrollen",
+    "body": "Bei neuen Einträgen zur aktuellen Hauptkategorie scrollen",
+    "labels": [
+      "type: enhancement",
+      "scope: ausrüstung"
+    ]
+  },
+  {
+    "title": "Am Smartphone: Bearbeiten auch über langen Tipp und gedrückt halten (m...",
+    "body": "Am Smartphone: Bearbeiten auch über langen Tipp und gedrückt halten (mit Kontext-Menü)",
+    "labels": [
+      "type: enhancement",
+      "scope: ausrüstung"
+    ]
+  },
+  {
+    "title": "Gepackt für: Alle, Pauschal, Individuell konkreter Beschreiben",
+    "body": "Gepackt für: Alle, Pauschal, Individuell konkreter Beschreiben",
+    "labels": [
+      "type: enhancement",
+      "scope: ausrüstung"
+    ]
+  },
+  {
+    "title": "Zurück Button bei geöffneter Liste soll in die Listenübersicht springe...",
+    "body": "Zurück Button bei geöffneter Liste soll in die Listenübersicht springen, nicht zur letzten Seite davor.",
+    "labels": [
+      "type: enhancement",
+      "scope: checklisten"
+    ]
+  },
+  {
+    "title": "Abgehakte Einträge standardmäßig ausblenden, aber einblendbar machen",
+    "body": "Abgehakte Einträge standardmäßig ausblenden, aber einblendbar machen",
+    "labels": [
+      "type: enhancement",
+      "scope: checklisten"
+    ]
+  },
+  {
+    "title": "Fortschrittsbalken Hintergrund im Dark-Mode zu hell. Umsetzung wie in ...",
+    "body": "Fortschrittsbalken Hintergrund im Dark-Mode zu hell. Umsetzung wie in Packliste",
+    "labels": [
+      "type: enhancement",
+      "scope: checklisten"
+    ]
+  },
+  {
+    "title": "Reihenfolge mit Drag-and-Drop konfigurieren (Nr. gar nicht mehr anzeig...",
+    "body": "Reihenfolge mit Drag-and-Drop konfigurieren (Nr. gar nicht mehr anzeigen)",
+    "labels": [
+      "type: enhancement",
+      "scope: kategorien"
+    ]
+  },
+  {
+    "title": "Hintergrund weiß",
+    "body": "Hintergrund weiß",
+    "labels": [
+      "type: enhancement",
+      "scope: kategorien"
+    ]
+  },
+  {
+    "title": "Drei-Punkte-Menü bündig ausrichten (Hauptkategorie und Kategorie)",
+    "body": "Drei-Punkte-Menü bündig ausrichten (Hauptkategorie und Kategorie)",
+    "labels": [
+      "type: enhancement",
+      "scope: kategorien"
+    ]
+  },
+  {
+    "title": "Darstellung mehr als Labels orientieren (Trennlinie, Abstand) aber ohn...",
+    "body": "Darstellung mehr als Labels orientieren (Trennlinie, Abstand) aber ohne Icon und Untertitel",
+    "labels": [
+      "type: enhancement",
+      "scope: kategorien"
+    ]
+  },
+  {
+    "title": "Tags kategorisieren (z.B. Zeit [Sommer, Pfingsten, Herbst], Ziel [Süde...",
+    "body": "Tags kategorisieren (z.B. Zeit [Sommer, Pfingsten, Herbst], Ziel [Süden, Deutschland, Berge], Aktivitäten [Strand, Feuerküche])",
+    "labels": [
+      "type: enhancement",
+      "scope: tags"
+    ]
+  },
+  {
+    "title": "Hintergrund weiß",
+    "body": "Hintergrund weiß",
+    "labels": [
+      "type: enhancement",
+      "scope: tags"
+    ]
+  },
+  {
+    "title": "Löschbestätigung nicht als Systemdialog, sondern als Modal bzw. von un...",
+    "body": "Löschbestätigung nicht als Systemdialog, sondern als Modal bzw. von unten auf dem Smartphone.",
+    "labels": [
+      "type: enhancement",
+      "scope: tags"
+    ]
+  },
+  {
+    "title": "Tag-Kategorien verwalten",
+    "body": "Tag-Kategorien verwalten",
+    "labels": [
+      "type: enhancement",
+      "scope: tags"
+    ]
+  },
+  {
+    "title": "Hintergrund weiß",
+    "body": "Hintergrund weiß",
+    "labels": [
+      "type: enhancement",
+      "scope: mitreisende"
+    ]
+  },
+  {
+    "title": "Standardmitreisende nicht mehr gelb hinterlegen",
+    "body": "Standardmitreisende nicht mehr gelb hinterlegen",
+    "labels": [
+      "type: enhancement",
+      "scope: mitreisende"
+    ]
+  },
+  {
+    "title": "Löschbestätigung nicht als Systemdialog, sondern als Modal bzw. von un...",
+    "body": "Löschbestätigung nicht als Systemdialog, sondern als Modal bzw. von unten auf dem Smartphone.",
+    "labels": [
+      "type: enhancement",
+      "scope: mitreisende"
+    ]
+  },
+  {
+    "title": "Farbe wählen und speichern",
+    "body": "Farbe wählen und speichern",
+    "labels": [
+      "type: enhancement",
+      "scope: mitreisende"
+    ]
+  },
+  {
+    "title": "In der Liste soll die User Id durch die Rolle ersetzt werden.",
+    "body": "In der Liste soll die User Id durch die Rolle ersetzt werden.",
+    "labels": [
+      "type: enhancement",
+      "scope: mitreisende"
+    ]
+  },
+  {
+    "title": "Bearbeiten: Haken bei Standard wird nicht angezeigt, nur grüner Hinter...",
+    "body": "Bearbeiten: Haken bei Standard wird nicht angezeigt, nur grüner Hintergrund.",
+    "labels": [
+      "type: enhancement",
+      "scope: mitreisende"
+    ]
+  },
+  {
+    "title": "Kennwort zurücksetzen mit Sicherheitsabfrage",
+    "body": "Kennwort zurücksetzen mit Sicherheitsabfrage",
+    "labels": [
+      "type: enhancement",
+      "scope: mitreisende"
+    ]
+  },
+  {
+    "title": "Gäste Gruppieren (einschl. Entsprechender Zuordnung von Kindern) siehe...",
+    "body": "Gäste Gruppieren (einschl. Entsprechender Zuordnung von Kindern) siehe auch Neue Rolle \"System Admin\"",
+    "labels": [
+      "type: enhancement",
+      "scope: mitreisende"
+    ]
+  },
+  {
+    "title": "Favoriten markieren",
+    "body": "Favoriten markieren",
+    "labels": [
+      "type: enhancement",
+      "scope: campingplätze"
+    ]
+  },
+  {
+    "title": "AutoComplete Suche bereits im Titel integrieren, inkl. Anpassungen aus...",
+    "body": "AutoComplete Suche bereits im Titel integrieren, inkl. Anpassungen aus den Fehlern. Adresse in separates Feld schreiben, wie es bereits für Land etc. Gemacht wird.",
+    "labels": [
+      "type: enhancement",
+      "scope: campingplätze"
+    ]
+  },
+  {
+    "title": "Bild integrieren (Bild auf Google Maps (auswählbar aus ein paar Vorsch...",
+    "body": "Bild integrieren (Bild auf Google Maps (auswählbar aus ein paar Vorschlägen).",
+    "labels": [
+      "type: enhancement",
+      "scope: campingplätze"
+    ]
+  },
+  {
+    "title": "Links zu Webseite und Video dezenter darstellen, z.B. als kleine Symbo...",
+    "body": "Links zu Webseite und Video dezenter darstellen, z.B. als kleine Symbole oder über das Drei-Punkte-Menü",
+    "labels": [
+      "type: enhancement",
+      "scope: campingplätze"
+    ]
+  },
+  {
+    "title": "Zweite Rückfallebene mit direkter Linkeingabe ergänzen, falls gar nich...",
+    "body": "Zweite Rückfallebene mit direkter Linkeingabe ergänzen, falls gar nichts gefunden wird.",
+    "labels": [
+      "type: enhancement",
+      "scope: campingplätze"
+    ]
+  },
+  {
+    "title": "Bild speichern",
+    "body": "Bild speichern",
+    "labels": [
+      "type: enhancement",
+      "scope: campingplätze"
+    ]
+  },
+  {
+    "title": "Bild Upload",
+    "body": "Bild Upload",
+    "labels": [
+      "type: enhancement",
+      "scope: campingplätze"
+    ]
+  },
+  {
+    "title": "Grobe Position besser darstellen (cleaner und kleiner)",
+    "body": "Grobe Position besser darstellen (cleaner und kleiner)",
+    "labels": [
+      "type: enhancement",
+      "scope: campingplätze"
+    ]
+  },
+  {
+    "title": "Übernahme der Webseite von Google Maps",
+    "body": "Übernahme der Webseite von Google Maps",
+    "labels": [
+      "type: enhancement",
+      "scope: campingplätze"
+    ]
+  },
+  {
+    "title": "ADAC-Routenplanung soll standardmäßig schnellste anstatt kürzeste Rout...",
+    "body": "ADAC-Routenplanung soll standardmäßig schnellste anstatt kürzeste Route anzeigen (Keine Offizielle Lösung dafür)",
+    "labels": [
+      "type: enhancement",
+      "scope: campingplätze"
+    ]
+  },
+  {
+    "title": "Im Dark-Mode: Text für Länderauswahl (Pill) sowie in der Liste Stadt, ...",
+    "body": "Im Dark-Mode: Text für Länderauswahl (Pill) sowie in der Liste Stadt, Land und Entfernung zu dunkel.",
+    "labels": [
+      "type: enhancement",
+      "scope: campingplätze"
+    ]
+  },
+  {
+    "title": "Transportmittel verbinden (z.B. Dachbox zum Gewicht des Autos rechnen)",
+    "body": "Transportmittel verbinden (z.B. Dachbox zum Gewicht des Autos rechnen)",
+    "labels": [
+      "type: enhancement",
+      "scope: transportmittel"
+    ]
+  },
+  {
+    "title": "Transportmittel unterteilen (Wohnwagen: Heckgarage, Kleiderschrank, Si...",
+    "body": "Transportmittel unterteilen (Wohnwagen: Heckgarage, Kleiderschrank, Sitzgruppe, Küche, Bad, Elternbett einschl. Position für GEwichtsverteilung",
+    "labels": [
+      "type: enhancement",
+      "scope: transportmittel"
+    ]
+  },
+  {
+    "title": "Tokens und Webhooks löschen hinter Drei-Punkte-Menü und mit Bestätigun...",
+    "body": "Tokens und Webhooks löschen hinter Drei-Punkte-Menü und mit Bestätigung",
+    "labels": [
+      "type: enhancement",
+      "scope: integration"
+    ]
+  },
+  {
+    "title": "API-Vorschau direkt zur API verschieben",
+    "body": "API-Vorschau direkt zur API verschieben",
+    "labels": [
+      "type: enhancement",
+      "scope: integration"
+    ]
+  }
+]
