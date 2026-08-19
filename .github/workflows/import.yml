@@ -1,0 +1,21 @@
+name: Import Issues
+on: workflow_dispatch
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create Issues from JSON
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          sudo apt-get install jq -y
+          jq -c '.[]' camping_app_issues.json | while read i; do
+            TITLE=$(echo "$i" | jq -r '.title')
+            BODY=$(echo "$i" | jq -r '.body')
+            LABELS=$(echo "$i" | jq -r '.labels | join(",")')
+            gh issue create --title "$TITLE" --body "$BODY" --label "$LABELS"
+            sleep 2 # Kurze Pause, um das API-Limit nicht zu überschreiten
+          done
