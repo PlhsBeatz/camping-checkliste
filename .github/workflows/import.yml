@@ -7,15 +7,35 @@ jobs:
       issues: write
     steps:
       - uses: actions/checkout@v4
-      - name: Create Issues from JSON
+      
+      - name: Import via Python
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          sudo apt-get install jq -y
-          jq -c '.[]' camping_app_issues.json | while read i; do
-            TITLE=$(echo "$i" | jq -r '.title')
-            BODY=$(echo "$i" | jq -r '.body')
-            LABELS=$(echo "$i" | jq -r '.labels | join(",")')
-            gh issue create --title "$TITLE" --body "$BODY" --label "$LABELS"
-            sleep 2 # Kurze Pause, um das API-Limit nicht zu überschreiten
-          done
+          cat << 'EOF' > import.py
+          import json
+          import subprocess
+          import time
+
+          # utf-8-sig filtert eventuelle unsichtbare Zeichen am Dateianfang heraus
+          with open('camping_app_issues.json', 'r', encoding='utf-8-sig') as f:
+              issues = json.load(f)
+
+          for i, issue in enumerate(issues, 1):
+              print(f"[{i}/{len(issues)}] Erstelle: {issue['title'][:50]}...")
+              
+              cmd = [
+                  'gh', 'issue', 'create',
+                  '--title', issue['title'],
+                  '--body', issue['body']
+              ]
+              
+              # Labels einzeln anhängen
+              for label in issue['labels']:
+                  cmd.extend(['--label', label])
+                  
+              subprocess.run(cmd, check=True)
+              time.sleep(1.5)  # Kurze Pause für das GitHub API-Limit
+          EOF
+          
+          python import.py
