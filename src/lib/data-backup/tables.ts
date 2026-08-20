@@ -37,6 +37,9 @@ export const BACKUP_TABLE_ORDER: string[] = [
   'checklisten',
   'checklisten_kategorien',
   'checklisten_eintraege',
+  'optimierungen',
+  'optimierungen_links',
+  'optimierungen_fotos',
 ]
 
 /** Legacy-API: gleiche Tabellen wie equipment ∪ referenceStammdaten */
@@ -98,7 +101,14 @@ const PLACES = new Set([
   'urlaub_campingplaetze',
   'campingplatz_segment_routen_cache',
 ])
-const TOOLS = new Set(['checklisten', 'checklisten_kategorien', 'checklisten_eintraege'])
+const TOOLS = new Set([
+  'checklisten',
+  'checklisten_kategorien',
+  'checklisten_eintraege',
+  'optimierungen',
+  'optimierungen_links',
+  'optimierungen_fotos',
+])
 export const AUTH_TABLES = new Set([
   'users',
   'einladungen',
@@ -142,6 +152,9 @@ export const PK_PARTS: Record<string, string[]> = {
   checklisten: ['id'],
   checklisten_kategorien: ['id'],
   checklisten_eintraege: ['id'],
+  optimierungen: ['id'],
+  optimierungen_links: ['id'],
+  optimierungen_fotos: ['id'],
 }
 
 export function rowKey(table: string, row: Record<string, unknown>): string {

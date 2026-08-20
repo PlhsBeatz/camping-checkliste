@@ -282,3 +282,55 @@ CREATE INDEX IF NOT EXISTS idx_checklisten_eintraege_kategorie_id ON checklisten
 CREATE TRIGGER IF NOT EXISTS update_checklisten_timestamp AFTER UPDATE ON checklisten BEGIN UPDATE checklisten SET updated_at = datetime('now') WHERE id = NEW.id; END;
 CREATE TRIGGER IF NOT EXISTS update_checklisten_kategorien_timestamp AFTER UPDATE ON checklisten_kategorien BEGIN UPDATE checklisten_kategorien SET updated_at = datetime('now') WHERE id = NEW.id; END;
 CREATE TRIGGER IF NOT EXISTS update_checklisten_eintraege_timestamp AFTER UPDATE ON checklisten_eintraege BEGIN UPDATE checklisten_eintraege SET updated_at = datetime('now') WHERE id = NEW.id; END;
+
+-- Optimierungen (Tools, Admin-Backlog)
+CREATE TABLE IF NOT EXISTS optimierungen (
+    id TEXT PRIMARY KEY,
+    titel TEXT NOT NULL,
+    notiz TEXT,
+    bereich TEXT NOT NULL DEFAULT 'ausstattung',
+    status TEXT NOT NULL DEFAULT 'idee',
+    prioritaet TEXT,
+    zeitfenster TEXT,
+    zeit_jahr INTEGER,
+    zeit_notiz TEXT,
+    faelligkeit_modus TEXT,
+    faellig_am TEXT,
+    faelligkeit_bezug_am TEXT,
+    reihenfolge INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_optimierungen_status ON optimierungen(status);
+
+CREATE TRIGGER IF NOT EXISTS update_optimierungen_timestamp
+AFTER UPDATE ON optimierungen
+BEGIN
+  UPDATE optimierungen SET updated_at = datetime('now') WHERE id = NEW.id;
+END;
+
+CREATE TABLE IF NOT EXISTS optimierungen_links (
+    id TEXT PRIMARY KEY,
+    optimierung_id TEXT NOT NULL,
+    url TEXT NOT NULL,
+    reihenfolge INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (optimierung_id) REFERENCES optimierungen(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_optimierungen_links_optimierung_id
+  ON optimierungen_links(optimierung_id);
+
+CREATE TABLE IF NOT EXISTS optimierungen_fotos (
+    id TEXT PRIMARY KEY,
+    optimierung_id TEXT NOT NULL,
+    sort_index INTEGER NOT NULL DEFAULT 0,
+    r2_object_key TEXT,
+    content_type TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (optimierung_id) REFERENCES optimierungen(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_optimierungen_fotos_optimierung_id
+  ON optimierungen_fotos(optimierung_id);

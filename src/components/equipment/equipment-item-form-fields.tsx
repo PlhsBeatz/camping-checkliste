@@ -1,7 +1,6 @@
 'use client'
 
-import { Star } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { Plus, Star, X } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { WeightInput } from '@/components/ui/weight-input'
@@ -308,34 +307,34 @@ export function EquipmentItemFormFields({
         </Label>
       </div>
 
-      <div>
+      <div className="space-y-1.5">
         <Label>Links</Label>
         {value.links.map((link, idx) => (
-          <div key={idx} className="flex gap-2 mt-2">
+          <div key={idx} className="flex items-center gap-1.5">
             <Input
               value={link.url}
               onChange={(e) => onChange(updateEquipmentLinkField(value, idx, e.target.value))}
-              placeholder="https://..."
+              placeholder="https://…"
+              className="h-9"
             />
-            <Button
+            <button
               type="button"
-              variant="outline"
-              size="sm"
+              aria-label="Link entfernen"
               onClick={() => onChange(removeEquipmentLinkField(value, idx))}
+              className="shrink-0 rounded-md p-2 text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
             >
-              Entfernen
-            </Button>
+              <X className="h-4 w-4" />
+            </button>
           </div>
         ))}
-        <Button
+        <button
           type="button"
-          variant="outline"
-          size="sm"
           onClick={() => onChange(addEquipmentLinkField(value))}
-          className="mt-2"
+          className="inline-flex items-center gap-1 pt-0.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
         >
+          <Plus className="h-3.5 w-3.5" />
           Link hinzufügen
-        </Button>
+        </button>
       </div>
     </div>
   )

@@ -419,6 +419,66 @@ export interface ChecklisteMitStruktur extends Checkliste {
   kategorien: (ChecklisteKategorie & { eintraege: ChecklisteEintrag[] })[]
 }
 
+/** Tools: Optimierungen-Backlog (Ideen, geplante Anpassungen) — Admin only */
+export type OptimierungStatus =
+  | 'idee'
+  | 'geplant'
+  | 'in_arbeit'
+  | 'erledigt'
+  | 'verworfen'
+
+export type OptimierungPrioritaet = 'niedrig' | 'mittel' | 'hoch'
+
+export type OptimierungBereich = 'ausstattung' | 'sonstiges'
+
+export type OptimierungZeitfenster =
+  | 'vor_saison'
+  | 'waehrend_urlaub'
+  | 'nach_saison'
+  | 'winter'
+  | 'jederzeit'
+
+export interface Optimierung {
+  id: string
+  titel: string
+  notiz: string | null
+  bereich: OptimierungBereich
+  status: OptimierungStatus
+  prioritaet: OptimierungPrioritaet | null
+  zeitfenster: OptimierungZeitfenster | null
+  zeit_jahr: number | null
+  zeit_notiz: string | null
+  /** Chip: naechster_urlaub | saisonstart | irgendwann */
+  faelligkeit_modus: 'naechster_urlaub' | 'saisonstart' | 'irgendwann' | null
+  /** Berechnetes Fälligkeitsdatum YYYY-MM-DD (null bei irgendwann / ohne Urlaub) */
+  faellig_am: string | null
+  /** Bezugstag für Saisonstart-Berechnung (wann Modus gesetzt wurde) */
+  faelligkeit_bezug_am: string | null
+  reihenfolge: number
+  created_at: string
+  updated_at?: string
+  links?: OptimierungLink[]
+  foto_count?: number
+  cover_foto_id?: string | null
+}
+
+export interface OptimierungLink {
+  id: string
+  optimierung_id: string
+  url: string
+  reihenfolge: number
+  created_at: string
+}
+
+export interface OptimierungFoto {
+  id: string
+  optimierung_id: string
+  sort_index: number
+  r2_object_key: string | null
+  content_type: string | null
+  created_at: string
+}
+
 export interface CloudflareEnv {
   DB: D1Database
   PACKING_SYNC_DO?: DurableObjectNamespace
@@ -5248,6 +5308,8 @@ export async function deriveAndPersistVacationDates(
     .prepare("UPDATE urlaube SET startdatum = ?, enddatum = ?, updated_at = datetime('now') WHERE id = ?")
     .bind(minStart, maxEnd, vacationId)
     .run()
+
+  await recalculateAllOptimierungFaelligkeiten(db)
 }
 
 // Routen-Cache
@@ -6110,6 +6172,597 @@ export async function resetChecklisteErledigt(db: D1Database, checklistId: strin
     return true
   } catch (error) {
     console.error('Error resetChecklisteErledigt:', error)
+    return false
+  }
+}
+
+// --- Optimierungen (Tools, Admin) ---
+
+const OPTIMIERUNG_STATUS_ORDER: Record<OptimierungStatus, number> = {
+  in_arbeit: 0,
+  geplant: 1,
+  idee: 2,
+  erledigt: 3,
+  verworfen: 4,
+}
+
+const OPTIMIERUNG_PRIO_ORDER: Record<string, number> = {
+  hoch: 0,
+  mittel: 1,
+  niedrig: 2,
+}
+
+function mapOptimierungRow(row: Record<string, unknown>): Optimierung {
+  const modusRaw = row.faelligkeit_modus != null ? String(row.faelligkeit_modus) : null
+  const modus =
+    modusRaw === 'naechster_urlaub' ||
+    modusRaw === 'saisonstart' ||
+    modusRaw === 'irgendwann'
+      ? modusRaw
+      : null
+  return {
+    id: String(row.id),
+    titel: String(row.titel),
+    notiz: row.notiz != null ? String(row.notiz) : null,
+    bereich: (row.bereich as OptimierungBereich) || 'ausstattung',
+    status: (row.status as OptimierungStatus) || 'idee',
+    prioritaet: row.prioritaet != null ? (String(row.prioritaet) as OptimierungPrioritaet) : null,
+    zeitfenster:
+      row.zeitfenster != null ? (String(row.zeitfenster) as OptimierungZeitfenster) : null,
+    zeit_jahr: row.zeit_jahr != null ? Number(row.zeit_jahr) : null,
+    zeit_notiz: row.zeit_notiz != null ? String(row.zeit_notiz) : null,
+    faelligkeit_modus: modus,
+    faellig_am: row.faellig_am != null ? String(row.faellig_am) : null,
+    faelligkeit_bezug_am:
+      row.faelligkeit_bezug_am != null ? String(row.faelligkeit_bezug_am) : null,
+    reihenfolge: Number(row.reihenfolge ?? 0),
+    created_at: String(row.created_at),
+    updated_at: row.updated_at != null ? String(row.updated_at) : undefined,
+  }
+}
+
+function mapOptimierungLinkRow(row: Record<string, unknown>): OptimierungLink {
+  return {
+    id: String(row.id),
+    optimierung_id: String(row.optimierung_id),
+    url: String(row.url),
+    reihenfolge: Number(row.reihenfolge ?? 0),
+    created_at: String(row.created_at),
+  }
+}
+
+function mapOptimierungFotoRow(row: Record<string, unknown>): OptimierungFoto {
+  return {
+    id: String(row.id),
+    optimierung_id: String(row.optimierung_id),
+    sort_index: Number(row.sort_index ?? 0),
+    r2_object_key: row.r2_object_key != null ? String(row.r2_object_key) : null,
+    content_type: row.content_type != null ? String(row.content_type) : null,
+    created_at: String(row.created_at),
+  }
+}
+
+function sortOptimierungen(items: Optimierung[]): Optimierung[] {
+  return [...items].sort((a, b) => {
+    const statusDiff =
+      (OPTIMIERUNG_STATUS_ORDER[a.status] ?? 99) - (OPTIMIERUNG_STATUS_ORDER[b.status] ?? 99)
+    if (statusDiff !== 0) return statusDiff
+    const prioA = a.prioritaet ? (OPTIMIERUNG_PRIO_ORDER[a.prioritaet] ?? 3) : 3
+    const prioB = b.prioritaet ? (OPTIMIERUNG_PRIO_ORDER[b.prioritaet] ?? 3) : 3
+    if (prioA !== prioB) return prioA - prioB
+    if (a.reihenfolge !== b.reihenfolge) return a.reihenfolge - b.reihenfolge
+    return a.created_at.localeCompare(b.created_at)
+  })
+}
+
+async function attachOptimierungRelations(
+  db: D1Database,
+  items: Optimierung[]
+): Promise<Optimierung[]> {
+  if (items.length === 0) return items
+  const ids = items.map((i) => i.id)
+  const ph = ids.map(() => '?').join(',')
+
+  const [linksRes, fotosRes] = await Promise.all([
+    db
+      .prepare(
+        `SELECT * FROM optimierungen_links WHERE optimierung_id IN (${ph})
+         ORDER BY optimierung_id, reihenfolge ASC, created_at ASC`
+      )
+      .bind(...ids)
+      .all(),
+    db
+      .prepare(
+        `SELECT * FROM optimierungen_fotos WHERE optimierung_id IN (${ph})
+         ORDER BY optimierung_id, sort_index ASC, created_at ASC`
+      )
+      .bind(...ids)
+      .all(),
+  ])
+
+  const linksByOpt = new Map<string, OptimierungLink[]>()
+  for (const row of (linksRes.results || []) as Record<string, unknown>[]) {
+    const link = mapOptimierungLinkRow(row)
+    const list = linksByOpt.get(link.optimierung_id) ?? []
+    list.push(link)
+    linksByOpt.set(link.optimierung_id, list)
+  }
+
+  const fotoMetaByOpt = new Map<string, { count: number; coverId: string | null }>()
+  for (const row of (fotosRes.results || []) as Record<string, unknown>[]) {
+    const foto = mapOptimierungFotoRow(row)
+    const prev = fotoMetaByOpt.get(foto.optimierung_id) ?? { count: 0, coverId: null }
+    if (prev.coverId == null) prev.coverId = foto.id
+    prev.count += 1
+    fotoMetaByOpt.set(foto.optimierung_id, prev)
+  }
+
+  return items.map((item) => {
+    const meta = fotoMetaByOpt.get(item.id)
+    return {
+      ...item,
+      links: linksByOpt.get(item.id) ?? [],
+      foto_count: meta?.count ?? 0,
+      cover_foto_id: meta?.coverId ?? null,
+    }
+  })
+}
+
+export async function getOptimierungen(
+  db: D1Database,
+  statusFilter?: OptimierungStatus
+): Promise<Optimierung[]> {
+  try {
+    const res = statusFilter
+      ? await db
+          .prepare('SELECT * FROM optimierungen WHERE status = ?')
+          .bind(statusFilter)
+          .all()
+      : await db.prepare('SELECT * FROM optimierungen').all()
+    const rows = (res.results || []) as Record<string, unknown>[]
+    const sorted = sortOptimierungen(rows.map(mapOptimierungRow))
+    return attachOptimierungRelations(db, sorted)
+  } catch (error) {
+    console.error('Error getOptimierungen:', error)
+    return []
+  }
+}
+
+export async function getOptimierungById(
+  db: D1Database,
+  id: string
+): Promise<Optimierung | null> {
+  try {
+    const row = await db
+      .prepare('SELECT * FROM optimierungen WHERE id = ?')
+      .bind(id)
+      .first()
+    if (!row) return null
+    const [withRel] = await attachOptimierungRelations(db, [
+      mapOptimierungRow(row as Record<string, unknown>),
+    ])
+    return withRel ?? null
+  } catch (error) {
+    console.error('Error getOptimierungById:', error)
+    return null
+  }
+}
+
+export async function replaceOptimierungLinks(
+  db: D1Database,
+  optimierungId: string,
+  urls: string[]
+): Promise<boolean> {
+  try {
+    await db
+      .prepare('DELETE FROM optimierungen_links WHERE optimierung_id = ?')
+      .bind(optimierungId)
+      .run()
+    const cleaned = urls.map((u) => u.trim()).filter((u) => u.length > 0)
+    for (let i = 0; i < cleaned.length; i++) {
+      await db
+        .prepare(
+          `INSERT INTO optimierungen_links (id, optimierung_id, url, reihenfolge)
+           VALUES (?, ?, ?, ?)`
+        )
+        .bind(crypto.randomUUID(), optimierungId, cleaned[i], i)
+        .run()
+    }
+    return true
+  } catch (error) {
+    console.error('Error replaceOptimierungLinks:', error)
+    return false
+  }
+}
+
+export type CreateOptimierungInput = {
+  titel: string
+  notiz?: string | null
+  bereich?: OptimierungBereich
+  status?: OptimierungStatus
+  prioritaet?: OptimierungPrioritaet | null
+  faelligkeit_modus?: 'naechster_urlaub' | 'saisonstart' | 'irgendwann' | null
+  links?: string[]
+}
+
+export async function createOptimierung(
+  db: D1Database,
+  input: CreateOptimierungInput
+): Promise<string | null> {
+  try {
+    const { computeFaelligAm } = await import('@/lib/optimierung-faelligkeit')
+    const id = crypto.randomUUID()
+    const maxRow = await db
+      .prepare('SELECT MAX(reihenfolge) as m FROM optimierungen')
+      .first<{ m: number | null }>()
+    const reihenfolge = (maxRow?.m ?? -1) + 1
+    const titel = input.titel.trim()
+    if (!titel) return null
+
+    const { todayInAppTimezone } = await import('@/lib/app-timezone')
+    const status = input.status ?? 'idee'
+    const clearFaelligkeit = status === 'idee' || status === 'verworfen'
+    const modus = clearFaelligkeit ? null : (input.faelligkeit_modus ?? null)
+    const vacations = clearFaelligkeit || !modus ? [] : await getVacations(db)
+    const bezugAm =
+      !clearFaelligkeit && modus === 'saisonstart' ? todayInAppTimezone() : null
+    const faelligAm =
+      clearFaelligkeit || !modus
+        ? null
+        : computeFaelligAm(modus, vacations, { bezugYmd: bezugAm })
+
+    await db
+      .prepare(
+        `INSERT INTO optimierungen (
+          id, titel, notiz, bereich, status, prioritaet,
+          faelligkeit_modus, faellig_am, faelligkeit_bezug_am, reihenfolge
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .bind(
+        id,
+        titel,
+        input.notiz?.trim() || null,
+        input.bereich ?? 'ausstattung',
+        status,
+        input.prioritaet ?? 'mittel',
+        modus,
+        faelligAm,
+        bezugAm,
+        reihenfolge
+      )
+      .run()
+    if (input.links) {
+      await replaceOptimierungLinks(db, id, input.links)
+    }
+    return id
+  } catch (error) {
+    console.error('Error createOptimierung:', error)
+    return null
+  }
+}
+
+export type UpdateOptimierungInput = {
+  titel?: string
+  notiz?: string | null
+  bereich?: OptimierungBereich
+  status?: OptimierungStatus
+  prioritaet?: OptimierungPrioritaet | null
+  faelligkeit_modus?: 'naechster_urlaub' | 'saisonstart' | 'irgendwann' | null
+  reihenfolge?: number
+  links?: string[]
+}
+
+export async function updateOptimierung(
+  db: D1Database,
+  id: string,
+  fields: UpdateOptimierungInput
+): Promise<boolean> {
+  try {
+    const { computeFaelligAm } = await import('@/lib/optimierung-faelligkeit')
+    const existing = await getOptimierungById(db, id)
+    if (!existing) return false
+
+    const titel =
+      fields.titel !== undefined ? fields.titel.trim() : existing.titel
+    if (!titel) return false
+
+    const notiz =
+      fields.notiz !== undefined
+        ? fields.notiz?.trim() || null
+        : existing.notiz
+    const bereich = fields.bereich ?? existing.bereich
+    const status = fields.status ?? existing.status
+    const prioritaet =
+      fields.prioritaet !== undefined ? fields.prioritaet : existing.prioritaet
+    const reihenfolge =
+      fields.reihenfolge !== undefined ? fields.reihenfolge : existing.reihenfolge
+
+    const { todayInAppTimezone } = await import('@/lib/app-timezone')
+    const clearFaelligkeit = status === 'idee' || status === 'verworfen'
+    let modus = clearFaelligkeit
+      ? null
+      : fields.faelligkeit_modus !== undefined
+        ? fields.faelligkeit_modus
+        : existing.faelligkeit_modus
+    if (clearFaelligkeit) modus = null
+
+    const modusTouched =
+      fields.faelligkeit_modus !== undefined &&
+      fields.faelligkeit_modus !== existing.faelligkeit_modus
+
+    let bezugAm: string | null = null
+    if (clearFaelligkeit || !modus || modus !== 'saisonstart') {
+      bezugAm = null
+    } else if (modusTouched || !existing.faelligkeit_bezug_am) {
+      // Fälligkeit neu gesetzt/geändert → nächster Saisonstart ab heute
+      bezugAm = todayInAppTimezone()
+    } else {
+      bezugAm = existing.faelligkeit_bezug_am
+    }
+
+    const vacations =
+      !clearFaelligkeit && modus && modus !== 'irgendwann'
+        ? await getVacations(db)
+        : []
+    const faelligAm =
+      clearFaelligkeit || !modus
+        ? null
+        : computeFaelligAm(modus, vacations, { bezugYmd: bezugAm })
+
+    await db
+      .prepare(
+        `UPDATE optimierungen SET
+          titel = ?, notiz = ?, bereich = ?, status = ?, prioritaet = ?,
+          faelligkeit_modus = ?, faellig_am = ?, faelligkeit_bezug_am = ?,
+          reihenfolge = ?
+        WHERE id = ?`
+      )
+      .bind(
+        titel,
+        notiz,
+        bereich,
+        status,
+        prioritaet,
+        modus,
+        faelligAm,
+        bezugAm,
+        reihenfolge,
+        id
+      )
+      .run()
+
+    if (fields.links !== undefined) {
+      await replaceOptimierungLinks(db, id, fields.links)
+    }
+    return true
+  } catch (error) {
+    console.error('Error updateOptimierung:', error)
+    return false
+  }
+}
+
+/** Alle Optimierungen mit Urlaubs-bezogener Fälligkeit neu berechnen */
+export async function recalculateAllOptimierungFaelligkeiten(
+  db: D1Database
+): Promise<number> {
+  try {
+    const { computeFaelligAm } = await import('@/lib/optimierung-faelligkeit')
+    const vacations = await getVacations(db)
+    const res = await db
+      .prepare(
+        `SELECT id, faelligkeit_modus, faelligkeit_bezug_am FROM optimierungen
+         WHERE faelligkeit_modus IN ('naechster_urlaub', 'saisonstart')
+           AND status NOT IN ('idee', 'verworfen')`
+      )
+      .all<{
+        id: string
+        faelligkeit_modus: string
+        faelligkeit_bezug_am: string | null
+      }>()
+    const rows = res.results || []
+    let updated = 0
+    for (const row of rows) {
+      const modus =
+        row.faelligkeit_modus === 'naechster_urlaub' ||
+        row.faelligkeit_modus === 'saisonstart'
+          ? row.faelligkeit_modus
+          : null
+      if (!modus) continue
+      const faelligAm = computeFaelligAm(modus, vacations, {
+        bezugYmd: row.faelligkeit_bezug_am,
+      })
+      await db
+        .prepare('UPDATE optimierungen SET faellig_am = ? WHERE id = ?')
+        .bind(faelligAm, row.id)
+        .run()
+      updated += 1
+    }
+    return updated
+  } catch (error) {
+    console.error('Error recalculateAllOptimierungFaelligkeiten:', error)
+    return 0
+  }
+}
+
+export async function listOptimierungFotoR2Keys(
+  db: D1Database,
+  optimierungId: string
+): Promise<string[]> {
+  try {
+    const res = await db
+      .prepare(
+        `SELECT r2_object_key FROM optimierungen_fotos
+         WHERE optimierung_id = ? AND r2_object_key IS NOT NULL`
+      )
+      .bind(optimierungId)
+      .all<{ r2_object_key: string }>()
+    return (res.results || [])
+      .map((r) => r.r2_object_key)
+      .filter((k) => typeof k === 'string' && k.trim().length > 0)
+  } catch (error) {
+    console.error('Error listOptimierungFotoR2Keys:', error)
+    return []
+  }
+}
+
+export async function deleteOptimierung(
+  db: D1Database,
+  id: string
+): Promise<{ deleted: boolean; r2Keys: string[] }> {
+  try {
+    const r2Keys = await listOptimierungFotoR2Keys(db, id)
+    const r = await db.prepare('DELETE FROM optimierungen WHERE id = ?').bind(id).run()
+    return {
+      deleted: r.success && (r.meta?.changes ?? 0) > 0,
+      r2Keys,
+    }
+  } catch (error) {
+    console.error('Error deleteOptimierung:', error)
+    return { deleted: false, r2Keys: [] }
+  }
+}
+
+export async function getOptimierungFotos(
+  db: D1Database,
+  optimierungId: string
+): Promise<OptimierungFoto[]> {
+  try {
+    const res = await db
+      .prepare(
+        `SELECT * FROM optimierungen_fotos WHERE optimierung_id = ?
+         ORDER BY sort_index ASC, created_at ASC`
+      )
+      .bind(optimierungId)
+      .all()
+    return ((res.results || []) as Record<string, unknown>[]).map(mapOptimierungFotoRow)
+  } catch (error) {
+    console.error('Error getOptimierungFotos:', error)
+    return []
+  }
+}
+
+export async function getOptimierungFotoById(
+  db: D1Database,
+  fotoId: string
+): Promise<OptimierungFoto | null> {
+  try {
+    const row = await db
+      .prepare('SELECT * FROM optimierungen_fotos WHERE id = ?')
+      .bind(fotoId)
+      .first()
+    if (!row) return null
+    return mapOptimierungFotoRow(row as Record<string, unknown>)
+  } catch (error) {
+    console.error('Error getOptimierungFotoById:', error)
+    return null
+  }
+}
+
+export function buildOptimierungFotoObjectKey(
+  optimierungId: string,
+  fotoId: string,
+  contentType: string
+): string {
+  const ct = contentType.toLowerCase()
+  const ext = ct.includes('png') ? 'png' : ct.includes('webp') ? 'webp' : 'jpg'
+  return `opt/${optimierungId}/${fotoId}.${ext}`
+}
+
+export async function createOptimierungFoto(
+  db: D1Database,
+  opts: {
+    optimierung_id: string
+    r2_object_key?: string | null
+    content_type?: string
+  }
+): Promise<OptimierungFoto | null> {
+  try {
+    const countRow = await db
+      .prepare(`SELECT COUNT(*) as n FROM optimierungen_fotos WHERE optimierung_id = ?`)
+      .bind(opts.optimierung_id)
+      .first<{ n: number }>()
+    const n = Number(countRow?.n ?? 0)
+    const id = crypto.randomUUID()
+    await db
+      .prepare(
+        `INSERT INTO optimierungen_fotos (
+          id, optimierung_id, sort_index, r2_object_key, content_type
+        ) VALUES (?, ?, ?, ?, ?)`
+      )
+      .bind(
+        id,
+        opts.optimierung_id,
+        n,
+        opts.r2_object_key ?? null,
+        opts.content_type ?? 'image/jpeg'
+      )
+      .run()
+    return getOptimierungFotoById(db, id)
+  } catch (error) {
+    console.error('Error createOptimierungFoto:', error)
+    return null
+  }
+}
+
+export async function updateOptimierungFotoR2(
+  db: D1Database,
+  fotoId: string,
+  r2_object_key: string,
+  content_type?: string
+): Promise<OptimierungFoto | null> {
+  try {
+    await db
+      .prepare(
+        `UPDATE optimierungen_fotos SET r2_object_key = ?,
+         content_type = COALESCE(?, content_type)
+         WHERE id = ?`
+      )
+      .bind(r2_object_key, content_type ?? null, fotoId)
+      .run()
+    return getOptimierungFotoById(db, fotoId)
+  } catch (error) {
+    console.error('Error updateOptimierungFotoR2:', error)
+    return null
+  }
+}
+
+export async function deleteOptimierungFoto(
+  db: D1Database,
+  optimierungId: string,
+  fotoId: string
+): Promise<{ deleted: boolean; r2_object_key: string | null }> {
+  try {
+    const row = await db
+      .prepare(
+        `SELECT r2_object_key FROM optimierungen_fotos
+         WHERE id = ? AND optimierung_id = ?`
+      )
+      .bind(fotoId, optimierungId)
+      .first<{ r2_object_key: string | null }>()
+    if (!row) return { deleted: false, r2_object_key: null }
+    const r2Key = row.r2_object_key != null ? String(row.r2_object_key) : null
+    await db.prepare('DELETE FROM optimierungen_fotos WHERE id = ?').bind(fotoId).run()
+    return { deleted: true, r2_object_key: r2Key }
+  } catch (error) {
+    console.error('Error deleteOptimierungFoto:', error)
+    return { deleted: false, r2_object_key: null }
+  }
+}
+
+export async function reorderOptimierungen(
+  db: D1Database,
+  orderedIds: string[]
+): Promise<boolean> {
+  try {
+    for (let i = 0; i < orderedIds.length; i++) {
+      await db
+        .prepare('UPDATE optimierungen SET reihenfolge = ? WHERE id = ?')
+        .bind(i, orderedIds[i])
+        .run()
+    }
+    return true
+  } catch (error) {
+    console.error('Error reorderOptimierungen:', error)
     return false
   }
 }

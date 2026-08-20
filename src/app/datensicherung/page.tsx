@@ -46,8 +46,9 @@ const PRESET_META: { id: UiPresetKey; label: string; hint: string }[] = [
   },
   {
     id: 'toolsChecklists',
-    label: 'Tools / Checklisten',
-    hint: 'Die zusätzlichen Checklisten unter „Tools“ mit Kategorien und Einträgen.',
+    label: 'Tools / Checklisten & Optimierungen',
+    hint:
+      'Checklisten unter „Tools“ (Kategorien und Einträge) sowie das Optimierungen-Backlog inkl. Links und Foto-Metadaten.',
   },
 ]
 

@@ -62,10 +62,15 @@ export function NavigationSidebar({ isOpen, onClose }: NavigationSidebarProps) {
     }
   ]
 
-  const toolsItems: { label: string; href: string }[] = [
+  const toolsItems: { label: string; href: string; adminOnly?: boolean }[] = [
     { label: 'SONNEN-AUSRICHTUNG', href: '/tools/sonnen-ausrichtung' },
     { label: 'CHECKLISTEN', href: '/tools/checklisten' },
+    { label: 'OPTIMIERUNGEN', href: '/tools/optimierungen', adminOnly: true },
   ]
+
+  const visibleToolsItems = toolsItems.filter(
+    (item) => !item.adminOnly || canAccessConfig
+  )
 
   /** Light Mode: deutlich dunkler als text-muted-foreground; Dark Mode unverändert */
   const navItemIdle =
@@ -141,7 +146,7 @@ export function NavigationSidebar({ isOpen, onClose }: NavigationSidebarProps) {
             {/* Tools Submenu */}
             {toolsExpanded && (
               <div className="mt-1 ml-11 space-y-1">
-                {toolsItems.map((item) => (
+                {visibleToolsItems.map((item) => (
                   <Link
                     key={item.href}
                     href={item.href}

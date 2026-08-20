@@ -581,20 +581,23 @@ export async function buildBackupBundle(
 
   if (options.includeR2Photos === true) {
     const bucket = ctx?.r2Bucket ?? null
-    const fotoRows = (data.campingplatz_fotos ?? []) as Record<string, unknown>[]
+    const fotoRows = [
+      ...((data.campingplatz_fotos ?? []) as Record<string, unknown>[]),
+      ...((data.optimierungen_fotos ?? []) as Record<string, unknown>[]),
+    ]
     const keysSorted = [...collectR2KeysFromCampingplatzFotos(fotoRows)].sort((a, b) =>
       a.localeCompare(b)
     )
 
     if (!bucket) {
       warnings.push(
-        'R2-Bilder angefordert, aber CAMPING_PHOTOS ist nicht gebunden — nur D1-Metadaten (campingplatz_fotos), keine Dateien im ZIP.'
+        'R2-Bilder angefordert, aber CAMPING_PHOTOS ist nicht gebunden — nur D1-Metadaten (Fotos), keine Dateien im ZIP.'
       )
     } else {
       deliverZipArchive = true
       if (keysSorted.length === 0) {
         warnings.push(
-          'R2-Bilder angefordert, aber keine gültigen r2_object_key in campingplatz_fotos — ZIP ohne Binärteil.'
+          'R2-Bilder angefordert, aber keine gültigen r2_object_key in den Foto-Tabellen — ZIP ohne Binärteil.'
         )
         r2PhotoFiles = []
       } else {

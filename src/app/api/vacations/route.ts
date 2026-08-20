@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getCloudflareContext } from '@opennextjs/cloudflare'
-import { getDB, getVacations, createVacation, updateVacation, deleteVacation, CloudflareEnv } from '@/lib/db'
+import { getDB, getVacations, createVacation, updateVacation, deleteVacation, recalculateAllOptimierungFaelligkeiten, CloudflareEnv } from '@/lib/db'
 import { requireAuth, requireAdmin } from '@/lib/api-auth'
 import { isAdminRole } from '@/lib/auth'
 import { notifyIntegrationChange } from '@/lib/integration-events'
@@ -71,6 +71,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to create vacation' }, { status: 400 })
     }
 
+    await recalculateAllOptimierungFaelligkeiten(db)
+
     return NextResponse.json({ success: true, data: vacation }, { status: 201 })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error)
@@ -109,6 +111,8 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to update vacation' }, { status: 400 })
     }
 
+    await recalculateAllOptimierungFaelligkeiten(db)
+
     const cfEnv = (await getCloudflareContext({ async: true })).env as unknown as CloudflareEnv
     await notifyIntegrationChange(cfEnv, id)
 
@@ -139,6 +143,8 @@ export async function DELETE(request: NextRequest) {
     if (!success) {
       return NextResponse.json({ error: 'Failed to delete vacation' }, { status: 400 })
     }
+
+    await recalculateAllOptimierungFaelligkeiten(db)
 
     return NextResponse.json({ success: true })
   } catch (error: unknown) {
