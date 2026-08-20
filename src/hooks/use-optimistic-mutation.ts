@@ -236,6 +236,20 @@ async function defaultSend(opts: MutationOptions): Promise<{ ok: boolean; status
       url = `/api/checklisten/${encodeURIComponent(ctx.checklistId ?? '')}/eintraege/${encodeURIComponent(ctx.eintragId ?? '')}`
       body = opts.payload
       break
+    case 'optimierungen':
+      if (opts.action === 'post') {
+        method = 'POST'
+        url = '/api/optimierungen'
+        body = opts.payload
+      } else if (opts.action === 'put' || opts.action === 'patch') {
+        method = 'PUT'
+        url = `/api/optimierungen/${encodeURIComponent(opts.key)}`
+        body = opts.payload
+      } else if (opts.action === 'delete') {
+        method = 'DELETE'
+        url = `/api/optimierungen/${encodeURIComponent(opts.key)}`
+      }
+      break
     default:
       return { ok: false, status: 0 }
   }

@@ -111,8 +111,8 @@ export function ResponsiveModal({
     const accessibleTitle = title || 'Dialog'
     if (isMobile) {
       return (
-        <Drawer open={open} onOpenChange={handleOpenChange}>
-          <DrawerContent className={cn('max-h-[90vh] flex flex-col p-0', contentClassName)}>
+        <Drawer open={open} onOpenChange={handleOpenChange} repositionInputs={false}>
+          <DrawerContent className={cn('max-h-[90dvh] flex flex-col p-0', contentClassName)}>
             <DrawerTitle className="sr-only">{accessibleTitle}</DrawerTitle>
             {children}
           </DrawerContent>
@@ -131,10 +131,10 @@ export function ResponsiveModal({
 
   if (isMobile) {
     return (
-      <Drawer open={open} onOpenChange={handleOpenChange}>
+      <Drawer open={open} onOpenChange={handleOpenChange} repositionInputs={false}>
         <DrawerContent
           className={cn(
-            'max-h-[90vh] flex flex-col w-full max-w-[100vw]',
+            'max-h-[90dvh] flex flex-col w-full max-w-[100vw]',
             noPadding ? 'p-0' : 'p-0',
             contentClassName
           )}

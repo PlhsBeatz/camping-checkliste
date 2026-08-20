@@ -109,6 +109,7 @@ export async function POST(request: NextRequest) {
     const env = process.env as unknown as CloudflareEnv
     const db = await getDB(env)
     const id = await createOptimierung(db, {
+      id: typeof o.id === 'string' && o.id.trim() ? o.id.trim() : undefined,
       titel,
       notiz: typeof o.notiz === 'string' ? o.notiz : null,
       bereich: isBereich(o.bereich) ? o.bereich : undefined,

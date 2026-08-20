@@ -6376,6 +6376,8 @@ export async function replaceOptimierungLinks(
 }
 
 export type CreateOptimierungInput = {
+  /** Optional: Client-ID für Offline-Anlegen (sonst Server-UUID) */
+  id?: string
   titel: string
   notiz?: string | null
   bereich?: OptimierungBereich
@@ -6391,7 +6393,7 @@ export async function createOptimierung(
 ): Promise<string | null> {
   try {
     const { computeFaelligAm } = await import('@/lib/optimierung-faelligkeit')
-    const id = crypto.randomUUID()
+    const id = input.id?.trim() || crypto.randomUUID()
     const maxRow = await db
       .prepare('SELECT MAX(reihenfolge) as m FROM optimierungen')
       .first<{ m: number | null }>()

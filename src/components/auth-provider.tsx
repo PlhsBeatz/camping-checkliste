@@ -11,7 +11,7 @@ import {
 } from 'react'
 import type { UserRole } from '@/lib/user-roles'
 import { isAdminRole, isSystemAdminRole } from '@/lib/user-roles'
-import { getCachedAuthUser, scheduleChecklistenPrefetch, subscribeToOnlineStatus } from '@/lib/offline-sync'
+import { getCachedAuthUser, scheduleChecklistenPrefetch, scheduleOptimierungenPrefetch, subscribeToOnlineStatus } from '@/lib/offline-sync'
 import { cacheAuthUser, clearAuthUser } from '@/lib/offline-db'
 import type { Personentyp } from '@/lib/db'
 
@@ -73,6 +73,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           console.warn('Auth-Cache schreiben fehlgeschlagen:', err)
         }
         scheduleChecklistenPrefetch()
+        if (isAdminRole(data.user.role) || isSystemAdminRole(data.user.role)) {
+          scheduleOptimierungenPrefetch()
+        }
       } else if (res.ok) {
         setUser(null)
         setFromCache(false)
@@ -107,6 +110,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       if (online && !lastOnline) {
         scheduleChecklistenPrefetch()
+        void getCachedAuthUser().then((cached) => {
+          if (
+            cached &&
+            (isAdminRole(cached.role) || isSystemAdminRole(cached.role))
+          ) {
+            scheduleOptimierungenPrefetch()
+          }
+        })
       }
       lastOnline = online
     })

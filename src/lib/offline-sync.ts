@@ -18,6 +18,7 @@ import {
   cacheTransportVehicles,
   cachePackingItems,
   cacheChecklisten,
+  cacheOptimierungen,
   cacheLastPosition,
   cachePackStatus,
   cacheCampingplaetze,
@@ -48,6 +49,7 @@ import type {
   CampingplatzRouteCacheEntry,
   PackStatusData,
   Rastplatz,
+  Optimierung,
 } from './db'
 
 /** Wie `getPackingItems` in `db.ts` nach dem Merge (Hauptkat → Kategorie → Titel). */
@@ -174,6 +176,40 @@ export function scheduleChecklistenPrefetch(): void {
 }
 
 // ---------------------------------------------------------------------------
+// Hintergrund: Optimierungen für Offline vorwärmen (Admin)
+// ---------------------------------------------------------------------------
+
+let optimierungenWarmInFlight: Promise<void> | null = null
+
+export function prefetchOptimierungenWarmCache(): Promise<void> {
+  if (optimierungenWarmInFlight !== null) return optimierungenWarmInFlight
+  optimierungenWarmInFlight = (async () => {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) return
+    await fetchAndCache<Optimierung[]>(
+      '/api/optimierungen',
+      cacheOptimierungen,
+      undefined,
+      { cache: 'no-store' }
+    )
+  })().finally(() => {
+    optimierungenWarmInFlight = null
+  })
+  return optimierungenWarmInFlight
+}
+
+export function scheduleOptimierungenPrefetch(): void {
+  if (typeof window === 'undefined') return
+  const run = () => {
+    void prefetchOptimierungenWarmCache()
+  }
+  if (typeof window.requestIdleCallback === 'function') {
+    window.requestIdleCallback(run, { timeout: 12_000 })
+  } else {
+    window.setTimeout(run, 2_500)
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Read-Pfade (getCached*)
 // ---------------------------------------------------------------------------
 
@@ -256,6 +292,14 @@ export async function getCachedChecklisten(): Promise<ChecklisteMitStruktur[]> {
   return rows
     .map(stripMeta)
     .sort((a, b) => a.reihenfolge - b.reihenfolge || a.titel.localeCompare(b.titel))
+}
+
+/** Aus IndexedDB lesen: Optimierungen (Admin-Backlog) */
+export async function getCachedOptimierungen(): Promise<Optimierung[]> {
+  const rows = await offlineDb.optimierungen.toArray()
+  return rows
+    .map(stripMeta)
+    .sort((a, b) => a.reihenfolge - b.reihenfolge || a.titel.localeCompare(b.titel, 'de'))
 }
 
 /** Aus IndexedDB lesen: zuletzt bekannte GPS-Position */
@@ -371,6 +415,7 @@ export const cacheFns = {
   transportVehicles: cacheTransportVehicles,
   packingItems: cachePackingItems,
   checklisten: cacheChecklisten,
+  optimierungen: cacheOptimierungen,
   lastPosition: cacheLastPosition,
   packStatus: cachePackStatus,
   campingplaetze: cacheCampingplaetze,
@@ -629,6 +674,25 @@ function resolveRoute(e: SyncQueueEntry): ResolvedRoute | null {
         url: `/api/checklisten/${encodeURIComponent(checklistId)}/eintraege/${encodeURIComponent(eintragId)}`,
         body: e.payload,
       }
+    }
+    case 'optimierungen': {
+      if (e.action === 'post') {
+        return { method: 'POST', url: '/api/optimierungen', body: e.payload }
+      }
+      if (e.action === 'put' || e.action === 'patch') {
+        return {
+          method: 'PUT',
+          url: `/api/optimierungen/${encodeURIComponent(e.key)}`,
+          body: e.payload,
+        }
+      }
+      if (e.action === 'delete') {
+        return {
+          method: 'DELETE',
+          url: `/api/optimierungen/${encodeURIComponent(e.key)}`,
+        }
+      }
+      return null
     }
     case 'pack-status-entry-weight': {
       return {

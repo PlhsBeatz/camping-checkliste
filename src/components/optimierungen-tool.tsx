@@ -25,6 +25,20 @@ import {
   type OptimierungFaelligkeitModus,
 } from '@/lib/optimierung-faelligkeit'
 import { useToast } from '@/hooks/use-toast'
+import { useOptimisticMutation } from '@/hooks/use-optimistic-mutation'
+import { useReconnectRefetch } from '@/hooks/use-reconnect-refetch'
+import {
+  fetchAndCache,
+  getCachedOptimierungen,
+  getCachedVacations,
+} from '@/lib/offline-sync'
+import {
+  cacheOptimierungen,
+  cacheVacations,
+  removeCachedOptimierung,
+} from '@/lib/offline-db'
+import { isOffline, showOfflineToast, showQueuedToast } from '@/lib/offline-toast'
+import { todayInAppTimezone } from '@/lib/app-timezone'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -269,6 +283,7 @@ export type OptimierungenToolProps = {
 
 export function OptimierungenTool({ headerTrailingRef }: OptimierungenToolProps) {
   const { toast } = useToast()
+  const { mutate } = useOptimisticMutation()
   const [items, setItems] = useState<Optimierung[]>([])
   const [vacations, setVacations] = useState<Vacation[]>([])
   const [loading, setLoading] = useState(true)
@@ -318,31 +333,67 @@ export function OptimierungenTool({ headerTrailingRef }: OptimierungenToolProps)
 
   const load = useCallback(async () => {
     try {
-      const [optRes, vacRes] = await Promise.all([
-        fetch('/api/optimierungen'),
-        fetch('/api/vacations'),
+      const [optResult, vacResult] = await Promise.all([
+        fetchAndCache<Optimierung[]>(
+          '/api/optimierungen',
+          cacheOptimierungen,
+          getCachedOptimierungen,
+          { cache: 'no-store' }
+        ),
+        fetchAndCache<Vacation[]>(
+          '/api/vacations',
+          cacheVacations,
+          getCachedVacations,
+          { cache: 'no-store' }
+        ),
       ])
-      const optJson = (await optRes.json()) as ApiResponse<Optimierung[]>
-      const vacJson = (await vacRes.json()) as ApiResponse<Vacation[]>
-      if (optJson.success && optJson.data) {
-        setItems(optJson.data)
+
+      if (optResult.data) {
+        setItems(optResult.data)
+        if (optResult.fromCache) {
+          showOfflineToast({
+            description: 'Optimierungen werden aus dem lokalen Cache angezeigt.',
+          })
+        }
       } else {
+        setItems([])
         toast({
           title: 'Laden fehlgeschlagen',
-          description: optJson.error || 'Unbekannter Fehler',
+          description: 'Optimierungen konnten nicht geladen werden.',
           variant: 'destructive',
         })
       }
-      if (vacJson.success && vacJson.data) {
-        setVacations(vacJson.data)
+
+      if (vacResult.data) {
+        setVacations(vacResult.data)
       }
     } catch (e) {
       console.error(e)
-      toast({
-        title: 'Laden fehlgeschlagen',
-        description: 'Netzwerkfehler',
-        variant: 'destructive',
-      })
+      try {
+        const [cachedOpt, cachedVac] = await Promise.all([
+          getCachedOptimierungen(),
+          getCachedVacations(),
+        ])
+        if (cachedOpt.length > 0) {
+          setItems(cachedOpt)
+          setVacations(cachedVac)
+          showOfflineToast({
+            description: 'Optimierungen werden aus dem lokalen Cache angezeigt.',
+          })
+        } else {
+          toast({
+            title: 'Laden fehlgeschlagen',
+            description: 'Netzwerkfehler',
+            variant: 'destructive',
+          })
+        }
+      } catch {
+        toast({
+          title: 'Laden fehlgeschlagen',
+          description: 'Netzwerkfehler',
+          variant: 'destructive',
+        })
+      }
     } finally {
       setLoading(false)
     }
@@ -351,6 +402,19 @@ export function OptimierungenTool({ headerTrailingRef }: OptimierungenToolProps)
   useEffect(() => {
     load()
   }, [load])
+
+  useReconnectRefetch(() => {
+    void load()
+  })
+
+  const persistItems = useCallback(async (next: Optimierung[]) => {
+    setItems(next)
+    try {
+      await cacheOptimierungen(next)
+    } catch (err) {
+      console.warn('Optimierungen-Cache schreiben fehlgeschlagen:', err)
+    }
+  }, [])
 
   const loadFotos = useCallback(async (optimierungId: string) => {
     try {
@@ -445,55 +509,137 @@ export function OptimierungenTool({ headerTrailingRef }: OptimierungenToolProps)
 
     const links = form.links.map((u) => u.trim()).filter(Boolean)
     const showFaelligkeit = showsFaelligkeitFields(form.status)
+    const faelligkeit_modus = showFaelligkeit
+      ? form.faelligkeit_modus || null
+      : null
     const payload = {
       titel,
       notiz: form.notiz.trim() || null,
       status: form.status,
       prioritaet: form.prioritaet,
-      faelligkeit_modus: showFaelligkeit
-        ? form.faelligkeit_modus || null
-        : null,
+      faelligkeit_modus,
       links,
     }
 
     setSaving(true)
     try {
       let newId: string | null = null
+      let queued = false
       if (isCreate) {
-        const res = await fetch('/api/optimierungen', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
+        const clientId = crypto.randomUUID()
+        const result = await mutate({
+          table: 'optimierungen',
+          action: 'post',
+          key: clientId,
+          payload: { ...payload, id: clientId },
         })
-        const json = (await res.json()) as ApiResponse<unknown> & { id?: string }
-        if (!res.ok || !json.success || !json.id) {
+        if (!result.ok && !result.queued) {
           toast({
             title: 'Anlegen fehlgeschlagen',
-            description: json.error || 'Unbekannter Fehler',
+            description: result.error || 'Unbekannter Fehler',
             variant: 'destructive',
           })
           return
         }
-        newId = json.id
+        queued = result.queued
+        newId = clientId
+        const modus = faelligkeit_modus
+        const bezugAm =
+          modus === 'saisonstart' ? todayInAppTimezone() : null
+        const faelligAm =
+          modus && modus !== 'irgendwann'
+            ? computeFaelligAm(modus, vacations, { bezugYmd: bezugAm })
+            : null
+        const optimistic: Optimierung = {
+          id: clientId,
+          titel,
+          notiz: payload.notiz,
+          bereich: 'ausstattung',
+          status: form.status,
+          prioritaet: form.prioritaet,
+          zeitfenster: null,
+          zeit_jahr: null,
+          zeit_notiz: null,
+          faelligkeit_modus: modus,
+          faellig_am: faelligAm,
+          faelligkeit_bezug_am: bezugAm,
+          reihenfolge: (items.reduce((m, i) => Math.max(m, i.reihenfolge), -1) + 1),
+          created_at: new Date().toISOString(),
+          links: links.map((url, idx) => ({
+            id: `${clientId}-link-${idx}`,
+            optimierung_id: clientId,
+            url,
+            reihenfolge: idx,
+            created_at: new Date().toISOString(),
+          })),
+          foto_count: 0,
+          cover_foto_id: null,
+        }
+        await persistItems([optimistic, ...items])
       } else {
-        const res = await fetch(`/api/optimierungen/${editing!.id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
+        const id = editing!.id
+        const result = await mutate({
+          table: 'optimierungen',
+          action: 'put',
+          key: id,
+          payload,
         })
-        const json = (await res.json()) as ApiResponse<unknown>
-        if (!res.ok || !json.success) {
+        if (!result.ok && !result.queued) {
           toast({
             title: 'Speichern fehlgeschlagen',
-            description: json.error || 'Unbekannter Fehler',
+            description: result.error || 'Unbekannter Fehler',
             variant: 'destructive',
           })
           return
         }
-        newId = editing!.id
+        queued = result.queued
+        newId = id
+        const modus = faelligkeit_modus
+        const bezugAm =
+          modus === 'saisonstart'
+            ? editing!.faelligkeit_modus === 'saisonstart' &&
+              editing!.faelligkeit_bezug_am &&
+              form.faelligkeit_modus === editing!.faelligkeit_modus
+              ? editing!.faelligkeit_bezug_am
+              : todayInAppTimezone()
+            : null
+        const faelligAm =
+          modus && modus !== 'irgendwann'
+            ? computeFaelligAm(modus, vacations, { bezugYmd: bezugAm })
+            : null
+        const next = items.map((item) =>
+          item.id === id
+            ? {
+                ...item,
+                titel,
+                notiz: payload.notiz,
+                status: form.status,
+                prioritaet: form.prioritaet,
+                faelligkeit_modus: modus,
+                faellig_am: faelligAm,
+                faelligkeit_bezug_am: bezugAm,
+                links: links.map((url, idx) => ({
+                  id: item.links?.[idx]?.id ?? `${id}-link-${idx}`,
+                  optimierung_id: id,
+                  url,
+                  reihenfolge: idx,
+                  created_at: item.links?.[idx]?.created_at ?? new Date().toISOString(),
+                })),
+              }
+            : item
+        )
+        await persistItems(next)
       }
 
       if (pendingFiles.length > 0 && newId) {
+        if (isOffline() || queued) {
+          toast({
+            title: queued ? 'Offline gespeichert' : 'Eintrag gespeichert',
+            description: 'Fotos können erst online hochgeladen werden.',
+          })
+          closeEdit()
+          return
+        }
         try {
           await uploadPendingFiles(newId, pendingFiles)
         } catch (e) {
@@ -510,8 +656,16 @@ export function OptimierungenTool({ headerTrailingRef }: OptimierungenToolProps)
       }
 
       closeEdit()
-      await load()
-      toast({ title: isCreate ? 'Optimierung angelegt' : 'Gespeichert' })
+      if (!queued) {
+        await load()
+        toast({ title: isCreate ? 'Optimierung angelegt' : 'Gespeichert' })
+      } else {
+        showQueuedToast({
+          description: isCreate
+            ? 'Die Optimierung wird synchronisiert, sobald Sie online sind.'
+            : undefined,
+        })
+      }
     } catch (e) {
       console.error(e)
       toast({
@@ -528,21 +682,31 @@ export function OptimierungenTool({ headerTrailingRef }: OptimierungenToolProps)
     if (!deleteTarget) return
     setDeleting(true)
     try {
-      const res = await fetch(`/api/optimierungen/${deleteTarget.id}`, { method: 'DELETE' })
-      const json = (await res.json()) as ApiResponse<unknown>
-      if (!res.ok || !json.success) {
+      const deletedId = deleteTarget.id
+      const result = await mutate({
+        table: 'optimierungen',
+        action: 'delete',
+        key: deletedId,
+      })
+      if (!result.ok && !result.queued) {
         toast({
           title: 'Löschen fehlgeschlagen',
-          description: json.error || 'Unbekannter Fehler',
+          description: result.error || 'Unbekannter Fehler',
           variant: 'destructive',
         })
         return
       }
-      const deletedId = deleteTarget.id
       setDeleteTarget(null)
       if (editing?.id === deletedId) closeEdit()
-      await load()
-      toast({ title: 'Gelöscht' })
+      await persistItems(items.filter((i) => i.id !== deletedId))
+      try {
+        await removeCachedOptimierung(deletedId)
+      } catch {
+        /* ignore */
+      }
+      if (result.queued) showQueuedToast({ description: 'Löschen wird bei Verbindung synchronisiert.' })
+      else toast({ title: 'Gelöscht' })
+      if (!isOffline()) await load()
     } catch (e) {
       console.error(e)
       toast({
@@ -560,29 +724,13 @@ export function OptimierungenTool({ headerTrailingRef }: OptimierungenToolProps)
       setItems((prev) =>
         prev.map((item) => (item.id === id ? { ...item, status } : item))
       )
-      try {
-        const res = await fetch(`/api/optimierungen/${id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ status }),
-        })
-        const json = (await res.json()) as ApiResponse<unknown>
-        if (!res.ok || !json.success) {
-          setItems((prev) =>
-            prev.map((item) =>
-              item.id === id ? { ...item, status: previousStatus } : item
-            )
-          )
-          toast({
-            title: 'Status konnte nicht gespeichert werden',
-            description: json.error || 'Unbekannter Fehler',
-            variant: 'destructive',
-          })
-          return false
-        }
-        return true
-      } catch (e) {
-        console.error(e)
+      const result = await mutate({
+        table: 'optimierungen',
+        action: 'put',
+        key: id,
+        payload: { status },
+      })
+      if (!result.ok && !result.queued) {
         setItems((prev) =>
           prev.map((item) =>
             item.id === id ? { ...item, status: previousStatus } : item
@@ -590,13 +738,22 @@ export function OptimierungenTool({ headerTrailingRef }: OptimierungenToolProps)
         )
         toast({
           title: 'Status konnte nicht gespeichert werden',
-          description: 'Netzwerkfehler',
+          description: result.error || 'Unbekannter Fehler',
           variant: 'destructive',
         })
         return false
       }
+      setItems((prev) => {
+        const next = prev.map((item) =>
+          item.id === id ? { ...item, status } : item
+        )
+        void cacheOptimierungen(next).catch(() => {})
+        return next
+      })
+      if (result.queued) showQueuedToast()
+      return true
     },
-    [toast]
+    [mutate, toast]
   )
 
   const handleToggleErledigt = useCallback(
@@ -627,24 +784,31 @@ export function OptimierungenTool({ headerTrailingRef }: OptimierungenToolProps)
     if (!discardTarget) return
     setDiscarding(true)
     try {
-      const res = await fetch(`/api/optimierungen/${discardTarget.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'verworfen' }),
+      const id = discardTarget.id
+      const result = await mutate({
+        table: 'optimierungen',
+        action: 'put',
+        key: id,
+        payload: { status: 'verworfen' },
       })
-      const json = (await res.json()) as ApiResponse<unknown>
-      if (!res.ok || !json.success) {
+      if (!result.ok && !result.queued) {
         toast({
           title: 'Verwerfen fehlgeschlagen',
-          description: json.error || 'Unbekannter Fehler',
+          description: result.error || 'Unbekannter Fehler',
           variant: 'destructive',
         })
         return
       }
       setDiscardTarget(null)
       closeEdit()
-      await load()
-      toast({ title: 'Als verworfen markiert' })
+      await persistItems(
+        items.map((item) =>
+          item.id === id ? { ...item, status: 'verworfen' as const } : item
+        )
+      )
+      if (result.queued) showQueuedToast()
+      else toast({ title: 'Als verworfen markiert' })
+      if (!isOffline()) await load()
     } catch (e) {
       console.error(e)
       toast({

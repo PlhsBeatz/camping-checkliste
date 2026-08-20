@@ -35,6 +35,7 @@ const additionalPrecacheEntries = [
   '/profil',
   '/tools/sonnen-ausrichtung',
   '/tools/checklisten',
+  '/tools/optimierungen',
   '/manifest.json',
 ].map((url) => ({ url, revision: swRevision }));
 

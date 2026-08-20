@@ -1,7 +1,7 @@
 /**
  * IndexedDB (Dexie) für Offline-Cache der D1-Daten.
  * Speichert: Urlaube, Ausrüstung, Kategorien, Tags, Mitreisende, Transportmittel, Packlisten-Einträge,
- * Tools-Checklisten, letzte GPS-Position, Tag-Kategorien, Pack-Status, Campingplätze (+ Fotos),
+ * Tools-Checklisten, Optimierungen, letzte GPS-Position, Tag-Kategorien, Pack-Status, Campingplätze (+ Fotos),
  * Routen, Profil-Heimat-Adresse, Rastplätze und letzte Auth-Session.
  *
  * Außerdem: Sync-Queue für Mutationen, die bei Reconnect mit Last-Write-Wins gesendet werden.
@@ -27,6 +27,7 @@ import type {
   CampingplatzSegmentRouteCacheEntry,
   PackStatusData,
   Rastplatz,
+  Optimierung,
 } from './db'
 
 export interface CachedVacation extends Vacation {
@@ -97,6 +98,12 @@ export interface CachedVacationMitreisender extends Mitreisender {
  * Wir cachen pro Checkliste einen Eintrag (key = id), inklusive Kategorien und Einträgen.
  */
 export interface CachedChecklist extends ChecklisteMitStruktur {
+  _cachedAt: number
+  _updatedAt: number
+}
+
+/** Tools/Optimierungen inkl. eingebetteter Links / Foto-Zähler wie die API liefert */
+export interface CachedOptimierung extends Optimierung {
   _cachedAt: number
   _updatedAt: number
 }
@@ -202,6 +209,7 @@ export class OfflineDB extends Dexie {
   transportVehicles!: EntityTable<CachedTransportVehicle, 'id'>
   packingItems!: EntityTable<CachedPackingItem, 'id'>
   checklisten!: EntityTable<CachedChecklist, 'id'>
+  optimierungen!: EntityTable<CachedOptimierung, 'id'>
   lastPosition!: EntityTable<CachedLastPosition, 'id'>
   packStatus!: EntityTable<CachedPackStatus, 'id'>
   campingplaetze!: EntityTable<CachedCampingplatz, 'id'>
@@ -335,6 +343,32 @@ export class OfflineDB extends Dexie {
       authUser: 'id, _cachedAt',
       syncQueue: '++id, table, timestamp, attempts',
     })
+    // Version 7: Tools/Optimierungen
+    this.version(7).stores({
+      vacations: 'id, _cachedAt, _updatedAt',
+      equipment: 'id, _cachedAt, _updatedAt',
+      categories: 'id, _cachedAt, _updatedAt',
+      mainCategories: 'id, _cachedAt, _updatedAt',
+      tags: 'id, _cachedAt, _updatedAt',
+      tagKategorien: 'id, reihenfolge, _cachedAt, _updatedAt',
+      mitreisende: 'id, _cachedAt, _updatedAt',
+      mitreisendenGruppen: 'id, sort_order, _cachedAt, _updatedAt',
+      vacationMitreisende: 'id_compound, _vacationId, _cachedAt, _updatedAt',
+      transportVehicles: 'id, _cachedAt, _updatedAt',
+      packingItems: 'id, packliste_id, _vacationId, _cachedAt, _updatedAt',
+      checklisten: 'id, reihenfolge, _cachedAt, _updatedAt',
+      optimierungen: 'id, status, reihenfolge, _cachedAt, _updatedAt',
+      lastPosition: 'id, _cachedAt',
+      packStatus: 'id, _cachedAt, _updatedAt',
+      campingplaetze: 'id, _cachedAt, _updatedAt',
+      campingplaetzeFotos: 'id, campingplatz_id, _cachedAt, _updatedAt',
+      rastplaetze: 'id, bewertung, kategorie, _cachedAt, _updatedAt',
+      routes: 'id, _cachedAt',
+      segmentRoutes: 'id, _cachedAt',
+      homeLocation: 'id, _cachedAt, _updatedAt',
+      authUser: 'id, _cachedAt',
+      syncQueue: '++id, table, timestamp, attempts',
+    })
   }
 }
 
@@ -452,6 +486,21 @@ export async function cacheChecklisten(
 ): Promise<void> {
   const withMetaItems = items.map((v) => withMeta(v)) as CachedChecklist[]
   await snapshotReplace(offlineDb.checklisten, withMetaItems)
+}
+
+/** Optimierungen-Liste cachen (Snapshot-Replace). */
+export async function cacheOptimierungen(items: Optimierung[]): Promise<void> {
+  const withMetaItems = items.map((v) => withMeta(v)) as CachedOptimierung[]
+  await snapshotReplace(offlineDb.optimierungen, withMetaItems)
+}
+
+/** Einzelne Optimierung upserten (z. B. nach Offline-Mutation). */
+export async function cacheOptimierung(item: Optimierung): Promise<void> {
+  await offlineDb.optimierungen.put(withMeta(item) as CachedOptimierung)
+}
+
+export async function removeCachedOptimierung(id: string): Promise<void> {
+  await offlineDb.optimierungen.delete(id)
 }
 
 /** Zuletzt bekannte GPS-Position speichern */
