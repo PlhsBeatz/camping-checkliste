@@ -5,6 +5,7 @@ import { ThemeProvider } from '@/components/theme-provider'
 import { AuthProvider } from '@/components/auth-provider'
 import { MustChangePasswordGuard } from '@/components/must-change-password-guard'
 import { OfflineBanner } from '@/components/offline-banner'
+import { PushNavigateListener } from '@/components/push-navigate-listener'
 import { Toaster } from '@/components/ui/sonner'
 import './globals.css'
 
@@ -68,6 +69,7 @@ export default function RootLayout({
                 {children}
               </div>
             </MustChangePasswordGuard>
+            <PushNavigateListener />
             <PwaUpdatePrompt />
             <Toaster richColors closeButton position="top-center" />
           </AuthProvider>

@@ -297,6 +297,8 @@ CREATE TABLE IF NOT EXISTS optimierungen (
     faelligkeit_modus TEXT,
     faellig_am TEXT,
     faelligkeit_bezug_am TEXT,
+    push_reminder_4w_sent INTEGER NOT NULL DEFAULT 0,
+    push_reminder_2w_sent INTEGER NOT NULL DEFAULT 0,
     reihenfolge INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))

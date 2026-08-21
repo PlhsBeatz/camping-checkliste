@@ -8,6 +8,16 @@ export const PUSH_NOTIFICATION_OPTIONS = [
     label: 'Rastplatz-Empfehlungen unterwegs',
     description:
       'Hinweis, wenn du auf der Route in der Nähe einer Empfehlung aus der Rastplatz-Sammlung bist.',
+    /** Nur Admins / System-Admins sehen und steuern diese Option im Profil */
+    adminOnly: false as const,
+  },
+  {
+    key: 'optimierungFaelligkeit' as const,
+    type: 'optimierung_due' as const,
+    label: 'Optimierungen',
+    description:
+      'Erinnerung 4 und 2 Wochen vor dem Fälligkeitsdatum geplanter Optimierungen.',
+    adminOnly: true as const,
   },
 ] as const
 
@@ -16,6 +26,7 @@ export type PushPreferenceKey = (typeof PUSH_NOTIFICATION_OPTIONS)[number]['key'
 export type UserPushSettings = {
   enabled: boolean
   rastplatzNearby: boolean
+  optimierungFaelligkeit: boolean
 }
 
 export type UserPushSettingsResponse = UserPushSettings & {
@@ -31,11 +42,14 @@ export function isPushTypeEnabled(
   switch (type) {
     case 'rastplatz_nearby':
       return settings.rastplatzNearby
+    case 'optimierung_due':
+      return settings.optimierungFaelligkeit
     default:
       return false
   }
 }
 
+/** Für clientseitige Rastplatz-Alerts (GPS): Master + Rastplatz-Typ + Geräte-Abo */
 export function canReceivePushAlerts(
   settings: UserPushSettings,
   browserSubscribed: boolean

@@ -172,16 +172,20 @@ self.addEventListener('notificationclick', (event: NotificationEvent) => {
     type?: string
     rastplatz_id?: string
   } | undefined
-  const url = data?.url || '/'
+  const targetUrl = new URL(data?.url || '/', self.location.origin).href
+
   event.waitUntil(
-    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(async (clients) => {
       for (const client of clients) {
         if ('focus' in client && client.url.includes(self.location.origin)) {
-          return client.focus()
+          await client.focus()
+          // Soft-Navigation in der App (Next.js) – WindowClient.navigate() hängt oft
+          client.postMessage({ type: 'PUSH_NAVIGATE', url: targetUrl })
+          return
         }
       }
       if (self.clients.openWindow) {
-        return self.clients.openWindow(url)
+        return self.clients.openWindow(targetUrl)
       }
       return undefined
     })

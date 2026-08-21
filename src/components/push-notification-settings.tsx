@@ -1,25 +1,33 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Bell } from 'lucide-react'
 import type { ApiResponse } from '@/lib/api-types'
-import { PUSH_NOTIFICATION_OPTIONS, type UserPushSettings } from '@/lib/push-settings'
+import { PUSH_NOTIFICATION_OPTIONS, type PushPreferenceKey, type UserPushSettings } from '@/lib/push-settings'
 import { usePushSubscribe } from '@/hooks/use-push-subscribe'
 import { PushDeviceActivatePrompt } from '@/components/push-device-activate'
+import { useAuth } from '@/components/auth-provider'
 
 type PushSettingsData = UserPushSettings & { browserSubscribed: boolean }
 
 export function PushNotificationSettings() {
+  const { canAccessConfig } = useAuth()
   const pushSubscribe = usePushSubscribe()
   const [settings, setSettings] = useState<PushSettingsData | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
+
+  const visibleOptions = useMemo(
+    () =>
+      PUSH_NOTIFICATION_OPTIONS.filter((opt) => !opt.adminOnly || canAccessConfig),
+    [canAccessConfig]
+  )
 
   const loadSettings = useCallback(async () => {
     setLoading(true)
@@ -97,7 +105,7 @@ export function PushNotificationSettings() {
     if (ok) setSettings((s) => (s ? { ...s, enabled: false, browserSubscribed: false } : s))
   }
 
-  const handleTypeToggle = async (key: 'rastplatzNearby', checked: boolean) => {
+  const handleTypeToggle = async (key: PushPreferenceKey, checked: boolean) => {
     if (!settings?.enabled) return
     const next = { ...settings, [key]: checked }
     await persist(next)
@@ -171,7 +179,7 @@ export function PushNotificationSettings() {
         {settings?.enabled && (
           <div className="space-y-3 pl-1">
             <p className="text-sm font-medium text-muted-foreground">Arten von Benachrichtigungen</p>
-            {PUSH_NOTIFICATION_OPTIONS.map((opt) => {
+            {visibleOptions.map((opt) => {
               const prefKey = opt.key
               const checked = settings[prefKey]
               return (

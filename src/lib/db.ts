@@ -369,6 +369,8 @@ export interface User {
   push_notifications_enabled?: number
   /** Profil: Rastplatz-Empfehlungen per Push */
   push_rastplatz_nearby?: number
+  /** Profil: Optimierungs-Fälligkeit per Push (Default an) */
+  push_optimierung_faelligkeit?: number
   /** Profil: GPS-Modus – auto | on | off */
   reise_gps_mode?: string
   created_at: string
@@ -4475,19 +4477,49 @@ export async function getUserPushSettings(
   userId: string
 ): Promise<(UserPushSettings & { browserSubscribed: boolean }) | null> {
   try {
-    const row = await db
-      .prepare(
-        `SELECT push_notifications_enabled, push_rastplatz_nearby,
-          (SELECT COUNT(*) FROM push_subscriptions ps WHERE ps.user_id = users.id) AS sub_count
-         FROM users WHERE id = ?`
-      )
-      .bind(userId)
-      .first<{ push_notifications_enabled: number; push_rastplatz_nearby: number; sub_count: number }>()
-    if (!row) return null
-    return {
-      enabled: row.push_notifications_enabled === 1,
-      rastplatzNearby: row.push_rastplatz_nearby !== 0,
-      browserSubscribed: (row.sub_count ?? 0) > 0,
+    try {
+      const row = await db
+        .prepare(
+          `SELECT push_notifications_enabled, push_rastplatz_nearby,
+            COALESCE(push_optimierung_faelligkeit, 1) AS push_optimierung_faelligkeit,
+            (SELECT COUNT(*) FROM push_subscriptions ps WHERE ps.user_id = users.id) AS sub_count
+           FROM users WHERE id = ?`
+        )
+        .bind(userId)
+        .first<{
+          push_notifications_enabled: number
+          push_rastplatz_nearby: number
+          push_optimierung_faelligkeit: number
+          sub_count: number
+        }>()
+      if (!row) return null
+      return {
+        enabled: row.push_notifications_enabled === 1,
+        rastplatzNearby: row.push_rastplatz_nearby !== 0,
+        optimierungFaelligkeit: row.push_optimierung_faelligkeit !== 0,
+        browserSubscribed: (row.sub_count ?? 0) > 0,
+      }
+    } catch {
+      // Migration 0039 noch nicht angewendet
+      const row = await db
+        .prepare(
+          `SELECT push_notifications_enabled, push_rastplatz_nearby,
+            (SELECT COUNT(*) FROM push_subscriptions ps WHERE ps.user_id = users.id) AS sub_count
+           FROM users WHERE id = ?`
+        )
+        .bind(userId)
+        .first<{
+          push_notifications_enabled: number
+          push_rastplatz_nearby: number
+          sub_count: number
+        }>()
+      if (!row) return null
+      return {
+        enabled: row.push_notifications_enabled === 1,
+        rastplatzNearby: row.push_rastplatz_nearby !== 0,
+        optimierungFaelligkeit: true,
+        browserSubscribed: (row.sub_count ?? 0) > 0,
+      }
     }
   } catch (error) {
     console.error('Error fetching user push settings:', error)
@@ -4501,13 +4533,38 @@ export async function updateUserPushSettings(
   settings: UserPushSettings
 ): Promise<boolean> {
   try {
-    await db
-      .prepare(
-        `UPDATE users SET push_notifications_enabled = ?, push_rastplatz_nearby = ?, updated_at = datetime('now') WHERE id = ?`
-      )
-      .bind(settings.enabled ? 1 : 0, settings.rastplatzNearby ? 1 : 0, userId)
-      .run()
-    return true
+    try {
+      await db
+        .prepare(
+          `UPDATE users SET
+            push_notifications_enabled = ?,
+            push_rastplatz_nearby = ?,
+            push_optimierung_faelligkeit = ?,
+            updated_at = datetime('now')
+           WHERE id = ?`
+        )
+        .bind(
+          settings.enabled ? 1 : 0,
+          settings.rastplatzNearby ? 1 : 0,
+          settings.optimierungFaelligkeit ? 1 : 0,
+          userId
+        )
+        .run()
+      return true
+    } catch {
+      // Migration 0039 noch nicht angewendet – ohne Optimierungs-Spalte speichern
+      await db
+        .prepare(
+          `UPDATE users SET
+            push_notifications_enabled = ?,
+            push_rastplatz_nearby = ?,
+            updated_at = datetime('now')
+           WHERE id = ?`
+        )
+        .bind(settings.enabled ? 1 : 0, settings.rastplatzNearby ? 1 : 0, userId)
+        .run()
+      return true
+    }
   } catch (error) {
     console.error('Error updating user push settings:', error)
     return false
@@ -6511,11 +6568,15 @@ export async function updateOptimierung(
         ? null
         : computeFaelligAm(modus, vacations, { bezugYmd: bezugAm })
 
+    const faelligChanged = (existing.faellig_am ?? null) !== (faelligAm ?? null)
+
     await db
       .prepare(
         `UPDATE optimierungen SET
           titel = ?, notiz = ?, bereich = ?, status = ?, prioritaet = ?,
           faelligkeit_modus = ?, faellig_am = ?, faelligkeit_bezug_am = ?,
+          push_reminder_4w_sent = CASE WHEN ? = 1 THEN 0 ELSE COALESCE(push_reminder_4w_sent, 0) END,
+          push_reminder_2w_sent = CASE WHEN ? = 1 THEN 0 ELSE COALESCE(push_reminder_2w_sent, 0) END,
           reihenfolge = ?
         WHERE id = ?`
       )
@@ -6528,6 +6589,8 @@ export async function updateOptimierung(
         modus,
         faelligAm,
         bezugAm,
+        faelligChanged ? 1 : 0,
+        faelligChanged ? 1 : 0,
         reihenfolge,
         id
       )
@@ -6552,7 +6615,7 @@ export async function recalculateAllOptimierungFaelligkeiten(
     const vacations = await getVacations(db)
     const res = await db
       .prepare(
-        `SELECT id, faelligkeit_modus, faelligkeit_bezug_am FROM optimierungen
+        `SELECT id, faelligkeit_modus, faelligkeit_bezug_am, faellig_am FROM optimierungen
          WHERE faelligkeit_modus IN ('naechster_urlaub', 'saisonstart')
            AND status NOT IN ('idee', 'verworfen')`
       )
@@ -6560,6 +6623,7 @@ export async function recalculateAllOptimierungFaelligkeiten(
         id: string
         faelligkeit_modus: string
         faelligkeit_bezug_am: string | null
+        faellig_am: string | null
       }>()
     const rows = res.results || []
     let updated = 0
@@ -6573,8 +6637,16 @@ export async function recalculateAllOptimierungFaelligkeiten(
       const faelligAm = computeFaelligAm(modus, vacations, {
         bezugYmd: row.faelligkeit_bezug_am,
       })
+      const prev = row.faellig_am ?? null
+      if (prev === faelligAm) continue
       await db
-        .prepare('UPDATE optimierungen SET faellig_am = ? WHERE id = ?')
+        .prepare(
+          `UPDATE optimierungen SET
+            faellig_am = ?,
+            push_reminder_4w_sent = 0,
+            push_reminder_2w_sent = 0
+           WHERE id = ?`
+        )
         .bind(faelligAm, row.id)
         .run()
       updated += 1

@@ -3,6 +3,7 @@ import { getDB, getVacations, getPackingItems, type CloudflareEnv } from '@/lib/
 import { requireAuth, requireSystemAdmin } from '@/lib/api-auth'
 import { buildTripStatusPayload, findRelevantVacation } from '@/lib/trip-readiness'
 import { processIntegrationCron } from '@/lib/integration-events'
+import { processOptimierungFaelligkeitPush } from '@/lib/optimierung-push-reminders'
 
 function verifyCronSecret(request: NextRequest): boolean {
   const expected = process.env.INTEGRATION_CRON_SECRET?.trim()
@@ -22,7 +23,14 @@ export async function GET(request: NextRequest) {
     const env = process.env as unknown as CloudflareEnv
     const db = await getDB(env)
     const processed = await processIntegrationCron(db)
-    return NextResponse.json({ success: true, data: { processed_vacations: processed } })
+    const optimierungPush = await processOptimierungFaelligkeitPush(db)
+    return NextResponse.json({
+      success: true,
+      data: {
+        processed_vacations: processed,
+        optimierung_reminders: optimierungPush,
+      },
+    })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error)
     return NextResponse.json({ error: message }, { status: 500 })

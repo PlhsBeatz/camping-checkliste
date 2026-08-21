@@ -1,5 +1,5 @@
 /** Leichtgewichtiger SW für Push-Tests in `pnpm dev` (ohne Serwist-Precache). */
-const DEV_PUSH_SW = '/push-sw.js'
+const DEV_PUSH_SW_PATH = '/push-sw.js'
 
 /** Produktions-PWA (Serwist). */
 const PROD_SW = '/sw.js'
@@ -10,38 +10,40 @@ function isPushDevWorker(scriptUrl: string | undefined): boolean {
 
 /**
  * Stellt einen Service Worker für Push bereit.
- * In der Entwicklung: push-sw.js. In Produktion: Serwist /sw.js (falls vorhanden).
+ * In der Entwicklung: push-sw.js (wie Rastplatz-Push). In Produktion: Serwist /sw.js.
  */
 export async function ensurePushServiceWorker(): Promise<ServiceWorkerRegistration | null> {
   if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return null
 
   const isDev = process.env.NODE_ENV === 'development'
-  const targetScript = isDev ? DEV_PUSH_SW : PROD_SW
+  // Cache-Bust, damit Dev-Änderungen an push-sw.js zuverlässig greifen
+  const targetScript = isDev
+    ? `${DEV_PUSH_SW_PATH}?v=push-nav-soft-1`
+    : PROD_SW
 
-  let reg = await navigator.serviceWorker.getRegistration('/')
-  const activeScript = reg?.active?.scriptURL ?? reg?.waiting?.scriptURL ?? ''
-
-  const hasCorrectWorker = isDev
-    ? isPushDevWorker(activeScript)
-    : activeScript.includes('/sw.js')
-
-  if (!reg || !hasCorrectWorker) {
+  try {
     if (isDev) {
       const regs = await navigator.serviceWorker.getRegistrations()
-      await Promise.all(
-        regs
-          .filter((r) => !isPushDevWorker(r.active?.scriptURL ?? r.installing?.scriptURL))
-          .map((r) => r.unregister())
-      )
+      await Promise.all(regs.map((r) => r.unregister()))
+    } else {
+      const regExisting = await navigator.serviceWorker.getRegistration('/')
+      const activeScript =
+        regExisting?.active?.scriptURL ?? regExisting?.waiting?.scriptURL ?? ''
+      if (regExisting && activeScript.includes('/sw.js')) {
+        await navigator.serviceWorker.ready
+        return regExisting
+      }
     }
-    try {
-      reg = await navigator.serviceWorker.register(targetScript, { scope: '/' })
-    } catch (err) {
-      console.warn('Push Service Worker registration failed:', err)
-      return null
-    }
-  }
 
-  await navigator.serviceWorker.ready
-  return reg
+    const reg = await navigator.serviceWorker.register(targetScript, {
+      scope: '/',
+      updateViaCache: 'none',
+    })
+    await reg.update()
+    await navigator.serviceWorker.ready
+    return reg
+  } catch (err) {
+    console.warn('Push Service Worker registration failed:', err)
+    return null
+  }
 }
