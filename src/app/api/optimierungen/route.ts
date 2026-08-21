@@ -4,7 +4,6 @@ import {
   getOptimierungen,
   createOptimierung,
   reorderOptimierungen,
-  recalculateAllOptimierungFaelligkeiten,
   CloudflareEnv,
   type OptimierungStatus,
   type OptimierungBereich,
@@ -51,8 +50,7 @@ export async function GET(request: NextRequest) {
 
     const env = process.env as unknown as CloudflareEnv
     const db = await getDB(env)
-    // Nächster Urlaub / Saisonstart können sich mit der Zeit bzw. Urlaubsplanung ändern
-    await recalculateAllOptimierungFaelligkeiten(db)
+    // Fälligkeit wird bei Urlaubs-Änderungen und im Daily-Cron neu berechnet – nicht bei jedem Lesen
     const data = await getOptimierungen(db, statusFilter)
     return NextResponse.json({ success: true, data })
   } catch (error: unknown) {

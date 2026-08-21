@@ -4,7 +4,7 @@
  * unter Verwendung der deutschen Tabellennamen aus dem ursprünglichen Schema.
  */
 
-import { D1Database, R2Bucket } from '@cloudflare/workers-types'
+import { D1Database, D1PreparedStatement, R2Bucket } from '@cloudflare/workers-types'
 import { getCloudflareContext } from '@opennextjs/cloudflare'
 import type { MengenRegel } from './packing-quantity'
 import { parseRegel, serializeRegel } from './packing-quantity'
@@ -2848,29 +2848,258 @@ export async function getVacationIdFromPackingItem(
   db: D1Database,
   packingItemId: string
 ): Promise<string | null> {
+  const map = await getVacationIdsFromPackingItems(db, [packingItemId])
+  return map.get(packingItemId) ?? null
+}
+
+const PACKING_ITEM_IN_CHUNK = 80
+
+/**
+ * Urlaubs-IDs für viele Packlisten-Einträge in wenigen Queries (normal + temporär).
+ * Vermeidet N+1 in Batch-APIs.
+ */
+export async function getVacationIdsFromPackingItems(
+  db: D1Database,
+  packingItemIds: string[]
+): Promise<Map<string, string>> {
+  const out = new Map<string, string>()
+  const unique = [...new Set(packingItemIds.filter((id) => typeof id === 'string' && id.length > 0))]
+  if (unique.length === 0) return out
+
   try {
-    const result = await db
-      .prepare(
-        `SELECT p.urlaub_id FROM packlisten p
-         JOIN packlisten_eintraege pe ON pe.packliste_id = p.id
-         WHERE pe.id = ?`
-      )
-      .bind(packingItemId)
-      .first<{ urlaub_id: string }>()
-    if (result?.urlaub_id) return result.urlaub_id
-    const tempResult = await db
-      .prepare(
-        `SELECT p.urlaub_id FROM packlisten p
-         JOIN packlisten_eintraege_temporaer pet ON pet.packliste_id = p.id
-         WHERE pet.id = ?`
-      )
-      .bind(packingItemId)
-      .first<{ urlaub_id: string }>()
-    return tempResult?.urlaub_id ?? null
+    for (let i = 0; i < unique.length; i += PACKING_ITEM_IN_CHUNK) {
+      const chunk = unique.slice(i, i + PACKING_ITEM_IN_CHUNK)
+      const ph = chunk.map(() => '?').join(',')
+      const [normal, temp] = await Promise.all([
+        db
+          .prepare(
+            `SELECT pe.id AS id, p.urlaub_id AS urlaub_id
+             FROM packlisten_eintraege pe
+             JOIN packlisten p ON p.id = pe.packliste_id
+             WHERE pe.id IN (${ph})`
+          )
+          .bind(...chunk)
+          .all<{ id: string; urlaub_id: string }>(),
+        db
+          .prepare(
+            `SELECT pet.id AS id, p.urlaub_id AS urlaub_id
+             FROM packlisten_eintraege_temporaer pet
+             JOIN packlisten p ON p.id = pet.packliste_id
+             WHERE pet.id IN (${ph})`
+          )
+          .bind(...chunk)
+          .all<{ id: string; urlaub_id: string }>(),
+      ])
+      for (const row of normal.results || []) out.set(String(row.id), String(row.urlaub_id))
+      for (const row of temp.results || []) out.set(String(row.id), String(row.urlaub_id))
+    }
   } catch (error) {
-    console.error('Error fetching vacation id from packing item:', error)
-    return null
+    console.error('Error fetching vacation ids from packing items:', error)
   }
+  return out
+}
+
+/** IDs filtern, die zum angegebenen Urlaub gehören. */
+export function filterPackingItemIdsForVacation(
+  vacationByItemId: Map<string, string>,
+  itemIds: string[],
+  vacationId: string
+): string[] {
+  return itemIds.filter((id) => vacationByItemId.get(id) === vacationId)
+}
+
+type PackingItemBulkPatch = {
+  transport_id?: string | null
+  bemerkung?: string | null
+  anzahl?: number
+}
+
+/**
+ * Gleiches Patch auf viele Packlisten-Einträge (normal + temporär) per IN-UPDATE.
+ */
+export async function updatePackingItemsBatch(
+  db: D1Database,
+  itemIds: string[],
+  updates: PackingItemBulkPatch
+): Promise<number> {
+  const unique = [...new Set(itemIds)]
+  if (unique.length === 0) return 0
+
+  const fields: string[] = []
+  const values: (string | number | null)[] = []
+  if (updates.transport_id !== undefined) {
+    fields.push('transport_id = ?')
+    values.push(updates.transport_id || null)
+  }
+  if (updates.bemerkung !== undefined) {
+    fields.push('bemerkung = ?')
+    values.push(updates.bemerkung || '')
+  }
+  if (updates.anzahl !== undefined) {
+    fields.push('anzahl = ?')
+    values.push(updates.anzahl)
+  }
+  if (fields.length === 0) return 0
+
+  const setSql = `${fields.join(', ')}, updated_at = datetime('now')`
+  let changed = 0
+  try {
+    for (let i = 0; i < unique.length; i += PACKING_ITEM_IN_CHUNK) {
+      const chunk = unique.slice(i, i + PACKING_ITEM_IN_CHUNK)
+      const ph = chunk.map(() => '?').join(',')
+      const bind = [...values, ...chunk]
+      const [r1, r2] = await db.batch([
+        db
+          .prepare(`UPDATE packlisten_eintraege SET ${setSql} WHERE id IN (${ph})`)
+          .bind(...bind),
+        db
+          .prepare(`UPDATE packlisten_eintraege_temporaer SET ${setSql} WHERE id IN (${ph})`)
+          .bind(...bind),
+      ])
+      changed += Number(r1?.meta?.changes ?? 0) + Number(r2?.meta?.changes ?? 0)
+    }
+    return changed
+  } catch (error) {
+    console.error('Error batch updating packing items:', error)
+    return 0
+  }
+}
+
+/**
+ * Viele Packlisten-Einträge löschen (FK CASCADE für Mitreisende/Gruppen).
+ */
+export async function deletePackingItemsBatch(
+  db: D1Database,
+  itemIds: string[]
+): Promise<number> {
+  const unique = [...new Set(itemIds)]
+  if (unique.length === 0) return 0
+  let deleted = 0
+  try {
+    for (let i = 0; i < unique.length; i += PACKING_ITEM_IN_CHUNK) {
+      const chunk = unique.slice(i, i + PACKING_ITEM_IN_CHUNK)
+      const ph = chunk.map(() => '?').join(',')
+      const [r1, r2] = await db.batch([
+        db.prepare(`DELETE FROM packlisten_eintraege WHERE id IN (${ph})`).bind(...chunk),
+        db
+          .prepare(`DELETE FROM packlisten_eintraege_temporaer WHERE id IN (${ph})`)
+          .bind(...chunk),
+      ])
+      deleted += Number(r1?.meta?.changes ?? 0) + Number(r2?.meta?.changes ?? 0)
+    }
+    return deleted
+  } catch (error) {
+    console.error('Error batch deleting packing items:', error)
+    return 0
+  }
+}
+
+export type AddPackingItemBatchInput = {
+  gegenstandId: string
+  anzahl?: number
+  bemerkung?: string | null
+  transportId?: string | null
+  mitreisende?: PackingItemMitreisenderInput[]
+  pauschalGruppenModus?: PauschalGruppenModus
+}
+
+/**
+ * Mehrere Packlisten-Einträge inkl. Mitreisende in D1-Batches einfügen.
+ */
+export async function addPackingItemsBatch(
+  db: D1Database,
+  packlisteId: string,
+  items: AddPackingItemBatchInput[]
+): Promise<{ success: boolean; gegenstandId?: string; id?: string | null }[]> {
+  const results: { success: boolean; gegenstandId?: string; id?: string | null }[] = []
+  const statements: D1PreparedStatement[] = []
+  const pending: {
+    resultIndex: number
+    itemIndex: number
+    id: string
+    gegenstandId: string
+  }[] = []
+
+  items.forEach((item, itemIndex) => {
+    if (!item.gegenstandId) {
+      results.push({ success: false })
+      return
+    }
+    const id = crypto.randomUUID()
+    const anzahl = item.anzahl ?? 1
+    const mitreisende = item.mitreisende ?? []
+    const modus = item.pauschalGruppenModus ?? 'einmal'
+
+    const resultIndex = results.length
+    results.push({ success: false, gegenstandId: item.gegenstandId, id })
+    pending.push({ resultIndex, itemIndex, id, gegenstandId: item.gegenstandId })
+
+    statements.push(
+      db
+        .prepare(
+          'INSERT INTO packlisten_eintraege (id, packliste_id, gegenstand_id, anzahl, bemerkung, transport_id, pauschal_gruppen_modus) VALUES (?, ?, ?, ?, ?, ?, ?)'
+        )
+        .bind(
+          id,
+          packlisteId,
+          item.gegenstandId,
+          anzahl,
+          item.bemerkung || null,
+          item.transportId || null,
+          modus
+        )
+    )
+
+    for (const entry of mitreisende) {
+      const mitreisenderId = typeof entry === 'string' ? entry : entry.id
+      const personAnzahl = typeof entry === 'string' ? null : (entry.anzahl ?? null)
+      statements.push(
+        db
+          .prepare(
+            'INSERT INTO packlisten_eintrag_mitreisende (packlisten_eintrag_id, mitreisender_id, gepackt, anzahl) VALUES (?, ?, ?, ?)'
+          )
+          .bind(id, mitreisenderId, 0, personAnzahl)
+      )
+    }
+  })
+
+  if (statements.length === 0) return results
+
+  try {
+    const BATCH_CHUNK = 40
+    for (let i = 0; i < statements.length; i += BATCH_CHUNK) {
+      await db.batch(statements.slice(i, i + BATCH_CHUNK))
+    }
+    for (const p of pending) {
+      results[p.resultIndex] = {
+        success: true,
+        gegenstandId: p.gegenstandId,
+        id: p.id,
+      }
+    }
+  } catch (error) {
+    console.error('Error batch adding packing items:', error)
+    for (const p of pending) {
+      const src = items[p.itemIndex]
+      if (!src) continue
+      const id = await addPackingItem(
+        db,
+        packlisteId,
+        src.gegenstandId,
+        src.anzahl ?? 1,
+        src.bemerkung,
+        src.transportId ?? null,
+        src.mitreisende ?? [],
+        src.pauschalGruppenModus ?? 'einmal'
+      )
+      results[p.resultIndex] = {
+        success: !!id,
+        gegenstandId: p.gegenstandId,
+        id,
+      }
+    }
+  }
+  return results
 }
 
 /**
@@ -6626,7 +6855,7 @@ export async function recalculateAllOptimierungFaelligkeiten(
         faellig_am: string | null
       }>()
     const rows = res.results || []
-    let updated = 0
+    const statements: D1PreparedStatement[] = []
     for (const row of rows) {
       const modus =
         row.faelligkeit_modus === 'naechster_urlaub' ||
@@ -6639,19 +6868,25 @@ export async function recalculateAllOptimierungFaelligkeiten(
       })
       const prev = row.faellig_am ?? null
       if (prev === faelligAm) continue
-      await db
-        .prepare(
-          `UPDATE optimierungen SET
-            faellig_am = ?,
-            push_reminder_4w_sent = 0,
-            push_reminder_2w_sent = 0
-           WHERE id = ?`
-        )
-        .bind(faelligAm, row.id)
-        .run()
-      updated += 1
+      statements.push(
+        db
+          .prepare(
+            `UPDATE optimierungen SET
+              faellig_am = ?,
+              push_reminder_4w_sent = 0,
+              push_reminder_2w_sent = 0
+             WHERE id = ?`
+          )
+          .bind(faelligAm, row.id)
+      )
     }
-    return updated
+    if (statements.length === 0) return 0
+    // D1 batch: max. ~100 Statements – in Chunks senden
+    const CHUNK = 50
+    for (let i = 0; i < statements.length; i += CHUNK) {
+      await db.batch(statements.slice(i, i + CHUNK))
+    }
+    return statements.length
   } catch (error) {
     console.error('Error recalculateAllOptimierungFaelligkeiten:', error)
     return 0

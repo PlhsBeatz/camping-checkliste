@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
     const res = NextResponse.json({ success: true, data: items })
     res.headers.set(
       'Cache-Control',
-      'public, max-age=60, s-maxage=60, stale-while-revalidate=120'
+      'public, max-age=300, s-maxage=300, stale-while-revalidate=600'
     )
     return res
   } catch (error: unknown) {

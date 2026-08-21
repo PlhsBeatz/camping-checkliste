@@ -2,9 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getCloudflareContext } from '@opennextjs/cloudflare'
 import {
   getDB,
-  deletePackingItem,
+  deletePackingItemsBatch,
   getMitreisendeForVacation,
-  getVacationIdFromPackingItem,
+  getVacationIdsFromPackingItems,
+  filterPackingItemIdsForVacation,
   type CloudflareEnv,
 } from '@/lib/db'
 import { notifyPackingSyncChange } from '@/lib/packing-sync'
@@ -42,29 +43,27 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Keine Berechtigung' }, { status: 403 })
     }
 
-    let deleted = 0
-    let failed = 0
+    const vacationById = await getVacationIdsFromPackingItems(db, itemIds)
+    const validIds = filterPackingItemIdsForVacation(vacationById, itemIds, vacationId)
+    const failedLookup = itemIds.length - validIds.length
 
-    for (const id of itemIds) {
-      const itemVacationId = await getVacationIdFromPackingItem(db, id)
-      if (itemVacationId !== vacationId) {
-        failed += 1
-        continue
-      }
-      const success = await deletePackingItem(db, id)
-      if (success) deleted += 1
-      else failed += 1
-    }
+    const deleted = await deletePackingItemsBatch(db, validIds)
+    const deletedCount = Math.min(deleted, validIds.length)
+    const deleteFailed = validIds.length - deletedCount
 
-    if (deleted > 0) {
+    if (deletedCount > 0) {
       const cfEnv = (await getCloudflareContext({ async: true })).env as unknown as CloudflareEnv
       await notifyPackingSyncChange(cfEnv, vacationId)
       await notifyIntegrationChange(cfEnv, vacationId)
     }
 
     return NextResponse.json({
-      success: failed === 0,
-      data: { deleted, failed, total: itemIds.length },
+      success: failedLookup + deleteFailed === 0,
+      data: {
+        deleted: deletedCount,
+        failed: failedLookup + deleteFailed,
+        total: itemIds.length,
+      },
     })
   } catch (error) {
     console.error('Error batch deleting packing items:', error)

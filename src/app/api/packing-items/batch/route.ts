@@ -1,12 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getCloudflareContext } from '@opennextjs/cloudflare'
-import { getDB, addPackingItem, getPacklisteId, getMitreisendeForVacation, CloudflareEnv } from '@/lib/db'
+import {
+  getDB,
+  addPackingItemsBatch,
+  getPacklisteId,
+  getMitreisendeForVacation,
+  CloudflareEnv,
+} from '@/lib/db'
 import { notifyPackingSyncChange } from '@/lib/packing-sync'
 import { notifyIntegrationChange } from '@/lib/integration-events'
 import { requireAuth } from '@/lib/api-auth'
 import { canAccessVacation } from '@/lib/permissions'
 
-/** Batch: mehrere Packlisten-Einträge in einem Request – vermeidet Worker-Überlastung */
+/** Batch: mehrere Packlisten-Einträge in einem Request – D1 batch statt N Einzel-INSERTs */
 export async function POST(request: NextRequest) {
   try {
     const auth = await requireAuth(request)
@@ -39,7 +45,7 @@ export async function POST(request: NextRequest) {
     }
 
     const mitreisende = await getMitreisendeForVacation(db, vacationId)
-    if (!canAccessVacation(auth.userContext, mitreisende.map(m => m.id))) {
+    if (!canAccessVacation(auth.userContext, mitreisende.map((m) => m.id))) {
       return NextResponse.json({ error: 'Keine Berechtigung' }, { status: 403 })
     }
 
@@ -48,31 +54,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Packliste not found' }, { status: 404 })
     }
 
-    const results: { success: boolean; gegenstandId?: string }[] = []
-    for (const item of items) {
-      const { gegenstandId, anzahl = 1, bemerkung, transportId, mitreisende, pauschalGruppenModus } = item
-      if (!gegenstandId) continue
-      const modus =
-        pauschalGruppenModus ??
-        ((mitreisende?.length ?? 0) === 0 ? 'einmal' : 'einmal')
-      const id = await addPackingItem(
-        db,
-        packlisteId,
-        gegenstandId,
-        anzahl,
-        bemerkung,
-        transportId ?? null,
-        mitreisende ?? [],
-        modus
-      )
-      results.push({ success: !!id, gegenstandId })
-    }
+    const results = await addPackingItemsBatch(db, packlisteId, items)
 
     const cfEnv = (await getCloudflareContext({ async: true })).env as unknown as CloudflareEnv
     await notifyPackingSyncChange(cfEnv, vacationId)
     await notifyIntegrationChange(cfEnv, vacationId)
 
-    const successCount = results.filter(r => r.success).length
+    const successCount = results.filter((r) => r.success).length
     return NextResponse.json({
       success: true,
       data: { added: successCount, total: items.length, results },

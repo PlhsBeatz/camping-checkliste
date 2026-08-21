@@ -3,7 +3,7 @@ import { getCloudflareContext } from '@opennextjs/cloudflare'
 import {
   getDB,
   getMitreisendeForVacation,
-  getVacationIdFromPackingItem,
+  getVacationIdsFromPackingItems,
   setMitreisenderAnzahl,
   type CloudflareEnv,
 } from '@/lib/db'
@@ -52,6 +52,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Keine Berechtigung' }, { status: 403 })
     }
 
+    const packingItemIds = updates.map((u) => u.packingItemId).filter(Boolean)
+    const vacationById = await getVacationIdsFromPackingItems(db, packingItemIds)
+
     let updated = 0
     let failed = 0
 
@@ -61,8 +64,7 @@ export async function POST(request: NextRequest) {
         failed += 1
         continue
       }
-      const itemVacationId = await getVacationIdFromPackingItem(db, packingItemId)
-      if (itemVacationId !== vacationId) {
+      if (vacationById.get(packingItemId) !== vacationId) {
         failed += 1
         continue
       }

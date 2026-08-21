@@ -20,8 +20,9 @@ const devVars = loadDevVars();
 // Häufig genutzte Top-Level-Routen, die wir aktiv precachen wollen, damit die installierte
 // PWA auch beim ersten Cold-Start offline brauchbar ist (HTML-Shell aus dem Precache,
 // die eigentlichen Daten kommen aus IndexedDB).
-const swRevision = Date.now().toString();
-const additionalPrecacheEntries = [
+// Revision: Commit-SHA wenn vorhanden, sonst feste App-Revision – nicht Date.now(),
+// sonst invalidiert jeder Deploy alle Precache-Einträge und erzeugt Traffic-Spikes (1102).
+const precacheUrls = [
   '/~offline',
   '/',
   '/pack-status',
@@ -37,7 +38,16 @@ const additionalPrecacheEntries = [
   '/tools/checklisten',
   '/tools/optimierungen',
   '/manifest.json',
-].map((url) => ({ url, revision: swRevision }));
+];
+const swRevision =
+  process.env.CF_PAGES_COMMIT_SHA?.slice(0, 12) ||
+  process.env.WORKERS_CI_COMMIT_SHA?.slice(0, 12) ||
+  process.env.GITHUB_SHA?.slice(0, 12) ||
+  'precache-v2';
+const additionalPrecacheEntries = precacheUrls.map((url) => ({
+  url,
+  revision: swRevision,
+}));
 
 const withSerwist = withSerwistInit({
   swSrc: 'src/app/sw.ts',

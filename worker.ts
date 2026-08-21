@@ -13,7 +13,7 @@ const PACKING_SYNC_WS_PATH = '/api/packing-sync/ws'
 const EQUIPMENT_ITEMS_PATH = '/api/equipment-items'
 const EQUIPMENT_BY_TAGS_PATH = '/api/equipment-by-tags'
 /** Cache-TTL in Sekunden – reduziert Worker-Aufrufe bei Equipment-Abfragen (500+ Einträge) */
-const EQUIPMENT_CACHE_TTL = 60
+const EQUIPMENT_CACHE_TTL = 300
 
 /** Prüft, ob GET Equipment-API (listenförmig) gecacht werden soll */
 function isCachedEquipmentRequest(request: Request, url: URL): boolean {
@@ -23,6 +23,11 @@ function isCachedEquipmentRequest(request: Request, url: URL): boolean {
     (path === EQUIPMENT_ITEMS_PATH && !url.searchParams.has('id')) ||
     path === EQUIPMENT_BY_TAGS_PATH
   )
+}
+
+/** Cache-Key ohne Cookie/Auth – Daten sind haushaltsweit, nicht nutzerspezifisch */
+function equipmentCacheKey(url: URL): Request {
+  return new Request(url.toString(), { method: 'GET' })
 }
 
 interface WorkerEnv {
@@ -58,7 +63,8 @@ export default {
     if (isCachedEquipmentRequest(request, url)) {
       // Cloudflare-spezifisch: caches.default (nicht im Standard CacheStorage-Typ)
       const cache = (caches as unknown as { default: Cache }).default
-      const cached = await cache.match(request)
+      const cacheKey = equipmentCacheKey(url)
+      const cached = await cache.match(cacheKey)
       if (cached) {
         return cached
       }
@@ -68,14 +74,16 @@ export default {
         const headers = new Headers(clone.headers)
         headers.set(
           'Cache-Control',
-          `public, max-age=${EQUIPMENT_CACHE_TTL}, s-maxage=${EQUIPMENT_CACHE_TTL}, stale-while-revalidate=120`
+          `public, max-age=${EQUIPMENT_CACHE_TTL}, s-maxage=${EQUIPMENT_CACHE_TTL}, stale-while-revalidate=600`
         )
+        // Kein Vary: Cookie – sonst zerfällt der Edge-Cache pro Session
+        headers.delete('Vary')
         const responseToCache = new Response(clone.body, {
           status: clone.status,
           statusText: clone.statusText,
           headers,
         })
-        ctx.waitUntil(cache.put(request, responseToCache))
+        ctx.waitUntil(cache.put(cacheKey, responseToCache))
       }
       return response
     }

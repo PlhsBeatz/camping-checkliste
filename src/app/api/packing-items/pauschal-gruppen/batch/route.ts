@@ -5,6 +5,7 @@ import {
   CloudflareEnv,
   setPauschalGruppenAssignment,
   getMitreisendeForVacation,
+  getVacationIdsFromPackingItems,
   type PauschalGruppenModus,
   type SetPauschalGruppenInput,
 } from '@/lib/db'
@@ -54,6 +55,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Keine Berechtigung' }, { status: 403 })
     }
 
+    const packingItemIds = assignments
+      .map((a) => a.packingItemId)
+      .filter((id): id is string => typeof id === 'string' && id.length > 0)
+    const vacationById = await getVacationIdsFromPackingItems(db, packingItemIds)
+
     const vacationGruppeIds = getVacationGruppeIds(mitreisende)
     let updated = 0
     let failed = 0
@@ -61,6 +67,10 @@ export async function POST(request: NextRequest) {
     for (const row of assignments) {
       const { packingItemId, pauschalGruppenModus, verantwortlicheGruppeId, gruppeIds } = row
       if (!packingItemId || !pauschalGruppenModus) {
+        failed += 1
+        continue
+      }
+      if (vacationById.get(packingItemId) !== vacationId) {
         failed += 1
         continue
       }

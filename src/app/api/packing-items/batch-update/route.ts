@@ -3,8 +3,9 @@ import { getCloudflareContext } from '@opennextjs/cloudflare'
 import {
   getDB,
   getMitreisendeForVacation,
-  getVacationIdFromPackingItem,
-  updatePackingItem,
+  getVacationIdsFromPackingItems,
+  filterPackingItemIdsForVacation,
+  updatePackingItemsBatch,
   type CloudflareEnv,
 } from '@/lib/db'
 import { notifyPackingSyncChange } from '@/lib/packing-sync'
@@ -57,38 +58,33 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'Keine Berechtigung' }, { status: 403 })
     }
 
-    const updates: {
-      transport_id?: string | null
-      bemerkung?: string | null
-      anzahl?: number
-    } = {}
+    const updates: BulkPatch = {}
     if ('transport_id' in patch) updates.transport_id = patch.transport_id ?? null
     if ('bemerkung' in patch) updates.bemerkung = patch.bemerkung ?? null
     if ('anzahl' in patch && patch.anzahl !== undefined) updates.anzahl = patch.anzahl
 
-    let updated = 0
-    let failed = 0
+    const vacationById = await getVacationIdsFromPackingItems(db, itemIds)
+    const validIds = filterPackingItemIdsForVacation(vacationById, itemIds, vacationId)
+    const failed = itemIds.length - validIds.length
 
-    for (const id of itemIds) {
-      const itemVacationId = await getVacationIdFromPackingItem(db, id)
-      if (itemVacationId !== vacationId) {
-        failed += 1
-        continue
-      }
-      const success = await updatePackingItem(db, id, updates)
-      if (success) updated += 1
-      else failed += 1
-    }
+    const updated = await updatePackingItemsBatch(db, validIds, updates)
+    // updatePackingItemsBatch zählt DB-changes (normal+temp); max. 1 pro ID erwartet
+    const updatedCount = Math.min(updated, validIds.length)
+    const updateFailed = validIds.length - updatedCount
 
-    if (updated > 0) {
+    if (updatedCount > 0) {
       const cfEnv = (await getCloudflareContext({ async: true })).env as unknown as CloudflareEnv
       await notifyPackingSyncChange(cfEnv, vacationId)
       await notifyIntegrationChange(cfEnv, vacationId)
     }
 
     return NextResponse.json({
-      success: failed === 0,
-      data: { updated, failed, total: itemIds.length },
+      success: failed + updateFailed === 0,
+      data: {
+        updated: updatedCount,
+        failed: failed + updateFailed,
+        total: itemIds.length,
+      },
     })
   } catch (error) {
     console.error('Error batch updating packing items:', error)
