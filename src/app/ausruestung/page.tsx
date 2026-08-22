@@ -6,7 +6,9 @@ import { EquipmentTable } from '@/components/equipment-table'
 import { EquipmentItemFormFields } from '@/components/equipment/equipment-item-form-fields'
 import { Plus, Menu } from 'lucide-react'
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
+import { useRouter, usePathname } from 'next/navigation'
 import { EquipmentItem, Category, MainCategory, TransportVehicle, Tag, TagKategorie, Mitreisender } from '@/lib/db'
+import type { FaelligkeitAmpelStatus } from '@/lib/faelligkeit-status'
 import type { ApiResponse } from '@/lib/api-types'
 import { ResponsiveModal } from '@/components/ui/responsive-modal'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
@@ -47,6 +49,8 @@ interface CategoryWithMain extends Category {
 }
 
 export default function AusruestungPage() {
+  const router = useRouter()
+  const pathname = usePathname()
   const { canAccessConfig } = useAuth()
   const canEditEquipment = canAccessConfig
   const [showNavSidebar, setShowNavSidebar] = useState(false)
@@ -60,6 +64,10 @@ export default function AusruestungPage() {
   /** Aufklapp-Zustand für die zusätzlichen Mitreisenden-Zeilen (Individuell) */
   const [individuelleMitreisendeExtraOffen, setIndividuelleMitreisendeExtraOffen] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
+  const [faelligkeitAmpelMap, setFaelligkeitAmpelMap] = useState<
+    Map<string, FaelligkeitAmpelStatus>
+  >(new Map())
+  const [faelligkeitIdMap, setFaelligkeitIdMap] = useState<Map<string, string>>(new Map())
   const [isSaving, setIsSaving] = useState(false)
   // Bump-Counter, der bei Reconnect alle useEffects (mit Cache-Befüllung) neu auslöst.
   const [refetchTick, setRefetchTick] = useState(0)
@@ -128,6 +136,33 @@ export default function AusruestungPage() {
     }
     fetchEquipmentItems()
   }, [refetchTick])
+
+  useEffect(() => {
+    const loadFaelligkeitLinks = () => {
+      void fetch('/api/faelligkeiten/equipment-links')
+        .then((r) => r.json())
+        .then((raw: unknown) => {
+          const data = raw as ApiResponse<{
+            ampel: Record<string, FaelligkeitAmpelStatus>
+            faelligkeitId: Record<string, string>
+          }>
+          if (data.success && data.data) {
+            setFaelligkeitAmpelMap(new Map(Object.entries(data.data.ampel ?? {})))
+            setFaelligkeitIdMap(new Map(Object.entries(data.data.faelligkeitId ?? {})))
+          }
+        })
+        .catch(() => {})
+    }
+
+    loadFaelligkeitLinks()
+
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') loadFaelligkeitLinks()
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => document.removeEventListener('visibilitychange', onVisible)
+  }, [refetchTick, pathname])
+
   // Fetch Categories
   useEffect(() => {
     const fetchCategories = async () => {
@@ -439,9 +474,27 @@ export default function AusruestungPage() {
                   tags={tags}
                   onEdit={handleEditEquipment}
                   onDelete={handleDeleteEquipment}
+                  onAddFaelligkeit={
+                    canEditEquipment
+                      ? (item) => {
+                          const faelligkeitId = faelligkeitIdMap.get(item.id)
+                          if (faelligkeitId) {
+                            router.push(
+                              `/tools/wartung?bearbeiten=${encodeURIComponent(faelligkeitId)}`
+                            )
+                          } else {
+                            router.push(
+                              `/tools/wartung?neu=1&equipment=${encodeURIComponent(item.id)}`
+                            )
+                          }
+                        }
+                      : undefined
+                  }
                   onVisibleSectionChange={handleEquipmentVisibleSection}
                   readOnly={!canEditEquipment}
                   dynamicHeight
+                  faelligkeitAmpelByEquipmentId={faelligkeitAmpelMap}
+                  faelligkeitIdByEquipmentId={faelligkeitIdMap}
                 />
               )}
           </div>

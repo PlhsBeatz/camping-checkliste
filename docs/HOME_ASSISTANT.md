@@ -163,6 +163,80 @@ Payload enthält immer den vollständigen Trip-Status unter `data` (siehe Live-V
 
 Webhooks werden mit Header `X-Webhook-Signature: sha256=<hmac>` signiert (HMAC-SHA256 über den JSON-Body). Für HA reicht meist die Webhook-URL-Geheimheit; für eigene Empfänger kann die Signatur verifiziert werden.
 
+## Wartung & Fälligkeiten (REST)
+
+```yaml
+rest:
+  - resource: https://<deine-app>/api/integrations/wartung-status
+    headers:
+      Authorization: !secret packliste_api_token
+    scan_interval: 3600
+    sensor:
+      - name: Wartung überfällig
+        unique_id: packliste_wartung_ueberfaellig
+        value_template: "{{ value_json.overdue_count }}"
+      - name: Wartung bald fällig
+        unique_id: packliste_wartung_bald_faellig
+        value_template: "{{ value_json.due_soon_count }}"
+        json_attributes_path: "$"
+        json_attributes:
+          - items
+```
+
+## Wartung: Webhook-Events
+
+Zusätzlich zum REST-Sensor `wartung-status` können Webhooks auf zwei zeitbasierte Events hören (täglicher Cron):
+
+| Event | Wann |
+|-------|------|
+| `de.camping-packliste.wartung.reminder` | Eintritt ins Warnfenster (`warnung_tage_vorher`, z. B. 30 Tage vor Fälligkeit) |
+| `de.camping-packliste.wartung.due` | Fälligkeitstag erreicht oder überschritten |
+
+Beispiel-Payload unter `data`:
+
+```json
+{
+  "faelligkeit": {
+    "id": "...",
+    "name": "Gasprüfung (Anlage)",
+    "kategorie": "sicherheit",
+    "naechste_faelligkeit": "2026-10-01",
+    "ampel_status": "bald_faellig",
+    "warnung_tage_vorher": 60,
+    "days_until_due": 45,
+    "sicherheitsrelevant": true,
+    "equipment_id": null,
+    "transport_id": null
+  },
+  "event_kind": "reminder",
+  "calendar_timezone": "Europe/Berlin"
+}
+```
+
+Home Assistant Automation (Webhook-Trigger):
+
+```yaml
+automation:
+  - alias: Wartung Gas bald fällig
+    triggers:
+      - trigger: webhook
+        webhook_id: packliste_wartung
+        allowed_methods:
+          - POST
+        local_only: true
+    conditions:
+      - condition: template
+        value_template: >-
+          {{ trigger.json.event_type == 'de.camping-packliste.wartung.reminder'
+             and trigger.json.data.faelligkeit.name is search('Gas') }}
+    actions:
+      - action: notify.mobile_app
+        data:
+          message: >-
+            {{ trigger.json.data.faelligkeit.name }}:
+            in {{ trigger.json.data.faelligkeit.days_until_due }} Tagen fällig
+```
+
 ## Weitere Ideen
 
 - **Erinnerung:** REST-Sensor + Automation wenn `percent < 80` und `days_until_departure <= 2`

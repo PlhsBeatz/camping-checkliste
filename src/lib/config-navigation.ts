@@ -18,6 +18,7 @@ export const CONFIG_NAV_GROUPS: ConfigNavGroup[] = [
       { label: 'Tags', href: '/tags' },
       { label: 'Personen', href: '/mitreisende' },
       { label: 'Transportmittel', href: '/transportmittel' },
+      { label: 'Wartungs-Vorlagen', href: '/wartung-vorlagen' },
     ],
   },
   {

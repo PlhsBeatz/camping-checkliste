@@ -57,12 +57,13 @@ type WebhookRow = {
   created_at: string
 }
 
-type PreviewEndpoint = 'trip-status' | 'open-items' | 'vacations'
+type PreviewEndpoint = 'trip-status' | 'open-items' | 'vacations' | 'wartung-status'
 
 const PREVIEW_ENDPOINTS: { id: PreviewEndpoint; label: string; path: string }[] = [
   { id: 'trip-status', label: 'Reise-Status', path: 'GET /api/integrations/trip-status' },
   { id: 'open-items', label: 'Offene Items', path: 'GET /api/integrations/trip-status/open-items' },
   { id: 'vacations', label: 'Alle Urlaube', path: 'GET /api/integrations/vacations' },
+  { id: 'wartung-status', label: 'Wartung & Fälligkeiten', path: 'GET /api/integrations/wartung-status' },
 ]
 
 const EVENT_LABELS: Record<IntegrationEventType, string> = {
@@ -73,6 +74,8 @@ const EVENT_LABELS: Record<IntegrationEventType, string> = {
   'de.camping-packliste.trip.departure_day': 'Abreisetag',
   'de.camping-packliste.trip.started': 'Reise gestartet',
   'de.camping-packliste.trip.ended': 'Reise beendet',
+  'de.camping-packliste.wartung.reminder': 'Wartung: Erinnerung (X Tage vorher)',
+  'de.camping-packliste.wartung.due': 'Wartung: Fälligkeit erreicht',
   'de.camping-packliste.integration.test': 'Test-Event',
 }
 

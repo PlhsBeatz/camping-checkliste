@@ -50,6 +50,9 @@ import type {
   PackStatusData,
   Rastplatz,
   Optimierung,
+  Faelligkeit,
+  VerbrauchMessung,
+  FaelligkeitVorlage,
 } from './db'
 
 /** Wie `getPackingItems` in `db.ts` nach dem Merge (Hauptkat → Kategorie → Titel). */
@@ -300,6 +303,23 @@ export async function getCachedOptimierungen(): Promise<Optimierung[]> {
   return rows
     .map(stripMeta)
     .sort((a, b) => a.reihenfolge - b.reihenfolge || a.titel.localeCompare(b.titel, 'de'))
+}
+
+export async function getCachedFaelligkeiten(): Promise<Faelligkeit[]> {
+  const rows = await offlineDb.faelligkeiten.toArray()
+  return rows.map(stripMeta) as Faelligkeit[]
+}
+
+export async function getCachedVerbrauchMessungen(): Promise<VerbrauchMessung[]> {
+  const rows = await offlineDb.verbrauchMessungen.toArray()
+  return rows.map(stripMeta) as VerbrauchMessung[]
+}
+
+export async function getCachedFaelligkeitVorlagen(): Promise<FaelligkeitVorlage[]> {
+  const rows = await offlineDb.faelligkeitVorlagen.toArray()
+  return rows
+    .map(stripMeta)
+    .sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name, 'de'))
 }
 
 /** Aus IndexedDB lesen: zuletzt bekannte GPS-Position */

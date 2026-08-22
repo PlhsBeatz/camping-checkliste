@@ -4711,6 +4711,7 @@ export async function getUserPushSettings(
         .prepare(
           `SELECT push_notifications_enabled, push_rastplatz_nearby,
             COALESCE(push_optimierung_faelligkeit, 1) AS push_optimierung_faelligkeit,
+            COALESCE(push_wartung_faellig, 1) AS push_wartung_faellig,
             (SELECT COUNT(*) FROM push_subscriptions ps WHERE ps.user_id = users.id) AS sub_count
            FROM users WHERE id = ?`
         )
@@ -4719,6 +4720,7 @@ export async function getUserPushSettings(
           push_notifications_enabled: number
           push_rastplatz_nearby: number
           push_optimierung_faelligkeit: number
+          push_wartung_faellig: number
           sub_count: number
         }>()
       if (!row) return null
@@ -4726,9 +4728,34 @@ export async function getUserPushSettings(
         enabled: row.push_notifications_enabled === 1,
         rastplatzNearby: row.push_rastplatz_nearby !== 0,
         optimierungFaelligkeit: row.push_optimierung_faelligkeit !== 0,
+        wartungFaelligkeit: row.push_wartung_faellig !== 0,
         browserSubscribed: (row.sub_count ?? 0) > 0,
       }
     } catch {
+      try {
+        const row = await db
+          .prepare(
+            `SELECT push_notifications_enabled, push_rastplatz_nearby,
+              COALESCE(push_optimierung_faelligkeit, 1) AS push_optimierung_faelligkeit,
+              (SELECT COUNT(*) FROM push_subscriptions ps WHERE ps.user_id = users.id) AS sub_count
+             FROM users WHERE id = ?`
+          )
+          .bind(userId)
+          .first<{
+            push_notifications_enabled: number
+            push_rastplatz_nearby: number
+            push_optimierung_faelligkeit: number
+            sub_count: number
+          }>()
+        if (!row) return null
+        return {
+          enabled: row.push_notifications_enabled === 1,
+          rastplatzNearby: row.push_rastplatz_nearby !== 0,
+          optimierungFaelligkeit: row.push_optimierung_faelligkeit !== 0,
+          wartungFaelligkeit: true,
+          browserSubscribed: (row.sub_count ?? 0) > 0,
+        }
+      } catch {
       // Migration 0039 noch nicht angewendet
       const row = await db
         .prepare(
@@ -4747,8 +4774,10 @@ export async function getUserPushSettings(
         enabled: row.push_notifications_enabled === 1,
         rastplatzNearby: row.push_rastplatz_nearby !== 0,
         optimierungFaelligkeit: true,
+        wartungFaelligkeit: true,
         browserSubscribed: (row.sub_count ?? 0) > 0,
       }
+    }
     }
   } catch (error) {
     console.error('Error fetching user push settings:', error)
@@ -4769,6 +4798,7 @@ export async function updateUserPushSettings(
             push_notifications_enabled = ?,
             push_rastplatz_nearby = ?,
             push_optimierung_faelligkeit = ?,
+            push_wartung_faellig = ?,
             updated_at = datetime('now')
            WHERE id = ?`
         )
@@ -4776,11 +4806,31 @@ export async function updateUserPushSettings(
           settings.enabled ? 1 : 0,
           settings.rastplatzNearby ? 1 : 0,
           settings.optimierungFaelligkeit ? 1 : 0,
+          settings.wartungFaelligkeit ? 1 : 0,
           userId
         )
         .run()
       return true
     } catch {
+      try {
+        await db
+          .prepare(
+            `UPDATE users SET
+              push_notifications_enabled = ?,
+              push_rastplatz_nearby = ?,
+              push_optimierung_faelligkeit = ?,
+              updated_at = datetime('now')
+             WHERE id = ?`
+          )
+          .bind(
+            settings.enabled ? 1 : 0,
+            settings.rastplatzNearby ? 1 : 0,
+            settings.optimierungFaelligkeit ? 1 : 0,
+            userId
+          )
+          .run()
+        return true
+      } catch {
       // Migration 0039 noch nicht angewendet – ohne Optimierungs-Spalte speichern
       await db
         .prepare(
@@ -4793,6 +4843,7 @@ export async function updateUserPushSettings(
         .bind(settings.enabled ? 1 : 0, settings.rastplatzNearby ? 1 : 0, userId)
         .run()
       return true
+      }
     }
   } catch (error) {
     console.error('Error updating user push settings:', error)
@@ -7378,3 +7429,5 @@ export async function getAllPushSubscriptions(db: D1Database): Promise<PushSubsc
     return []
   }
 }
+
+export * from './db-wartung'

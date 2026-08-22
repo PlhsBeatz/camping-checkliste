@@ -41,6 +41,8 @@ export const ALL_INTEGRATION_EVENT_TYPES = [
   'de.camping-packliste.trip.departure_day',
   'de.camping-packliste.trip.started',
   'de.camping-packliste.trip.ended',
+  'de.camping-packliste.wartung.reminder',
+  'de.camping-packliste.wartung.due',
   'de.camping-packliste.integration.test',
 ] as const
 

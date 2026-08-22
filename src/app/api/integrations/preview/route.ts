@@ -4,6 +4,7 @@ import {
   getVacation,
   getPackingItems,
   getVacations,
+  getWartungStatusForIntegration,
   type CloudflareEnv,
 } from '@/lib/db'
 import { requireAuth, requireSystemAdmin } from '@/lib/api-auth'
@@ -14,7 +15,7 @@ import {
   getDepartureDate,
 } from '@/lib/trip-readiness'
 
-const ENDPOINTS = ['trip-status', 'open-items', 'vacations'] as const
+const ENDPOINTS = ['trip-status', 'open-items', 'vacations', 'wartung-status'] as const
 type PreviewEndpoint = (typeof ENDPOINTS)[number]
 
 function isPreviewEndpoint(v: string | null): v is PreviewEndpoint {
@@ -34,13 +35,18 @@ export async function GET(request: NextRequest) {
 
     if (!isPreviewEndpoint(endpoint)) {
       return NextResponse.json(
-        { error: 'endpoint muss trip-status, open-items oder vacations sein' },
+        { error: 'endpoint muss trip-status, open-items, vacations oder wartung-status sein' },
         { status: 400 }
       )
     }
 
     const env = process.env as unknown as CloudflareEnv
     const db = await getDB(env)
+
+    if (endpoint === 'wartung-status') {
+      const data = await getWartungStatusForIntegration(db)
+      return NextResponse.json({ success: true, data: { schema_version: 1, ...data } })
+    }
 
     if (endpoint === 'vacations') {
       const vacations = await getVacations(db)

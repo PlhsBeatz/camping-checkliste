@@ -19,6 +19,13 @@ export const PUSH_NOTIFICATION_OPTIONS = [
       'Erinnerung 4 und 2 Wochen vor dem Fälligkeitsdatum geplanter Optimierungen.',
     adminOnly: true as const,
   },
+  {
+    key: 'wartungFaelligkeit' as const,
+    type: 'wartung_due' as const,
+    label: 'Wartung & Fälligkeiten',
+    description: 'Erinnerung, wenn Wartungs- oder Ablaufdaten fällig oder überfällig sind.',
+    adminOnly: false as const,
+  },
 ] as const
 
 export type PushPreferenceKey = (typeof PUSH_NOTIFICATION_OPTIONS)[number]['key']
@@ -27,6 +34,7 @@ export type UserPushSettings = {
   enabled: boolean
   rastplatzNearby: boolean
   optimierungFaelligkeit: boolean
+  wartungFaelligkeit: boolean
 }
 
 export type UserPushSettingsResponse = UserPushSettings & {
@@ -44,6 +52,8 @@ export function isPushTypeEnabled(
       return settings.rastplatzNearby
     case 'optimierung_due':
       return settings.optimierungFaelligkeit
+    case 'wartung_due':
+      return settings.wartungFaelligkeit
     default:
       return false
   }

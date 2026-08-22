@@ -40,6 +40,10 @@ export const BACKUP_TABLE_ORDER: string[] = [
   'optimierungen',
   'optimierungen_links',
   'optimierungen_fotos',
+  'faelligkeit_vorlagen',
+  'faelligkeiten',
+  'faelligkeiten_historie',
+  'verbrauch_messungen',
 ]
 
 /** Legacy-API: gleiche Tabellen wie equipment ∪ referenceStammdaten */
@@ -108,6 +112,10 @@ const TOOLS = new Set([
   'optimierungen',
   'optimierungen_links',
   'optimierungen_fotos',
+  'faelligkeit_vorlagen',
+  'faelligkeiten',
+  'faelligkeiten_historie',
+  'verbrauch_messungen',
 ])
 export const AUTH_TABLES = new Set([
   'users',
@@ -155,6 +163,10 @@ export const PK_PARTS: Record<string, string[]> = {
   optimierungen: ['id'],
   optimierungen_links: ['id'],
   optimierungen_fotos: ['id'],
+  faelligkeit_vorlagen: ['id'],
+  faelligkeiten: ['id'],
+  faelligkeiten_historie: ['id'],
+  verbrauch_messungen: ['id'],
 }
 
 export function rowKey(table: string, row: Record<string, unknown>): string {

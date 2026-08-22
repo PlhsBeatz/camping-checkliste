@@ -65,6 +65,7 @@ export function NavigationSidebar({ isOpen, onClose }: NavigationSidebarProps) {
   const toolsItems: { label: string; href: string; adminOnly?: boolean }[] = [
     { label: 'SONNEN-AUSRICHTUNG', href: '/tools/sonnen-ausrichtung' },
     { label: 'CHECKLISTEN', href: '/tools/checklisten' },
+    { label: 'WARTUNG', href: '/tools/wartung' },
     { label: 'OPTIMIERUNGEN', href: '/tools/optimierungen', adminOnly: true },
   ]
 

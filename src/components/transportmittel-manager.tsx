@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { ResponsiveModal } from '@/components/ui/responsive-modal'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Button } from '@/components/ui/button'
@@ -18,7 +19,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Trash2, Plus, MoreVertical, Pencil, ChevronDown, ChevronRight } from 'lucide-react'
+import { Trash2, Plus, MoreVertical, Pencil, ChevronDown, ChevronRight, Wrench } from 'lucide-react'
 import {
   TransportVehicle,
   TransportVehicleFestgewichtManuell,
@@ -26,6 +27,7 @@ import {
 } from '@/lib/db'
 import type { ApiResponse } from '@/lib/api-types'
 import { cn, formatWeightForDisplay, parseWeightInput } from '@/lib/utils'
+import { useAuth } from '@/components/auth-provider'
 import {
   TRANSPORT_ICON_OPTIONS,
   TransportIcon,
@@ -38,10 +40,16 @@ function TransportmittelRow({
   vehicle,
   onEdit,
   onDelete,
+  onWartung,
+  wartungCount,
+  canManageWartung,
 }: {
   vehicle: TransportVehicleWithFestgewicht | TransportVehicle
   onEdit: (v: TransportVehicle) => void
   onDelete: (id: string) => void
+  onWartung: (v: TransportVehicle) => void
+  wartungCount: number
+  canManageWartung: boolean
 }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const nutzlast = vehicle.zul_gesamtgewicht - vehicle.eigengewicht
@@ -80,6 +88,17 @@ function TransportmittelRow({
             <Pencil className="h-4 w-4 mr-2" />
             Bearbeiten
           </DropdownMenuItem>
+          {canManageWartung && (
+            <DropdownMenuItem
+              onSelect={() => {
+                setMenuOpen(false)
+                onWartung(vehicle)
+              }}
+            >
+              <Wrench className="h-4 w-4 mr-2" />
+              {wartungCount > 0 ? 'Wartungen anzeigen' : 'Wartung anlegen'}
+            </DropdownMenuItem>
+          )}
           <DropdownMenuItem
             onSelect={() => {
               setMenuOpen(false)
@@ -102,10 +121,15 @@ interface TransportmittelManagerProps {
 }
 
 export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelManagerProps) {
+  const router = useRouter()
+  const { canAccessConfig } = useAuth()
   const [showDialog, setShowDialog] = useState(false)
   const [editingVehicle, setEditingVehicle] = useState<TransportVehicle | null>(null)
   const [deleteVehicleId, setDeleteVehicleId] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
+  const [wartungCountByTransportId, setWartungCountByTransportId] = useState<Map<string, number>>(
+    new Map()
+  )
 
   const [form, setForm] = useState({
     name: '',
@@ -138,6 +162,32 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
       }
     } catch (e) {
       console.error('Failed to load festgewicht:', e)
+    }
+  }
+
+  useEffect(() => {
+    if (vehicles.length === 0) {
+      setWartungCountByTransportId(new Map())
+      return
+    }
+    const ids = vehicles.map((v) => v.id).join(',')
+    void fetch(`/api/faelligkeiten/transport-summary?ids=${encodeURIComponent(ids)}`)
+      .then((r) => r.json())
+      .then((raw: unknown) => {
+        const data = raw as ApiResponse<Record<string, number>>
+        if (data.success && data.data) {
+          setWartungCountByTransportId(new Map(Object.entries(data.data)))
+        }
+      })
+      .catch(() => {})
+  }, [vehicles])
+
+  const handleWartung = (vehicle: TransportVehicle) => {
+    const count = wartungCountByTransportId.get(vehicle.id) ?? 0
+    if (count > 0) {
+      router.push(`/tools/wartung?transport=${encodeURIComponent(vehicle.id)}`)
+    } else {
+      router.push(`/tools/wartung?neu=1&transport=${encodeURIComponent(vehicle.id)}`)
     }
   }
 
@@ -385,6 +435,9 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
                 vehicle={vehicle}
                 onEdit={openEdit}
                 onDelete={handleDelete}
+                onWartung={handleWartung}
+                wartungCount={wartungCountByTransportId.get(vehicle.id) ?? 0}
+                canManageWartung={canAccessConfig}
               />
             ))}
           </div>

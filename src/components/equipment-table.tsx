@@ -19,8 +19,10 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Search, Filter, Star, MoreVertical, Pencil, Trash2, ExternalLink, Sigma } from 'lucide-react'
+import { Search, Filter, Star, MoreVertical, Pencil, Trash2, ExternalLink, Sigma, Wrench } from 'lucide-react'
 import { EquipmentItem, Category, MainCategory, TransportVehicle, Tag } from '@/lib/db'
+import type { FaelligkeitAmpelStatus } from '@/lib/faelligkeit-status'
+import { FaelligkeitAmpelBadge } from '@/components/wartung/faelligkeit-ampel-badge'
 import { regelKurzLabel } from '@/lib/packing-quantity'
 import { cn } from '@/lib/utils'
 import { useIsMobile } from '@/hooks/use-mobile'
@@ -35,6 +37,8 @@ interface EquipmentTableProps {
   tags: Tag[]
   onEdit: (item: EquipmentItem) => void
   onDelete: (id: string) => void
+  /** Wartung/Fälligkeit für Gegenstand anlegen (Admin) */
+  onAddFaelligkeit?: (item: EquipmentItem) => void
   /** Sichtbare Haupt-/Unterkategorie (Sticky-Banner) für Dropdown-Scroll beim neuen Eintrag */
   onVisibleSectionChange?: (ctx: {
     mainTitle: string | null
@@ -44,6 +48,10 @@ interface EquipmentTableProps {
   readOnly?: boolean
   /** Dynamische Höhe bis zum unteren Bildschirmrand */
   dynamicHeight?: boolean
+  /** Schlechtester Fälligkeits-Status pro Ausrüstungs-ID */
+  faelligkeitAmpelByEquipmentId?: Map<string, FaelligkeitAmpelStatus>
+  /** Fälligkeits-ID pro Ausrüstungs-ID (für Wartung bearbeiten) */
+  faelligkeitIdByEquipmentId?: Map<string, string>
 }
 
 const LONG_PRESS_MS = 500
@@ -69,9 +77,12 @@ export const EquipmentTable = React.memo(({
   tags,
   onEdit,
   onDelete,
+  onAddFaelligkeit,
   onVisibleSectionChange,
   readOnly = false,
   dynamicHeight = false,
+  faelligkeitAmpelByEquipmentId,
+  faelligkeitIdByEquipmentId,
 }: EquipmentTableProps) => {
   const isMobile = useIsMobile()
   const [searchTerm, setSearchTerm] = useState('')
@@ -916,6 +927,11 @@ export const EquipmentTable = React.memo(({
                             <span className="w-4" />
                           )}
                           <span>{item.was}</span>
+                          {(() => {
+                            const ampel = faelligkeitAmpelByEquipmentId?.get(item.id)
+                            if (!ampel || ampel === 'ok' || ampel === 'nur_info') return null
+                            return <FaelligkeitAmpelBadge status={ampel} compact />
+                          })()}
                         </div>
                         <div className={`px-4 py-2 text-sm flex items-center ${colAlign.transport}`}>{getTransportName(item.transport_id)}</div>
                         <div className={`px-4 py-2 text-sm flex items-center gap-1.5 ${colAlign.gewicht}`}>
@@ -1022,6 +1038,19 @@ export const EquipmentTable = React.memo(({
                                 <Pencil className="h-4 w-4 mr-2" />
                                 Bearbeiten
                               </DropdownMenuItem>
+                              {onAddFaelligkeit && (
+                                <DropdownMenuItem
+                                  onSelect={() => {
+                                    setOpenMenuId(null)
+                                    onAddFaelligkeit(item)
+                                  }}
+                                >
+                                  <Wrench className="h-4 w-4 mr-2" />
+                                  {faelligkeitIdByEquipmentId?.has(item.id)
+                                    ? 'Wartung bearbeiten'
+                                    : 'Wartung anlegen'}
+                                </DropdownMenuItem>
+                              )}
                               <DropdownMenuItem
                                 onSelect={() => {
                                   setOpenMenuId(null)
@@ -1083,6 +1112,22 @@ export const EquipmentTable = React.memo(({
                     <Pencil className="h-4 w-4 mr-2" />
                     Bearbeiten
                   </button>
+                  {onAddFaelligkeit && (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="relative flex w-full cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground"
+                      onClick={() => {
+                        setLongPressMenu(null)
+                        onAddFaelligkeit(longPressMenuItem)
+                      }}
+                    >
+                      <Wrench className="h-4 w-4 mr-2" />
+                      {faelligkeitIdByEquipmentId?.has(longPressMenuItem.id)
+                        ? 'Wartung bearbeiten'
+                        : 'Wartung anlegen'}
+                    </button>
+                  )}
                   <button
                     type="button"
                     role="menuitem"

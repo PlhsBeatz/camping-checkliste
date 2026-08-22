@@ -9,6 +9,7 @@ export const PUSH_SCHEMA_VERSION = 1 as const
 export type PushNotificationType =
   | 'rastplatz_nearby'
   | 'optimierung_due'
+  | 'wartung_due'
 
 export type PushNotificationPayload = {
   schema_version: typeof PUSH_SCHEMA_VERSION
@@ -23,7 +24,7 @@ export type PushNotificationPayload = {
   data?: Record<string, string | number | boolean | null>
 }
 
-const VALID_TYPES = new Set<string>(['rastplatz_nearby', 'optimierung_due'])
+const VALID_TYPES = new Set<string>(['rastplatz_nearby', 'optimierung_due', 'wartung_due'])
 
 export function isPushNotificationPayload(value: unknown): value is PushNotificationPayload {
   if (!value || typeof value !== 'object') return false
@@ -50,6 +51,8 @@ export function resolvePushUrl(payload: PushNotificationPayload): string {
     }
     case 'optimierung_due':
       return '/tools/optimierungen'
+    case 'wartung_due':
+      return '/tools/wartung'
     default:
       return '/'
   }
@@ -156,6 +159,50 @@ export function buildOptimierungDuePush(params: {
       weeks_before: weeks,
       faellig_am: params.faelligAm,
     },
+  }
+}
+
+/** Sammel-Push für fällige Wartungseinträge. */
+export function buildWartungDuePush(params: {
+  items: Array<{
+    id: string
+    name: string
+    ampel_status: string
+    naechste_faelligkeit: string | null
+  }>
+  today: string
+}): PushNotificationPayload {
+  const count = params.items.length
+  const overdue = params.items.filter((i) => i.ampel_status === 'ueberfaellig').length
+  const titles = params.items.map((i) => truncateTitel(i.name))
+
+  let body: string
+  if (count === 1) {
+    const first = params.items[0]
+    const title = first ? truncateTitel(first.name) : 'Eintrag'
+    const due = first?.naechste_faelligkeit
+    body = due ? `${title} (fällig ${formatFaelligAmDe(due)})` : title
+  } else if (count <= 3) {
+    body = titles.join(', ')
+  } else {
+    body = `${titles.slice(0, 2).join(', ')} und ${count - 2} weitere`
+  }
+
+  return {
+    schema_version: PUSH_SCHEMA_VERSION,
+    type: 'wartung_due',
+    title:
+      overdue > 0
+        ? count === 1
+          ? 'Wartung überfällig'
+          : `${overdue} Wartung${overdue > 1 ? 'en' : ''} überfällig`
+        : count === 1
+          ? 'Wartung fällig'
+          : `${count} Wartungen fällig`,
+    body,
+    tag: `wartung_due:${params.today}`,
+    url: '/tools/wartung',
+    data: { count, overdue, date: params.today },
   }
 }
 

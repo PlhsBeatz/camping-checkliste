@@ -10,10 +10,13 @@ function parseBody(body: unknown): UserPushSettings | null {
   if (typeof o.enabled !== 'boolean') return null
   if (typeof o.rastplatzNearby !== 'boolean') return null
   if (typeof o.optimierungFaelligkeit !== 'boolean') return null
+  const wartungFaelligkeit =
+    typeof o.wartungFaelligkeit === 'boolean' ? o.wartungFaelligkeit : true
   return {
     enabled: o.enabled,
     rastplatzNearby: o.rastplatzNearby,
     optimierungFaelligkeit: o.optimierungFaelligkeit,
+    wartungFaelligkeit,
   }
 }
 
@@ -24,6 +27,7 @@ function toResponseData(
     enabled: settings.enabled,
     rastplatzNearby: settings.rastplatzNearby,
     optimierungFaelligkeit: settings.optimierungFaelligkeit,
+    wartungFaelligkeit: settings.wartungFaelligkeit,
     browserSubscribed: settings.browserSubscribed ?? false,
   }
 }

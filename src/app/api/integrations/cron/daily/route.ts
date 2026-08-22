@@ -4,6 +4,7 @@ import { requireAuth, requireSystemAdmin } from '@/lib/api-auth'
 import { buildTripStatusPayload, findRelevantVacation } from '@/lib/trip-readiness'
 import { processIntegrationCron } from '@/lib/integration-events'
 import { processOptimierungFaelligkeitPush } from '@/lib/optimierung-push-reminders'
+import { processWartungFaelligkeitPush } from '@/lib/wartung-push-reminders'
 
 function verifyCronSecret(request: NextRequest): boolean {
   const expected = process.env.INTEGRATION_CRON_SECRET?.trim()
@@ -24,11 +25,13 @@ export async function GET(request: NextRequest) {
     const db = await getDB(env)
     const processed = await processIntegrationCron(db)
     const optimierungPush = await processOptimierungFaelligkeitPush(db)
+    const wartungPush = await processWartungFaelligkeitPush(db)
     return NextResponse.json({
       success: true,
       data: {
         processed_vacations: processed,
         optimierung_reminders: optimierungPush,
+        wartung_reminders: wartungPush,
       },
     })
   } catch (error: unknown) {

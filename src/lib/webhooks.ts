@@ -6,6 +6,9 @@ import {
   type IntegrationEventType,
 } from '@/lib/integration-db'
 import type { TripStatusPayload } from '@/lib/trip-readiness'
+import type { WartungWebhookPayload } from '@/lib/wartung-webhook-payload'
+
+export type CloudEventData = TripStatusPayload | WartungWebhookPayload
 
 export type CloudEventPayload = {
   specversion: '1.0'
@@ -16,7 +19,7 @@ export type CloudEventPayload = {
   id: string
   time: string
   datacontenttype: 'application/json'
-  data: TripStatusPayload
+  data: CloudEventData
 }
 
 export function buildCloudEvent(
@@ -34,6 +37,27 @@ export function buildCloudEvent(
     datacontenttype: 'application/json',
     data,
   }
+}
+
+export function buildWartungCloudEvent(
+  eventType: 'de.camping-packliste.wartung.reminder' | 'de.camping-packliste.wartung.due',
+  data: WartungWebhookPayload
+): CloudEventPayload {
+  return {
+    specversion: '1.0',
+    type: eventType,
+    event_type: eventType,
+    source: `/wartung/faelligkeiten/${data.faelligkeit.id}`,
+    id: crypto.randomUUID(),
+    time: new Date().toISOString(),
+    datacontenttype: 'application/json',
+    data,
+  }
+}
+
+function webhookLogVacationId(data: CloudEventData): string | null {
+  if ('vacation' in data && data.vacation?.id) return data.vacation.id
+  return null
 }
 
 export async function deliverWebhookEvent(
@@ -79,7 +103,7 @@ export async function deliverWebhookEvent(
     webhook_id: webhook.id,
     event_type: event.type,
     event_id: event.id,
-    vacation_id: event.data.vacation?.id ?? null,
+    vacation_id: webhookLogVacationId(event.data),
     http_status: httpStatus,
     success,
     error_message: errorMessage,

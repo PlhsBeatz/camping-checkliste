@@ -28,6 +28,9 @@ import type {
   PackStatusData,
   Rastplatz,
   Optimierung,
+  Faelligkeit,
+  VerbrauchMessung,
+  FaelligkeitVorlage,
 } from './db'
 
 export interface CachedVacation extends Vacation {
@@ -104,6 +107,21 @@ export interface CachedChecklist extends ChecklisteMitStruktur {
 
 /** Tools/Optimierungen inkl. eingebetteter Links / Foto-Zähler wie die API liefert */
 export interface CachedOptimierung extends Optimierung {
+  _cachedAt: number
+  _updatedAt: number
+}
+
+export interface CachedFaelligkeit extends Faelligkeit {
+  _cachedAt: number
+  _updatedAt: number
+}
+
+export interface CachedVerbrauchMessung extends VerbrauchMessung {
+  _cachedAt: number
+  _updatedAt: number
+}
+
+export interface CachedFaelligkeitVorlage extends FaelligkeitVorlage {
   _cachedAt: number
   _updatedAt: number
 }
@@ -210,6 +228,9 @@ export class OfflineDB extends Dexie {
   packingItems!: EntityTable<CachedPackingItem, 'id'>
   checklisten!: EntityTable<CachedChecklist, 'id'>
   optimierungen!: EntityTable<CachedOptimierung, 'id'>
+  faelligkeiten!: EntityTable<CachedFaelligkeit, 'id'>
+  verbrauchMessungen!: EntityTable<CachedVerbrauchMessung, 'id'>
+  faelligkeitVorlagen!: EntityTable<CachedFaelligkeitVorlage, 'id'>
   lastPosition!: EntityTable<CachedLastPosition, 'id'>
   packStatus!: EntityTable<CachedPackStatus, 'id'>
   campingplaetze!: EntityTable<CachedCampingplatz, 'id'>
@@ -369,6 +390,63 @@ export class OfflineDB extends Dexie {
       authUser: 'id, _cachedAt',
       syncQueue: '++id, table, timestamp, attempts',
     })
+    // Version 8: Wartung (Fälligkeiten + Verbrauch)
+    this.version(8).stores({
+      vacations: 'id, _cachedAt, _updatedAt',
+      equipment: 'id, _cachedAt, _updatedAt',
+      categories: 'id, _cachedAt, _updatedAt',
+      mainCategories: 'id, _cachedAt, _updatedAt',
+      tags: 'id, _cachedAt, _updatedAt',
+      tagKategorien: 'id, reihenfolge, _cachedAt, _updatedAt',
+      mitreisende: 'id, _cachedAt, _updatedAt',
+      mitreisendenGruppen: 'id, sort_order, _cachedAt, _updatedAt',
+      vacationMitreisende: 'id_compound, _vacationId, _cachedAt, _updatedAt',
+      transportVehicles: 'id, _cachedAt, _updatedAt',
+      packingItems: 'id, packliste_id, _vacationId, _cachedAt, _updatedAt',
+      checklisten: 'id, reihenfolge, _cachedAt, _updatedAt',
+      optimierungen: 'id, status, reihenfolge, _cachedAt, _updatedAt',
+      faelligkeiten: 'id, naechste_faelligkeit, _cachedAt, _updatedAt',
+      verbrauchMessungen: 'id, typ, urlaub_id, _cachedAt, _updatedAt',
+      lastPosition: 'id, _cachedAt',
+      packStatus: 'id, _cachedAt, _updatedAt',
+      campingplaetze: 'id, _cachedAt, _updatedAt',
+      campingplaetzeFotos: 'id, campingplatz_id, _cachedAt, _updatedAt',
+      rastplaetze: 'id, bewertung, kategorie, _cachedAt, _updatedAt',
+      routes: 'id, _cachedAt',
+      segmentRoutes: 'id, _cachedAt',
+      homeLocation: 'id, _cachedAt, _updatedAt',
+      authUser: 'id, _cachedAt',
+      syncQueue: '++id, table, timestamp, attempts',
+    })
+    // Version 9: Wartungs-Vorlagen
+    this.version(9).stores({
+      vacations: 'id, _cachedAt, _updatedAt',
+      equipment: 'id, _cachedAt, _updatedAt',
+      categories: 'id, _cachedAt, _updatedAt',
+      mainCategories: 'id, _cachedAt, _updatedAt',
+      tags: 'id, _cachedAt, _updatedAt',
+      tagKategorien: 'id, reihenfolge, _cachedAt, _updatedAt',
+      mitreisende: 'id, _cachedAt, _updatedAt',
+      mitreisendenGruppen: 'id, sort_order, _cachedAt, _updatedAt',
+      vacationMitreisende: 'id_compound, _vacationId, _cachedAt, _updatedAt',
+      transportVehicles: 'id, _cachedAt, _updatedAt',
+      packingItems: 'id, packliste_id, _vacationId, _cachedAt, _updatedAt',
+      checklisten: 'id, reihenfolge, _cachedAt, _updatedAt',
+      optimierungen: 'id, status, reihenfolge, _cachedAt, _updatedAt',
+      faelligkeiten: 'id, naechste_faelligkeit, _cachedAt, _updatedAt',
+      verbrauchMessungen: 'id, typ, urlaub_id, _cachedAt, _updatedAt',
+      faelligkeitVorlagen: 'id, sort_order, _cachedAt, _updatedAt',
+      lastPosition: 'id, _cachedAt',
+      packStatus: 'id, _cachedAt, _updatedAt',
+      campingplaetze: 'id, _cachedAt, _updatedAt',
+      campingplaetzeFotos: 'id, campingplatz_id, _cachedAt, _updatedAt',
+      rastplaetze: 'id, bewertung, kategorie, _cachedAt, _updatedAt',
+      routes: 'id, _cachedAt',
+      segmentRoutes: 'id, _cachedAt',
+      homeLocation: 'id, _cachedAt, _updatedAt',
+      authUser: 'id, _cachedAt',
+      syncQueue: '++id, table, timestamp, attempts',
+    })
   }
 }
 
@@ -501,6 +579,29 @@ export async function cacheOptimierung(item: Optimierung): Promise<void> {
 
 export async function removeCachedOptimierung(id: string): Promise<void> {
   await offlineDb.optimierungen.delete(id)
+}
+
+export async function cacheFaelligkeiten(items: Faelligkeit[]): Promise<void> {
+  const withMetaItems = items.map((v) => withMeta(v)) as CachedFaelligkeit[]
+  await snapshotReplace(offlineDb.faelligkeiten, withMetaItems)
+}
+
+export async function cacheFaelligkeit(item: Faelligkeit): Promise<void> {
+  await offlineDb.faelligkeiten.put(withMeta(item) as CachedFaelligkeit)
+}
+
+export async function removeCachedFaelligkeit(id: string): Promise<void> {
+  await offlineDb.faelligkeiten.delete(id)
+}
+
+export async function cacheVerbrauchMessungen(items: VerbrauchMessung[]): Promise<void> {
+  const withMetaItems = items.map((v) => withMeta(v)) as CachedVerbrauchMessung[]
+  await snapshotReplace(offlineDb.verbrauchMessungen, withMetaItems)
+}
+
+export async function cacheFaelligkeitVorlagen(items: FaelligkeitVorlage[]): Promise<void> {
+  const withMetaItems = items.map((v) => withMeta(v)) as CachedFaelligkeitVorlage[]
+  await snapshotReplace(offlineDb.faelligkeitVorlagen, withMetaItems)
 }
 
 /** Zuletzt bekannte GPS-Position speichern */
