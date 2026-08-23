@@ -51,7 +51,7 @@ interface CategoryWithMain extends Category {
 export default function AusruestungPage() {
   const router = useRouter()
   const pathname = usePathname()
-  const { canAccessConfig } = useAuth()
+  const { canAccessConfig, canReadWartung, canWriteWartung } = useAuth()
   const canEditEquipment = canAccessConfig
   const [showNavSidebar, setShowNavSidebar] = useState(false)
   const [equipmentItems, setEquipmentItems] = useState<EquipmentItem[]>([])
@@ -138,6 +138,7 @@ export default function AusruestungPage() {
   }, [refetchTick])
 
   useEffect(() => {
+    if (!canReadWartung) return
     const loadFaelligkeitLinks = () => {
       void fetch('/api/faelligkeiten/equipment-links')
         .then((r) => r.json())
@@ -161,7 +162,7 @@ export default function AusruestungPage() {
     }
     document.addEventListener('visibilitychange', onVisible)
     return () => document.removeEventListener('visibilitychange', onVisible)
-  }, [refetchTick, pathname])
+  }, [refetchTick, pathname, canReadWartung])
 
   // Fetch Categories
   useEffect(() => {
@@ -475,7 +476,7 @@ export default function AusruestungPage() {
                   onEdit={handleEditEquipment}
                   onDelete={handleDeleteEquipment}
                   onAddFaelligkeit={
-                    canEditEquipment
+                    canWriteWartung
                       ? (item) => {
                           const faelligkeitId = faelligkeitIdMap.get(item.id)
                           if (faelligkeitId) {
@@ -493,8 +494,8 @@ export default function AusruestungPage() {
                   onVisibleSectionChange={handleEquipmentVisibleSection}
                   readOnly={!canEditEquipment}
                   dynamicHeight
-                  faelligkeitAmpelByEquipmentId={faelligkeitAmpelMap}
-                  faelligkeitIdByEquipmentId={faelligkeitIdMap}
+                  faelligkeitAmpelByEquipmentId={canReadWartung ? faelligkeitAmpelMap : undefined}
+                  faelligkeitIdByEquipmentId={canReadWartung ? faelligkeitIdMap : undefined}
                 />
               )}
           </div>

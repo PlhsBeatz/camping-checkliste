@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDB, getFaelligkeitCountByTransportIds, type CloudflareEnv } from '@/lib/db'
-import { requireAuth } from '@/lib/api-auth'
+import { requireAuth, requireReadWartung } from '@/lib/api-auth'
 
 export async function GET(request: NextRequest) {
   try {
     const auth = await requireAuth(request)
     if (auth instanceof NextResponse) return auth
+    const readErr = requireReadWartung(auth.userContext)
+    if (readErr) return readErr
     const { searchParams } = new URL(request.url)
     const idsParam = searchParams.get('ids')
     if (!idsParam?.trim()) {

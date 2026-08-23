@@ -9,7 +9,7 @@ import {
   type OptimierungBereich,
   type OptimierungPrioritaet,
 } from '@/lib/db'
-import { requireAuth, requireAdmin } from '@/lib/api-auth'
+import { requireAuth, requireWriteOptimierung, requireReadOptimierung } from '@/lib/api-auth'
 import { isOptimierungFaelligkeitModus } from '@/lib/optimierung-faelligkeit'
 
 const STATUSES: OptimierungStatus[] = [
@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
   try {
     const auth = await requireAuth(request)
     if (auth instanceof NextResponse) return auth
-    const adminErr = requireAdmin(auth.userContext)
+    const adminErr = requireReadOptimierung(auth.userContext)
     if (adminErr) return adminErr
 
     const statusParam = request.nextUrl.searchParams.get('status')
@@ -63,8 +63,8 @@ export async function POST(request: NextRequest) {
   try {
     const auth = await requireAuth(request)
     if (auth instanceof NextResponse) return auth
-    const adminErr = requireAdmin(auth.userContext)
-    if (adminErr) return adminErr
+    const writeErr = requireWriteOptimierung(auth.userContext)
+    if (writeErr) return writeErr
 
     let body: unknown
     try {
@@ -139,8 +139,8 @@ export async function PUT(request: NextRequest) {
   try {
     const auth = await requireAuth(request)
     if (auth instanceof NextResponse) return auth
-    const adminErr = requireAdmin(auth.userContext)
-    if (adminErr) return adminErr
+    const writeErr = requireWriteOptimierung(auth.userContext)
+    if (writeErr) return writeErr
 
     let body: unknown
     try {

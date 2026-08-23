@@ -10,7 +10,7 @@ import {
   type FaelligkeitIntervallEinheit,
   type FaelligkeitIntervallRhythmus,
 } from '@/lib/db'
-import { requireAuth, requireAdmin } from '@/lib/api-auth'
+import { requireAuth, requireWriteWartung, requireReadWartung } from '@/lib/api-auth'
 
 interface FaelligkeitUpdateBody {
   name?: string
@@ -38,6 +38,8 @@ export async function GET(
   try {
     const auth = await requireAuth(request)
     if (auth instanceof NextResponse) return auth
+    const readErr = requireReadWartung(auth.userContext)
+    if (readErr) return readErr
     const { id } = await params
     const env = process.env as unknown as CloudflareEnv
     const db = await getDB(env)
@@ -59,7 +61,7 @@ export async function PUT(
   try {
     const auth = await requireAuth(request)
     if (auth instanceof NextResponse) return auth
-    const adminErr = requireAdmin(auth.userContext)
+    const adminErr = requireWriteWartung(auth.userContext)
     if (adminErr) return adminErr
 
     const { id } = await params
@@ -84,7 +86,7 @@ export async function DELETE(
   try {
     const auth = await requireAuth(request)
     if (auth instanceof NextResponse) return auth
-    const adminErr = requireAdmin(auth.userContext)
+    const adminErr = requireWriteWartung(auth.userContext)
     if (adminErr) return adminErr
 
     const { id } = await params

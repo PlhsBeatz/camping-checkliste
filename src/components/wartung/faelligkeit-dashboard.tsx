@@ -98,7 +98,7 @@ function FaelligkeitCard({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            {showQuittieren && (
+            {showQuittieren && canAdmin && (
               <DropdownMenuItem
                 onSelect={() => {
                   setOpenMenuId(null)

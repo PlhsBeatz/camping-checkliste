@@ -8,7 +8,7 @@ import {
   type CloudflareEnv,
   type FaelligkeitEreignisTyp,
 } from '@/lib/db'
-import { requireAuth, requireAdmin } from '@/lib/api-auth'
+import { requireAuth, requireWriteWartung } from '@/lib/api-auth'
 
 interface HistorieUpdateBody {
   ereignis_typ?: FaelligkeitEreignisTyp
@@ -23,7 +23,7 @@ export async function PUT(
   try {
     const auth = await requireAuth(request)
     if (auth instanceof NextResponse) return auth
-    const adminErr = requireAdmin(auth.userContext)
+    const adminErr = requireWriteWartung(auth.userContext)
     if (adminErr) return adminErr
 
     const { id, historieId } = await params
@@ -59,7 +59,7 @@ export async function DELETE(
   try {
     const auth = await requireAuth(request)
     if (auth instanceof NextResponse) return auth
-    const adminErr = requireAdmin(auth.userContext)
+    const adminErr = requireWriteWartung(auth.userContext)
     if (adminErr) return adminErr
 
     const { id, historieId } = await params

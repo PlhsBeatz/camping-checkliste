@@ -279,9 +279,10 @@ function PrioritaetIcon({ prio }: { prio: OptimierungPrioritaet }) {
 
 export type OptimierungenToolProps = {
   headerTrailingRef?: RefObject<HTMLDivElement | null>
+  canWrite?: boolean
 }
 
-export function OptimierungenTool({ headerTrailingRef }: OptimierungenToolProps) {
+export function OptimierungenTool({ headerTrailingRef, canWrite = true }: OptimierungenToolProps) {
   const { toast } = useToast()
   const { mutate } = useOptimisticMutation()
   const [items, setItems] = useState<Optimierung[]>([])
@@ -926,10 +927,12 @@ export function OptimierungenTool({ headerTrailingRef }: OptimierungenToolProps)
             )}
           </DropdownMenuItem>
           <DropdownMenuSeparator />
-          <DropdownMenuItem className="cursor-pointer gap-2" onSelect={openCreate}>
-            <Plus className="h-4 w-4 shrink-0" />
-            Neue Optimierung
-          </DropdownMenuItem>
+          {canWrite ? (
+            <DropdownMenuItem className="cursor-pointer gap-2" onSelect={openCreate}>
+              <Plus className="h-4 w-4 shrink-0" />
+              Neue Optimierung
+            </DropdownMenuItem>
+          ) : null}
         </DropdownMenuContent>
       </DropdownMenu>
     ) : null
@@ -990,7 +993,9 @@ export function OptimierungenTool({ headerTrailingRef }: OptimierungenToolProps)
                           <Checkbox
                             id={`opt-check-${item.id}`}
                             checked={isErledigt}
+                            disabled={!canWrite}
                             onCheckedChange={(v) => {
+                              if (!canWrite) return
                               void handleToggleErledigt(item, v === true)
                             }}
                             className={OPT_CHECKBOX_CLASS}
@@ -1059,6 +1064,7 @@ export function OptimierungenTool({ headerTrailingRef }: OptimierungenToolProps)
                                 </span>
                               ) : null}
                             </div>
+                            {canWrite ? (
                             <DropdownMenu
                               open={openMenuId === item.id}
                               onOpenChange={(o) => setOpenMenuId(o ? item.id : null)}
@@ -1095,6 +1101,7 @@ export function OptimierungenTool({ headerTrailingRef }: OptimierungenToolProps)
                                 </DropdownMenuItem>
                               </DropdownMenuContent>
                             </DropdownMenu>
+                            ) : null}
                           </div>
                           {faelligLine ? (
                             <p className="text-xs text-muted-foreground mt-1 truncate">
@@ -1117,6 +1124,7 @@ export function OptimierungenTool({ headerTrailingRef }: OptimierungenToolProps)
         </div>
       )}
 
+      {canWrite ? (
       <div className="fixed bottom-6 right-6 z-30">
         <Button
           size="icon"
@@ -1127,6 +1135,7 @@ export function OptimierungenTool({ headerTrailingRef }: OptimierungenToolProps)
           <Plus className="h-6 w-6" strokeWidth={2.5} />
         </Button>
       </div>
+      ) : null}
 
       <ResponsiveModal
         open={editOpen}

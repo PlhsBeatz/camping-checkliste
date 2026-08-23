@@ -10,17 +10,17 @@ import { cn } from '@/lib/utils'
 import { useAuth } from '@/components/auth-provider'
 
 export default function OptimierungenPage() {
-  const { canAccessConfig, loading } = useAuth()
+  const { canReadOptimierung, canWriteOptimierung, loading } = useAuth()
   const router = useRouter()
   const [showNavSidebar, setShowNavSidebar] = useState(false)
   const headerTrailingRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (loading) return
-    if (!canAccessConfig) {
+    if (!canReadOptimierung) {
       router.replace('/')
     }
-  }, [loading, canAccessConfig, router])
+  }, [loading, canReadOptimierung, router])
 
   useEffect(() => {
     if (showNavSidebar) {
@@ -36,7 +36,7 @@ export default function OptimierungenPage() {
     }
   }, [showNavSidebar])
 
-  if (loading || !canAccessConfig) {
+  if (loading || !canReadOptimierung) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <p className="text-muted-foreground text-sm">Wird geladen…</p>
@@ -77,7 +77,7 @@ export default function OptimierungenPage() {
             </div>
           </div>
 
-          <OptimierungenTool headerTrailingRef={headerTrailingRef} />
+          <OptimierungenTool headerTrailingRef={headerTrailingRef} canWrite={canWriteOptimierung} />
         </div>
       </div>
     </div>

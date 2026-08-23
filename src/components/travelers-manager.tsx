@@ -25,12 +25,19 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Trash2, Star, MoreVertical, Pencil, Mail, Copy, KeyRound, Share2 } from 'lucide-react'
+import { Trash2, Star, MoreVertical, Pencil, Mail, Copy, KeyRound, Share2, AlertTriangle } from 'lucide-react'
 import { Mitreisender, MitreisendenGruppe, Personentyp } from '@/lib/db'
 import type { UserRole } from '@/lib/user-roles'
 import { userRoleLabel, personentypLabel } from '@/lib/user-role-labels'
 import { useAuth } from '@/components/auth-provider'
 import type { ApiResponse } from '@/lib/api-types'
+import {
+  KIND_BERECHTIGUNG_OPTIONS,
+  ERWACHSEN_BERECHTIGUNG_OPTIONS,
+  filterErwachsenBerechtigungen,
+  isWartungOptimierungBerechtigung,
+  toggleBerechtigung,
+} from '@/lib/berechtigungen'
 import {
   USER_COLORS,
   DEFAULT_USER_COLOR_BG,
@@ -267,10 +274,19 @@ export function TravelersManager({
     ].sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name, 'de'))
   }, [sortedGruppen, form.gruppeId, gruppen, travelers])
 
-  const BERECHTIGUNGEN_OPTIONS = [
-    { key: 'can_edit_pauschal_entries', label: 'Pauschale Einträge bearbeiten' },
-    { key: 'gepackt_erfordert_elternkontrolle', label: 'Gepackt erfordert Elternkontrolle' },
-  ] as const
+  const selectedGruppeMeta = gruppen.find((g) => g.id === form.gruppeId)
+  const inStandardReisegruppe = selectedGruppeMeta?.urlaub_standard_mitnehmen ?? false
+  const showNonStandardGroupPermWarning =
+    !inStandardReisegruppe &&
+    formBerechtigungen.some(isWartungOptimierungBerechtigung)
+
+  const inviteGruppeMeta = inviteTraveler
+    ? gruppen.find((g) => g.id === inviteTraveler.gruppe_id)
+    : undefined
+  const inviteInStandardReisegruppe = inviteGruppeMeta?.urlaub_standard_mitnehmen ?? false
+  const showInviteNonStandardGroupPermWarning =
+    !inviteInStandardReisegruppe &&
+    inviteBerechtigungen.some(isWartungOptimierungBerechtigung)
 
   const handleCreate = async () => {
     if (!form.name.trim()) {
@@ -357,7 +373,7 @@ export function TravelersManager({
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            berechtigungen: formBerechtigungen.filter((p) => p === 'can_edit_pauschal_entries'),
+            berechtigungen: filterErwachsenBerechtigungen(formBerechtigungen),
           }),
         })
         const permData = (await permRes.json()) as ApiResponse<unknown>
@@ -842,9 +858,7 @@ export function TravelersManager({
                   const pt = v as Personentyp
                   setForm({ ...form, personentyp: pt })
                   if (pt === 'erwachsen') {
-                    setFormBerechtigungen((prev) =>
-                      prev.filter((p) => p === 'can_edit_pauschal_entries')
-                    )
+                    setFormBerechtigungen((prev) => filterErwachsenBerechtigungen(prev))
                   }
                 }}
               >
@@ -888,18 +902,16 @@ export function TravelersManager({
                 </p>
                 <div className="space-y-2">
                   {(form.personentyp === 'kind'
-                    ? BERECHTIGUNGEN_OPTIONS
-                    : BERECHTIGUNGEN_OPTIONS.filter((o) => o.key === 'can_edit_pauschal_entries')
+                    ? KIND_BERECHTIGUNG_OPTIONS
+                    : ERWACHSEN_BERECHTIGUNG_OPTIONS
                   ).map((opt) => (
                     <div key={opt.key} className="flex items-center space-x-2">
                       <Checkbox
                         id={`perm-${opt.key}`}
                         checked={formBerechtigungen.includes(opt.key)}
                         onCheckedChange={(checked) => {
-                          setFormBerechtigungen(prev =>
-                            checked
-                              ? [...prev, opt.key]
-                              : prev.filter((k) => k !== opt.key)
+                          setFormBerechtigungen((prev) =>
+                            toggleBerechtigung(prev, opt.key, checked === true)
                           )
                         }}
                       />
@@ -912,6 +924,19 @@ export function TravelersManager({
                     </div>
                   ))}
                 </div>
+                {showNonStandardGroupPermWarning && (
+                  <div className="flex gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100">
+                    <AlertTriangle
+                      className="mt-0.5 h-4 w-4 shrink-0 text-amber-700 dark:text-amber-300"
+                      aria-hidden
+                    />
+                    <p>
+                      Diese Person gehört nicht zur Standard-Reisegruppe (nicht bei neuen Urlauben
+                      vorausgewählt). Wartungs- und Optimierungs-Berechtigungen sind für Personen
+                      außerhalb der Kerngruppe unüblich – bitte bewusst setzen.
+                    </p>
+                  </div>
+                )}
               </div>
             )}
             <Button
@@ -958,16 +983,16 @@ export function TravelersManager({
                   </p>
                   <div className="space-y-2">
                     {(inviteTraveler?.personentyp === 'kind'
-                      ? BERECHTIGUNGEN_OPTIONS
-                      : BERECHTIGUNGEN_OPTIONS.filter((o) => o.key === 'can_edit_pauschal_entries')
+                      ? KIND_BERECHTIGUNG_OPTIONS
+                      : ERWACHSEN_BERECHTIGUNG_OPTIONS
                     ).map((opt) => (
                       <div key={opt.key} className="flex items-center space-x-2">
                         <Checkbox
                           id={`invite-perm-${opt.key}`}
                           checked={inviteBerechtigungen.includes(opt.key)}
                           onCheckedChange={(checked) => {
-                            setInviteBerechtigungen(prev =>
-                              checked ? [...prev, opt.key] : prev.filter((k) => k !== opt.key)
+                            setInviteBerechtigungen((prev) =>
+                              toggleBerechtigung(prev, opt.key, checked === true)
                             )
                           }}
                         />
@@ -977,6 +1002,18 @@ export function TravelersManager({
                       </div>
                     ))}
                   </div>
+                  {showInviteNonStandardGroupPermWarning && (
+                    <div className="flex gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100">
+                      <AlertTriangle
+                        className="mt-0.5 h-4 w-4 shrink-0 text-amber-700 dark:text-amber-300"
+                        aria-hidden
+                      />
+                      <p>
+                        Diese Person gehört nicht zur Standard-Reisegruppe. Wartungs- und
+                        Optimierungs-Berechtigungen bitte nur bewusst vergeben.
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
               <Button onClick={handleCreateInvite} disabled={isLoading} className="w-full">

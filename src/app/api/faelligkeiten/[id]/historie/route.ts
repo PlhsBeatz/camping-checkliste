@@ -7,7 +7,7 @@ import {
   type CloudflareEnv,
   type FaelligkeitEreignisTyp,
 } from '@/lib/db'
-import { requireAuth } from '@/lib/api-auth'
+import { requireAuth, requireWriteWartung, requireReadWartung } from '@/lib/api-auth'
 
 interface HistorieBody {
   ereignis_typ: FaelligkeitEreignisTyp
@@ -25,6 +25,8 @@ export async function GET(
   try {
     const auth = await requireAuth(request)
     if (auth instanceof NextResponse) return auth
+    const readErr = requireReadWartung(auth.userContext)
+    if (readErr) return readErr
     const { id } = await params
     const { searchParams } = new URL(request.url)
     const limit = Math.min(100, Math.max(1, Number(searchParams.get('limit') ?? 50)))
@@ -50,6 +52,8 @@ export async function POST(
   try {
     const auth = await requireAuth(request)
     if (auth instanceof NextResponse) return auth
+    const writeErr = requireWriteWartung(auth.userContext)
+    if (writeErr) return writeErr
     const { id } = await params
     const body = (await request.json()) as HistorieBody
 

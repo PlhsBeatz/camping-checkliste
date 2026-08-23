@@ -122,7 +122,7 @@ interface TransportmittelManagerProps {
 
 export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelManagerProps) {
   const router = useRouter()
-  const { canAccessConfig } = useAuth()
+  const { canAccessConfig, canWriteWartung } = useAuth()
   const [showDialog, setShowDialog] = useState(false)
   const [editingVehicle, setEditingVehicle] = useState<TransportVehicle | null>(null)
   const [deleteVehicleId, setDeleteVehicleId] = useState<string | null>(null)
@@ -437,7 +437,7 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
                 onDelete={handleDelete}
                 onWartung={handleWartung}
                 wartungCount={wartungCountByTransportId.get(vehicle.id) ?? 0}
-                canManageWartung={canAccessConfig}
+                canManageWartung={canWriteWartung}
               />
             ))}
           </div>

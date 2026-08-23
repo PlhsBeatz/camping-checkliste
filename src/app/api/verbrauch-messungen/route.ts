@@ -6,7 +6,7 @@ import {
   type CloudflareEnv,
   type VerbrauchMessungTyp,
 } from '@/lib/db'
-import { requireAuth, requireAdmin } from '@/lib/api-auth'
+import { requireAuth, requireWriteWartung, requireReadWartung } from '@/lib/api-auth'
 
 interface VerbrauchBody {
   typ?: VerbrauchMessungTyp
@@ -25,6 +25,8 @@ export async function GET(request: NextRequest) {
   try {
     const auth = await requireAuth(request)
     if (auth instanceof NextResponse) return auth
+    const readErr = requireReadWartung(auth.userContext)
+    if (readErr) return readErr
     const { searchParams } = new URL(request.url)
     const typ = searchParams.get('typ') as VerbrauchMessungTyp | null
     const urlaubId = searchParams.get('urlaubId')
@@ -46,7 +48,7 @@ export async function POST(request: NextRequest) {
   try {
     const auth = await requireAuth(request)
     if (auth instanceof NextResponse) return auth
-    const adminErr = requireAdmin(auth.userContext)
+    const adminErr = requireWriteWartung(auth.userContext)
     if (adminErr) return adminErr
 
     const body = (await request.json()) as VerbrauchBody

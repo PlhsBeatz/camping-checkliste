@@ -9,7 +9,7 @@ import {
   buildOptimierungFotoObjectKey,
   getCampingPhotosR2,
 } from '@/lib/db'
-import { requireAuth, requireAdmin } from '@/lib/api-auth'
+import { requireAuth, requireWriteOptimierung, requireReadOptimierung } from '@/lib/api-auth'
 import { optimizeCampingPhotoToWebp } from '@/lib/camping-photo-optimize'
 
 const UPLOAD_MAX_BYTES = 32 * 1024 * 1024
@@ -22,8 +22,8 @@ export async function GET(
   try {
     const auth = await requireAuth(request)
     if (auth instanceof NextResponse) return auth
-    const adminErr = requireAdmin(auth.userContext)
-    if (adminErr) return adminErr
+    const readErr = requireReadOptimierung(auth.userContext)
+    if (readErr) return readErr
 
     const { id } = await context.params
     if (!id) {
@@ -52,8 +52,8 @@ export async function POST(
   try {
     const auth = await requireAuth(request)
     if (auth instanceof NextResponse) return auth
-    const adminErr = requireAdmin(auth.userContext)
-    if (adminErr) return adminErr
+    const writeErr = requireWriteOptimierung(auth.userContext)
+    if (writeErr) return writeErr
 
     const { id: optimierungId } = await context.params
     if (!optimierungId) {

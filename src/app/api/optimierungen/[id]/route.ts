@@ -9,7 +9,7 @@ import {
   type OptimierungBereich,
   type OptimierungPrioritaet,
 } from '@/lib/db'
-import { requireAuth, requireAdmin } from '@/lib/api-auth'
+import { requireAuth, requireWriteOptimierung } from '@/lib/api-auth'
 import { isOptimierungFaelligkeitModus } from '@/lib/optimierung-faelligkeit'
 
 const STATUSES: OptimierungStatus[] = [
@@ -39,8 +39,8 @@ export async function PUT(
   try {
     const auth = await requireAuth(request)
     if (auth instanceof NextResponse) return auth
-    const adminErr = requireAdmin(auth.userContext)
-    if (adminErr) return adminErr
+    const writeErr = requireWriteOptimierung(auth.userContext)
+    if (writeErr) return writeErr
 
     const { id } = await params
     let body: unknown
@@ -129,8 +129,8 @@ export async function DELETE(
   try {
     const auth = await requireAuth(request)
     if (auth instanceof NextResponse) return auth
-    const adminErr = requireAdmin(auth.userContext)
-    if (adminErr) return adminErr
+    const writeErr = requireWriteOptimierung(auth.userContext)
+    if (writeErr) return writeErr
 
     const { id } = await params
     const env = process.env as unknown as CloudflareEnv

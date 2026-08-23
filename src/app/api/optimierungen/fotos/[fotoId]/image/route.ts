@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { CloudflareEnv, getDB, getCampingPhotosR2, getOptimierungFotoById } from '@/lib/db'
-import { requireAuth, requireAdmin } from '@/lib/api-auth'
+import { requireAuth, requireReadOptimierung } from '@/lib/api-auth'
 
 export async function GET(
   request: NextRequest,
@@ -9,8 +9,8 @@ export async function GET(
   try {
     const auth = await requireAuth(request)
     if (auth instanceof NextResponse) return auth
-    const adminErr = requireAdmin(auth.userContext)
-    if (adminErr) return adminErr
+    const readErr = requireReadOptimierung(auth.userContext)
+    if (readErr) return readErr
 
     const { fotoId } = await context.params
     if (!fotoId) {

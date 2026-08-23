@@ -9,7 +9,7 @@ import {
   type FaelligkeitIntervallEinheit,
   type FaelligkeitIntervallRhythmus,
 } from '@/lib/db'
-import { requireAuth, requireAdmin } from '@/lib/api-auth'
+import { requireAuth, requireWriteWartung, requireReadWartung } from '@/lib/api-auth'
 
 interface FaelligkeitBody {
   name?: string
@@ -33,6 +33,8 @@ export async function GET(request: NextRequest) {
   try {
     const auth = await requireAuth(request)
     if (auth instanceof NextResponse) return auth
+    const readErr = requireReadWartung(auth.userContext)
+    if (readErr) return readErr
     const env = process.env as unknown as CloudflareEnv
     const db = await getDB(env)
     const { searchParams } = new URL(request.url)
@@ -58,7 +60,7 @@ export async function POST(request: NextRequest) {
   try {
     const auth = await requireAuth(request)
     if (auth instanceof NextResponse) return auth
-    const adminErr = requireAdmin(auth.userContext)
+    const adminErr = requireWriteWartung(auth.userContext)
     if (adminErr) return adminErr
 
     const body = (await request.json()) as FaelligkeitBody

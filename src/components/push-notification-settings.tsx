@@ -15,7 +15,7 @@ import { useAuth } from '@/components/auth-provider'
 type PushSettingsData = UserPushSettings & { browserSubscribed: boolean }
 
 export function PushNotificationSettings() {
-  const { canAccessConfig } = useAuth()
+  const { canAccessConfig, canReadWartung, canReadOptimierung } = useAuth()
   const pushSubscribe = usePushSubscribe()
   const [settings, setSettings] = useState<PushSettingsData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -25,8 +25,13 @@ export function PushNotificationSettings() {
 
   const visibleOptions = useMemo(
     () =>
-      PUSH_NOTIFICATION_OPTIONS.filter((opt) => !opt.adminOnly || canAccessConfig),
-    [canAccessConfig]
+      PUSH_NOTIFICATION_OPTIONS.filter((opt) => {
+        if (opt.key === 'optimierungFaelligkeit') return canReadOptimierung
+        if (opt.key === 'wartungFaelligkeit') return canReadWartung
+        if (opt.adminOnly) return canAccessConfig
+        return true
+      }),
+    [canAccessConfig, canReadWartung, canReadOptimierung]
   )
 
   const loadSettings = useCallback(async () => {

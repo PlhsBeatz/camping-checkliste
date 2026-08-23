@@ -6,7 +6,7 @@ import {
   deleteOptimierungFoto,
   getCampingPhotosR2,
 } from '@/lib/db'
-import { requireAuth, requireAdmin } from '@/lib/api-auth'
+import { requireAuth, requireWriteOptimierung } from '@/lib/api-auth'
 
 export async function DELETE(
   request: NextRequest,
@@ -15,8 +15,8 @@ export async function DELETE(
   try {
     const auth = await requireAuth(request)
     if (auth instanceof NextResponse) return auth
-    const adminErr = requireAdmin(auth.userContext)
-    if (adminErr) return adminErr
+    const writeErr = requireWriteOptimierung(auth.userContext)
+    if (writeErr) return writeErr
 
     const { id: optimierungId, fotoId } = await context.params
     if (!optimierungId || !fotoId) {

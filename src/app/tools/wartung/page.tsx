@@ -49,7 +49,7 @@ import {
 function WartungPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const { canAccessConfig } = useAuth()
+  const { canReadWartung, canWriteWartung, loading: authLoading } = useAuth()
   const [showNavSidebar, setShowNavSidebar] = useState(false)
   const [dashboard, setDashboard] = useState<FaelligkeitDashboard | null>(null)
   const [messungen, setMessungen] = useState<VerbrauchMessung[]>([])
@@ -74,6 +74,13 @@ function WartungPageContent() {
     const sep = url.includes('?') ? '&' : '?'
     return fetch(`${url}${sep}_=${Date.now()}`, { cache: 'no-store' })
   }, [])
+
+  useEffect(() => {
+    if (authLoading) return
+    if (!canReadWartung) {
+      router.replace('/')
+    }
+  }, [authLoading, canReadWartung, router])
 
   useEffect(() => {
     if (showNavSidebar) {
@@ -271,7 +278,7 @@ function WartungPageContent() {
       : null
 
   useEffect(() => {
-    if (loading || formOpen || neuParam !== '1' || !canAccessConfig) return
+    if (loading || formOpen || neuParam !== '1' || !canWriteWartung) return
 
     setEditItem(null)
     if (equipmentParam) {
@@ -300,13 +307,13 @@ function WartungPageContent() {
     filterTransportId,
     loading,
     formOpen,
-    canAccessConfig,
+    canWriteWartung,
     equipment,
     router,
   ])
 
   useEffect(() => {
-    if (loading || formOpen || !bearbeitenParam || !canAccessConfig || !dashboard) return
+    if (loading || formOpen || !bearbeitenParam || !canWriteWartung || !dashboard) return
 
     const all = flattenFaelligkeitDashboard(dashboard)
     const item = all.find((f) => f.id === bearbeitenParam)
@@ -318,7 +325,15 @@ function WartungPageContent() {
       setFormOpen(true)
     }
     router.replace('/tools/wartung', { scroll: false })
-  }, [bearbeitenParam, loading, formOpen, canAccessConfig, dashboard, router])
+  }, [bearbeitenParam, loading, formOpen, canWriteWartung, dashboard, router])
+
+  if (authLoading || !canReadWartung) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <p className="text-muted-foreground text-sm">Wird geladen…</p>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen flex max-w-full overflow-x-clip">
@@ -381,7 +396,7 @@ function WartungPageContent() {
                   <FaelligkeitDashboardView
                     dashboard={dashboard}
                     filterTransportId={filterTransportId}
-                    canAdmin={canAccessConfig}
+                    canAdmin={canWriteWartung}
                     onQuittieren={setQuittItem}
                     onHistorie={setHistorieItem}
                     onEdit={handleEdit}
@@ -395,7 +410,7 @@ function WartungPageContent() {
               <VerbrauchSection
                 messungen={messungen}
                 vacations={vacations}
-                canAdmin={canAccessConfig}
+                canAdmin={canWriteWartung}
                 onMessungCreated={upsertMessung}
                 onMessungDeleted={removeMessung}
                 onRefresh={() => void load()}
@@ -403,7 +418,7 @@ function WartungPageContent() {
             </TabsContent>
           </Tabs>
 
-          {canAccessConfig && (
+          {canWriteWartung && (
             <div className="fixed bottom-6 right-6 z-30">
               <Button
                 size="icon"
@@ -445,7 +460,7 @@ function WartungPageContent() {
         faelligkeitId={historieItem?.id ?? null}
         faelligkeitName={historieItem?.name ?? ''}
         faelligkeit={historieItem}
-        canAdmin={canAccessConfig}
+        canAdmin={canWriteWartung}
         onChanged={() => void refreshDashboard()}
       />
 
@@ -456,7 +471,7 @@ function WartungPageContent() {
         description={
           deleteItem
             ? `„${deleteItem.name}" wird unwiderruflich gelöscht (inkl. Historie).`
-            : undefined
+            : ''
         }
         onConfirm={() => void handleDelete()}
       />

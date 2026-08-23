@@ -9,7 +9,7 @@ import {
   type FaelligkeitIntervallEinheit,
   type FaelligkeitIntervallRhythmus,
 } from '@/lib/db'
-import { requireAuth, requireAdmin } from '@/lib/api-auth'
+import { requireAuth, requireAdmin, requireReadWartung } from '@/lib/api-auth'
 import { normalizeFaelligkeitTyp } from '@/lib/faelligkeit-status'
 
 interface FaelligkeitVorlageBody {
@@ -31,6 +31,8 @@ export async function GET(request: NextRequest) {
   try {
     const auth = await requireAuth(request)
     if (auth instanceof NextResponse) return auth
+    const readErr = requireReadWartung(auth.userContext)
+    if (readErr) return readErr
     const env = process.env as unknown as CloudflareEnv
     const db = await getDB(env)
     const data = await getFaelligkeitVorlagen(db)
