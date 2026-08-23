@@ -15,6 +15,7 @@ import {
   type AttentionFeed,
   type AttentionItem,
   type AttentionKind,
+  type AttentionVacationTile,
 } from '@/lib/attention-feed'
 import { SNOOZE_PRESET_DAYS } from '@/lib/attention-snooze'
 import { useReconnectRefetch } from '@/hooks/use-reconnect-refetch'
@@ -37,6 +38,49 @@ function formatHubDateRange(start: string, end: string): string {
   const [ye, me, de] = end.slice(0, 10).split('-')
   if (!ys || !ms || !ds || !ye || !me || !de) return `${start} – ${end}`
   return `${ds}.${ms}.${ys} – ${de}.${me}.${ye}`
+}
+
+function vacationCountdownAria(tile: AttentionVacationTile): string | undefined {
+  const kind = tile.countdownKind
+  const days = tile.countdownDays
+  if (!kind) return undefined
+  if (kind === 'today') return 'Urlaub beginnt heute'
+  if (kind === 'last_day') return 'Letzter Urlaubstag'
+  if (kind === 'remaining') {
+    return days === 1 ? 'Noch 1 Tag Urlaub' : `Noch ${days} Tage Urlaub`
+  }
+  return days === 1 ? 'Noch 1 Tag bis zum Start' : `Noch ${days} Tage bis zum Start`
+}
+
+function VacationCountdown({ tile }: { tile: AttentionVacationTile }) {
+  const kind = tile.countdownKind
+  const days = tile.countdownDays
+  if (!kind) return null
+
+  if (kind === 'today') {
+    return (
+      <span className="text-[10px] font-medium leading-tight text-brand-heading shrink-0">
+        heute
+      </span>
+    )
+  }
+  if (kind === 'last_day') {
+    return (
+      <span className="text-[10px] font-medium leading-tight text-right text-brand-heading shrink-0">
+        letzter
+        <span className="block text-muted-foreground font-normal">Tag</span>
+      </span>
+    )
+  }
+
+  return (
+    <span className="text-right shrink-0 leading-none">
+      <span className="block text-sm font-semibold tabular-nums text-brand-heading">{days}</span>
+      <span className="block text-[10px] text-muted-foreground mt-0.5">
+        {days === 1 ? 'Tag' : 'Tage'}
+      </span>
+    </span>
+  )
 }
 
 function OverviewTile({ href, children }: { href: string; children: ReactNode }) {
@@ -220,12 +264,19 @@ function HeuteHubContent() {
                   </OverviewTile>
 
                   <OverviewTile href={feed.vacationTile?.href ?? '/urlaube'}>
-                    <span
-                      className="material-icons text-xl leading-none text-[rgb(45,79,30)]"
-                      aria-hidden
-                    >
-                      event
-                    </span>
+                    <div className="flex items-start justify-between gap-1">
+                      <span
+                        className="material-icons text-xl leading-none text-[rgb(45,79,30)]"
+                        aria-hidden
+                      >
+                        event
+                      </span>
+                      {feed.vacationTile?.countdownKind ? (
+                        <span aria-label={vacationCountdownAria(feed.vacationTile)}>
+                          <VacationCountdown tile={feed.vacationTile} />
+                        </span>
+                      ) : null}
+                    </div>
                     <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
                       Urlaub
                     </p>

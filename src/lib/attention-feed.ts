@@ -24,6 +24,8 @@ import {
 import { isWinterpause } from '@/lib/winterpause'
 
 export const MAX_ATTENTION_ITEMS = 7
+/** Optimierungen in der Todo-Liste: fällig innerhalb dieser Tage (oder überfällig). */
+export const OPTIMIERUNG_TODO_HORIZON_DAYS = 90
 
 export type HubFrame =
   | 'winterpause'
@@ -71,6 +73,8 @@ export type AttentionPackingCard = {
   weightTone: PackingWeightTone | null
 }
 
+export type VacationTileCountdownKind = 'until_start' | 'remaining' | 'today' | 'last_day'
+
 export type AttentionVacationTile = {
   id: string
   titel: string
@@ -79,6 +83,8 @@ export type AttentionVacationTile = {
   href: string
   campingplatzName: string | null
   extraCampingCount: number
+  countdownDays: number | null
+  countdownKind: VacationTileCountdownKind | null
 }
 
 export type AttentionVacationRef = {
@@ -223,9 +229,34 @@ function stayNights(start: string | null, end: string | null): number {
   return days > 0 ? days : 0
 }
 
+function vacationTileCountdown(
+  vacation: Vacation,
+  todayYmd: string
+): Pick<AttentionVacationTile, 'countdownDays' | 'countdownKind'> {
+  const start = normalizeCalendarDate(vacation.startdatum)
+  const end = normalizeCalendarDate(vacation.enddatum)
+  const untilStart = differenceCalendarDays(start, todayYmd)
+  const untilEnd = differenceCalendarDays(end, todayYmd)
+
+  if (untilStart > 0) {
+    return { countdownDays: untilStart, countdownKind: 'until_start' }
+  }
+  if (untilEnd < 0) {
+    return { countdownDays: null, countdownKind: null }
+  }
+  if (untilEnd === 0) {
+    return { countdownDays: 1, countdownKind: 'last_day' }
+  }
+  if (untilStart === 0) {
+    return { countdownDays: untilEnd + 1, countdownKind: 'today' }
+  }
+  return { countdownDays: untilEnd + 1, countdownKind: 'remaining' }
+}
+
 export function buildVacationTile(
   vacation: Vacation,
-  stays: VacationCampingStay[]
+  stays: VacationCampingStay[],
+  todayYmd: string
 ): AttentionVacationTile {
   const ranked = [...stays].sort((a, b) => {
     const nightDiff = stayNights(b.start_datum, b.end_datum) - stayNights(a.start_datum, a.end_datum)
@@ -248,6 +279,7 @@ export function buildVacationTile(
     href: `/urlaube/${encodeURIComponent(vacation.id)}`,
     campingplatzName,
     extraCampingCount,
+    ...vacationTileCountdown(vacation, todayYmd),
   }
 }
 
@@ -526,7 +558,7 @@ export function buildAttentionFeed(input: AttentionFeedInput): AttentionFeed {
   }
 
   const vacationTile = tileVacation
-    ? buildVacationTile(tileVacation, input.campingStays ?? [])
+    ? buildVacationTile(tileVacation, input.campingStays ?? [], todayYmd)
     : null
 
   const raw: AttentionItem[] = []
@@ -620,22 +652,32 @@ export function buildAttentionFeed(input: AttentionFeedInput): AttentionFeed {
       const winterBoost =
         frame === 'winterpause' &&
         (o.zeitfenster === 'winter' || o.zeitfenster === 'vor_saison' || o.zeitfenster === 'nach_saison')
+      const forNextVacation = o.faelligkeit_modus === 'naechster_urlaub'
       if (!dueYmd && !winterBoost) continue
-      if (dueYmd) {
-        const days = differenceCalendarDays(dueYmd, todayYmd)
-        if (days > 14 && !winterBoost) continue
+      const daysUntilDue = dueYmd ? differenceCalendarDays(dueYmd, todayYmd) : null
+      if (
+        daysUntilDue != null &&
+        daysUntilDue > OPTIMIERUNG_TODO_HORIZON_DAYS &&
+        !winterBoost &&
+        !forNextVacation
+      ) {
+        continue
       }
-      const overdue = dueYmd ? differenceCalendarDays(dueYmd, todayYmd) < 0 : false
+      const overdue = daysUntilDue != null && daysUntilDue < 0
+      const beyondHorizon =
+        daysUntilDue != null && daysUntilDue > OPTIMIERUNG_TODO_HORIZON_DAYS
       raw.push({
         key: `optimierung:${o.id}`,
         kind: 'optimierung',
         title: o.titel,
         reason: dueYmd
-          ? formatDaysUntil(dueYmd, todayYmd)
+          ? forNextVacation
+            ? `${formatDaysUntil(dueYmd, todayYmd)} · nächster Urlaub`
+            : formatDaysUntil(dueYmd, todayYmd)
           : 'Passt in die Winterpause',
         risk: null,
         href: `/tools/optimierungen`,
-        score: overdue ? 550 : winterBoost ? 300 : 500,
+        score: overdue ? 550 : winterBoost || beyondHorizon ? 300 : 500,
         dueYmd,
         sicherheitsrelevant: false,
         snoozeAllowed: true,
