@@ -39,6 +39,10 @@ interface AuthContextValue {
   canSelectOtherProfiles: boolean
   gepacktRequiresParentApproval: boolean
   canEditPauschalEntries: boolean
+  canReadWartung: boolean
+  canWriteWartung: boolean
+  canReadOptimierung: boolean
+  canWriteOptimierung: boolean
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
@@ -73,7 +77,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           console.warn('Auth-Cache schreiben fehlgeschlagen:', err)
         }
         scheduleChecklistenPrefetch()
-        if (isAdminRole(data.user.role) || isSystemAdminRole(data.user.role)) {
+        if (
+          isAdminRole(data.user.role) ||
+          data.user.permissions?.includes('can_read_optimierung') ||
+          data.user.permissions?.includes('can_write_optimierung')
+        ) {
           scheduleOptimierungenPrefetch()
         }
       } else if (res.ok) {
@@ -113,7 +121,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         void getCachedAuthUser().then((cached) => {
           if (
             cached &&
-            (isAdminRole(cached.role) || isSystemAdminRole(cached.role))
+            (isAdminRole(cached.role) ||
+              cached.permissions?.includes('can_read_optimierung') ||
+              cached.permissions?.includes('can_write_optimierung'))
           ) {
             scheduleOptimierungenPrefetch()
           }
@@ -156,6 +166,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const canEditPauschalEntries =
     canAccessConfig || (user?.permissions?.includes('can_edit_pauschal_entries') ?? false)
 
+  const canReadWartung =
+    canAccessConfig ||
+    (user?.permissions?.includes('can_read_wartung') ?? false) ||
+    (user?.permissions?.includes('can_write_wartung') ?? false)
+
+  const canWriteWartung =
+    canAccessConfig || (user?.permissions?.includes('can_write_wartung') ?? false)
+
+  const canReadOptimierung =
+    canAccessConfig ||
+    (user?.permissions?.includes('can_read_optimierung') ?? false) ||
+    (user?.permissions?.includes('can_write_optimierung') ?? false)
+
+  const canWriteOptimierung =
+    canAccessConfig || (user?.permissions?.includes('can_write_optimierung') ?? false)
+
   return (
     <AuthContext.Provider
       value={{
@@ -169,6 +195,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         canSelectOtherProfiles,
         gepacktRequiresParentApproval,
         canEditPauschalEntries,
+        canReadWartung,
+        canWriteWartung,
+        canReadOptimierung,
+        canWriteOptimierung,
       }}
     >
       {children}

@@ -7,6 +7,12 @@ import type { NextRequest } from 'next/server'
 import { getSession, isAdminRole, isSystemAdminRole } from '@/lib/auth'
 import { getDB, getUserById, CloudflareEnv } from '@/lib/db'
 import { buildUserContext, type UserContext } from '@/lib/permissions'
+import {
+  canReadOptimierung,
+  canReadWartung,
+  canWriteOptimierung,
+  canWriteWartung,
+} from '@/lib/permissions'
 
 export async function requireAuth(
   request: NextRequest
@@ -42,6 +48,34 @@ export function requireAdmin(userContext: UserContext): NextResponse | null {
 export function requireSystemAdmin(userContext: UserContext): NextResponse | null {
   if (!isSystemAdminRole(userContext.role)) {
     return NextResponse.json({ error: 'Keine Berechtigung (System-Admin erforderlich)' }, { status: 403 })
+  }
+  return null
+}
+
+export function requireReadWartung(userContext: UserContext): NextResponse | null {
+  if (!canReadWartung(userContext)) {
+    return NextResponse.json({ error: 'Keine Berechtigung (Wartung lesen)' }, { status: 403 })
+  }
+  return null
+}
+
+export function requireWriteWartung(userContext: UserContext): NextResponse | null {
+  if (!canWriteWartung(userContext)) {
+    return NextResponse.json({ error: 'Keine Berechtigung (Wartung bearbeiten)' }, { status: 403 })
+  }
+  return null
+}
+
+export function requireReadOptimierung(userContext: UserContext): NextResponse | null {
+  if (!canReadOptimierung(userContext)) {
+    return NextResponse.json({ error: 'Keine Berechtigung (Optimierungen lesen)' }, { status: 403 })
+  }
+  return null
+}
+
+export function requireWriteOptimierung(userContext: UserContext): NextResponse | null {
+  if (!canWriteOptimierung(userContext)) {
+    return NextResponse.json({ error: 'Keine Berechtigung (Optimierungen bearbeiten)' }, { status: 403 })
   }
   return null
 }

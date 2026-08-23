@@ -7,6 +7,7 @@ import {
   CloudflareEnv,
 } from '@/lib/db'
 import { requireAuth, requireAdmin } from '@/lib/api-auth'
+import { normalizeHubAnlass } from '@/lib/checkliste-hub-anlass'
 
 export async function GET(request: NextRequest) {
   try {
@@ -41,9 +42,13 @@ export async function POST(request: NextRequest) {
     if (!titel) {
       return NextResponse.json({ error: 'titel ist erforderlich' }, { status: 400 })
     }
+    const hubAnlassRaw =
+      body && typeof body === 'object'
+        ? (body as { hub_anlass?: unknown }).hub_anlass
+        : undefined
     const env = process.env as unknown as CloudflareEnv
     const db = await getDB(env)
-    const id = await createCheckliste(db, titel)
+    const id = await createCheckliste(db, titel, normalizeHubAnlass(hubAnlassRaw))
     if (!id) {
       return NextResponse.json({ error: 'Checkliste konnte nicht angelegt werden' }, { status: 500 })
     }

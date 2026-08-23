@@ -44,6 +44,7 @@ export const BACKUP_TABLE_ORDER: string[] = [
   'faelligkeiten',
   'faelligkeiten_historie',
   'verbrauch_messungen',
+  'attention_snooze',
 ]
 
 /** Legacy-API: gleiche Tabellen wie equipment ∪ referenceStammdaten */
@@ -116,6 +117,7 @@ const TOOLS = new Set([
   'faelligkeiten',
   'faelligkeiten_historie',
   'verbrauch_messungen',
+  'attention_snooze',
 ])
 export const AUTH_TABLES = new Set([
   'users',
@@ -167,6 +169,7 @@ export const PK_PARTS: Record<string, string[]> = {
   faelligkeiten: ['id'],
   faelligkeiten_historie: ['id'],
   verbrauch_messungen: ['id'],
+  attention_snooze: ['item_key'],
 }
 
 export function rowKey(table: string, row: Record<string, unknown>): string {

@@ -32,6 +32,7 @@ import type {
   VerbrauchMessung,
   FaelligkeitVorlage,
 } from './db'
+import type { AttentionFeed } from './attention-feed'
 
 export interface CachedVacation extends Vacation {
   _cachedAt: number
@@ -122,6 +123,13 @@ export interface CachedVerbrauchMessung extends VerbrauchMessung {
 }
 
 export interface CachedFaelligkeitVorlage extends FaelligkeitVorlage {
+  _cachedAt: number
+  _updatedAt: number
+}
+
+export interface CachedAttentionFeed {
+  id: 'current'
+  feed: AttentionFeed
   _cachedAt: number
   _updatedAt: number
 }
@@ -240,6 +248,7 @@ export class OfflineDB extends Dexie {
   homeLocation!: EntityTable<CachedHomeLocation, 'id'>
   segmentRoutes!: EntityTable<CachedSegmentRoute, 'id'>
   authUser!: EntityTable<CachedAuthUser, 'id'>
+  attentionFeed!: EntityTable<CachedAttentionFeed, 'id'>
   syncQueue!: EntityTable<SyncQueueEntry, 'id'>
 
   constructor() {
@@ -447,6 +456,9 @@ export class OfflineDB extends Dexie {
       authUser: 'id, _cachedAt',
       syncQueue: '++id, table, timestamp, attempts',
     })
+    this.version(10).stores({
+      attentionFeed: 'id',
+    })
   }
 }
 
@@ -564,6 +576,25 @@ export async function cacheChecklisten(
 ): Promise<void> {
   const withMetaItems = items.map((v) => withMeta(v)) as CachedChecklist[]
   await snapshotReplace(offlineDb.checklisten, withMetaItems)
+}
+
+export async function cacheAttentionFeed(feed: AttentionFeed): Promise<void> {
+  const t = Date.now()
+  await offlineDb.attentionFeed.put({
+    id: 'current',
+    feed,
+    _cachedAt: t,
+    _updatedAt: t,
+  })
+}
+
+export async function getCachedAttentionFeed(): Promise<AttentionFeed | null> {
+  try {
+    const row = await offlineDb.attentionFeed.get('current')
+    return row?.feed ?? null
+  } catch {
+    return null
+  }
 }
 
 /** Optimierungen-Liste cachen (Snapshot-Replace). */

@@ -1211,7 +1211,7 @@ export default function UrlaubDetailPage() {
                         if (typeof window !== 'undefined') {
                           sessionStorage.setItem('packlistVacationId', vacation.id)
                         }
-                        router.push(`/?vacation=${vacation.id}`)
+                        router.push(`/packliste?vacation=${vacation.id}`)
                         notifyVacationSearchParamChanged()
                       }}
                     >

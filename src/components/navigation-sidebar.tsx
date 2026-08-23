@@ -8,6 +8,7 @@ import { AppLogo } from '@/components/app-logo'
 import { useAuth } from '@/components/auth-provider'
 import { cn } from '@/lib/utils'
 import { isConfigRoute } from '@/lib/config-navigation'
+import { useAttentionBadge } from '@/hooks/use-attention-badge'
 
 interface NavigationSidebarProps {
   isOpen: boolean
@@ -16,8 +17,9 @@ interface NavigationSidebarProps {
 
 export function NavigationSidebar({ isOpen, onClose }: NavigationSidebarProps) {
   const pathname = usePathname()
-  const { canAccessConfig } = useAuth()
+  const { canAccessConfig, canReadWartung, canReadOptimierung } = useAuth()
   const [toolsExpanded, setToolsExpanded] = useState(false)
+  const attentionCount = useAttentionBadge()
 
   useEffect(() => {
     if (pathname.startsWith('/tools')) setToolsExpanded(true)
@@ -25,10 +27,17 @@ export function NavigationSidebar({ isOpen, onClose }: NavigationSidebarProps) {
 
   const menuItems = [
     {
+      icon: 'today',
+      label: 'HEUTE',
+      href: '/',
+      active: pathname === '/',
+      badge: attentionCount,
+    },
+    {
       icon: 'checklist',
       label: 'PACKLISTE',
-      href: '/',
-      active: pathname === '/'
+      href: '/packliste',
+      active: pathname.startsWith('/packliste'),
     },
     {
       icon: 'analytics',
@@ -62,16 +71,22 @@ export function NavigationSidebar({ isOpen, onClose }: NavigationSidebarProps) {
     }
   ]
 
-  const toolsItems: { label: string; href: string; adminOnly?: boolean }[] = [
+  const toolsItems: {
+    label: string
+    href: string
+    requiresRead?: 'wartung' | 'optimierung'
+  }[] = [
     { label: 'SONNEN-AUSRICHTUNG', href: '/tools/sonnen-ausrichtung' },
     { label: 'CHECKLISTEN', href: '/tools/checklisten' },
-    { label: 'WARTUNG', href: '/tools/wartung' },
-    { label: 'OPTIMIERUNGEN', href: '/tools/optimierungen', adminOnly: true },
+    { label: 'WARTUNG', href: '/tools/wartung', requiresRead: 'wartung' },
+    { label: 'OPTIMIERUNGEN', href: '/tools/optimierungen', requiresRead: 'optimierung' },
   ]
 
-  const visibleToolsItems = toolsItems.filter(
-    (item) => !item.adminOnly || canAccessConfig
-  )
+  const visibleToolsItems = toolsItems.filter((item) => {
+    if (item.requiresRead === 'wartung') return canReadWartung
+    if (item.requiresRead === 'optimierung') return canReadOptimierung
+    return true
+  })
 
   /** Light Mode: deutlich dunkler als text-muted-foreground; Dark Mode unverändert */
   const navItemIdle =
@@ -117,9 +132,20 @@ export function NavigationSidebar({ isOpen, onClose }: NavigationSidebarProps) {
               >
                 <span className="material-icons text-xl">{item.icon}</span>
                 <span className="text-xs tracking-wide">{item.label}</span>
-                {item.active && (
+                {'badge' in item && typeof item.badge === 'number' && item.badge > 0 ? (
+                  <span
+                    className={cn(
+                      'ml-auto min-w-[1.25rem] h-5 px-1 rounded-full text-[10px] font-semibold flex items-center justify-center tabular-nums',
+                      item.active
+                        ? 'bg-white text-[rgb(45,79,30)]'
+                        : 'bg-[rgb(45,79,30)] text-white'
+                    )}
+                  >
+                    {item.badge > 9 ? '9+' : item.badge}
+                  </span>
+                ) : item.active ? (
                   <div className="ml-auto w-2 h-2 bg-white rounded-full" data-keep-white />
-                )}
+                ) : null}
               </Link>
             ))}
           </div>

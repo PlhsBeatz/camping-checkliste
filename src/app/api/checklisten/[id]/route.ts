@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDB, updateCheckliste, deleteCheckliste, CloudflareEnv } from '@/lib/db'
 import { requireAuth, requireAdmin } from '@/lib/api-auth'
+import { isChecklisteHubAnlass } from '@/lib/checkliste-hub-anlass'
 
 export async function PUT(
   request: NextRequest,
@@ -21,15 +22,16 @@ export async function PUT(
     const o = body && typeof body === 'object' ? (body as Record<string, unknown>) : {}
     const titel = typeof o.titel === 'string' ? o.titel.trim() : undefined
     const reihenfolge = typeof o.reihenfolge === 'number' ? o.reihenfolge : undefined
-    if (titel === undefined && reihenfolge === undefined) {
-      return NextResponse.json({ error: 'titel und/oder reihenfolge erwartet' }, { status: 400 })
+    const hub_anlass = isChecklisteHubAnlass(o.hub_anlass) ? o.hub_anlass : undefined
+    if (titel === undefined && reihenfolge === undefined && hub_anlass === undefined) {
+      return NextResponse.json({ error: 'titel, reihenfolge und/oder hub_anlass erwartet' }, { status: 400 })
     }
     if (titel !== undefined && !titel) {
       return NextResponse.json({ error: 'titel darf nicht leer sein' }, { status: 400 })
     }
     const env = process.env as unknown as CloudflareEnv
     const db = await getDB(env)
-    const ok = await updateCheckliste(db, id, { titel, reihenfolge })
+    const ok = await updateCheckliste(db, id, { titel, reihenfolge, hub_anlass })
     if (!ok) {
       return NextResponse.json({ error: 'Aktualisierung fehlgeschlagen' }, { status: 500 })
     }

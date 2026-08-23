@@ -25,14 +25,21 @@ export function getDepartureDate(vacation: Vacation): string {
   return raw.slice(0, 10)
 }
 
+export type ErstAbreisetagCountMode = 'auto' | 'exclude' | 'only' | 'include'
+
 /** Packliste-Modus: welche Items zählen für Integrations-Fortschritt */
 export function shouldCountPackingItem(
   item: PackingItem,
   departureDate: string,
-  now = new Date()
+  now = new Date(),
+  erstAbreisetag: ErstAbreisetagCountMode = 'auto'
 ): boolean {
   if (String(item.status || '').trim() === 'Immer gepackt') return false
-  if (item.erst_abreisetag_gepackt && departureDate) {
+  const isAbreise = !!item.erst_abreisetag_gepackt
+  if (erstAbreisetag === 'exclude') return !isAbreise
+  if (erstAbreisetag === 'only') return isAbreise
+  if (erstAbreisetag === 'include') return true
+  if (isAbreise && departureDate) {
     const abreiseStr = normalizeCalendarDate(departureDate)
     if (abreiseStr && todayInAppTimezone(now) !== abreiseStr) return false
   }
@@ -58,14 +65,15 @@ export type PackingProgress = {
 export function computePackingProgress(
   items: PackingItem[],
   departureDate: string,
-  now = new Date()
+  now = new Date(),
+  erstAbreisetag: ErstAbreisetagCountMode = 'auto'
 ): PackingProgress {
   let total = 0
   let packed = 0
   const openItems: OpenPackingItem[] = []
 
   for (const item of items) {
-    if (!shouldCountPackingItem(item, departureDate, now)) continue
+    if (!shouldCountPackingItem(item, departureDate, now, erstAbreisetag)) continue
 
     if (item.mitreisenden_typ === 'pauschal') {
       const modus = item.pauschal_gruppen_modus ?? 'einmal'

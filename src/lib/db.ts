@@ -10,6 +10,10 @@ import type { MengenRegel } from './packing-quantity'
 import { parseRegel, serializeRegel } from './packing-quantity'
 import type { UserPushSettings } from './push-settings'
 import { DEFAULT_REISE_GPS_MODE, parseReiseGpsMode, type ReiseGpsMode } from './reise-gps-settings'
+import {
+  normalizeHubAnlass,
+  type ChecklisteHubAnlass,
+} from './checkliste-hub-anlass'
 
 export interface Vacation {
   id: string
@@ -393,6 +397,7 @@ export interface Checkliste {
   id: string
   titel: string
   reihenfolge: number
+  hub_anlass: ChecklisteHubAnlass
   created_at: string
   updated_at?: string
 }
@@ -6074,6 +6079,13 @@ function mapEintragRow(e: ChecklisteEintragRow): ChecklisteEintrag {
   }
 }
 
+function mapChecklisteRow(row: Checkliste): Checkliste {
+  return {
+    ...row,
+    hub_anlass: normalizeHubAnlass(row.hub_anlass),
+  }
+}
+
 export async function getChecklistenFullTree(db: D1Database): Promise<ChecklisteMitStruktur[]> {
   try {
     const lists = await db
@@ -6115,13 +6127,16 @@ export async function getChecklistenFullTree(db: D1Database): Promise<Checkliste
       catsByList.set(k.checklist_id, list)
     }
 
-    return rows.map(c => ({
-      ...c,
-      kategorien: (catsByList.get(c.id) ?? []).map(kat => ({
-        ...kat,
-        eintraege: entsByKat.get(kat.id) ?? [],
-      })),
-    }))
+    return rows.map(c => {
+      const list = mapChecklisteRow(c)
+      return {
+        ...list,
+        kategorien: (catsByList.get(list.id) ?? []).map(kat => ({
+          ...kat,
+          eintraege: entsByKat.get(kat.id) ?? [],
+        })),
+      }
+    })
   } catch (error) {
     console.error('Error getChecklistenFullTree:', error)
     return []
@@ -6138,6 +6153,7 @@ export async function getChecklisteById(
       .bind(checklistId)
       .first<Checkliste>()
     if (!c) return null
+    const mapped = mapChecklisteRow(c)
 
     const catsRes = await db
       .prepare(
@@ -6163,7 +6179,7 @@ export async function getChecklisteById(
     }
 
     return {
-      ...c,
+      ...mapped,
       kategorien: cats.map(kat => ({
         ...kat,
         eintraege: entsByKat.get(kat.id) ?? [],
@@ -6175,7 +6191,11 @@ export async function getChecklisteById(
   }
 }
 
-export async function createCheckliste(db: D1Database, titel: string): Promise<string | null> {
+export async function createCheckliste(
+  db: D1Database,
+  titel: string,
+  hubAnlass: ChecklisteHubAnlass = 'keine'
+): Promise<string | null> {
   try {
     const id = crypto.randomUUID()
     const maxRow = await db
@@ -6184,9 +6204,9 @@ export async function createCheckliste(db: D1Database, titel: string): Promise<s
     const reihenfolge = (maxRow?.m ?? -1) + 1
     await db
       .prepare(
-        'INSERT INTO checklisten (id, titel, reihenfolge) VALUES (?, ?, ?)'
+        'INSERT INTO checklisten (id, titel, reihenfolge, hub_anlass) VALUES (?, ?, ?, ?)'
       )
-      .bind(id, titel.trim(), reihenfolge)
+      .bind(id, titel.trim(), reihenfolge, normalizeHubAnlass(hubAnlass))
       .run()
     return id
   } catch (error) {
@@ -6198,7 +6218,7 @@ export async function createCheckliste(db: D1Database, titel: string): Promise<s
 export async function updateCheckliste(
   db: D1Database,
   id: string,
-  fields: { titel?: string; reihenfolge?: number }
+  fields: { titel?: string; reihenfolge?: number; hub_anlass?: ChecklisteHubAnlass }
 ): Promise<boolean> {
   try {
     if (fields.titel !== undefined) {
@@ -6211,6 +6231,12 @@ export async function updateCheckliste(
       await db
         .prepare('UPDATE checklisten SET reihenfolge = ? WHERE id = ?')
         .bind(fields.reihenfolge, id)
+        .run()
+    }
+    if (fields.hub_anlass !== undefined) {
+      await db
+        .prepare('UPDATE checklisten SET hub_anlass = ? WHERE id = ?')
+        .bind(normalizeHubAnlass(fields.hub_anlass), id)
         .run()
     }
     return true

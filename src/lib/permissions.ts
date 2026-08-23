@@ -7,6 +7,12 @@ import { isAdminRole } from './user-roles'
 import type { D1Database } from '@cloudflare/workers-types'
 import { getMitreisendeBerechtigungen, getMitreisenderStammdaten } from './db'
 import type { Personentyp } from './db'
+import {
+  BERECHTIGUNG_READ_OPTIMIERUNG,
+  BERECHTIGUNG_READ_WARTUNG,
+  BERECHTIGUNG_WRITE_OPTIMIERUNG,
+  BERECHTIGUNG_WRITE_WARTUNG,
+} from './berechtigungen'
 
 export interface UserContext {
   userId: string
@@ -55,6 +61,32 @@ export function hasPermission(ctx: UserContext, key: string): boolean {
 export function canEditPauschalEntries(ctx: UserContext): boolean {
   if (isAdminRole(ctx.role)) return true
   return hasPermission(ctx, 'can_edit_pauschal_entries')
+}
+
+export function canReadWartung(ctx: UserContext): boolean {
+  if (isAdminRole(ctx.role)) return true
+  return (
+    hasPermission(ctx, BERECHTIGUNG_READ_WARTUNG) ||
+    hasPermission(ctx, BERECHTIGUNG_WRITE_WARTUNG)
+  )
+}
+
+export function canWriteWartung(ctx: UserContext): boolean {
+  if (isAdminRole(ctx.role)) return true
+  return hasPermission(ctx, BERECHTIGUNG_WRITE_WARTUNG)
+}
+
+export function canReadOptimierung(ctx: UserContext): boolean {
+  if (isAdminRole(ctx.role)) return true
+  return (
+    hasPermission(ctx, BERECHTIGUNG_READ_OPTIMIERUNG) ||
+    hasPermission(ctx, BERECHTIGUNG_WRITE_OPTIMIERUNG)
+  )
+}
+
+export function canWriteOptimierung(ctx: UserContext): boolean {
+  if (isAdminRole(ctx.role)) return true
+  return hasPermission(ctx, BERECHTIGUNG_WRITE_OPTIMIERUNG)
 }
 
 /** Elternkontrolle nur für Personentyp kind mit gesetztem Flag */

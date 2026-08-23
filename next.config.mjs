@@ -25,6 +25,7 @@ const devVars = loadDevVars();
 const precacheUrls = [
   '/~offline',
   '/',
+  '/packliste',
   '/pack-status',
   '/urlaube',
   '/ausruestung',
@@ -36,6 +37,7 @@ const precacheUrls = [
   '/profil',
   '/tools/sonnen-ausrichtung',
   '/tools/checklisten',
+  '/tools/wartung',
   '/tools/optimierungen',
   '/manifest.json',
 ];

@@ -21,7 +21,7 @@ export function useVacationSearchParam(): string | null {
   return useSyncExternalStore(subscribe, readVacationParam, () => null)
 }
 
-/** Nach `router.push('/?vacation=…')` aufrufen, damit die Packliste den Query-Param sieht. */
+/** Nach `router.push('/packliste?vacation=…')` aufrufen, damit die Packliste den Query-Param sieht. */
 export function notifyVacationSearchParamChanged(): void {
   if (typeof window === 'undefined') return
   window.dispatchEvent(new Event('packlist-url-query'))

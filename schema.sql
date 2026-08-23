@@ -248,6 +248,7 @@ CREATE TABLE IF NOT EXISTS checklisten (
     id TEXT PRIMARY KEY,
     titel TEXT NOT NULL,
     reihenfolge INTEGER NOT NULL DEFAULT 0,
+    hub_anlass TEXT NOT NULL DEFAULT 'keine',
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -282,6 +283,12 @@ CREATE INDEX IF NOT EXISTS idx_checklisten_eintraege_kategorie_id ON checklisten
 CREATE TRIGGER IF NOT EXISTS update_checklisten_timestamp AFTER UPDATE ON checklisten BEGIN UPDATE checklisten SET updated_at = datetime('now') WHERE id = NEW.id; END;
 CREATE TRIGGER IF NOT EXISTS update_checklisten_kategorien_timestamp AFTER UPDATE ON checklisten_kategorien BEGIN UPDATE checklisten_kategorien SET updated_at = datetime('now') WHERE id = NEW.id; END;
 CREATE TRIGGER IF NOT EXISTS update_checklisten_eintraege_timestamp AFTER UPDATE ON checklisten_eintraege BEGIN UPDATE checklisten_eintraege SET updated_at = datetime('now') WHERE id = NEW.id; END;
+
+CREATE TABLE IF NOT EXISTS attention_snooze (
+    item_key TEXT PRIMARY KEY,
+    snoozed_until TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
 
 -- Optimierungen (Tools, Admin-Backlog)
 CREATE TABLE IF NOT EXISTS optimierungen (

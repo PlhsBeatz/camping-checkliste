@@ -354,7 +354,7 @@ function UrlaubePageContent() {
     if (typeof window !== 'undefined') {
       sessionStorage.setItem('packlistVacationId', vacationId)
     }
-    router.push(`/?vacation=${vacationId}`)
+    router.push(`/packliste?vacation=${vacationId}`)
     notifyVacationSearchParamChanged()
   }
 

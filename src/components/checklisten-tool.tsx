@@ -30,6 +30,13 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { ResponsiveModal } from '@/components/ui/responsive-modal'
 import { Label } from '@/components/ui/label'
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -60,6 +67,12 @@ import {
 } from '@/lib/offline-sync'
 import { cacheChecklisten } from '@/lib/offline-db'
 import { UndoToast } from '@/components/undo-toast'
+import {
+  CHECKLISTE_HUB_ANLAESSE,
+  HUB_ANLASS_LABEL,
+  normalizeHubAnlass,
+  type ChecklisteHubAnlass,
+} from '@/lib/checkliste-hub-anlass'
 
 /** Toast-Zeilenumbruch vermeiden: einheitlich kürzen */
 function truncateForUndoToast(s: string, maxLen: number): string {
@@ -268,6 +281,9 @@ function SortableChecklistCard({
             </CardTitle>
             <p className="text-xs text-muted-foreground">
               {done}/{total} erledigt
+              {checklist.hub_anlass && checklist.hub_anlass !== 'keine'
+                ? ` · Hub: ${HUB_ANLASS_LABEL[checklist.hub_anlass]}`
+                : ''}
             </p>
           </div>
           <ListChecks className="h-5 w-5 text-muted-foreground shrink-0" />
@@ -467,6 +483,7 @@ export function ChecklistenTool({ onHeaderContextChange, headerTrailingRef }: Ch
   const [editMode, setEditMode] = useState(false)
   const [newListOpen, setNewListOpen] = useState(false)
   const [newListTitel, setNewListTitel] = useState('')
+  const [newListAnlass, setNewListAnlass] = useState<ChecklisteHubAnlass>('keine')
   const [deleteListId, setDeleteListId] = useState<string | null>(null)
   const [resetListId, setResetListId] = useState<string | null>(null)
   const [deleteKat, setDeleteKat] = useState<{ checklistId: string; katId: string; titel: string } | null>(
@@ -814,7 +831,7 @@ export function ChecklistenTool({ onHeaderContextChange, headerTrailingRef }: Ch
     const res = await fetch('/api/checklisten', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ titel: t }),
+      body: JSON.stringify({ titel: t, hub_anlass: newListAnlass }),
     })
     const j = (await res.json()) as { success?: boolean; id?: string; error?: string }
     if (!res.ok || !j.success) {
@@ -823,8 +840,25 @@ export function ChecklistenTool({ onHeaderContextChange, headerTrailingRef }: Ch
     }
     setNewListOpen(false)
     setNewListTitel('')
+    setNewListAnlass('keine')
     toast({ title: 'Checkliste angelegt' })
     await load()
+  }
+
+  const saveHubAnlass = async (checklistId: string, hubAnlass: ChecklisteHubAnlass) => {
+    const res = await fetch(`/api/checklisten/${checklistId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ hub_anlass: hubAnlass }),
+    })
+    const j = (await res.json()) as { success?: boolean; error?: string }
+    if (!res.ok || !j.success) {
+      toast({ title: j.error || 'Speichern fehlgeschlagen', variant: 'destructive' })
+      return
+    }
+    setData((prev) =>
+      prev.map((c) => (c.id === checklistId ? { ...c, hub_anlass: hubAnlass } : c))
+    )
   }
 
   const confirmDeleteList = async () => {
@@ -1050,6 +1084,26 @@ export function ChecklistenTool({ onHeaderContextChange, headerTrailingRef }: Ch
                   Liste löschen
                 </Button>
               </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Im Heute-Hub zeigen als</Label>
+              <Select
+                value={normalizeHubAnlass(activeChecklist.hub_anlass)}
+                onValueChange={(v) => {
+                  void saveHubAnlass(detailId, normalizeHubAnlass(v))
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {CHECKLISTE_HUB_ANLAESSE.map((anlass) => (
+                    <SelectItem key={anlass} value={anlass}>
+                      {HUB_ANLASS_LABEL[anlass]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <DndContext
               sensors={sensors}
@@ -1318,6 +1372,9 @@ export function ChecklistenTool({ onHeaderContextChange, headerTrailingRef }: Ch
                     <p className="text-xs text-muted-foreground">
                       {c.kategorien.reduce((n, k) => n + k.eintraege.filter(e => e.erledigt).length, 0)}/
                       {c.kategorien.reduce((n, k) => n + k.eintraege.length, 0)} erledigt
+                      {c.hub_anlass && c.hub_anlass !== 'keine'
+                        ? ` · Hub: ${HUB_ANLASS_LABEL[c.hub_anlass]}`
+                        : ''}
                     </p>
                   </div>
                   <ListChecks className="h-5 w-5 text-muted-foreground shrink-0" />
@@ -1341,6 +1398,24 @@ export function ChecklistenTool({ onHeaderContextChange, headerTrailingRef }: Ch
             onChange={e => setNewListTitel(e.target.value)}
             placeholder="z. B. Abfahrt"
           />
+          <div className="space-y-1.5">
+            <Label>Im Heute-Hub zeigen als</Label>
+            <Select
+              value={newListAnlass}
+              onValueChange={(v) => setNewListAnlass(normalizeHubAnlass(v))}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {CHECKLISTE_HUB_ANLAESSE.map((anlass) => (
+                  <SelectItem key={anlass} value={anlass}>
+                    {HUB_ANLASS_LABEL[anlass]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           <Button onClick={createList}>Anlegen</Button>
         </div>
       </ResponsiveModal>
