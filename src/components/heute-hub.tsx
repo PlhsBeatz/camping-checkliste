@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { AlertTriangle, Clock, Menu } from 'lucide-react'
@@ -21,6 +21,14 @@ import { SNOOZE_PRESET_DAYS } from '@/lib/attention-snooze'
 import { useReconnectRefetch } from '@/hooks/use-reconnect-refetch'
 import { getCachedAttentionFeed, cacheAttentionFeed } from '@/lib/offline-db'
 import { notifyAttentionChanged } from '@/lib/attention-events'
+import { HeuteTravelNav } from '@/components/heute-travel-nav'
+import {
+  attentionCoordsQuery,
+  getCachedAttentionPosition,
+  getLiveAttentionPosition,
+  rememberAttentionPosition,
+} from '@/lib/attention-geo-client'
+import type { GeoPoint } from '@/lib/sonnen-hub-arrival'
 
 const KIND_META: Record<AttentionKind, { label: string; icon: string }> = {
   wartung_sicherheit: { label: 'Wartung', icon: 'build' },
@@ -31,6 +39,7 @@ const KIND_META: Record<AttentionKind, { label: string; icon: string }> = {
   optimierung: { label: 'Optimierung', icon: 'tune' },
   checkliste: { label: 'Checkliste', icon: 'fact_check' },
   vacation_next: { label: 'Urlaub', icon: 'event' },
+  sonnen_ausrichtung: { label: 'Sonne', icon: 'wb_sunny' },
 }
 
 function formatHubDateRange(start: string, end: string): string {
@@ -87,7 +96,7 @@ function OverviewTile({ href, children }: { href: string; children: ReactNode })
   return (
     <Link href={href} className="block min-w-0 h-full">
       <Card className="h-full min-h-[8.75rem] transition-colors hover:border-[rgb(45,79,30)]/40">
-        <CardContent className="p-3 h-full flex flex-col gap-1.5">{children}</CardContent>
+        <CardContent className="relative p-3 h-full flex flex-col gap-1.5">{children}</CardContent>
       </Card>
     </Link>
   )
@@ -101,6 +110,7 @@ function HeuteHubContent() {
   const [snoozingKey, setSnoozingKey] = useState<string | null>(null)
   const [snoozeOpenKey, setSnoozeOpenKey] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const positionRef = useRef<GeoPoint | null>(null)
 
   useEffect(() => {
     if (showNavSidebar) {
@@ -116,9 +126,13 @@ function HeuteHubContent() {
     }
   }, [showNavSidebar])
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (pos?: GeoPoint | null) => {
+    const userPosition = pos === undefined ? positionRef.current : pos
+    if (userPosition) positionRef.current = userPosition
     try {
-      const res = await fetch(`/api/attention?_=${Date.now()}`, { cache: 'no-store' })
+      const res = await fetch(`/api/attention?_=${Date.now()}${attentionCoordsQuery(userPosition)}`, {
+        cache: 'no-store',
+      })
       const json = (await res.json()) as ApiResponse<AttentionFeed>
       if (json.success && json.data) {
         setFeed(json.data)
@@ -141,7 +155,21 @@ function HeuteHubContent() {
   }, [])
 
   useEffect(() => {
-    void load()
+    let cancelled = false
+    const run = async () => {
+      const cached = await getCachedAttentionPosition()
+      if (cancelled) return
+      await load(cached)
+      const live = await getLiveAttentionPosition()
+      if (cancelled || !live) return
+      await rememberAttentionPosition(live)
+      await load(live)
+      notifyAttentionChanged()
+    }
+    void run()
+    return () => {
+      cancelled = true
+    }
   }, [load])
 
   useReconnectRefetch(() => {
@@ -151,10 +179,15 @@ function HeuteHubContent() {
   const snooze = async (item: AttentionItem, days: number) => {
     setSnoozingKey(item.key)
     try {
+      const pos = positionRef.current
       const res = await fetch('/api/attention/snooze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ item_key: item.key, days }),
+        body: JSON.stringify({
+          item_key: item.key,
+          days,
+          ...(pos ? { lat: pos.lat, lng: pos.lng } : {}),
+        }),
       })
       const json = (await res.json()) as ApiResponse<AttentionFeed> & { error?: string }
       if (!res.ok || !json.success || !json.data) {
@@ -210,7 +243,7 @@ function HeuteHubContent() {
 
           {feed ? (
             <>
-              <section className="space-y-2">
+              <section className="space-y-3">
                 <h3 className="text-sm font-medium tracking-wide text-muted-foreground">
                   Überblick
                 </h3>
@@ -264,25 +297,26 @@ function HeuteHubContent() {
                   </OverviewTile>
 
                   <OverviewTile href={feed.vacationTile?.href ?? '/urlaube'}>
-                    <div className="flex items-start justify-between gap-1">
+                    {feed.vacationTile?.countdownKind ? (
                       <span
-                        className="material-icons text-xl leading-none text-[rgb(45,79,30)]"
-                        aria-hidden
+                        className="absolute top-3 right-3 z-10"
+                        aria-label={vacationCountdownAria(feed.vacationTile)}
                       >
-                        event
+                        <VacationCountdown tile={feed.vacationTile} />
                       </span>
-                      {feed.vacationTile?.countdownKind ? (
-                        <span aria-label={vacationCountdownAria(feed.vacationTile)}>
-                          <VacationCountdown tile={feed.vacationTile} />
-                        </span>
-                      ) : null}
-                    </div>
-                    <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                    ) : null}
+                    <span
+                      className="material-icons text-xl leading-none text-[rgb(45,79,30)]"
+                      aria-hidden
+                    >
+                      event
+                    </span>
+                    <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground pr-10">
                       Urlaub
                     </p>
                     {feed.vacationTile ? (
                       <>
-                        <p className="text-sm font-medium text-brand-heading leading-snug line-clamp-2">
+                        <p className="text-sm font-medium text-brand-heading leading-snug line-clamp-2 pr-10">
                           {feed.vacationTile.titel}
                         </p>
                         <p className="text-xs text-muted-foreground tabular-nums">
@@ -305,6 +339,7 @@ function HeuteHubContent() {
                     )}
                   </OverviewTile>
                 </div>
+                {feed.travelNav ? <HeuteTravelNav nav={feed.travelNav} /> : null}
               </section>
 
               {items.length > 0 ? (

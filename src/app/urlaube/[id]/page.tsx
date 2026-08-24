@@ -72,15 +72,15 @@ import {
   type TravelSegment,
 } from '@/lib/travel-segment'
 import {
+  getRastplaetzeAlongSegment,
   openSegmentInAdacMaps,
   openSegmentInGoogleMaps,
+  type SegmentRouteMatchOptions,
 } from '@/lib/maps-export'
 import {
-  getRastplaetzeAlongSegment,
   getRastplaetzeBySegmentDeduped,
   resolveSegmentRastOpen,
   SegmentRastSuggestions,
-  type SegmentRouteMatchOptions,
 } from '@/components/segment-rast-suggestions'
 
 function sanitizeRoutePolyline(encoded: string | null | undefined): string | null {

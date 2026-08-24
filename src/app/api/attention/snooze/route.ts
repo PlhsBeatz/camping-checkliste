@@ -8,6 +8,7 @@ import { addCalendarDays, todayInAppTimezone } from '@/lib/app-timezone'
 import { buildAttentionFeed, MAX_ATTENTION_ITEMS } from '@/lib/attention-feed'
 import { loadAttentionFeedInput } from '@/lib/attention-feed-sources'
 import { capSnoozeUntil, isSnoozePresetDays } from '@/lib/attention-snooze'
+import { parseGeoPoint } from '@/lib/sonnen-hub-arrival'
 
 export async function POST(request: NextRequest) {
   try {
@@ -47,6 +48,8 @@ export async function POST(request: NextRequest) {
       includeOptimierungItems,
       mitreisenderFilter,
       snoozes: new Map(),
+      userId: userContext.userId,
+      userPosition: parseGeoPoint(o.lat, o.lng),
     })
 
     const unsnoozed = buildAttentionFeed(input)

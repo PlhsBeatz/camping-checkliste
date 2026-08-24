@@ -175,6 +175,57 @@ function sanitizePolyline(encoded: string | null | undefined): string | null {
   return isUsableRoutePolyline(encoded) ? encoded!.trim() : null
 }
 
+/** Welche Cache-/API-Route gehört zu diesem Fahrtsegment? */
+export type TravelSegmentRouteLookup =
+  | { kind: 'home'; campingplatzId: string; direction: 'outbound' | 'return' }
+  | { kind: 'segment'; fromId: string; toId: string }
+  | { kind: 'none' }
+
+export type SegmentRouteMatch = {
+  encodedPolyline: string | null
+  routeProvider: 'google' | 'haversine' | null
+}
+
+export function getTravelSegmentRouteLookup(segment: TravelSegment): TravelSegmentRouteLookup {
+  if (isReturnHomeSegment(segment)) {
+    const campingplatzId = segment.from.campingplatzId
+    return campingplatzId
+      ? { kind: 'home', campingplatzId, direction: 'return' }
+      : { kind: 'none' }
+  }
+  if (segment.from.kind === 'home') {
+    const campingplatzId = segment.to.campingplatzId
+    return campingplatzId
+      ? { kind: 'home', campingplatzId, direction: 'outbound' }
+      : { kind: 'none' }
+  }
+  const fromId = segment.from.campingplatzId
+  const toId = segment.to.campingplatzId
+  if (!fromId || !toId) return { kind: 'none' }
+  return { kind: 'segment', fromId, toId }
+}
+
+/** Polyline und Provider aus Hin-/Rück- oder Etappen-Cache ableiten. */
+export function polylineMatchFromRouteSource(
+  lookup: TravelSegmentRouteLookup,
+  source: SegmentPolylineSource | null | undefined
+): SegmentRouteMatch {
+  const fallback: SegmentRouteMatch = {
+    encodedPolyline: null,
+    routeProvider: 'haversine',
+  }
+  if (lookup.kind === 'none' || !source) return fallback
+  const encoded =
+    lookup.kind === 'home' && lookup.direction === 'return'
+      ? sanitizePolyline(source.returnEncodedPolyline)
+      : sanitizePolyline(source.encodedPolyline)
+  if (!encoded) return fallback
+  return {
+    encodedPolyline: encoded,
+    routeProvider: source.provider === 'haversine' ? 'haversine' : 'google',
+  }
+}
+
 /** Polylines pro Segment-ID für GPS-Matching und Rast-Erfassung. */
 export function buildSegmentPolylinesMap(
   stays: VacationCampingStay[],
@@ -487,12 +538,15 @@ export function collectDisplayedTravelSegments(
   return result
 }
 
-function isTravelSegmentPast(
+/**
+ * Kalendertage, an denen dieses Segment eine echte Fahrt ist
+ * (Abfahrt bis Ankunft, Platzwechsel, Heimreise).
+ */
+export function getSegmentTravelDayRange(
   segment: TravelSegment,
   vacation: Vacation,
-  stays: VacationCampingStay[],
-  today: string
-): boolean {
+  stays: VacationCampingStay[]
+): { startYmd: string; endYmd: string } | null {
   const sorted = sortedStays(stays)
 
   if (isReturnHomeSegment(segment)) {
@@ -503,9 +557,8 @@ function isTravelSegmentPast(
       (lastStayId ? sorted.find((s) => s.id === lastStayId) : null) ??
       sorted[sorted.length - 1]
     const endDate = normalizeCalendarDate(lastStay?.end_datum || vacation.enddatum)
-    if (endDate) return today > endDate
-    const vacationEnd = normalizeCalendarDate(vacation.enddatum)
-    return vacationEnd ? today > vacationEnd : false
+    if (!endDate) return null
+    return { startYmd: endDate, endYmd: endDate }
   }
 
   if (segment.from.kind === 'home') {
@@ -515,26 +568,33 @@ function isTravelSegmentPast(
     const firstStay =
       (homeStayId ? sorted.find((s) => s.id === homeStayId) : null) ?? sorted[0]
     const arrival = normalizeCalendarDate(firstStay?.start_datum)
-    if (arrival) return today > arrival
     const departure = normalizeCalendarDate(getDepartureDate(vacation))
-    return departure ? today > departure : false
+    const endYmd = arrival || departure
+    const startYmd = departure || arrival
+    if (!startYmd || !endYmd) return null
+    return startYmd <= endYmd
+      ? { startYmd, endYmd }
+      : { startYmd: endYmd, endYmd: startYmd }
   }
 
   const stayPairMatch = /^(.+)-to-(.+)$/.exec(segment.id)
-  if (stayPairMatch) {
-    const toStayId = stayPairMatch[2]!
-    const toStay = sorted.find((s) => s.id === toStayId)
-    const arrival = normalizeCalendarDate(toStay?.start_datum)
-    if (arrival) return today > arrival
-    return false
-  }
-
-  const destinationId = segment.to.campingplatzId
-  const toStay = sorted.find((s) => s.campingplatz.id === destinationId)
+  const toStay = stayPairMatch
+    ? sorted.find((s) => s.id === stayPairMatch[2])
+    : sorted.find((s) => s.campingplatz.id === segment.to.campingplatzId)
   const arrival = normalizeCalendarDate(toStay?.start_datum)
-  if (arrival) return today > arrival
+  if (!arrival) return null
+  return { startYmd: arrival, endYmd: arrival }
+}
 
-  return false
+function isTravelSegmentPast(
+  segment: TravelSegment,
+  vacation: Vacation,
+  stays: VacationCampingStay[],
+  today: string
+): boolean {
+  const range = getSegmentTravelDayRange(segment, vacation, stays)
+  if (!range) return false
+  return today > range.endYmd
 }
 
 /** Phase pro Streckenabschnitt: nächster offen, vergangene und spätere zugeklappt. */

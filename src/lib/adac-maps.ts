@@ -5,7 +5,7 @@ import type { ApiResponse } from '@/lib/api-types'
 export function formatAdacPlace(
   lat: number,
   lng: number,
-  type: 1 | 6 = 6
+  type: 1 | 2 | 6 = 2
 ): string {
   return `${lat.toFixed(5)}_${lng.toFixed(5)}_${type}_0`
 }

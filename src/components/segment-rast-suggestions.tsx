@@ -2,60 +2,21 @@
 
 import { useMemo } from 'react'
 import type { Rastplatz } from '@/lib/db'
-import { isPointInSegmentCorridor, type TravelLegPhase, type TravelSegment } from '@/lib/travel-segment'
-import { isPointNearAnyEncodedPolyline, isPointNearEncodedPolyline } from '@/lib/route-polyline'
+import { type TravelLegPhase, type TravelSegment } from '@/lib/travel-segment'
 import {
   ADAC_MAX_WAYPOINTS,
   GOOGLE_MAPS_MAX_WAYPOINTS_MOBILE,
+  getRastplaetzeAlongSegment,
   openSegmentInAdacMaps,
   openSegmentInGoogleMaps,
+  type SegmentRouteMatchOptions,
 } from '@/lib/maps-export'
 import { Button } from '@/components/ui/button'
 import { ThumbsUp, ThumbsDown, ExternalLink } from 'lucide-react'
 import { merkmalLabel } from '@/lib/rastplatz-merkmale'
 import { cn } from '@/lib/utils'
 
-export type SegmentRouteMatchOptions = {
-  encodedPolyline?: string | null
-  /** Zusätzliche Polylines (z. B. Hinfahrt bei Roundtrip zum selben Platz). */
-  alternateEncodedPolylines?: Array<string | null | undefined>
-  routeProvider?: 'google' | 'haversine' | null
-}
-
-export function isRastplatzOnTravelSegment(
-  r: Rastplatz,
-  segment: TravelSegment,
-  match?: SegmentRouteMatchOptions | string | null
-): boolean {
-  if (r.is_archived || r.lat == null || r.lng == null) return false
-  const point = { lat: r.lat, lng: r.lng }
-  const options: SegmentRouteMatchOptions =
-    typeof match === 'string' || match === null || match === undefined
-      ? { encodedPolyline: match }
-      : match
-
-  const polylines = [
-    options.encodedPolyline,
-    ...(options.alternateEncodedPolylines ?? []),
-  ].filter((p): p is string => !!p?.trim())
-
-  if (polylines.length > 0) {
-    return isPointNearAnyEncodedPolyline(point, polylines)
-  }
-  // Ohne Polyline: nur bei Haversine-Fallback (keine echte Route). Während des Ladens nichts anzeigen.
-  if (options.routeProvider === 'haversine') {
-    return isPointInSegmentCorridor(point, segment.from, segment.to)
-  }
-  return false
-}
-
-export function getRastplaetzeAlongSegment(
-  segment: TravelSegment,
-  rastplaetze: Rastplatz[],
-  match?: SegmentRouteMatchOptions | string | null
-): Rastplatz[] {
-  return rastplaetze.filter((r) => isRastplatzOnTravelSegment(r, segment, match))
-}
+export type { SegmentRouteMatchOptions }
 
 export function defaultSegmentRastOpen(phase: TravelLegPhase): boolean {
   return phase === 'next'

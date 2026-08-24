@@ -1,18 +1,30 @@
 import { buildAdacRouteUrl, formatAdacPlace, openPlaceInAdacMaps } from '@/lib/adac-maps'
 import type { Rastplatz } from '@/lib/db'
 import { haversineDistanceKm } from '@/lib/routes'
-import { isPointNearEncodedPolyline } from '@/lib/route-polyline'
+import { isPointNearAnyEncodedPolyline } from '@/lib/route-polyline'
 import { isPointInSegmentCorridor, type TravelSegment } from '@/lib/travel-segment'
 
 export const GOOGLE_MAPS_MAX_WAYPOINTS_DESKTOP = 9
 export const GOOGLE_MAPS_MAX_WAYPOINTS_MOBILE = 3
 export const ADAC_MAX_WAYPOINTS = 5
 
+export function googleMapsWaypointLimit(): number {
+  if (typeof window !== 'undefined' && window.innerWidth < 768) {
+    return GOOGLE_MAPS_MAX_WAYPOINTS_MOBILE
+  }
+  return GOOGLE_MAPS_MAX_WAYPOINTS_DESKTOP
+}
+
 export type RouteWaypoint = {
   lat: number
   lng: number
   label?: string
   googlePlaceId?: string | null
+}
+
+/** Koordinaten — Ortsnamen wie „Zuhause“ geocodiert Google Maps am Desktop nicht zuverlässig. */
+function formatLatLng(w: RouteWaypoint): string {
+  return `${w.lat.toFixed(6)},${w.lng.toFixed(6)}`
 }
 
 /** Google Maps Directions URL mit Zwischenzielen (max. 9 Desktop, 3 Mobile). */
@@ -22,28 +34,10 @@ export function buildGoogleMapsRouteUrl(params: {
   waypoints?: RouteWaypoint[]
   travelMode?: 'driving' | 'walking' | 'bicycling'
 }): string {
-  const fmt = (w: RouteWaypoint) =>
-    w.label?.trim()
-      ? w.label.trim()
-      : `${w.lat.toFixed(6)},${w.lng.toFixed(6)}`
-
-  const search = new URLSearchParams({
-    api: '1',
-    origin: fmt(params.origin),
-    destination: fmt(params.destination),
-    travelmode: params.travelMode ?? 'driving',
-  })
-
-  const wps = params.waypoints ?? []
-  if (wps.length > 0) {
-    search.set('waypoints', wps.map(fmt).join('|'))
-    const placeIds = wps.map((w) => w.googlePlaceId).filter(Boolean) as string[]
-    if (placeIds.length === wps.length && placeIds.length > 0) {
-      search.set('waypoint_place_ids', placeIds.join('|'))
-    }
-  }
-
-  return `https://www.google.com/maps/dir/?${search.toString()}`
+  const hops = [params.origin, ...(params.waypoints ?? []), params.destination]
+  const path = hops.map(formatLatLng).join('/')
+  void params.travelMode
+  return `https://www.google.com/maps/dir/${path}`
 }
 
 /** ADAC-Route mit mehreren Zwischenzielen (Gespann). */
@@ -53,15 +47,55 @@ export function buildAdacRouteUrlWithWaypoints(params: {
   waypoints?: RouteWaypoint[]
   departure?: Date
 }): string {
-  const toPlace = (w: RouteWaypoint, type: 1 | 6 = 6) =>
-    formatAdacPlace(w.lat, w.lng, type)
-
+  /** Typ 2 entspricht dem aktuellen ADAC-Routenplaner (Start, Zwischenziel, Ziel). */
+  const toPlace = (w: RouteWaypoint) => formatAdacPlace(w.lat, w.lng, 2)
   const parts = [
-    toPlace(params.origin, 1),
-    ...(params.waypoints ?? []).map((w) => toPlace(w, 6)),
-    toPlace(params.destination, 6),
+    toPlace(params.origin),
+    ...(params.waypoints ?? []).map(toPlace),
+    toPlace(params.destination),
   ]
   return buildAdacRouteUrl(parts.join(','), params.departure)
+}
+
+export type SegmentRouteMatchOptions = {
+  encodedPolyline?: string | null
+  /** Zusätzliche Polylines (z. B. Hinfahrt bei Roundtrip zum selben Platz). */
+  alternateEncodedPolylines?: Array<string | null | undefined>
+  routeProvider?: 'google' | 'haversine' | null
+}
+
+export function isRastplatzOnTravelSegment(
+  r: Rastplatz,
+  segment: TravelSegment,
+  match?: SegmentRouteMatchOptions | string | null
+): boolean {
+  if (r.is_archived || r.lat == null || r.lng == null) return false
+  const point = { lat: r.lat, lng: r.lng }
+  const options: SegmentRouteMatchOptions =
+    typeof match === 'string' || match === null || match === undefined
+      ? { encodedPolyline: match }
+      : match
+
+  const polylines = [
+    options.encodedPolyline,
+    ...(options.alternateEncodedPolylines ?? []),
+  ].filter((p): p is string => !!p?.trim())
+
+  if (polylines.length > 0) {
+    return isPointNearAnyEncodedPolyline(point, polylines)
+  }
+  if (options.routeProvider === 'haversine') {
+    return isPointInSegmentCorridor(point, segment.from, segment.to)
+  }
+  return false
+}
+
+export function getRastplaetzeAlongSegment(
+  segment: TravelSegment,
+  rastplaetze: Rastplatz[],
+  match?: SegmentRouteMatchOptions | string | null
+): Rastplatz[] {
+  return rastplaetze.filter((r) => isRastplatzOnTravelSegment(r, segment, match))
 }
 
 /** Empfehlungen entlang eines Segments als Wegpunkte (sortiert von Start nach Ziel). */
@@ -77,21 +111,13 @@ export function selectRastplaetzeForSegment(
 ): Rastplatz[] {
   const onlyEmpfehlung = options?.onlyEmpfehlung !== false
   const maxCount = options?.maxCount ?? 9
-  const encodedPolyline = options?.encodedPolyline
-  const routeProvider = options?.routeProvider
-  const filtered = rastplaetze.filter((r) => {
-    if (r.is_archived) return false
-    if (onlyEmpfehlung && r.bewertung !== 'empfehlung') return false
-    if (r.lat == null || r.lng == null) return false
-    const point = { lat: r.lat, lng: r.lng }
-    if (encodedPolyline?.trim()) {
-      return isPointNearEncodedPolyline(point, encodedPolyline)
-    }
-    if (routeProvider === 'haversine') {
-      return isPointInSegmentCorridor(point, segment.from, segment.to)
-    }
-    return false
+  const along = getRastplaetzeAlongSegment(segment, rastplaetze, {
+    encodedPolyline: options?.encodedPolyline,
+    routeProvider: options?.routeProvider,
   })
+  const filtered = onlyEmpfehlung
+    ? along.filter((r) => r.bewertung === 'empfehlung')
+    : along
 
   const scored = filtered
     .map((r) => {
@@ -154,6 +180,38 @@ export function countSegmentEmpfehlungen(
   }).length
 }
 
+export function openGoogleMapsRoute(
+  segment: TravelSegment,
+  waypoints: RouteWaypoint[],
+  maxWaypoints = GOOGLE_MAPS_MAX_WAYPOINTS_DESKTOP
+): void {
+  const { origin, destination } = segmentRouteEndpoints(segment)
+  window.open(
+    buildGoogleMapsRouteUrl({
+      origin,
+      destination,
+      waypoints: waypoints.slice(0, maxWaypoints),
+    }),
+    '_blank'
+  )
+}
+
+export function openAdacMapsRoute(
+  segment: TravelSegment,
+  waypoints: RouteWaypoint[],
+  maxWaypoints = ADAC_MAX_WAYPOINTS
+): void {
+  const { origin, destination } = segmentRouteEndpoints(segment)
+  window.open(
+    buildAdacRouteUrlWithWaypoints({
+      origin,
+      destination,
+      waypoints: waypoints.slice(0, maxWaypoints),
+    }),
+    '_blank'
+  )
+}
+
 export function openSegmentInGoogleMaps(
   segment: TravelSegment,
   rastplaetze: Rastplatz[],
@@ -161,17 +219,16 @@ export function openSegmentInGoogleMaps(
   encodedPolyline?: string | null,
   routeProvider?: 'google' | 'haversine' | null
 ): void {
-  const { origin, destination } = segmentRouteEndpoints(segment)
-  const waypoints = getSegmentEmpfehlungsWaypoints(
+  openGoogleMapsRoute(
     segment,
-    rastplaetze,
-    maxWaypoints,
-    encodedPolyline,
-    routeProvider
-  )
-  window.open(
-    buildGoogleMapsRouteUrl({ origin, destination, waypoints }),
-    '_blank'
+    getSegmentEmpfehlungsWaypoints(
+      segment,
+      rastplaetze,
+      maxWaypoints,
+      encodedPolyline,
+      routeProvider
+    ),
+    maxWaypoints
   )
 }
 
@@ -182,17 +239,16 @@ export function openSegmentInAdacMaps(
   encodedPolyline?: string | null,
   routeProvider?: 'google' | 'haversine' | null
 ): void {
-  const { origin, destination } = segmentRouteEndpoints(segment)
-  const waypoints = getSegmentEmpfehlungsWaypoints(
+  openAdacMapsRoute(
     segment,
-    rastplaetze,
-    maxWaypoints,
-    encodedPolyline,
-    routeProvider
-  )
-  window.open(
-    buildAdacRouteUrlWithWaypoints({ origin, destination, waypoints }),
-    '_blank'
+    getSegmentEmpfehlungsWaypoints(
+      segment,
+      rastplaetze,
+      maxWaypoints,
+      encodedPolyline,
+      routeProvider
+    ),
+    maxWaypoints
   )
 }
 

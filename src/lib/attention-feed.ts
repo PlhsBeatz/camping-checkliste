@@ -9,6 +9,7 @@ import type {
   Optimierung,
   PackingItem,
   PackStatusData,
+  Rastplatz,
   Vacation,
   VacationCampingStay,
 } from '@/lib/db'
@@ -22,6 +23,18 @@ import {
   type TripPhase,
 } from '@/lib/trip-readiness'
 import { isWinterpause } from '@/lib/winterpause'
+import {
+  attachTravelNavWaypoints,
+  findHubTravelNav,
+  type HubTravelNav,
+  type HubTravelNavRouteMatch,
+} from '@/lib/hub-travel-nav'
+import {
+  campingStayCoords,
+  hasArrivedAtCampingForSunCard,
+  previousStayBefore,
+  type GeoPoint,
+} from '@/lib/sonnen-hub-arrival'
 
 export const MAX_ATTENTION_ITEMS = 7
 /** Optimierungen in der Todo-Liste: fällig innerhalb dieser Tage (oder überfällig). */
@@ -45,6 +58,7 @@ export type AttentionKind =
   | 'optimierung'
   | 'checkliste'
   | 'vacation_next'
+  | 'sonnen_ausrichtung'
 
 export type AttentionItem = {
   key: string
@@ -104,6 +118,7 @@ export type AttentionFeed = {
   nextVacation: { id: string; titel: string; startdatum: string } | null
   vacationTile: AttentionVacationTile | null
   packing: AttentionPackingCard | null
+  travelNav: HubTravelNav | null
   primaryAction: { label: string; href: string; reason: string }
   items: AttentionItem[]
   badgeCount: number
@@ -119,6 +134,10 @@ export type AttentionFeedInput = {
   hubPackingItems?: PackingItem[]
   hubPackStatus?: PackStatusData | null
   campingStays?: VacationCampingStay[]
+  userPosition?: GeoPoint | null
+  homeCoords?: GeoPoint | null
+  travelNavRastplaetze?: Rastplatz[]
+  travelNavRouteMatch?: HubTravelNavRouteMatch | null
   faelligkeiten: Faelligkeit[]
   optimierungen: Optimierung[]
   checklisten: ChecklisteMitStruktur[]
@@ -560,6 +579,22 @@ export function buildAttentionFeed(input: AttentionFeedInput): AttentionFeed {
   const vacationTile = tileVacation
     ? buildVacationTile(tileVacation, input.campingStays ?? [], todayYmd)
     : null
+  const travelNavBase = tileVacation
+    ? findHubTravelNav({
+        vacation: tileVacation,
+        stays: input.campingStays ?? [],
+        homeCoords: input.homeCoords ?? null,
+        userPosition: input.userPosition ?? null,
+        todayYmd,
+      })
+    : null
+  const travelNav = travelNavBase
+    ? attachTravelNavWaypoints(
+        travelNavBase,
+        input.travelNavRastplaetze ?? [],
+        input.travelNavRouteMatch
+      )
+    : null
 
   const raw: AttentionItem[] = []
 
@@ -732,6 +767,40 @@ export function buildAttentionFeed(input: AttentionFeedInput): AttentionFeed {
     })
   }
 
+  for (const stay of input.campingStays ?? []) {
+    if (!stay.start_datum) continue
+    if (normalizeCalendarDate(stay.start_datum) !== todayYmd) continue
+    const dest = campingStayCoords(stay)
+    const prev = previousStayBefore(input.campingStays ?? [], stay)
+    const originFromPrev = prev ? campingStayCoords(prev) : null
+    const origin = originFromPrev ?? input.homeCoords ?? null
+    const originIsDest =
+      dest && origin && dest.lat === origin.lat && dest.lng === origin.lng
+    if (
+      !hasArrivedAtCampingForSunCard({
+        destination: dest,
+        origin: originIsDest ? null : origin,
+        user: input.userPosition ?? null,
+      })
+    ) {
+      continue
+    }
+    const name = stay.campingplatz.name?.trim() || 'Campingplatz'
+    raw.push({
+      key: `sonne:${stay.id}`,
+      kind: 'sonnen_ausrichtung',
+      title: 'Sonnenausrichtung',
+      reason: `Erster Tag · ${name}`,
+      risk: 'Heute den Stellplatz nach Sonne und Schatten ausrichten.',
+      href: '/tools/sonnen-ausrichtung',
+      score: 470,
+      dueYmd: todayYmd,
+      sicherheitsrelevant: false,
+      snoozeAllowed: true,
+      adminOnly: false,
+    })
+  }
+
   const visible = raw.filter((item) => {
     if (item.sicherheitsrelevant && isSafetySnoozeBlocked(item.dueYmd, todayYmd)) {
       return true
@@ -769,6 +838,7 @@ export function buildAttentionFeed(input: AttentionFeedInput): AttentionFeed {
           }
         : null,
     packing,
+    travelNav,
     primaryAction,
     items: visible,
     badgeCount: visible.length,

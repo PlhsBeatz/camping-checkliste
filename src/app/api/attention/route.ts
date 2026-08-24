@@ -5,6 +5,7 @@ import { canAccessConfig, canReadOptimierung, canReadWartung } from '@/lib/permi
 import { isAdminRole } from '@/lib/user-roles'
 import { buildAttentionFeed, MAX_ATTENTION_ITEMS } from '@/lib/attention-feed'
 import { loadAttentionFeedInput } from '@/lib/attention-feed-sources'
+import { parseGeoPoint } from '@/lib/sonnen-hub-arrival'
 
 export async function GET(request: NextRequest) {
   try {
@@ -22,11 +23,16 @@ export async function GET(request: NextRequest) {
         ? userContext.mitreisenderId
         : undefined
 
+    const { searchParams } = new URL(request.url)
+    const userPosition = parseGeoPoint(searchParams.get('lat'), searchParams.get('lng'))
+
     const input = await loadAttentionFeedInput(db, {
       includeAdminItems,
       includeWartungItems,
       includeOptimierungItems,
       mitreisenderFilter,
+      userId: userContext.userId,
+      userPosition,
     })
     const feed = buildAttentionFeed(input)
 
@@ -35,7 +41,6 @@ export async function GET(request: NextRequest) {
       items: feed.items.slice(0, MAX_ATTENTION_ITEMS),
     }
 
-    const { searchParams } = new URL(request.url)
     if (searchParams.get('count') === '1') {
       const res = NextResponse.json({ success: true, badgeCount: feed.badgeCount })
       res.headers.set('Cache-Control', 'private, no-store')
