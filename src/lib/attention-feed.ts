@@ -711,7 +711,7 @@ export function buildAttentionFeed(input: AttentionFeedInput): AttentionFeed {
             : formatDaysUntil(dueYmd, todayYmd)
           : 'Passt in die Winterpause',
         risk: null,
-        href: `/tools/optimierungen`,
+        href: `/tools/optimierungen/${encodeURIComponent(o.id)}`,
         score: overdue ? 550 : winterBoost || beyondHorizon ? 300 : 500,
         dueYmd,
         sicherheitsrelevant: false,

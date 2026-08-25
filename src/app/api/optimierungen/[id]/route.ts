@@ -3,13 +3,14 @@ import {
   getDB,
   updateOptimierung,
   deleteOptimierung,
+  getOptimierungById,
   getCampingPhotosR2,
   CloudflareEnv,
   type OptimierungStatus,
   type OptimierungBereich,
   type OptimierungPrioritaet,
 } from '@/lib/db'
-import { requireAuth, requireWriteOptimierung } from '@/lib/api-auth'
+import { requireAuth, requireWriteOptimierung, requireReadOptimierung } from '@/lib/api-auth'
 import { isOptimierungFaelligkeitModus } from '@/lib/optimierung-faelligkeit'
 
 const STATUSES: OptimierungStatus[] = [
@@ -30,6 +31,34 @@ function isBereich(v: unknown): v is OptimierungBereich {
 }
 function isPrio(v: unknown): v is OptimierungPrioritaet {
   return typeof v === 'string' && (PRIOS as string[]).includes(v)
+}
+
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const auth = await requireAuth(request)
+    if (auth instanceof NextResponse) return auth
+    const readErr = requireReadOptimierung(auth.userContext)
+    if (readErr) return readErr
+
+    const { id } = await params
+    if (!id) {
+      return NextResponse.json({ success: false, error: 'Fehlende ID' }, { status: 400 })
+    }
+
+    const env = process.env as unknown as CloudflareEnv
+    const db = await getDB(env)
+    const data = await getOptimierungById(db, id)
+    if (!data) {
+      return NextResponse.json({ success: false, error: 'Nicht gefunden' }, { status: 404 })
+    }
+    return NextResponse.json({ success: true, data })
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error)
+    return NextResponse.json({ error: message }, { status: 500 })
+  }
 }
 
 export async function PUT(

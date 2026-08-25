@@ -50,6 +50,12 @@ const PRESET_META: { id: UiPresetKey; label: string; hint: string }[] = [
     hint:
       'Checklisten unter „Tools“ (Kategorien und Einträge) sowie das Optimierungen-Backlog inkl. Links und Foto-Metadaten.',
   },
+  {
+    id: 'wartung',
+    label: 'Wartung & Verbrauch',
+    hint:
+      'Fälligkeiten inkl. Historie, Wartungs-Vorlagen und Verbrauchsmessungen. Ohne „Ausrüstung“ ergänzt Auto-Closure die zugeordneten Gegenstände und Transportmittel.',
+  },
 ]
 
 function emptyUiPresetState(): Record<UiPresetKey, boolean> {
@@ -59,6 +65,7 @@ function emptyUiPresetState(): Record<UiPresetKey, boolean> {
     vacations: false,
     places: false,
     toolsChecklists: false,
+    wartung: false,
   }
 }
 
@@ -475,7 +482,8 @@ export default function DatensicherungPage() {
                   <p className="text-xs text-muted-foreground">
                     Wenn Sie nur einzelne Urlaube exportieren und weder „Packliste-Stamm &amp; Organisation“
                     noch „Ausrüstung“ anhaken, werden fehlende referenzierte Tabellen automatisch ergänzt
-                    (damit der Import konsistent bleibt).
+                    (damit der Import konsistent bleibt). Dasselbe gilt für „Wartung &amp; Verbrauch“:
+                    zugeordnete Ausrüstungsgegenstände und Transportmittel werden mit exportiert.
                   </p>
                 </div>
               </div>

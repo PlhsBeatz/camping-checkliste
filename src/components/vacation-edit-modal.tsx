@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Button, buttonVariants } from '@/components/ui/button'
+import { Button } from '@/components/ui/button'
 import { ResponsiveModal } from '@/components/ui/responsive-modal'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -14,7 +14,6 @@ import { deriveReisezielName } from '@/lib/vacation-helpers'
 import { addDays, differenceInCalendarDays, format } from 'date-fns'
 import { de } from 'date-fns/locale'
 import type { DateRange } from 'react-day-picker'
-import { useNavigation, type CaptionProps } from 'react-day-picker'
 import { Calendar } from '@/components/ui/calendar'
 import {
   Popover,
@@ -37,8 +36,6 @@ import {
 } from '@/components/ui/command'
 import {
   Calendar as CalendarIcon,
-  ChevronLeft,
-  ChevronRight,
   Plus,
   Settings,
   Trash2,
@@ -180,42 +177,6 @@ const emptyVacationForm = (): VacationFormState => ({
   packliste_default_ansicht: 'packliste',
 })
 
-/** Caption mit eigener Navigation pro Monat (für Mobile, wenn zwei Monate untereinander stehen) */
-function RangeCalendarCaption(props: CaptionProps) {
-  const { goToMonth, nextMonth, previousMonth } = useNavigation()
-  return (
-    <div className="flex justify-between items-center pt-1 w-full gap-1">
-      <button
-        type="button"
-        disabled={!previousMonth}
-        onClick={() => previousMonth && goToMonth(previousMonth)}
-        className={cn(
-          buttonVariants({ variant: 'outline' }),
-          'h-7 w-7 shrink-0 bg-transparent p-0 opacity-50 hover:opacity-100 disabled:opacity-30'
-        )}
-        aria-label="Vorheriger Monat"
-      >
-        <ChevronLeft className="h-4 w-4" />
-      </button>
-      <span className="text-sm font-medium">
-        {format(props.displayMonth, 'MMMM yyyy', { locale: de })}
-      </span>
-      <button
-        type="button"
-        disabled={!nextMonth}
-        onClick={() => nextMonth && goToMonth(nextMonth)}
-        className={cn(
-          buttonVariants({ variant: 'outline' }),
-          'h-7 w-7 shrink-0 bg-transparent p-0 opacity-50 hover:opacity-100 disabled:opacity-30'
-        )}
-        aria-label="Nächster Monat"
-      >
-        <ChevronRight className="h-4 w-4" />
-      </button>
-    </div>
-  )
-}
-
 /** True wenn Viewport schmal (z. B. Smartphone/Tablet) – dann Daterangepicker als Dialog statt Popover */
 function useIsSmallViewport() {
   const [isSmall, setIsSmall] = useState(false)
@@ -336,7 +297,6 @@ function StayRow({
                     onSelect={handleSelect}
                     locale={de}
                     numberOfMonths={2}
-                    components={{ Caption: RangeCalendarCaption }}
                   />
                 </div>
                 <div className="flex gap-2 p-2 pt-4 bg-muted/30">
@@ -389,7 +349,6 @@ function StayRow({
                 onSelect={handleSelect}
                 locale={de}
                 numberOfMonths={2}
-                components={{ Caption: RangeCalendarCaption }}
               />
               <div className="flex gap-2 p-3 pt-4 bg-muted/30">
                 <Button
@@ -866,7 +825,6 @@ export function VacationEditModal({
                           }}
                           locale={de}
                           numberOfMonths={2}
-                          components={{ Caption: RangeCalendarCaption }}
                         />
                       </div>
                       <div className="flex gap-2 p-2 pt-4 bg-muted/30">
@@ -968,7 +926,6 @@ export function VacationEditModal({
                       }}
                       locale={de}
                       numberOfMonths={2}
-                      components={{ Caption: RangeCalendarCaption }}
                     />
                     <div className="flex gap-2 p-3 pt-4 bg-muted/30">
                       <Button

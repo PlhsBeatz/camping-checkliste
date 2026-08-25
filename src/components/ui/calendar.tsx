@@ -2,26 +2,128 @@
 
 import * as React from "react"
 import { ChevronLeft, ChevronRight } from "lucide-react"
-import { DayPicker } from "react-day-picker"
+import { format } from "date-fns"
+import { de } from "date-fns/locale"
+import { DayPicker, useNavigation, type CaptionProps } from "react-day-picker"
 
 import { cn } from "@/lib/utils"
 import { buttonVariants } from "@/components/ui/button"
 
 export type CalendarProps = React.ComponentProps<typeof DayPicker>
 
+const MONTH_CHOICES = Array.from({ length: 12 }, (_, month) => ({
+  month,
+  label: format(new Date(2020, month, 1), "MMMM", { locale: de }),
+}))
+
+function yearChoicesAround(centerYear: number): number[] {
+  const from = centerYear - 15
+  const to = centerYear + 20
+  const years: number[] = []
+  for (let y = from; y <= to; y++) years.push(y)
+  return years
+}
+
+const captionSelectClass =
+  "h-8 max-w-[9.5rem] rounded-md border border-input bg-background px-1.5 text-sm font-medium text-foreground shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+
+/** Monat- und Jahres-Dropdowns, damit ferne Daten ohne viele Klicks erreichbar sind. */
+export function CalendarMonthYearCaption(props: CaptionProps) {
+  const { goToMonth, nextMonth, previousMonth } = useNavigation()
+  const month = props.displayMonth.getMonth()
+  const year = props.displayMonth.getFullYear()
+  const years = yearChoicesAround(new Date().getFullYear())
+  if (!years.includes(year)) {
+    years.push(year)
+    years.sort((a, b) => a - b)
+  }
+  const uid = React.useId()
+  const monthSelectId = `${uid}-month`
+  const yearSelectId = `${uid}-year`
+
+  const jumpTo = (nextMonthIndex: number, nextYear: number) => {
+    goToMonth(new Date(nextYear, nextMonthIndex, 1))
+  }
+
+  return (
+    <div className="flex w-full items-center justify-between gap-1 pt-1">
+      <button
+        type="button"
+        disabled={!previousMonth}
+        onClick={() => previousMonth && goToMonth(previousMonth)}
+        className={cn(
+          buttonVariants({ variant: "outline" }),
+          "h-8 w-8 shrink-0 bg-transparent p-0 opacity-50 hover:opacity-100 disabled:opacity-30"
+        )}
+        aria-label="Vorheriger Monat"
+      >
+        <ChevronLeft className="h-4 w-4" />
+      </button>
+      <div className="flex min-w-0 flex-1 items-center justify-center gap-1">
+        <label className="sr-only" htmlFor={monthSelectId}>
+          Monat
+        </label>
+        <select
+          id={monthSelectId}
+          className={captionSelectClass}
+          value={month}
+          onPointerDown={(e) => e.stopPropagation()}
+          onChange={(e) => jumpTo(Number(e.target.value), year)}
+        >
+          {MONTH_CHOICES.map((m) => (
+            <option key={m.month} value={m.month}>
+              {m.label}
+            </option>
+          ))}
+        </select>
+        <label className="sr-only" htmlFor={yearSelectId}>
+          Jahr
+        </label>
+        <select
+          id={yearSelectId}
+          className={cn(captionSelectClass, "max-w-[5.5rem]")}
+          value={year}
+          onPointerDown={(e) => e.stopPropagation()}
+          onChange={(e) => jumpTo(month, Number(e.target.value))}
+        >
+          {years.map((y) => (
+            <option key={y} value={y}>
+              {y}
+            </option>
+          ))}
+        </select>
+      </div>
+      <button
+        type="button"
+        disabled={!nextMonth}
+        onClick={() => nextMonth && goToMonth(nextMonth)}
+        className={cn(
+          buttonVariants({ variant: "outline" }),
+          "h-8 w-8 shrink-0 bg-transparent p-0 opacity-50 hover:opacity-100 disabled:opacity-30"
+        )}
+        aria-label="Nächster Monat"
+      >
+        <ChevronRight className="h-4 w-4" />
+      </button>
+    </div>
+  )
+}
+
 function Calendar({
   className,
   classNames,
   showOutsideDays = true,
   components: customComponents,
+  fixedWeeks = true,
   ...props
 }: CalendarProps) {
   return (
     <DayPicker
       showOutsideDays={showOutsideDays}
+      fixedWeeks={fixedWeeks}
       className={cn("p-3", className)}
       classNames={{
-        months: "flex flex-col sm:flex-row space-y-2 sm:space-x-4 sm:space-y-0",
+        months: "flex flex-col sm:flex-row space-y-2 sm:space-x-4 sm:space-y-0 items-start",
         month: "space-y-4",
         caption: "flex justify-center pt-1 relative items-center",
         caption_label: "text-sm font-medium",
@@ -67,6 +169,7 @@ function Calendar({
         IconRight: ({ className, ...iconProps }) => (
           <ChevronRight className={cn("h-4 w-4", className)} {...iconProps} />
         ),
+        Caption: CalendarMonthYearCaption,
         ...(customComponents ?? {}),
       }}
       {...props}

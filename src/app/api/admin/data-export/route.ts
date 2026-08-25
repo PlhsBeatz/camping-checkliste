@@ -13,6 +13,7 @@ function parsePresets(v: unknown): BackupPreset[] | undefined {
     'vacations',
     'places',
     'toolsChecklists',
+    'wartung',
     'auth',
   ]
   const out: BackupPreset[] = []

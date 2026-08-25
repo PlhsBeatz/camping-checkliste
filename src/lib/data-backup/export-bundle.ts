@@ -18,6 +18,7 @@ import {
   rowKey,
   domainLabelsForPresets,
   topologicalTableList,
+  WARTUNG_TABLES,
 } from './tables'
 
 const VACATION_TABLES = new Set([
@@ -438,6 +439,111 @@ async function filteredVacationTables(
   return out
 }
 
+/**
+ * Referenzierte Ausrüstung, Transportmittel und Urlaube zu Wartungs-Zeilen,
+ * damit ein reiner Wartung-Export per Auto-Closure importierbar bleibt.
+ */
+async function wartungReferencedExports(
+  db: D1Database,
+  source: Record<string, Record<string, unknown>[]>,
+  warnings: string[]
+): Promise<Record<string, Record<string, unknown>[]>> {
+  const out: Record<string, Record<string, unknown>[]> = {}
+  const equipmentIds = new Set<string>()
+  const transportIds = new Set<string>()
+  const urlaubIds = new Set<string>()
+
+  for (const row of source.faelligkeiten ?? []) {
+    const e = row.equipment_id
+    const t = row.transport_id
+    if (typeof e === 'string' && e) equipmentIds.add(e)
+    if (typeof t === 'string' && t) transportIds.add(t)
+  }
+  for (const row of source.verbrauch_messungen ?? []) {
+    const e = row.equipment_id
+    const t = row.transport_id
+    const u = row.urlaub_id
+    if (typeof e === 'string' && e) equipmentIds.add(e)
+    if (typeof t === 'string' && t) transportIds.add(t)
+    if (typeof u === 'string' && u) urlaubIds.add(u)
+  }
+
+  const tryIn = async (table: string, col: string, ids: string[]) => {
+    if (ids.length === 0) {
+      out[table] = out[table] ?? []
+      return
+    }
+    try {
+      if (!(await tableExists(db, table))) {
+        out[table] = out[table] ?? []
+        return
+      }
+      const ip = placeholders(ids.length)
+      const r = await db
+        .prepare(`SELECT * FROM ${table} WHERE ${col} IN (${ip})`)
+        .bind(...ids)
+        .all()
+      out[table] = mergeRows(table, out[table] ?? [], (r.results ?? []) as Record<string, unknown>[])
+    } catch (e) {
+      warnings.push(`wartungClosure ${table}: ${e instanceof Error ? e.message : String(e)}`)
+      out[table] = out[table] ?? []
+    }
+  }
+
+  await tryIn('ausruestungsgegenstaende', 'id', [...equipmentIds])
+  await tryIn('transportmittel', 'id', [...transportIds])
+  await tryIn('urlaube', 'id', [...urlaubIds])
+
+  const fetchedEquip = out.ausruestungsgegenstaende ?? []
+  const gegenstandIds = fetchedEquip.map((r) => String(r.id)).filter(Boolean)
+  const kategorieIds = new Set<string>()
+  for (const row of fetchedEquip) {
+    const k = row.kategorie_id
+    if (typeof k === 'string' && k) kategorieIds.add(k)
+    const tid = row.transport_id
+    if (typeof tid === 'string' && tid) transportIds.add(tid)
+  }
+
+  if (gegenstandIds.length > 0) {
+    await tryIn('ausruestungsgegenstaende_links', 'gegenstand_id', gegenstandIds)
+    await tryIn('ausruestungsgegenstaende_standard_mitreisende', 'gegenstand_id', gegenstandIds)
+    await tryIn('ausruestungsgegenstaende_tags', 'gegenstand_id', gegenstandIds)
+  }
+
+  if (kategorieIds.size > 0) {
+    await tryIn('kategorien', 'id', [...kategorieIds])
+    const hkIds = new Set<string>()
+    for (const k of out.kategorien ?? []) {
+      const hk = k.hauptkategorie_id
+      if (typeof hk === 'string' && hk) hkIds.add(hk)
+    }
+    if (hkIds.size > 0) await tryIn('hauptkategorien', 'id', [...hkIds])
+  }
+
+  const tagIds = new Set<string>()
+  for (const tr of out.ausruestungsgegenstaende_tags ?? []) {
+    const tid = tr.tag_id
+    if (typeof tid === 'string' && tid) tagIds.add(tid)
+  }
+  if (tagIds.size > 0) {
+    await tryIn('tags', 'id', [...tagIds])
+    const catIds = new Set<string>()
+    for (const tg of out.tags ?? []) {
+      const c = tg.tag_kategorie_id
+      if (typeof c === 'string' && c) catIds.add(c)
+    }
+    if (catIds.size > 0) await tryIn('tag_kategorien', 'id', [...catIds])
+  }
+
+  const allTransportIds = [...transportIds]
+  if (allTransportIds.length > 0) {
+    await tryIn('transportmittel', 'id', allTransportIds)
+    await tryIn('transportmittel_festgewicht_manuell', 'transport_id', allTransportIds)
+  }
+
+  return out
+}
+
 /** Workers Free: wenige Subrequests pro Aufruf — Standard klein halten (überschreibbar via EXPORT_R2_BATCH_LIMIT). */
 function resolveR2PhotoBatchLimit(requested?: number): number {
   const raw = typeof process !== 'undefined' ? process.env.EXPORT_R2_BATCH_LIMIT : undefined
@@ -540,6 +646,27 @@ export async function buildBackupBundle(
   }
 
   for (const t of tables) if (data[t] === undefined) data[t] = []
+
+  const exportsWartungTables = [...WARTUNG_TABLES].some((t) => tableSet.has(t))
+  if (
+    !isFullExport &&
+    autoClosure &&
+    exportsWartungTables &&
+    !hasReferencePreset
+  ) {
+    const closed = await wartungReferencedExports(db, data, warnings)
+    let extraRows = 0
+    for (const [k, rows] of Object.entries(closed)) {
+      if (!rows?.length) continue
+      data[k] = mergeRows(k, data[k] ?? [], rows) as BackupTableData
+      extraRows += rows.length
+    }
+    if (extraRows > 0) {
+      warnings.push(
+        `Wartung-Export (Auto-Closure): ${extraRows} referenzierte Zeile(n) (Ausrüstung, Transport, ggf. Urlaub) ergänzt, damit der Import die Fremdschlüssel erfüllen kann.`
+      )
+    }
+  }
 
   if (!includeAuth && isFullExport) {
     let usersRemoved = 0

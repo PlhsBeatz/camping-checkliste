@@ -8,6 +8,7 @@ export type BackupPreset =
   | 'vacations'
   | 'places'
   | 'toolsChecklists'
+  | 'wartung'
   | 'auth'
 
 export interface BackupMeta {

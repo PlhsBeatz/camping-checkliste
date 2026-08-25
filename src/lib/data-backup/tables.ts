@@ -113,11 +113,15 @@ const TOOLS = new Set([
   'optimierungen',
   'optimierungen_links',
   'optimierungen_fotos',
+  'attention_snooze',
+])
+
+/** Wartung & Verbrauch (Fälligkeiten, Vorlagen, Historie, Messungen) */
+export const WARTUNG_TABLES = new Set([
   'faelligkeit_vorlagen',
   'faelligkeiten',
   'faelligkeiten_historie',
   'verbrauch_messungen',
-  'attention_snooze',
 ])
 export const AUTH_TABLES = new Set([
   'users',
@@ -192,6 +196,8 @@ export function tablesForPreset(p: BackupPreset): Set<string> {
       return PLACES
     case 'toolsChecklists':
       return TOOLS
+    case 'wartung':
+      return WARTUNG_TABLES
     case 'auth':
       return AUTH_TABLES
   }
