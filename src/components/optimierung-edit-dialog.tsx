@@ -30,7 +30,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
-import { OptimierungPhotoLightbox } from '@/components/optimierung-photo-lightbox'
+import { PhotoLightbox } from '@/components/photo-lightbox'
 import {
   emptyOptimierungForm,
   FAELLIGKEIT_OPTIONS,
@@ -704,11 +704,11 @@ export function OptimierungEditDialog({
         </div>
       </ResponsiveModal>
 
-      <OptimierungPhotoLightbox
+      <PhotoLightbox
         fotos={editFotos}
         openId={lightboxId}
-        onClose={() => setLightboxId(null)}
-        onChangeId={setLightboxId}
+        onOpenIdChange={setLightboxId}
+        imageSrc={optimierungFotoSrc}
       />
 
       <ConfirmDialog

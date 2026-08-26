@@ -36,7 +36,7 @@ import { useReconnectRefetch } from '@/hooks/use-reconnect-refetch'
 import { useOptimisticMutation } from '@/hooks/use-optimistic-mutation'
 import { useToast } from '@/hooks/use-toast'
 import { OptimierungEditDialog } from '@/components/optimierung-edit-dialog'
-import { OptimierungPhotoLightbox } from '@/components/optimierung-photo-lightbox'
+import { PhotoLightbox } from '@/components/photo-lightbox'
 import {
   formatFaelligkeitListLine,
   formatLinkMenuLabel,
@@ -409,11 +409,11 @@ export default function OptimierungDetailPage() {
         </div>
       </div>
 
-      <OptimierungPhotoLightbox
+      <PhotoLightbox
         fotos={fotos}
         openId={lightboxId}
-        onClose={() => setLightboxId(null)}
-        onChangeId={setLightboxId}
+        onOpenIdChange={setLightboxId}
+        imageSrc={optimierungFotoSrc}
       />
 
       <OptimierungEditDialog
