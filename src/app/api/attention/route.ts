@@ -33,6 +33,7 @@ export async function GET(request: NextRequest) {
       mitreisenderFilter,
       userId: userContext.userId,
       userPosition,
+      mode: searchParams.get('count') === '1' ? 'count' : 'full',
     })
     const feed = buildAttentionFeed(input)
 

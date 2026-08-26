@@ -5,7 +5,6 @@ import {
 } from '@/lib/app-timezone'
 import type { ChecklisteHubAnlass } from '@/lib/checkliste-hub-anlass'
 import type {
-  ChecklisteMitStruktur,
   Optimierung,
   PackingItem,
   PackStatusData,
@@ -126,6 +125,15 @@ export type AttentionFeed = {
   quickLinks: { label: string; href: string }[]
 }
 
+/** Nur Fortschritt + Anlass – ohne volle Eintragstexte (spart Worker-CPU). */
+export type AttentionCheckliste = {
+  id: string
+  titel: string
+  hub_anlass: ChecklisteHubAnlass
+  done: number
+  total: number
+}
+
 export type AttentionFeedInput = {
   now?: Date
   vacations: Vacation[]
@@ -140,11 +148,13 @@ export type AttentionFeedInput = {
   travelNavRouteMatch?: HubTravelNavRouteMatch | null
   faelligkeiten: Faelligkeit[]
   optimierungen: Optimierung[]
-  checklisten: ChecklisteMitStruktur[]
+  checklisten: AttentionCheckliste[]
   snoozes: Map<string, string>
   includeAdminItems: boolean
   includeWartungItems: boolean
   includeOptimierungItems: boolean
+  /** false = Badge-Count ohne Fahrt-Leiste (Rasterplätze/Polyline). */
+  includeTravelNav?: boolean
 }
 
 function vacationRef(v: Vacation): AttentionVacationRef {
@@ -172,13 +182,8 @@ function formatDaysUntil(dueYmd: string, todayYmd: string): string {
   return `in ${days} Tagen fällig`
 }
 
-function checklistProgress(list: ChecklisteMitStruktur): { done: number; total: number } {
-  const total = list.kategorien.reduce((n, k) => n + k.eintraege.length, 0)
-  const done = list.kategorien.reduce(
-    (n, k) => n + k.eintraege.filter((e) => e.erledigt).length,
-    0
-  )
-  return { done, total }
+function checklistProgress(list: AttentionCheckliste): { done: number; total: number } {
+  return { done: list.done, total: list.total }
 }
 
 function isSnoozed(key: string, snoozes: Map<string, string>, todayYmd: string): boolean {
@@ -579,15 +584,18 @@ export function buildAttentionFeed(input: AttentionFeedInput): AttentionFeed {
   const vacationTile = tileVacation
     ? buildVacationTile(tileVacation, input.campingStays ?? [], todayYmd)
     : null
-  const travelNavBase = tileVacation
-    ? findHubTravelNav({
-        vacation: tileVacation,
-        stays: input.campingStays ?? [],
-        homeCoords: input.homeCoords ?? null,
-        userPosition: input.userPosition ?? null,
-        todayYmd,
-      })
-    : null
+  const travelNavBase =
+    input.includeTravelNav === false
+      ? null
+      : tileVacation
+        ? findHubTravelNav({
+            vacation: tileVacation,
+            stays: input.campingStays ?? [],
+            homeCoords: input.homeCoords ?? null,
+            userPosition: input.userPosition ?? null,
+            todayYmd,
+          })
+        : null
   const travelNav = travelNavBase
     ? attachTravelNavWaypoints(
         travelNavBase,

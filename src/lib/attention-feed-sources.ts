@@ -1,10 +1,10 @@
 import {
   getCampingStaysForVacation,
-  getChecklistenFullTree,
+  getChecklistenHubSummaries,
   getOptimierungen,
-  getPackingItems,
+  getPackingItemsForHub,
   getPackStatus,
-  getRastplaetze,
+  getRastplaetzeForHub,
   getUserById,
   getVacations,
   type PackingItem,
@@ -12,7 +12,7 @@ import {
   type Rastplatz,
   type VacationCampingStay,
 } from '@/lib/db'
-import { getFaelligkeiten } from '@/lib/db-wartung'
+import { getFaelligkeitenForHub } from '@/lib/db-wartung'
 import { getAttentionSnoozes } from '@/lib/db-attention'
 import { findCurrentOrNextVacation, type AttentionFeedInput } from '@/lib/attention-feed'
 import { findRelevantVacation } from '@/lib/trip-readiness'
@@ -34,8 +34,11 @@ export async function loadAttentionFeedInput(
     snoozes?: Map<string, string>
     userId?: string
     userPosition?: GeoPoint | null
+    /** Nur Badge-Zahl: ohne Rastplätze, Routen-Polyline und Campingplatz-Aufenthalte. */
+    mode?: 'full' | 'count'
   }
 ): Promise<AttentionFeedInput> {
+  const full = opts.mode !== 'count'
   const vacations = await getVacations(db, opts.mitreisenderFilter)
   const relevant = findRelevantVacation(vacations)
   const hubVacation = findCurrentOrNextVacation(vacations)
@@ -51,30 +54,33 @@ export async function loadAttentionFeedInput(
     checklisten,
     snoozes,
     user,
+    optimierungen,
   ] = await Promise.all([
-    relevant ? getPackingItems(db, relevant.id) : Promise.resolve<PackingItem[]>([]),
+    relevant ? getPackingItemsForHub(db, relevant.id) : Promise.resolve<PackingItem[]>([]),
     relevant ? getPackStatus(db, relevant.id) : Promise.resolve<PackStatusData | null>(null),
-    hubVacation && !sameHub
-      ? getPackingItems(db, hubVacation.id)
+    full && hubVacation && !sameHub
+      ? getPackingItemsForHub(db, hubVacation.id)
       : Promise.resolve<PackingItem[] | null>(null),
-    hubVacation && !sameHub
+    full && hubVacation && !sameHub
       ? getPackStatus(db, hubVacation.id)
       : Promise.resolve<PackStatusData | null>(null),
-    hubVacation
+    full && hubVacation
       ? getCampingStaysForVacation(db, hubVacation.id)
       : Promise.resolve<VacationCampingStay[]>([]),
-    opts.includeWartungItems ? getFaelligkeiten(db) : Promise.resolve([]),
-    getChecklistenFullTree(db),
+    opts.includeWartungItems ? getFaelligkeitenForHub(db) : Promise.resolve([]),
+    getChecklistenHubSummaries(db),
     opts.snoozes ? Promise.resolve(opts.snoozes) : getAttentionSnoozes(db),
-    opts.userId ? getUserById(db, opts.userId) : Promise.resolve(null),
+    full && opts.userId ? getUserById(db, opts.userId) : Promise.resolve(null),
+    opts.includeOptimierungItems
+      ? getOptimierungen(db, undefined, { relations: false })
+      : Promise.resolve([]),
   ])
 
-  const optimierungen = opts.includeOptimierungItems ? await getOptimierungen(db) : []
   const homeCoords = user ? parseGeoPoint(user.heimat_lat, user.heimat_lng) : null
 
   let travelNavRastplaetze: Rastplatz[] = []
   let travelNavRouteMatch: HubTravelNavRouteMatch | null = null
-  if (hubVacation) {
+  if (full && hubVacation) {
     const hint = findHubTravelNav({
       vacation: hubVacation,
       stays: campingStays,
@@ -84,7 +90,7 @@ export async function loadAttentionFeedInput(
     })
     if (hint) {
       const [rast, match] = await Promise.all([
-        getRastplaetze(db),
+        getRastplaetzeForHub(db),
         loadTravelNavRouteMatch(db, opts.userId, hint.segment),
       ])
       travelNavRastplaetze = rast
@@ -110,5 +116,6 @@ export async function loadAttentionFeedInput(
     includeAdminItems: opts.includeAdminItems,
     includeWartungItems: opts.includeWartungItems,
     includeOptimierungItems: opts.includeOptimierungItems,
+    includeTravelNav: full,
   }
 }

@@ -266,6 +266,31 @@ export async function getFaelligkeiten(
   }
 }
 
+/** Hub/Attention: ohne Equipment-/Transport-Joins (nur Ampel + Name). */
+export async function getFaelligkeitenForHub(db: D1Database): Promise<Faelligkeit[]> {
+  try {
+    const res = await db
+      .prepare(
+        `SELECT f.id, f.name, f.kategorie, f.typ,
+                f.equipment_id, f.transport_id,
+                f.bezug_datum, f.gueltig_bis, f.letzte_erledigung_am, f.initial_erledigung_am, f.naechste_faelligkeit,
+                f.intervall_einheit, f.intervall_wert, f.intervall_rhythmus, f.warnung_tage_vorher,
+                f.sicherheitsrelevant, f.is_archived
+         FROM faelligkeiten f
+         WHERE f.is_archived = 0
+         ORDER BY
+           CASE WHEN f.naechste_faelligkeit IS NULL THEN 1 ELSE 0 END,
+           f.naechste_faelligkeit ASC,
+           f.name COLLATE NOCASE ASC`
+      )
+      .all<Record<string, unknown>>()
+    return (res.results || []).map(mapFaelligkeitRow)
+  } catch (error) {
+    console.error('Error getFaelligkeitenForHub:', error)
+    return []
+  }
+}
+
 export async function getFaelligkeit(db: D1Database, id: string): Promise<Faelligkeit | null> {
   try {
     const row = await db

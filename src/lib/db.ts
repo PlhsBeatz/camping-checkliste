@@ -1330,6 +1330,175 @@ export async function getPackingItems(db: D1Database, vacationId: string): Promi
 }
 
 /**
+ * Hub/Attention: nur Felder für Packfortschritt und Vorgemerkt-Zählung.
+ * Ohne Gewichte, Details, Transport-Joins, Sortierung und Schema-PRAGMA.
+ */
+export async function getPackingItemsForHub(
+  db: D1Database,
+  vacationId: string
+): Promise<PackingItem[]> {
+  try {
+    const query = `
+      SELECT
+        pe.id, pe.packliste_id, pe.gegenstand_id, pe.gepackt, pe.gepackt_vorgemerkt,
+        pe.pauschal_gruppen_modus,
+        CASE WHEN ag.id IS NULL
+          THEN '(Gegenstand fehlt in Ausrüstung — Zeile ' || pe.id || ', Ausrüstung ' || pe.gegenstand_id || ')'
+          ELSE ag.was END AS was,
+        COALESCE(ag.mitreisenden_typ, 'pauschal') AS mitreisenden_typ,
+        CASE WHEN ag.id IS NULL THEN 'Normal' ELSE ag.status END AS status,
+        ag.erst_abreisetag_gepackt AS erst_abreisetag_gepackt,
+        COALESCE(hk.titel, '—') AS hauptkategorie
+      FROM packlisten_eintraege pe
+      JOIN packlisten p ON pe.packliste_id = p.id
+      LEFT JOIN ausruestungsgegenstaende ag ON pe.gegenstand_id = ag.id
+      LEFT JOIN kategorien k ON ag.kategorie_id = k.id
+      LEFT JOIN hauptkategorien hk ON k.hauptkategorie_id = hk.id
+      WHERE p.urlaub_id = ?
+        AND (
+          ag.id IS NULL
+          OR TRIM(COALESCE(ag.status, 'Normal')) NOT IN ('Ausgemustert', 'Fest Installiert')
+        )
+    `
+    const result = await db.prepare(query).bind(vacationId).all<Record<string, unknown>>()
+    const rows = result.results || []
+
+    const mitQuery = `
+      SELECT pem.packlisten_eintrag_id, pem.mitreisender_id, m.name as mitreisender_name,
+             pem.gepackt, pem.gepackt_vorgemerkt
+      FROM packlisten_eintrag_mitreisende pem
+      JOIN mitreisende m ON pem.mitreisender_id = m.id
+      WHERE pem.packlisten_eintrag_id IN (
+        SELECT pe.id FROM packlisten_eintraege pe
+        JOIN packlisten p ON pe.packliste_id = p.id
+        WHERE p.urlaub_id = ?
+      )
+    `
+    const mitResult = await db.prepare(mitQuery).bind(vacationId).all<{
+      packlisten_eintrag_id: string
+      mitreisender_id: string
+      mitreisender_name: string
+      gepackt: number
+      gepackt_vorgemerkt?: number
+    }>()
+    const mitreisendeByEintrag = new Map<string, PackingItem['mitreisende']>()
+    for (const m of mitResult.results || []) {
+      const eid = String(m.packlisten_eintrag_id)
+      const arr = mitreisendeByEintrag.get(eid) || []
+      arr.push({
+        mitreisender_id: String(m.mitreisender_id),
+        mitreisender_name: String(m.mitreisender_name),
+        gepackt: !!m.gepackt,
+        gepackt_vorgemerkt: !!m.gepackt_vorgemerkt,
+      })
+      mitreisendeByEintrag.set(eid, arr)
+    }
+
+    const gruppenByEintrag = await loadPackingItemGruppenForVacation(db, vacationId, false)
+
+    const items: PackingItem[] = []
+    for (const item of rows) {
+      const id = String(item.id)
+      items.push({
+        id,
+        packliste_id: String(item.packliste_id),
+        gegenstand_id: String(item.gegenstand_id),
+        anzahl: 1,
+        gepackt: !!item.gepackt,
+        gepackt_vorgemerkt: !!item.gepackt_vorgemerkt,
+        mitreisenden_typ: String(item.mitreisenden_typ || 'pauschal') as PackingItem['mitreisenden_typ'],
+        mitreisende: mitreisendeByEintrag.get(id) || [],
+        was: String(item.was),
+        kategorie: '',
+        hauptkategorie: String(item.hauptkategorie),
+        status: (() => {
+          const s = item.status != null ? String(item.status).trim() : ''
+          return s === 'Immer gepackt' ? 'Immer gepackt' : s || 'Normal'
+        })(),
+        erst_abreisetag_gepackt: !!item.erst_abreisetag_gepackt,
+        created_at: '',
+        pauschal_gruppen_modus: parsePauschalGruppenModus(item.pauschal_gruppen_modus),
+        gruppen: gruppenByEintrag.get(id) ?? [],
+      })
+    }
+
+    const packlisteIdResult = await db
+      .prepare('SELECT id FROM packlisten WHERE urlaub_id = ?')
+      .bind(vacationId)
+      .first<{ id: string }>()
+    const packlisteId = packlisteIdResult?.id
+    if (packlisteId) {
+      const tempMitQuery = `
+        SELECT pem.packlisten_eintrag_id, pem.mitreisender_id, m.name as mitreisender_name,
+               pem.gepackt, pem.gepackt_vorgemerkt
+        FROM packlisten_eintrag_mitreisende_temporaer pem
+        JOIN mitreisende m ON pem.mitreisender_id = m.id
+        WHERE pem.packlisten_eintrag_id IN (
+          SELECT pet.id FROM packlisten_eintraege_temporaer pet
+          WHERE pet.packliste_id = ?
+        )
+      `
+      const tempMitResult = await db.prepare(tempMitQuery).bind(packlisteId).all<{
+        packlisten_eintrag_id: string
+        mitreisender_id: string
+        mitreisender_name: string
+        gepackt: number
+        gepackt_vorgemerkt?: number
+      }>()
+      const tempMitreisendeByEintrag = new Map<string, PackingItem['mitreisende']>()
+      for (const m of tempMitResult.results || []) {
+        const eid = String(m.packlisten_eintrag_id)
+        const arr = tempMitreisendeByEintrag.get(eid) || []
+        arr.push({
+          mitreisender_id: String(m.mitreisender_id),
+          mitreisender_name: String(m.mitreisender_name),
+          gepackt: !!m.gepackt,
+          gepackt_vorgemerkt: !!m.gepackt_vorgemerkt,
+        })
+        tempMitreisendeByEintrag.set(eid, arr)
+      }
+
+      const tempQuery = `
+        SELECT pet.id, pet.packliste_id, pet.was, pet.gepackt, pet.gepackt_vorgemerkt,
+               pet.pauschal_gruppen_modus, hk.titel as hauptkategorie
+        FROM packlisten_eintraege_temporaer pet
+        JOIN kategorien k ON pet.kategorie_id = k.id
+        JOIN hauptkategorien hk ON k.hauptkategorie_id = hk.id
+        WHERE pet.packliste_id = ?
+      `
+      const tempResult = await db.prepare(tempQuery).bind(packlisteId).all<Record<string, unknown>>()
+      const tempGruppenByEintrag = await loadPackingItemGruppenForVacation(db, vacationId, true)
+      for (const row of tempResult.results || []) {
+        const eid = String(row.id)
+        const tempMit = tempMitreisendeByEintrag.get(eid) || []
+        items.push({
+          id: eid,
+          packliste_id: String(row.packliste_id),
+          gegenstand_id: '',
+          anzahl: 1,
+          gepackt: !!row.gepackt,
+          gepackt_vorgemerkt: !!row.gepackt_vorgemerkt,
+          mitreisenden_typ: tempMit.length > 0 ? 'ausgewaehlte' : 'pauschal',
+          mitreisende: tempMit,
+          was: String(row.was),
+          kategorie: '',
+          hauptkategorie: String(row.hauptkategorie),
+          created_at: '',
+          is_temporaer: true,
+          pauschal_gruppen_modus: parsePauschalGruppenModus(row.pauschal_gruppen_modus),
+          gruppen: tempGruppenByEintrag.get(eid) ?? [],
+        })
+      }
+    }
+
+    return items
+  } catch (error) {
+    console.error('getPackingItemsForHub failed for vacationId=', vacationId, error)
+    return []
+  }
+}
+
+/**
  * Vorgemerk-Status eines Pauschal-Eintrags (für Kind-Berechtigung: nur eigene Vormerkung entfernen)
  */
 export async function getPackingItemPauschalVorgemerkt(
@@ -6143,6 +6312,48 @@ export async function getChecklistenFullTree(db: D1Database): Promise<Checkliste
   }
 }
 
+/** Checklisten-Fortschritt für den Home-Hub – ohne Kategorien/Eintragstexte. */
+export async function getChecklistenHubSummaries(
+  db: D1Database
+): Promise<{ id: string; titel: string; hub_anlass: ChecklisteHubAnlass; done: number; total: number }[]> {
+  try {
+    const [listsRes, countsRes] = await Promise.all([
+      db
+        .prepare('SELECT id, titel, hub_anlass FROM checklisten')
+        .all<{ id: string; titel: string; hub_anlass: string | null }>(),
+      db
+        .prepare(
+          `SELECT checklist_id,
+                  COUNT(*) AS total,
+                  SUM(CASE WHEN erledigt = 1 THEN 1 ELSE 0 END) AS done
+           FROM checklisten_eintraege
+           GROUP BY checklist_id`
+        )
+        .all<{ checklist_id: string; total: number; done: number }>(),
+    ])
+    const counts = new Map<string, { total: number; done: number }>()
+    for (const row of countsRes.results || []) {
+      counts.set(String(row.checklist_id), {
+        total: Number(row.total ?? 0),
+        done: Number(row.done ?? 0),
+      })
+    }
+    return (listsRes.results || []).map((row) => {
+      const c = counts.get(String(row.id))
+      return {
+        id: String(row.id),
+        titel: String(row.titel),
+        hub_anlass: normalizeHubAnlass(row.hub_anlass),
+        done: c?.done ?? 0,
+        total: c?.total ?? 0,
+      }
+    })
+  } catch (error) {
+    console.error('Error getChecklistenHubSummaries:', error)
+    return []
+  }
+}
+
 export async function getChecklisteById(
   db: D1Database,
   checklistId: string
@@ -6629,15 +6840,23 @@ async function attachOptimierungRelations(
   const [linksRes, fotosRes] = await Promise.all([
     db
       .prepare(
-        `SELECT * FROM optimierungen_links WHERE optimierung_id IN (${ph})
+        `SELECT id, optimierung_id, url, reihenfolge, created_at
+         FROM optimierungen_links WHERE optimierung_id IN (${ph})
          ORDER BY optimierung_id, reihenfolge ASC, created_at ASC`
       )
       .bind(...ids)
       .all(),
     db
       .prepare(
-        `SELECT * FROM optimierungen_fotos WHERE optimierung_id IN (${ph})
-         ORDER BY optimierung_id, sort_index ASC, created_at ASC`
+        `SELECT optimierung_id,
+                COUNT(*) AS foto_count,
+                (SELECT f2.id FROM optimierungen_fotos f2
+                 WHERE f2.optimierung_id = f.optimierung_id
+                 ORDER BY f2.sort_index ASC, f2.created_at ASC
+                 LIMIT 1) AS cover_id
+         FROM optimierungen_fotos f
+         WHERE f.optimierung_id IN (${ph})
+         GROUP BY f.optimierung_id`
       )
       .bind(...ids)
       .all(),
@@ -6653,11 +6872,11 @@ async function attachOptimierungRelations(
 
   const fotoMetaByOpt = new Map<string, { count: number; coverId: string | null }>()
   for (const row of (fotosRes.results || []) as Record<string, unknown>[]) {
-    const foto = mapOptimierungFotoRow(row)
-    const prev = fotoMetaByOpt.get(foto.optimierung_id) ?? { count: 0, coverId: null }
-    if (prev.coverId == null) prev.coverId = foto.id
-    prev.count += 1
-    fotoMetaByOpt.set(foto.optimierung_id, prev)
+    const optId = String(row.optimierung_id)
+    fotoMetaByOpt.set(optId, {
+      count: Number(row.foto_count ?? 0),
+      coverId: row.cover_id != null ? String(row.cover_id) : null,
+    })
   }
 
   return items.map((item) => {
@@ -6673,17 +6892,32 @@ async function attachOptimierungRelations(
 
 export async function getOptimierungen(
   db: D1Database,
-  statusFilter?: OptimierungStatus
+  statusFilter?: OptimierungStatus,
+  options?: { relations?: boolean }
 ): Promise<Optimierung[]> {
   try {
-    const res = statusFilter
-      ? await db
-          .prepare('SELECT * FROM optimierungen WHERE status = ?')
-          .bind(statusFilter)
-          .all()
-      : await db.prepare('SELECT * FROM optimierungen').all()
+    const slim = options?.relations === false
+    let sql: string
+    const binds: string[] = []
+    if (slim) {
+      sql = `SELECT id, titel, status, zeitfenster, faelligkeit_modus, faellig_am, reihenfolge, created_at
+             FROM optimierungen
+             WHERE status IN ('geplant', 'in_arbeit')`
+      if (statusFilter) {
+        sql += ' AND status = ?'
+        binds.push(statusFilter)
+      }
+    } else if (statusFilter) {
+      sql = 'SELECT * FROM optimierungen WHERE status = ?'
+      binds.push(statusFilter)
+    } else {
+      sql = 'SELECT * FROM optimierungen'
+    }
+    const res =
+      binds.length > 0 ? await db.prepare(sql).bind(...binds).all() : await db.prepare(sql).all()
     const rows = (res.results || []) as Record<string, unknown>[]
     const sorted = sortOptimierungen(rows.map(mapOptimierungRow))
+    if (slim) return sorted
     return attachOptimierungRelations(db, sorted)
   } catch (error) {
     console.error('Error getOptimierungen:', error)
@@ -7200,6 +7434,40 @@ export async function getRastplaetze(
     return (result.results || []).map((row) => mapRastplatzRow(row))
   } catch (error) {
     console.error('Error fetching rastplaetze:', error)
+    return []
+  }
+}
+
+/** Hub-Travel-Nav: nur Koordinaten/Bewertung, ohne Bemerkungen und Merkmale. */
+export async function getRastplaetzeForHub(db: D1Database): Promise<Rastplatz[]> {
+  try {
+    const result = await db
+      .prepare(
+        `SELECT id, name, bewertung, lat, lng, google_place_id
+         FROM rastplaetze WHERE is_archived = 0`
+      )
+      .all<Record<string, unknown>>()
+    return (result.results || []).map((row) => ({
+      id: String(row.id),
+      name: String(row.name),
+      bewertung: String(row.bewertung) as Rastplatz['bewertung'],
+      kategorie: 'sonstiges' as Rastplatz['kategorie'],
+      merkmale: [],
+      bemerkungen: null,
+      adresse: null,
+      ort: null,
+      land: null,
+      bundesland: null,
+      lat: Number(row.lat),
+      lng: Number(row.lng),
+      google_place_id: row.google_place_id != null ? String(row.google_place_id) : null,
+      entdeckt_urlaub_id: null,
+      entdeckt_am: null,
+      is_archived: false,
+      created_at: '',
+    }))
+  } catch (error) {
+    console.error('Error fetching rastplaetze for hub:', error)
     return []
   }
 }

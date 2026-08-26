@@ -130,7 +130,7 @@ function HeuteHubContent() {
     const userPosition = pos === undefined ? positionRef.current : pos
     if (userPosition) positionRef.current = userPosition
     try {
-      const res = await fetch(`/api/attention?_=${Date.now()}${attentionCoordsQuery(userPosition)}`, {
+      const res = await fetch(`/api/attention${attentionCoordsQuery(userPosition).replace(/^&/, '?')}`, {
         cache: 'no-store',
       })
       const json = (await res.json()) as ApiResponse<AttentionFeed>
@@ -138,6 +138,7 @@ function HeuteHubContent() {
         setFeed(json.data)
         setError(null)
         await cacheAttentionFeed(json.data)
+        notifyAttentionChanged(json.data.badgeCount)
         return
       }
       throw new Error(json.error || 'Laden fehlgeschlagen')
@@ -146,6 +147,7 @@ function HeuteHubContent() {
       if (cached) {
         setFeed(cached)
         setError(null)
+        notifyAttentionChanged(cached.badgeCount)
         return
       }
       setError(e instanceof Error ? e.message : 'Laden fehlgeschlagen')
@@ -163,8 +165,12 @@ function HeuteHubContent() {
       const live = await getLiveAttentionPosition()
       if (cancelled || !live) return
       await rememberAttentionPosition(live)
+      const sameSpot =
+        cached != null &&
+        Math.abs(cached.lat - live.lat) < 0.0008 &&
+        Math.abs(cached.lng - live.lng) < 0.0008
+      if (sameSpot) return
       await load(live)
-      notifyAttentionChanged()
     }
     void run()
     return () => {
@@ -197,7 +203,7 @@ function HeuteHubContent() {
       setFeed(json.data)
       setSnoozeOpenKey(null)
       await cacheAttentionFeed(json.data)
-      notifyAttentionChanged()
+      notifyAttentionChanged(json.data.badgeCount)
     } finally {
       setSnoozingKey(null)
     }

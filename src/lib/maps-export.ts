@@ -111,15 +111,14 @@ export function selectRastplaetzeForSegment(
 ): Rastplatz[] {
   const onlyEmpfehlung = options?.onlyEmpfehlung !== false
   const maxCount = options?.maxCount ?? 9
-  const along = getRastplaetzeAlongSegment(segment, rastplaetze, {
+  const candidates = onlyEmpfehlung
+    ? rastplaetze.filter((r) => r.bewertung === 'empfehlung')
+    : rastplaetze
+  const along = getRastplaetzeAlongSegment(segment, candidates, {
     encodedPolyline: options?.encodedPolyline,
     routeProvider: options?.routeProvider,
   })
-  const filtered = onlyEmpfehlung
-    ? along.filter((r) => r.bewertung === 'empfehlung')
-    : along
-
-  const scored = filtered
+  const scored = along
     .map((r) => {
       const dFrom = haversineDistanceKm({
         lat1: segment.from.lat,
