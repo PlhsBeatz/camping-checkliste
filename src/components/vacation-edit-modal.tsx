@@ -9,9 +9,11 @@ import { MitreisendeManager } from '@/components/mitreisende-manager'
 import { cn } from '@/lib/utils'
 import { getCachedCampingplaetze } from '@/lib/offline-sync'
 import type { ApiResponse } from '@/lib/api-types'
-import type { Campingplatz, Mitreisender, Vacation } from '@/lib/db'
+import type { Campingplatz, Mitreisender, Vacation, VacationCampingStay } from '@/lib/db'
+import { CampingStayBookingPanel } from '@/components/camping-stay-booking-panel'
+import { StayDateRangePicker } from '@/components/stay-date-range-picker'
 import { deriveReisezielName } from '@/lib/vacation-helpers'
-import { addDays, differenceInCalendarDays, format } from 'date-fns'
+import { addDays, format } from 'date-fns'
 import { de } from 'date-fns/locale'
 import type { DateRange } from 'react-day-picker'
 import { Calendar } from '@/components/ui/calendar'
@@ -122,13 +124,6 @@ function useFlipReorder() {
   return register
 }
 
-/** Anzahl Nächte zwischen zwei ISO-Daten (>= 0). */
-function nightsBetween(start: string, end: string): number {
-  if (!start || !end) return 0
-  const diff = differenceInCalendarDays(new Date(end), new Date(start))
-  return diff > 0 ? diff : 0
-}
-
 /**
  * Vorbelegung für einen neu hinzugefügten Aufenthalt:
  * im Anschluss an den spätesten datierten Aufenthalt (1 Nacht), sonst der Seed-Zeitraum.
@@ -203,44 +198,6 @@ function StayRow({
   onChangeDates: (startDatum: string, endDatum: string) => void
   onRemove: () => void
 }) {
-  const isSmallViewport = useIsSmallViewport()
-  const [open, setOpen] = useState(false)
-  const [draftRange, setDraftRange] = useState<DateRange | undefined>(undefined)
-
-  const hasDates = Boolean(stay.startDatum && stay.endDatum)
-  const nights = hasDates ? nightsBetween(stay.startDatum, stay.endDatum) : 0
-
-  const selectedRange: DateRange | undefined =
-    stay.startDatum && stay.endDatum
-      ? { from: new Date(stay.startDatum), to: new Date(stay.endDatum) }
-      : stay.startDatum
-      ? { from: new Date(stay.startDatum), to: new Date(stay.startDatum) }
-      : undefined
-
-  const handleSelect = (range: DateRange | undefined) => {
-    if (range?.from) setDraftRange({ from: range.from, to: range.to ?? range.from })
-  }
-
-  const confirmRange = () => {
-    if (!draftRange?.from) return
-    onChangeDates(
-      format(draftRange.from, 'yyyy-MM-dd'),
-      format((draftRange.to ?? draftRange.from)!, 'yyyy-MM-dd')
-    )
-    setOpen(false)
-    setDraftRange(undefined)
-  }
-
-  const triggerLabel = hasDates ? (
-    <span className="truncate">
-      {format(new Date(stay.startDatum), 'dd.MM.yy', { locale: de })} –{' '}
-      {format(new Date(stay.endDatum), 'dd.MM.yy', { locale: de })}
-      {nights > 0 && ` · ${nights} ${nights === 1 ? 'Nacht' : 'Nächte'}`}
-    </span>
-  ) : (
-    <span>Dauer wählen</span>
-  )
-
   return (
     <div className="flex items-start gap-2 py-2 px-2 rounded-md bg-muted/60 border border-muted-foreground/10">
       <div className="flex-1 min-w-0 space-y-1.5">
@@ -255,115 +212,13 @@ function StayRow({
             </div>
           )}
         </div>
-        {isSmallViewport ? (
-          <>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className={cn(
-                'h-8 w-full justify-start text-left font-normal',
-                !hasDates && 'text-muted-foreground'
-              )}
-              onClick={() => {
-                setDraftRange(selectedRange)
-                setOpen(true)
-              }}
-            >
-              <CalendarIcon className="mr-2 h-3.5 w-3.5 shrink-0" />
-              {triggerLabel}
-            </Button>
-            <Dialog
-              open={open}
-              onOpenChange={(isOpen) => {
-                setOpen(isOpen)
-                if (!isOpen) setDraftRange(undefined)
-              }}
-            >
-              <DialogContent className="p-0 gap-0 w-[calc(100vw-2rem)] max-w-[420px] max-h-[90vh] overflow-y-auto">
-                <DialogHeader className="px-3 pt-2 pb-0">
-                  <DialogTitle>Dauer wählen</DialogTitle>
-                </DialogHeader>
-                <div className="flex justify-center w-full px-2">
-                  <Calendar
-                    mode="range"
-                    className="p-2"
-                    classNames={{
-                      months: 'flex flex-col sm:flex-row space-y-1 sm:space-x-4 sm:space-y-0',
-                      month: 'space-y-1',
-                    }}
-                    defaultMonth={draftRange?.from ?? selectedRange?.from ?? new Date()}
-                    selected={draftRange ?? selectedRange}
-                    onSelect={handleSelect}
-                    locale={de}
-                    numberOfMonths={2}
-                  />
-                </div>
-                <div className="flex gap-2 p-2 pt-4 bg-muted/30">
-                  <Button
-                    type="button"
-                    size="sm"
-                    className="flex-1 bg-[rgb(45,79,30)] text-white hover:bg-[rgb(45,79,30)]/90 hover:text-white border-[rgb(45,79,30)]"
-                    disabled={!draftRange?.from}
-                    onClick={confirmRange}
-                  >
-                    OK
-                  </Button>
-                </div>
-              </DialogContent>
-            </Dialog>
-          </>
-        ) : (
-          <Popover
-            open={open}
-            onOpenChange={(isOpen) => {
-              setOpen(isOpen)
-              if (isOpen) setDraftRange(selectedRange)
-              else setDraftRange(undefined)
-            }}
-          >
-            <PopoverTrigger asChild>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className={cn(
-                  'h-8 justify-start text-left font-normal',
-                  !hasDates && 'text-muted-foreground'
-                )}
-              >
-                <CalendarIcon className="mr-2 h-3.5 w-3.5 shrink-0" />
-                {triggerLabel}
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-auto p-0 bg-card max-h-[80vh] overflow-y-auto" align="start">
-              <Calendar
-                mode="range"
-                className="p-2"
-                classNames={{
-                  months: 'flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-4',
-                  month: 'space-y-1',
-                }}
-                defaultMonth={draftRange?.from ?? selectedRange?.from ?? new Date()}
-                selected={draftRange ?? selectedRange}
-                onSelect={handleSelect}
-                locale={de}
-                numberOfMonths={2}
-              />
-              <div className="flex gap-2 p-3 pt-4 bg-muted/30">
-                <Button
-                  type="button"
-                  size="sm"
-                  className="flex-1 bg-[rgb(45,79,30)] text-white hover:bg-[rgb(45,79,30)]/90 hover:text-white border-[rgb(45,79,30)]"
-                  disabled={!draftRange?.from}
-                  onClick={confirmRange}
-                >
-                  OK
-                </Button>
-              </div>
-            </PopoverContent>
-          </Popover>
-        )}
+        <StayDateRangePicker
+          startDatum={stay.startDatum}
+          endDatum={stay.endDatum}
+          onChange={onChangeDates}
+          dialogTitle="Dauer wählen"
+          emptyLabel="Dauer wählen"
+        />
         {overlapHint && <p className="text-xs text-amber-600">{overlapHint}</p>}
       </div>
       <Button
@@ -390,6 +245,7 @@ export function VacationEditModal({
   const [isLoading, setIsLoading] = useState(false)
   const [allCampingplaetze, setAllCampingplaetze] = useState<Campingplatz[]>([])
   const [stays, setStays] = useState<StayDraft[]>([])
+  const [apiStaysByKey, setApiStaysByKey] = useState<Record<string, VacationCampingStay>>({})
   const [campingSearchOpen, setCampingSearchOpen] = useState(false)
   const [vacationMitreisende, setVacationMitreisende] = useState<Mitreisender[]>([])
   const [newVacationForm, setNewVacationForm] = useState<VacationFormState>(emptyVacationForm)
@@ -460,6 +316,7 @@ export function VacationEditModal({
     setNewVacationForm(emptyVacationForm())
     setVacationMitreisende([])
     setStays([])
+    setApiStaysByKey({})
     setCampingSearchOpen(false)
     setShowVacationSettingsModal(false)
     setAbfahrtPopoverOpen(false)
@@ -525,15 +382,21 @@ export function VacationEditModal({
           setVacationMitreisende(payload.mitreisende ?? [])
           const apiStays = payload.stays ?? []
           if (apiStays.length > 0) {
+            const byKey: Record<string, VacationCampingStay> = {}
             setStays(
-              apiStays.map((s) => ({
-                key: s.id || crypto.randomUUID(),
-                campingplatzId: s.campingplatz_id,
-                startDatum: s.start_datum ?? '',
-                endDatum: s.end_datum ?? '',
-              }))
+              apiStays.map((s) => {
+                if (s.id) byKey[s.id] = s as VacationCampingStay
+                return {
+                  key: s.id || crypto.randomUUID(),
+                  campingplatzId: s.campingplatz_id,
+                  startDatum: s.start_datum ?? '',
+                  endDatum: s.end_datum ?? '',
+                }
+              })
             )
+            setApiStaysByKey(byKey)
           } else {
+            setApiStaysByKey({})
             // Fallback (z. B. veraltete Antwort ohne stays): Plätze ohne Datum übernehmen.
             setStays(
               (payload.campingplaetze ?? []).map((c) => ({
@@ -617,6 +480,7 @@ export function VacationEditModal({
             body: JSON.stringify({
               urlaubId: vacationIdForCamping,
               stays: sortedStays.map((s) => ({
+                id: s.key,
                 campingplatzId: s.campingplatzId,
                 startDatum: s.startDatum || null,
                 endDatum: s.endDatum || null,
@@ -1119,6 +983,24 @@ export function VacationEditModal({
                           setStays((prev) => prev.filter((s) => s.key !== stay.key))
                         }
                       />
+                      {apiStaysByKey[stay.key] ? (
+                        <CampingStayBookingPanel
+                          stay={apiStaysByKey[stay.key]!}
+                          canEdit
+                          onSaved={async () => {
+                            if (!vacationId) return
+                            const res = await fetch(`/api/vacations/${vacationId}`)
+                            const data = (await res.json()) as ApiResponse<VacationEditResponse>
+                            if (data.success && data.data?.stays) {
+                              const byKey: Record<string, VacationCampingStay> = {}
+                              for (const s of data.data.stays) {
+                                if (s.id) byKey[s.id] = s as VacationCampingStay
+                              }
+                              setApiStaysByKey(byKey)
+                            }
+                          }}
+                        />
+                      ) : null}
                     </div>
                   ))
                 )}

@@ -57,6 +57,8 @@ export async function PUT(request: NextRequest) {
       vacationId?: string
       campingplatzIds?: string[]
       stays?: Array<{
+        id?: string
+        stayId?: string
         campingplatzId?: string
         campingplatz_id?: string
         startDatum?: string | null
@@ -81,6 +83,7 @@ export async function PUT(request: NextRequest) {
     if (Array.isArray(body.stays)) {
       stays = body.stays
         .map((s) => ({
+          id: s.stayId ?? s.id ?? null,
           campingplatz_id: String(s.campingplatzId ?? s.campingplatz_id ?? ''),
           start_datum: s.startDatum ?? s.start_datum ?? null,
           end_datum: s.endDatum ?? s.end_datum ?? null,

@@ -90,6 +90,9 @@ export async function POST(request: NextRequest) {
       photo_name?: string | null
       aufwunschliste?: boolean
       top_favorit?: boolean
+      platzplan_url?: string | null
+      platzplan_url_vorlage?: string | null
+      platzplan_hinweis?: string | null
     }
 
     if (!body.name || !body.land || !body.ort || !body.platz_typ) {
@@ -122,6 +125,18 @@ export async function POST(request: NextRequest) {
         { success: false, error: 'Failed to create campingplatz' },
         { status: 500 }
       )
+    }
+
+    if (
+      body.platzplan_url != null ||
+      body.platzplan_url_vorlage != null ||
+      body.platzplan_hinweis != null
+    ) {
+      await updateCampingplatz(db, campingplatz.id, {
+        platzplan_url: body.platzplan_url ?? null,
+        platzplan_url_vorlage: body.platzplan_url_vorlage ?? null,
+        platzplan_hinweis: body.platzplan_hinweis ?? null,
+      })
     }
 
     if (
@@ -175,6 +190,9 @@ export async function PUT(request: NextRequest) {
       is_archived?: boolean
       aufwunschliste?: boolean
       top_favorit?: boolean
+      platzplan_url?: string | null
+      platzplan_url_vorlage?: string | null
+      platzplan_hinweis?: string | null
     }
 
     if (!body.id) {
@@ -199,6 +217,9 @@ export async function PUT(request: NextRequest) {
       is_archived: body.is_archived,
       aufwunschliste: body.aufwunschliste,
       top_favorit: body.top_favorit,
+      platzplan_url: body.platzplan_url ?? null,
+      platzplan_url_vorlage: body.platzplan_url_vorlage ?? null,
+      platzplan_hinweis: body.platzplan_hinweis ?? null,
     })
 
     if (!updated) {

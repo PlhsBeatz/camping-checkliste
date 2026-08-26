@@ -6,6 +6,7 @@
 
 import { default as handler } from './.open-next/worker.js'
 import { PackingSyncDO } from './src/durable-objects/PackingSyncDO'
+import { ingestBookingEmail } from './src/lib/booking-db'
 
 export { PackingSyncDO }
 
@@ -32,7 +33,8 @@ function equipmentCacheKey(url: URL): Request {
 
 interface WorkerEnv {
   PACKING_SYNC_DO: DurableObjectNamespace
-  DB?: unknown
+  DB?: D1Database
+  CAMPING_PHOTOS?: R2Bucket
   ASSETS?: Fetcher
   INTEGRATION_CRON_SECRET?: string
 }
@@ -89,6 +91,18 @@ export default {
     }
 
     return handler.fetch(request, env, ctx)
+  },
+
+  async email(
+    message: ForwardableEmailMessage,
+    env: WorkerEnv,
+    ctx: ExecutionContext
+  ): Promise<void> {
+    if (!env.DB) {
+      console.error('DB binding missing — cannot ingest booking email')
+      return
+    }
+    ctx.waitUntil(ingestBookingEmail(message, env))
   },
 
   async scheduled(

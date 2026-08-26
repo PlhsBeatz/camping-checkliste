@@ -259,6 +259,11 @@ export interface Campingplatz {
   aufwunschliste: boolean
   /** Top-Lieblingsplatz */
   top_favorit: boolean
+  /** Link zum Platzplan auf der Plätze-Webseite */
+  platzplan_url?: string | null
+  /** URL-Vorlage mit {platznummer} Platzhalter */
+  platzplan_url_vorlage?: string | null
+  platzplan_hinweis?: string | null
   created_at: string
   updated_at?: string
   /** Aus JOIN campingplatz_fotos (is_cover = 1) */
@@ -349,6 +354,22 @@ export interface VacationCampingStay {
   end_datum: string | null
   sort_index: number | null
   notizen: string | null
+  platznummer?: string | null
+  buchungsnummer?: string | null
+  buchungsstatus?: string | null
+  checkin_zeit?: string | null
+  checkout_zeit?: string | null
+  zugangscode?: string | null
+  unterkunftstyp?: string | null
+  preis_gesamt?: number | null
+  waehrung?: string | null
+  anzahlung_betrag?: number | null
+  restzahlung_faellig_am?: string | null
+  buchungsdatum?: string | null
+  stornierungsfrist?: string | null
+  extras_json?: string | null
+  kontakt_platz?: string | null
+  notizen_buchung?: string | null
   created_at: string
   campingplatz: Campingplatz
 }
@@ -564,6 +585,11 @@ function mapCampingplatzRow(row: Record<string, unknown>): Campingplatz {
         ? true
         : !!(row.aufwunschliste ?? 0),
     top_favorit: !!(row.top_favorit ?? 0),
+    platzplan_url: row.platzplan_url != null ? String(row.platzplan_url) : null,
+    platzplan_url_vorlage:
+      row.platzplan_url_vorlage != null ? String(row.platzplan_url_vorlage) : null,
+    platzplan_hinweis:
+      row.platzplan_hinweis != null ? String(row.platzplan_hinweis) : null,
     created_at: String(row.created_at || ''),
     updated_at: row.updated_at != null ? String(row.updated_at) : undefined,
     cover_foto_id:
@@ -5506,6 +5532,9 @@ export async function updateCampingplatz(
     is_archived: boolean
     aufwunschliste: boolean
     top_favorit: boolean
+    platzplan_url: string | null
+    platzplan_url_vorlage: string | null
+    platzplan_hinweis: string | null
   }>
 ): Promise<Campingplatz | null> {
   try {
@@ -5575,6 +5604,18 @@ export async function updateCampingplatz(
     if (updates.top_favorit !== undefined) {
       fields.push('top_favorit = ?')
       values.push(updates.top_favorit ? 1 : 0)
+    }
+    if (updates.platzplan_url !== undefined) {
+      fields.push('platzplan_url = ?')
+      values.push(updates.platzplan_url)
+    }
+    if (updates.platzplan_url_vorlage !== undefined) {
+      fields.push('platzplan_url_vorlage = ?')
+      values.push(updates.platzplan_url_vorlage)
+    }
+    if (updates.platzplan_hinweis !== undefined) {
+      fields.push('platzplan_hinweis = ?')
+      values.push(updates.platzplan_hinweis)
     }
 
     if (fields.length === 0) {
@@ -5659,42 +5700,135 @@ export async function getCampingplaetzeForVacation(
  * sortiert nach Startdatum (ohne Datum zuletzt). Mehrfachzuordnungen bleiben als
  * separate Einträge erhalten.
  */
-export async function getCampingStaysForVacation(
-  db: D1Database,
-  vacationId: string
-): Promise<VacationCampingStay[]> {
-  try {
-    const result = await db
-      .prepare(
-        `SELECT c.*, cf.id AS cover_foto_id, cf.r2_object_key AS cover_r2_object_key,
-         cf.google_photo_name AS cover_google_photo_name,
-         uc.id AS stay_id, uc.urlaub_id AS stay_urlaub_id, uc.campingplatz_id AS stay_campingplatz_id,
-         uc.start_datum AS stay_start, uc.end_datum AS stay_end,
-         uc.sort_index AS stay_sort, uc.notizen AS stay_notizen, uc.created_at AS stay_created_at
+function mapVacationCampingStayRow(
+  row: Record<string, unknown>,
+  withBookingFields: boolean
+): VacationCampingStay {
+  return {
+    id: String(row.stay_id),
+    urlaub_id: String(row.stay_urlaub_id),
+    campingplatz_id: String(row.stay_campingplatz_id),
+    start_datum: row.stay_start != null ? String(row.stay_start) : null,
+    end_datum: row.stay_end != null ? String(row.stay_end) : null,
+    sort_index: row.stay_sort != null ? Number(row.stay_sort) : null,
+    notizen: row.stay_notizen != null ? String(row.stay_notizen) : null,
+    platznummer:
+      withBookingFields && row.stay_platznummer != null
+        ? String(row.stay_platznummer)
+        : null,
+    buchungsnummer:
+      withBookingFields && row.stay_buchungsnummer != null
+        ? String(row.stay_buchungsnummer)
+        : null,
+    buchungsstatus:
+      withBookingFields && row.stay_buchungsstatus != null
+        ? String(row.stay_buchungsstatus)
+        : null,
+    checkin_zeit:
+      withBookingFields && row.stay_checkin_zeit != null
+        ? String(row.stay_checkin_zeit)
+        : null,
+    checkout_zeit:
+      withBookingFields && row.stay_checkout_zeit != null
+        ? String(row.stay_checkout_zeit)
+        : null,
+    zugangscode:
+      withBookingFields && row.stay_zugangscode != null
+        ? String(row.stay_zugangscode)
+        : null,
+    unterkunftstyp:
+      withBookingFields && row.stay_unterkunftstyp != null
+        ? String(row.stay_unterkunftstyp)
+        : null,
+    preis_gesamt:
+      withBookingFields && row.stay_preis_gesamt != null
+        ? Number(row.stay_preis_gesamt)
+        : null,
+    waehrung:
+      withBookingFields && row.stay_waehrung != null ? String(row.stay_waehrung) : null,
+    anzahlung_betrag:
+      withBookingFields && row.stay_anzahlung_betrag != null
+        ? Number(row.stay_anzahlung_betrag)
+        : null,
+    restzahlung_faellig_am:
+      withBookingFields && row.stay_restzahlung_faellig_am != null
+        ? String(row.stay_restzahlung_faellig_am)
+        : null,
+    buchungsdatum:
+      withBookingFields && row.stay_buchungsdatum != null
+        ? String(row.stay_buchungsdatum)
+        : null,
+    stornierungsfrist:
+      withBookingFields && row.stay_stornierungsfrist != null
+        ? String(row.stay_stornierungsfrist)
+        : null,
+    extras_json:
+      withBookingFields && row.stay_extras_json != null
+        ? String(row.stay_extras_json)
+        : null,
+    kontakt_platz:
+      withBookingFields && row.stay_kontakt_platz != null
+        ? String(row.stay_kontakt_platz)
+        : null,
+    notizen_buchung:
+      withBookingFields && row.stay_notizen_buchung != null
+        ? String(row.stay_notizen_buchung)
+        : null,
+    created_at: String(row.stay_created_at || ''),
+    campingplatz: mapCampingplatzRow(row),
+  }
+}
+
+const CAMPING_STAY_JOIN = `
          FROM urlaub_campingplaetze uc
          JOIN campingplaetze c ON uc.campingplatz_id = c.id
          LEFT JOIN campingplatz_fotos cf ON cf.campingplatz_id = c.id AND cf.is_cover = 1
          WHERE uc.urlaub_id = ?
          ORDER BY (uc.start_datum IS NULL), uc.start_datum, COALESCE(uc.sort_index, 999999), c.name`
+
+export async function getCampingStaysForVacation(
+  db: D1Database,
+  vacationId: string
+): Promise<VacationCampingStay[]> {
+  const baseSelect = `SELECT c.*, cf.id AS cover_foto_id, cf.r2_object_key AS cover_r2_object_key,
+         cf.google_photo_name AS cover_google_photo_name,
+         uc.id AS stay_id, uc.urlaub_id AS stay_urlaub_id, uc.campingplatz_id AS stay_campingplatz_id,
+         uc.start_datum AS stay_start, uc.end_datum AS stay_end,
+         uc.sort_index AS stay_sort, uc.notizen AS stay_notizen,
+         uc.created_at AS stay_created_at`
+
+  const bookingSelect = `,
+         uc.platznummer AS stay_platznummer, uc.buchungsnummer AS stay_buchungsnummer,
+         uc.buchungsstatus AS stay_buchungsstatus, uc.checkin_zeit AS stay_checkin_zeit,
+         uc.checkout_zeit AS stay_checkout_zeit, uc.zugangscode AS stay_zugangscode,
+         uc.unterkunftstyp AS stay_unterkunftstyp, uc.preis_gesamt AS stay_preis_gesamt,
+         uc.waehrung AS stay_waehrung, uc.anzahlung_betrag AS stay_anzahlung_betrag,
+         uc.restzahlung_faellig_am AS stay_restzahlung_faellig_am,
+         uc.buchungsdatum AS stay_buchungsdatum, uc.stornierungsfrist AS stay_stornierungsfrist,
+         uc.extras_json AS stay_extras_json, uc.kontakt_platz AS stay_kontakt_platz,
+         uc.notizen_buchung AS stay_notizen_buchung`
+
+  for (const withBooking of [true, false]) {
+    try {
+      const select = withBooking ? baseSelect + bookingSelect : baseSelect
+      const result = await db
+        .prepare(select + CAMPING_STAY_JOIN)
+        .bind(vacationId)
+        .all<Record<string, unknown>>()
+      const rows = result.results || []
+      return rows.map((row) => mapVacationCampingStayRow(row, withBooking))
+    } catch (error) {
+      if (!withBooking) {
+        console.error('Error fetching camping stays for vacation:', error)
+        return []
+      }
+      console.warn(
+        'Camping stays query without booking columns (Migration 0049 fehlt?) – Fallback wird versucht:',
+        error
       )
-      .bind(vacationId)
-      .all<Record<string, unknown>>()
-    const rows = result.results || []
-    return rows.map((row) => ({
-      id: String(row.stay_id),
-      urlaub_id: String(row.stay_urlaub_id),
-      campingplatz_id: String(row.stay_campingplatz_id),
-      start_datum: row.stay_start != null ? String(row.stay_start) : null,
-      end_datum: row.stay_end != null ? String(row.stay_end) : null,
-      sort_index: row.stay_sort != null ? Number(row.stay_sort) : null,
-      notizen: row.stay_notizen != null ? String(row.stay_notizen) : null,
-      created_at: String(row.stay_created_at || ''),
-      campingplatz: mapCampingplatzRow(row),
-    }))
-  } catch (error) {
-    console.error('Error fetching camping stays for vacation:', error)
-    return []
+    }
   }
+  return []
 }
 
 /** Alle Campingplätze für mehrere Urlaube in wenigen Datenbank-Runden (eine Query pro Chunk). */
@@ -5745,6 +5879,7 @@ export async function getCampingplaetzeForVacationsBatch(
 }
 
 export type CampingStayInput = {
+  id?: string | null
   campingplatz_id: string
   start_datum?: string | null
   end_datum?: string | null
@@ -5762,35 +5897,8 @@ export async function setCampingplaetzeForVacation(
   vacationId: string,
   stays: CampingStayInput[]
 ): Promise<boolean> {
-  try {
-    await db
-      .prepare('DELETE FROM urlaub_campingplaetze WHERE urlaub_id = ?')
-      .bind(vacationId)
-      .run()
-    for (let index = 0; index < stays.length; index++) {
-      const stay = stays[index]
-      if (!stay || !stay.campingplatz_id) continue
-      await db
-        .prepare(
-          'INSERT INTO urlaub_campingplaetze (id, urlaub_id, campingplatz_id, start_datum, end_datum, notizen, sort_index) VALUES (?, ?, ?, ?, ?, ?, ?)'
-        )
-        .bind(
-          crypto.randomUUID(),
-          vacationId,
-          stay.campingplatz_id,
-          stay.start_datum || null,
-          stay.end_datum || null,
-          stay.notizen || null,
-          index
-        )
-        .run()
-    }
-    await deriveAndPersistVacationDates(db, vacationId)
-    return true
-  } catch (error) {
-    console.error('Error setting campingplaetze for vacation:', error)
-    return false
-  }
+  const { setCampingplaetzeForVacationPreservingBooking } = await import('./booking-db')
+  return setCampingplaetzeForVacationPreservingBooking(db, vacationId, stays)
 }
 
 /**

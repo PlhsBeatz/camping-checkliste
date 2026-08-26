@@ -9,6 +9,7 @@ import { Campingplatz, type CampingplatzFoto } from '@/lib/db'
 import { ResponsiveModal } from '@/components/ui/responsive-modal'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
 import { CampingplatzAddressAutocomplete, type PlacePhotoForPicker } from '@/components/campingplatz-address-autocomplete'
 import Image from 'next/image'
 import { placesPhotoProxyUrl } from '@/lib/places-photo'
@@ -39,6 +40,9 @@ interface CampingplatzFormState {
   cons: string[]
   aufwunschliste: boolean
   top_favorit: boolean
+  platzplan_url: string
+  platzplan_url_vorlage: string
+  platzplan_hinweis: string
 }
 
 /** UI: Fotos pro Rasterseite (Google liefert max. 10 pro Place-Details-Antwort, ohne Pagination). */
@@ -61,6 +65,9 @@ function createEmptyForm(): CampingplatzFormState {
     cons: [''],
     aufwunschliste: true,
     top_favorit: false,
+    platzplan_url: '',
+    platzplan_url_vorlage: '',
+    platzplan_hinweis: '',
   }
 }
 
@@ -122,6 +129,9 @@ export function CampingplatzEditModal({
         aufwunschliste:
           (initialCampingplatz as { aufwunschliste?: boolean }).aufwunschliste !== false,
         top_favorit: !!(initialCampingplatz as { top_favorit?: boolean }).top_favorit,
+        platzplan_url: initialCampingplatz.platzplan_url ?? '',
+        platzplan_url_vorlage: initialCampingplatz.platzplan_url_vorlage ?? '',
+        platzplan_hinweis: initialCampingplatz.platzplan_hinweis ?? '',
       })
     } else {
       setEditId(null)
@@ -348,6 +358,9 @@ export function CampingplatzEditModal({
         cons: string[]
         aufwunschliste: boolean
         top_favorit: boolean
+        platzplan_url: string | null
+        platzplan_url_vorlage: string | null
+        platzplan_hinweis: string | null
       } = {
         id: editId ?? undefined,
         name: form.name.trim(),
@@ -364,6 +377,9 @@ export function CampingplatzEditModal({
         cons: form.cons.map((p) => p.trim()).filter((p) => p.length > 0),
         aufwunschliste: form.aufwunschliste,
         top_favorit: form.top_favorit,
+        platzplan_url: form.platzplan_url.trim() || null,
+        platzplan_url_vorlage: form.platzplan_url_vorlage.trim() || null,
+        platzplan_hinweis: form.platzplan_hinweis.trim() || null,
       }
       if (editId) {
         if (savedFotos.length > 0) payload.photo_name = coverGoogle
@@ -549,6 +565,46 @@ export function CampingplatzEditModal({
                   setForm((prev) => ({ ...prev, video_link: e.target.value }))
                 }
                 placeholder="https://youtube.com/..."
+              />
+            </div>
+          </div>
+          <div className="space-y-3 rounded-lg border border-dashed p-3">
+            <p className="text-sm font-medium">Platzplan</p>
+            <div>
+              <Label htmlFor="cp-platzplan-url">Platzplan-URL</Label>
+              <Input
+                id="cp-platzplan-url"
+                value={form.platzplan_url}
+                onChange={(e) =>
+                  setForm((prev) => ({ ...prev, platzplan_url: e.target.value }))
+                }
+                placeholder="https://…/lageplan.pdf"
+              />
+            </div>
+            <div>
+              <Label htmlFor="cp-platzplan-vorlage">URL-Vorlage (optional)</Label>
+              <Input
+                id="cp-platzplan-vorlage"
+                value={form.platzplan_url_vorlage}
+                onChange={(e) =>
+                  setForm((prev) => ({ ...prev, platzplan_url_vorlage: e.target.value }))
+                }
+                placeholder="https://…?platz={platznummer}"
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Platzhalter <code>{'{platznummer}'}</code> wird durch die Buchungs-Platznummer ersetzt.
+              </p>
+            </div>
+            <div>
+              <Label htmlFor="cp-platzplan-hinweis">Hinweis</Label>
+              <Textarea
+                id="cp-platzplan-hinweis"
+                value={form.platzplan_hinweis}
+                onChange={(e) =>
+                  setForm((prev) => ({ ...prev, platzplan_hinweis: e.target.value }))
+                }
+                placeholder="z. B. Lageplan unter Downloads auf der Webseite"
+                rows={2}
               />
             </div>
           </div>

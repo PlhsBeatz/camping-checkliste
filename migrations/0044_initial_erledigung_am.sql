@@ -1,6 +1,7 @@
 -- Migration 0044: Erste Erledigung beim Anlegen einfrieren (unabhängig von Quittierungen)
--- Ausführen: wrangler d1 execute camping-db --local --file=./migrations/0044_initial_erledigung_am.sql
--- Remote:   wrangler d1 execute camping-db --remote --file=./migrations/0044_initial_erledigung_am.sql
+-- Ausführen: wrangler d1 migrations apply camping-db --local
+-- Bei Fehler "duplicate column name: initial_erledigung_am" → Spalte existiert bereits;
+-- dann scripts/baseline-d1-migrations-0044-0048.sql ausführen und migrations apply erneut.
 
 ALTER TABLE faelligkeiten ADD COLUMN initial_erledigung_am TEXT;
 

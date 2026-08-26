@@ -9,6 +9,7 @@ import { useAuth } from '@/components/auth-provider'
 import { cn } from '@/lib/utils'
 import { isConfigRoute } from '@/lib/config-navigation'
 import { useAttentionBadge } from '@/hooks/use-attention-badge'
+import { useBookingImportBadge } from '@/hooks/use-booking-import-badge'
 
 interface NavigationSidebarProps {
   isOpen: boolean
@@ -20,6 +21,7 @@ export function NavigationSidebar({ isOpen, onClose }: NavigationSidebarProps) {
   const { canAccessConfig, canReadWartung, canReadOptimierung } = useAuth()
   const [toolsExpanded, setToolsExpanded] = useState(false)
   const attentionCount = useAttentionBadge()
+  const bookingImportCount = useBookingImportBadge()
 
   useEffect(() => {
     if (pathname.startsWith('/tools')) setToolsExpanded(true)
@@ -49,7 +51,8 @@ export function NavigationSidebar({ isOpen, onClose }: NavigationSidebarProps) {
       icon: 'event',
       label: 'URLAUBE',
       href: '/urlaube',
-      active: pathname.startsWith('/urlaube')
+      active: pathname.startsWith('/urlaube'),
+      badge: canAccessConfig ? bookingImportCount : undefined,
     },
     {
       icon: 'inventory_2',

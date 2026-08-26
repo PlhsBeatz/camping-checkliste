@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { NavigationSidebar } from '@/components/navigation-sidebar'
 import { VacationEditModal } from '@/components/vacation-edit-modal'
+import { BookingImportDialog } from '@/components/booking-import-dialog'
 import {
   Archive,
   Plus,
@@ -13,11 +14,13 @@ import {
   Trash2,
   Route,
   Calendar as CalendarIcon,
+  MailPlus,
 } from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Suspense, useState, useEffect, useRef, useMemo } from 'react'
@@ -47,12 +50,15 @@ import { format, isSameMonth, isSameYear } from 'date-fns'
 import { de } from 'date-fns/locale'
 import Image from 'next/image'
 import { useAuth } from '@/components/auth-provider'
+import { useBookingImportBadge } from '@/hooks/use-booking-import-badge'
 
 function UrlaubePageContent() {
   const { canAccessConfig, user } = useAuth()
   const router = useRouter()
   const searchParams = useSearchParams()
   const filterCampingplatzId = searchParams.get('campingplatz')
+  const bookingImportCount = useBookingImportBadge()
+  const [bookingImportOpen, setBookingImportOpen] = useState(false)
   const [vacationsViewMode, setVacationsViewMode] = useState<'aktuell' | 'archiv'>(() =>
     filterCampingplatzId ? 'archiv' : 'aktuell'
   )
@@ -89,6 +95,33 @@ function UrlaubePageContent() {
   // Refetch-Tick: bei Reconnect bumpen → die nachfolgenden useEffects mit Cache-Anbindung neu auslösen.
   const [refetchTick, setRefetchTick] = useState(0)
   useReconnectRefetch(() => setRefetchTick((t) => t + 1))
+
+  useEffect(() => {
+    if (searchParams.get('bookingImport') === '1' && canAccessConfig) {
+      setBookingImportOpen(true)
+    }
+  }, [searchParams, canAccessConfig])
+
+  const handleBookingImportOpenChange = (open: boolean) => {
+    setBookingImportOpen(open)
+    if (
+      !open &&
+      (searchParams.get('bookingImport') ||
+        searchParams.get('id') ||
+        searchParams.get('text') ||
+        searchParams.get('title') ||
+        searchParams.get('url'))
+    ) {
+      const params = new URLSearchParams(searchParams.toString())
+      params.delete('bookingImport')
+      params.delete('id')
+      params.delete('text')
+      params.delete('title')
+      params.delete('url')
+      const qs = params.toString()
+      router.replace(qs ? `/urlaube?${qs}` : '/urlaube')
+    }
+  }
 
   // Fetch Vacations
   useEffect(() => {
@@ -463,6 +496,19 @@ function UrlaubePageContent() {
                     Urlaubsarchiv
                   </DropdownMenuItem>
                 )}
+                {canAccessConfig && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      className="cursor-pointer gap-2"
+                      onSelect={() => setBookingImportOpen(true)}
+                    >
+                      <MailPlus className="h-4 w-4 shrink-0" />
+                      Buchung importieren
+                      {bookingImportCount > 0 ? ` (${bookingImportCount})` : ''}
+                    </DropdownMenuItem>
+                  </>
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -735,6 +781,22 @@ function UrlaubePageContent() {
         </div>
         )}
       </div>
+
+      {canAccessConfig && (
+        <BookingImportDialog
+          open={bookingImportOpen}
+          onOpenChange={handleBookingImportOpenChange}
+          initialPendingId={searchParams.get('id')}
+          initialBetreff={searchParams.get('title') ?? ''}
+          initialInhalt={
+            searchParams.get('text')?.trim() ||
+            searchParams.get('url')?.trim() ||
+            ''
+          }
+          pendingCount={bookingImportCount}
+          onConfirmed={() => setRefetchTick((t) => t + 1)}
+        />
+      )}
 
     </div>
   )

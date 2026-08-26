@@ -8,6 +8,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { NavigationSidebar } from '@/components/navigation-sidebar'
 import { VacationEditModal } from '@/components/vacation-edit-modal'
+import { BookingImportDialog } from '@/components/booking-import-dialog'
 import { UrlaubOverviewMap } from '@/components/urlaub-overview-map'
 import {
   ArrowLeft,
@@ -20,14 +21,15 @@ import {
   Route,
   Trash2,
   Users,
+  MailPlus,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { ApiResponse } from '@/lib/api-types'
 import { Vacation, Mitreisender, Campingplatz, VacationCampingStay, Rastplatz } from '@/lib/db'
-import Image from 'next/image'
-import { campingplatzListThumbnailSrc } from '@/lib/campingplatz-photo-url'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Card, CardContent } from '@/components/ui/card'
+import { VacationStayCard } from '@/components/vacation-stay-card'
+import type { UrlaubCampingplatzEmail } from '@/lib/booking-types'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -60,6 +62,7 @@ import {
 } from '@/lib/client-route-info'
 import { isUsableRoutePolyline } from '@/lib/route-polyline'
 import { useReconnectRefetch } from '@/hooks/use-reconnect-refetch'
+import { useBookingImportBadge } from '@/hooks/use-booking-import-badge'
 import { getVacationCountdown } from '@/lib/vacation-helpers'
 import { groupAllMitreisendeByGruppe } from '@/lib/pack-profile-groups'
 import {
@@ -327,10 +330,13 @@ export default function UrlaubDetailPage() {
   const [mitreisende, setMitreisende] = useState<Mitreisender[]>([])
   const [campingplaetze, setCampingplaetze] = useState<Campingplatz[]>([])
   const [stays, setStays] = useState<VacationCampingStay[]>([])
+  const [stayEmails, setStayEmails] = useState<Record<string, UrlaubCampingplatzEmail[]>>({})
   const [loadError, setLoadError] = useState<string | null>(null)
   const [deleteBusy, setDeleteBusy] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
+  const [bookingImportOpen, setBookingImportOpen] = useState(false)
+  const bookingImportCount = useBookingImportBadge()
   const [routeInfo, setRouteInfo] = useState<Record<string, CampingplatzRouteInfo>>({})
   const [segmentRouteInfo, setSegmentRouteInfo] = useState<
     Record<string, CampingplatzRouteInfo>
@@ -366,6 +372,7 @@ export default function UrlaubDetailPage() {
             setMitreisende(await getCachedVacationMitreisende(id))
             setCampingplaetze([])
             setStays([])
+            setStayEmails({})
             return
           }
         }
@@ -374,12 +381,30 @@ export default function UrlaubDetailPage() {
         setMitreisende([])
         setCampingplaetze([])
         setStays([])
+        setStayEmails({})
         return
       }
       setVacation(data.data.vacation)
       setMitreisende(data.data.mitreisende)
       setCampingplaetze(data.data.campingplaetze)
       setStays(data.data.stays ?? [])
+      const loadedStays = data.data.stays ?? []
+      if (loadedStays.length > 0) {
+        const emailEntries = await Promise.all(
+          loadedStays.map(async (stay) => {
+            try {
+              const er = await fetch(`/api/vacations/stays/${stay.id}/emails`)
+              const ed = (await er.json()) as ApiResponse<UrlaubCampingplatzEmail[]>
+              return [stay.id, ed.success && ed.data ? ed.data : []] as const
+            } catch {
+              return [stay.id, []] as const
+            }
+          })
+        )
+        setStayEmails(Object.fromEntries(emailEntries))
+      } else {
+        setStayEmails({})
+      }
     } catch {
       if (typeof navigator !== 'undefined' && !navigator.onLine) {
         const cached = await getCachedVacations()
@@ -397,6 +422,7 @@ export default function UrlaubDetailPage() {
       setMitreisende([])
       setCampingplaetze([])
       setStays([])
+      setStayEmails({})
     }
   }, [id])
 
@@ -879,6 +905,14 @@ export default function UrlaubDetailPage() {
                     <Pencil className="h-4 w-4" />
                     Bearbeiten
                   </DropdownMenuItem>
+                  <DropdownMenuItem
+                    className="cursor-pointer gap-2"
+                    onClick={() => setBookingImportOpen(true)}
+                  >
+                    <MailPlus className="h-4 w-4" />
+                    Buchung importieren
+                    {bookingImportCount > 0 ? ` (${bookingImportCount})` : ''}
+                  </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
                     className="cursor-pointer gap-2 text-destructive focus:text-destructive"
@@ -1030,7 +1064,6 @@ export default function UrlaubDetailPage() {
                         })()}
                         {sortedStays.map((stay, index) => {
                           const cp = stay.campingplatz
-                          const photoUrl = campingplatzListThumbnailSrc(cp)
                           const nights = stayNights(stay.start_datum, stay.end_datum)
                           const next = sortedStays[index + 1]
                           const showLeg =
@@ -1040,44 +1073,14 @@ export default function UrlaubDetailPage() {
                             next.campingplatz.lat != null
                           return (
                             <div key={stay.id}>
-                              <Link
-                                href={`/campingplaetze/${cp.id}`}
-                                className={cn(
-                                  'bg-card rounded-xl border border-subtle shadow-sm px-3 py-2 flex gap-3 items-start transition-colors hover:bg-muted',
-                                  cp.is_archived && 'opacity-60 bg-muted/60'
-                                )}
-                              >
-                                <div className="flex-shrink-0 w-12 h-12 rounded-lg overflow-hidden bg-muted flex items-center justify-center">
-                                  {photoUrl ? (
-                                    <Image
-                                      src={photoUrl}
-                                      alt=""
-                                      width={48}
-                                      height={48}
-                                      unoptimized
-                                      className="w-full h-full object-cover"
-                                    />
-                                  ) : (
-                                    <span className="text-[10px] leading-tight text-muted-foreground px-1 text-center">
-                                      Kein Bild
-                                    </span>
-                                  )}
-                                </div>
-                                <div className="space-y-1 min-w-0 flex-1">
-                                  <span className="font-semibold text-sm truncate block">
-                                    {cp.name}
-                                  </span>
-                                  <div className="text-xs text-gray-600">
-                                    {cp.ort}, {cp.land}
-                                    {cp.bundesland && ` (${cp.bundesland})`}
-                                  </div>
-                                  <div className="text-xs font-medium text-brand-heading">
-                                    {formatStayDateRange(stay.start_datum, stay.end_datum)}
-                                    {nights > 0 &&
-                                      ` · ${nights} ${nights === 1 ? 'Nacht' : 'Nächte'}`}
-                                  </div>
-                                </div>
-                              </Link>
+                              <VacationStayCard
+                                stay={stay}
+                                emails={stayEmails[stay.id] ?? []}
+                                canEdit={canAccessConfig}
+                                onSaved={() => void load()}
+                                formatDateRange={formatStayDateRange}
+                                nights={nights}
+                              />
                               {showLeg && next && (
                                 <>
                                   {(() => {
@@ -1235,6 +1238,16 @@ export default function UrlaubDetailPage() {
             setCampingplaetze(savedCamping)
             void load()
           }}
+        />
+      )}
+
+      {vacation && canAccessConfig && (
+        <BookingImportDialog
+          open={bookingImportOpen}
+          onOpenChange={setBookingImportOpen}
+          initialUrlaubId={vacation.id}
+          pendingCount={bookingImportCount}
+          onConfirmed={() => void load()}
         />
       )}
 
