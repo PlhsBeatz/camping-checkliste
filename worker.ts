@@ -6,7 +6,7 @@
 
 import { default as handler } from './.open-next/worker.js'
 import { PackingSyncDO } from './src/durable-objects/PackingSyncDO'
-import { ingestBookingEmail } from './src/lib/booking-db'
+import { ingestBookingEmail } from './src/lib/booking-email-ingest'
 
 export { PackingSyncDO }
 
@@ -102,7 +102,11 @@ export default {
       console.error('DB binding missing — cannot ingest booking email')
       return
     }
-    ctx.waitUntil(ingestBookingEmail(message, env))
+    ctx.waitUntil(
+      ingestBookingEmail(message, env).catch((err) => {
+        console.error('Booking email ingest failed:', err)
+      })
+    )
   },
 
   async scheduled(

@@ -7,7 +7,7 @@ import type {
   StayBookingFields,
   UrlaubCampingplatzEmail,
 } from './booking-types'
-import { parseBookingEmail, stripHtml } from './booking-email-parser'
+import { parseBookingEmail } from './booking-email-parser'
 import { buildGmailSearchLink } from './gmail-links'
 import { suggestStayMatch } from './booking-stay-matcher'
 import {
@@ -506,47 +506,5 @@ export async function setCampingplaetzeForVacationPreservingBooking(
   } catch (error) {
     console.error('Error setting camping stays preserving booking:', error)
     return false
-  }
-}
-
-export async function ingestBookingEmail(
-  message: ForwardableEmailMessage,
-  env: { DB: D1Database; CAMPING_PHOTOS?: R2Bucket }
-): Promise<void> {
-  const rawBuffer = await new Response(message.raw).arrayBuffer()
-  let subject = message.headers.get('subject') ?? ''
-  let textBody = ''
-  let htmlBody = ''
-
-  try {
-    const PostalMime = (await import('postal-mime')).default
-    const parsed = await PostalMime.parse(rawBuffer)
-    subject = parsed.subject ?? subject
-    textBody = parsed.text ?? ''
-    htmlBody = parsed.html ?? ''
-  } catch {
-    textBody = new TextDecoder().decode(rawBuffer).slice(0, MAX_TEXT_LEN)
-  }
-
-  const inhalt = textBody || stripHtml(htmlBody) || textBody
-  const messageId = message.headers.get('message-id')
-
-  await createBookingImportPending(env.DB, {
-    quelle: 'email_forward',
-    betreff: subject,
-    absender: message.from,
-    inhalt_text: inhalt,
-    message_id: messageId,
-  })
-
-  if (env.CAMPING_PHOTOS) {
-    try {
-      const key = `booking-eml/${crypto.randomUUID()}.eml`
-      await env.CAMPING_PHOTOS.put(key, rawBuffer, {
-        httpMetadata: { contentType: 'message/rfc822' },
-      })
-    } catch (e) {
-      console.warn('R2 eml store failed:', e)
-    }
   }
 }
