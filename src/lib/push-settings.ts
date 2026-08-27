@@ -26,6 +26,13 @@ export const PUSH_NOTIFICATION_OPTIONS = [
     description: 'Erinnerung, wenn Wartungs- oder Ablaufdaten fällig oder überfällig sind.',
     adminOnly: false as const,
   },
+  {
+    key: 'restzahlungFaelligkeit' as const,
+    type: 'restzahlung_due' as const,
+    label: 'Restzahlungen',
+    description: 'Erinnerung 30 Tage vor dem Fälligkeitsdatum offener Restzahlungen.',
+    adminOnly: false as const,
+  },
 ] as const
 
 export type PushPreferenceKey = (typeof PUSH_NOTIFICATION_OPTIONS)[number]['key']
@@ -35,6 +42,7 @@ export type UserPushSettings = {
   rastplatzNearby: boolean
   optimierungFaelligkeit: boolean
   wartungFaelligkeit: boolean
+  restzahlungFaelligkeit: boolean
 }
 
 export type UserPushSettingsResponse = UserPushSettings & {
@@ -54,6 +62,8 @@ export function isPushTypeEnabled(
       return settings.optimierungFaelligkeit
     case 'wartung_due':
       return settings.wartungFaelligkeit
+    case 'restzahlung_due':
+      return settings.restzahlungFaelligkeit
     default:
       return false
   }

@@ -4913,6 +4913,7 @@ export async function getUserPushSettings(
           `SELECT push_notifications_enabled, push_rastplatz_nearby,
             COALESCE(push_optimierung_faelligkeit, 1) AS push_optimierung_faelligkeit,
             COALESCE(push_wartung_faellig, 1) AS push_wartung_faellig,
+            COALESCE(push_restzahlung, 1) AS push_restzahlung,
             (SELECT COUNT(*) FROM push_subscriptions ps WHERE ps.user_id = users.id) AS sub_count
            FROM users WHERE id = ?`
         )
@@ -4922,6 +4923,7 @@ export async function getUserPushSettings(
           push_rastplatz_nearby: number
           push_optimierung_faelligkeit: number
           push_wartung_faellig: number
+          push_restzahlung: number
           sub_count: number
         }>()
       if (!row) return null
@@ -4930,6 +4932,7 @@ export async function getUserPushSettings(
         rastplatzNearby: row.push_rastplatz_nearby !== 0,
         optimierungFaelligkeit: row.push_optimierung_faelligkeit !== 0,
         wartungFaelligkeit: row.push_wartung_faellig !== 0,
+        restzahlungFaelligkeit: row.push_restzahlung !== 0,
         browserSubscribed: (row.sub_count ?? 0) > 0,
       }
     } catch {
@@ -4954,6 +4957,7 @@ export async function getUserPushSettings(
           rastplatzNearby: row.push_rastplatz_nearby !== 0,
           optimierungFaelligkeit: row.push_optimierung_faelligkeit !== 0,
           wartungFaelligkeit: true,
+          restzahlungFaelligkeit: true,
           browserSubscribed: (row.sub_count ?? 0) > 0,
         }
       } catch {
@@ -4976,6 +4980,7 @@ export async function getUserPushSettings(
         rastplatzNearby: row.push_rastplatz_nearby !== 0,
         optimierungFaelligkeit: true,
         wartungFaelligkeit: true,
+        restzahlungFaelligkeit: true,
         browserSubscribed: (row.sub_count ?? 0) > 0,
       }
     }
@@ -5000,6 +5005,7 @@ export async function updateUserPushSettings(
             push_rastplatz_nearby = ?,
             push_optimierung_faelligkeit = ?,
             push_wartung_faellig = ?,
+            push_restzahlung = ?,
             updated_at = datetime('now')
            WHERE id = ?`
         )
@@ -5008,6 +5014,7 @@ export async function updateUserPushSettings(
           settings.rastplatzNearby ? 1 : 0,
           settings.optimierungFaelligkeit ? 1 : 0,
           settings.wartungFaelligkeit ? 1 : 0,
+          settings.restzahlungFaelligkeit ? 1 : 0,
           userId
         )
         .run()
@@ -5830,6 +5837,61 @@ export async function getCampingStaysForVacation(
     }
   }
   return []
+}
+
+export type RestzahlungAttentionStay = {
+  id: string
+  urlaub_id: string
+  restzahlung_faellig_am: string
+  preis_gesamt: number | null
+  anzahlung_betrag: number | null
+  waehrung: string | null
+  campingplatz_name: string
+  urlaub_titel: string
+}
+
+/** Aufenthalte mit offener Restzahlung für den Heute-Hub. */
+export async function getRestzahlungAttentionStays(
+  db: D1Database
+): Promise<RestzahlungAttentionStay[]> {
+  try {
+    const res = await db
+      .prepare(
+        `SELECT uc.id, uc.urlaub_id, uc.restzahlung_faellig_am,
+                uc.preis_gesamt, uc.anzahlung_betrag, uc.waehrung,
+                c.name AS campingplatz_name, v.titel AS urlaub_titel
+         FROM urlaub_campingplaetze uc
+         JOIN campingplaetze c ON c.id = uc.campingplatz_id
+         JOIN urlaube v ON v.id = uc.urlaub_id
+         WHERE uc.restzahlung_faellig_am IS NOT NULL
+           AND trim(uc.restzahlung_faellig_am) != ''
+           AND (uc.buchungsstatus IS NULL OR uc.buchungsstatus NOT IN ('bezahlt', 'storniert'))
+         ORDER BY uc.restzahlung_faellig_am ASC`
+      )
+      .all<{
+        id: string
+        urlaub_id: string
+        restzahlung_faellig_am: string
+        preis_gesamt: number | null
+        anzahlung_betrag: number | null
+        waehrung: string | null
+        campingplatz_name: string
+        urlaub_titel: string
+      }>()
+    return (res.results ?? []).map((row) => ({
+      id: row.id,
+      urlaub_id: row.urlaub_id,
+      restzahlung_faellig_am: String(row.restzahlung_faellig_am),
+      preis_gesamt: row.preis_gesamt != null ? Number(row.preis_gesamt) : null,
+      anzahlung_betrag: row.anzahlung_betrag != null ? Number(row.anzahlung_betrag) : null,
+      waehrung: row.waehrung != null ? String(row.waehrung) : null,
+      campingplatz_name: row.campingplatz_name,
+      urlaub_titel: row.urlaub_titel,
+    }))
+  } catch (error) {
+    console.error('Error fetching restzahlung attention stays:', error)
+    return []
+  }
 }
 
 /** Alle Campingplätze für mehrere Urlaube in wenigen Datenbank-Runden (eine Query pro Chunk). */

@@ -37,6 +37,7 @@ const KIND_META: Record<AttentionKind, { label: string; icon: string }> = {
   packing_weight: { label: 'Pack-Status', icon: 'analytics' },
   packing_vorgemerkt: { label: 'Packliste', icon: 'checklist' },
   optimierung: { label: 'Optimierung', icon: 'tune' },
+  restzahlung: { label: 'Restzahlung', icon: 'payments' },
   checkliste: { label: 'Checkliste', icon: 'fact_check' },
   vacation_next: { label: 'Urlaub', icon: 'event' },
   sonnen_ausrichtung: { label: 'Sonne', icon: 'wb_sunny' },

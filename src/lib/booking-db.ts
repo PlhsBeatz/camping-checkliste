@@ -102,6 +102,15 @@ export async function updateCampingStayBooking(
   booking: StayBookingFields
 ): Promise<boolean> {
   try {
+    const current = await db
+      .prepare(`SELECT restzahlung_faellig_am FROM urlaub_campingplaetze WHERE id = ?`)
+      .bind(stayId)
+      .first<{ restzahlung_faellig_am: string | null }>()
+
+    const newDue = booking.restzahlung_faellig_am ?? null
+    const oldDue = current?.restzahlung_faellig_am ?? null
+    const dueChanged = String(newDue ?? '') !== String(oldDue ?? '')
+
     await db
       .prepare(
         `UPDATE urlaub_campingplaetze SET
@@ -133,6 +142,18 @@ export async function updateCampingStayBooking(
         stayId
       )
       .run()
+
+    if (dueChanged) {
+      try {
+        await db
+          .prepare(`UPDATE urlaub_campingplaetze SET push_restzahlung_30d_sent = 0 WHERE id = ?`)
+          .bind(stayId)
+          .run()
+      } catch {
+        // Migration 0052 noch nicht angewendet
+      }
+    }
+
     return true
   } catch (error) {
     console.error('Error updating stay booking:', error)

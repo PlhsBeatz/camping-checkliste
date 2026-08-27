@@ -5,11 +5,13 @@ import {
   getPackingItemsForHub,
   getPackStatus,
   getRastplaetzeForHub,
+  getRestzahlungAttentionStays,
   getUserById,
   getVacations,
   type PackingItem,
   type PackStatusData,
   type Rastplatz,
+  type RestzahlungAttentionStay,
   type VacationCampingStay,
 } from '@/lib/db'
 import { getFaelligkeitenForHub } from '@/lib/db-wartung'
@@ -55,6 +57,7 @@ export async function loadAttentionFeedInput(
     snoozes,
     user,
     optimierungen,
+    restzahlungStays,
   ] = await Promise.all([
     relevant ? getPackingItemsForHub(db, relevant.id) : Promise.resolve<PackingItem[]>([]),
     relevant ? getPackStatus(db, relevant.id) : Promise.resolve<PackStatusData | null>(null),
@@ -74,6 +77,7 @@ export async function loadAttentionFeedInput(
     opts.includeOptimierungItems
       ? getOptimierungen(db, undefined, { relations: false })
       : Promise.resolve([]),
+    full ? getRestzahlungAttentionStays(db) : Promise.resolve<RestzahlungAttentionStay[]>([]),
   ])
 
   const homeCoords = user ? parseGeoPoint(user.heimat_lat, user.heimat_lng) : null
@@ -111,6 +115,7 @@ export async function loadAttentionFeedInput(
     travelNavRouteMatch,
     faelligkeiten,
     optimierungen,
+    restzahlungStays,
     checklisten,
     snoozes,
     includeAdminItems: opts.includeAdminItems,

@@ -1,6 +1,16 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import {
+  Children,
+  cloneElement,
+  isValidElement,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactElement,
+  type ReactNode,
+} from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -17,6 +27,11 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover'
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible'
 import { ResponsiveModal } from '@/components/ui/responsive-modal'
 import { StayDateRangePicker } from '@/components/stay-date-range-picker'
 import type { ApiResponse } from '@/lib/api-types'
@@ -41,9 +56,122 @@ import {
   type BookingFieldChange,
 } from '@/lib/booking-merge'
 import { invalidateBookingImportBadgeCache } from '@/hooks/use-booking-import-badge'
+import { formatBookingMoney, parseBookingMoneyInput } from '@/lib/booking-format'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
-import { History, Loader2, Sparkles } from 'lucide-react'
+import { ChevronDown, History, Loader2, Sparkles } from 'lucide-react'
+import { Input as InputComponent } from '@/components/ui/input'
+import { Textarea as TextareaComponent } from '@/components/ui/textarea'
+import { SelectTrigger as SelectTriggerComponent } from '@/components/ui/select'
+
+const CHANGED_FIELD_RING =
+  'ring-2 ring-accent-orange border-accent-orange focus-visible:ring-accent-orange'
+
+function applyChangedRing(node: ReactNode, changed: boolean): ReactNode {
+  if (!changed || !isValidElement(node)) return node
+  const el = node as ReactElement<{
+    className?: string
+    children?: ReactNode
+    highlighted?: boolean
+  }>
+  if (
+    el.type === InputComponent ||
+    el.type === TextareaComponent ||
+    el.type === SelectTriggerComponent
+  ) {
+    return cloneElement(el, {
+      className: cn(el.props.className, CHANGED_FIELD_RING),
+    })
+  }
+  if ((el.type as { displayName?: string }).displayName === 'CurrencyInput') {
+    return cloneElement(el, { highlighted: true })
+  }
+  const childNodes = el.props.children
+  if (childNodes != null) {
+    const mapped = Children.map(childNodes, (child) => applyChangedRing(child, changed))
+    return cloneElement(el, {}, mapped)
+  }
+  return node
+}
+
+function CurrencyInput({
+  value,
+  currency,
+  onChange,
+  className,
+  highlighted = false,
+}: {
+  value: number | null | undefined
+  currency?: string | null
+  onChange: (value: number | null) => void
+  className?: string
+  highlighted?: boolean
+}) {
+  const [focused, setFocused] = useState(false)
+  const [draft, setDraft] = useState('')
+
+  const displayValue = focused
+    ? draft
+    : value != null && Number.isFinite(value)
+      ? formatBookingMoney(value, currency)
+      : ''
+
+  return (
+    <Input
+      inputMode="decimal"
+      className={cn(className, highlighted && CHANGED_FIELD_RING)}
+      value={displayValue}
+      onFocus={() => {
+        setFocused(true)
+        setDraft(value != null && Number.isFinite(value) ? String(value) : '')
+      }}
+      onBlur={() => {
+        setFocused(false)
+        const parsed = parseBookingMoneyInput(draft)
+        onChange(parsed)
+      }}
+      onChange={(e) => {
+        setDraft(e.target.value)
+        const parsed = parseBookingMoneyInput(e.target.value)
+        if (parsed != null) onChange(parsed)
+        else if (!e.target.value.trim()) onChange(null)
+      }}
+    />
+  )
+}
+CurrencyInput.displayName = 'CurrencyInput'
+
+function ImportSectionHeader({
+  title,
+  count,
+  open,
+}: {
+  title: string
+  count?: number
+  open?: boolean
+}) {
+  return (
+    <div className="flex w-full items-center justify-between gap-3">
+      <div className="flex items-center gap-2.5 min-w-0">
+        <span className="h-5 w-1 shrink-0 rounded-full bg-accent-orange" aria-hidden />
+        <span className="font-semibold text-sm text-foreground tracking-tight">{title}</span>
+        {count != null && count > 0 && (
+          <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-accent-orange px-1.5 text-[10px] font-semibold text-white tabular-nums">
+            {count}
+          </span>
+        )}
+      </div>
+      {open != null && (
+        <ChevronDown
+          className={cn(
+            'h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200',
+            open && 'rotate-180'
+          )}
+        />
+      )}
+    </div>
+  )
+}
 
 type AiAnalyzeMeta = {
   pdfs_used: string[]
@@ -103,7 +231,7 @@ function PreviousValuePopover({
       <PopoverTrigger asChild>
         <button
           type="button"
-          className="shrink-0 rounded p-0.5 text-amber-700 hover:bg-amber-100/80 dark:text-amber-300 dark:hover:bg-amber-900/40"
+          className="shrink-0 rounded p-0.5 text-accent-orange hover:bg-accent-orange/10"
           aria-label={`Vorheriger Wert: ${previousValue}`}
           title={`Vorher: ${previousValue}`}
         >
@@ -145,14 +273,9 @@ function ImportField({
   children: ReactNode
 }) {
   return (
-    <div
-      className={cn(
-        'space-y-1.5 rounded-lg p-2 -m-2',
-        change && 'bg-amber-50/80 ring-1 ring-amber-300/80 dark:bg-amber-950/20 dark:ring-amber-700/60'
-      )}
-    >
+    <div className="space-y-1.5">
       <div className="flex items-center justify-between gap-2 min-h-5">
-        <Label className={cn(change && 'text-amber-950 dark:text-amber-100')}>{label}</Label>
+        <Label>{label}</Label>
         {change && (
           <PreviousValuePopover
             previousValue={change.previous}
@@ -160,7 +283,7 @@ function ImportField({
           />
         )}
       </div>
-      {children}
+      {applyChangedRing(children, !!change)}
     </div>
   )
 }
@@ -202,6 +325,7 @@ export function BookingImportDialog({
   const [existingBooking, setExistingBooking] = useState<StayBookingFields | null>(null)
   const [pasteBetreff, setPasteBetreff] = useState('')
   const [pasteInhalt, setPasteInhalt] = useState('')
+  const [manualOpen, setManualOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [aiAnalyzing, setAiAnalyzing] = useState(false)
   const [aiMeta, setAiMeta] = useState<AiAnalyzeMeta | null>(null)
@@ -397,6 +521,7 @@ export function BookingImportDialog({
     if (!open) return
     if (initialBetreff) setPasteBetreff(initialBetreff)
     if (initialInhalt) setPasteInhalt(initialInhalt)
+    if (initialBetreff || initialInhalt) setManualOpen(true)
   }, [open, initialBetreff, initialInhalt])
 
   useEffect(() => {
@@ -599,62 +724,86 @@ export function BookingImportDialog({
       contentClassName="max-w-lg sm:max-w-2xl max-h-[90vh] overflow-y-auto"
     >
       <div className="space-y-4 pb-2">
-        <section className="rounded-xl border bg-card p-4 space-y-3">
-          <h2 className="font-medium text-sm">Manuell einfügen</h2>
-          <div>
-            <Label>Betreff (optional)</Label>
-            <Input value={pasteBetreff} onChange={(e) => setPasteBetreff(e.target.value)} />
-          </div>
-          <div>
-            <Label>E-Mail-Text</Label>
-            <Textarea
-              className="min-h-[100px] font-mono text-xs"
-              value={pasteInhalt}
-              onChange={(e) => setPasteInhalt(e.target.value)}
-              placeholder="Text aus Gmail kopieren und hier einfügen…"
-            />
-          </div>
-          <div className="flex gap-2 flex-wrap">
-            <Button type="button" variant="outline" disabled={loading || aiAnalyzing} onClick={() => void analyzePaste()}>
-              Analysieren
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              disabled={loading || aiAnalyzing}
-              onClick={() => void analyzeWithAi()}
-            >
-              {aiAnalyzing ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin mr-1" />
-                  KI analysiert…
-                </>
-              ) : (
-                <>
-                  <Sparkles className="h-4 w-4 mr-1" />
-                  Mit KI analysieren
-                </>
-              )}
-            </Button>
-            <Button type="button" disabled={loading || aiAnalyzing} onClick={() => void createFromPaste()}>
-              Import anlegen
-            </Button>
-          </div>
-        </section>
+        <Collapsible open={manualOpen} onOpenChange={setManualOpen}>
+          <section className="rounded-xl border bg-muted/20 overflow-hidden">
+            <CollapsibleTrigger asChild>
+              <button
+                type="button"
+                className="flex w-full items-center gap-3 px-4 py-3.5 text-left hover:bg-muted/40 transition-colors"
+              >
+                <ImportSectionHeader title="Manuell einfügen" open={manualOpen} />
+              </button>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <div className="space-y-3 border-t border-border/60 px-4 py-4 bg-card/80">
+                <div>
+                  <Label>Betreff (optional)</Label>
+                  <Input value={pasteBetreff} onChange={(e) => setPasteBetreff(e.target.value)} />
+                </div>
+                <div>
+                  <Label>E-Mail-Text</Label>
+                  <Textarea
+                    className="min-h-[100px] font-mono text-xs"
+                    value={pasteInhalt}
+                    onChange={(e) => setPasteInhalt(e.target.value)}
+                    placeholder="Text aus Gmail kopieren und hier einfügen…"
+                  />
+                </div>
+                <div className="flex gap-2 flex-wrap">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={loading || aiAnalyzing}
+                    onClick={() => void analyzePaste()}
+                  >
+                    Analysieren
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={loading || aiAnalyzing}
+                    onClick={() => void analyzeWithAi()}
+                  >
+                    {aiAnalyzing ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                        KI analysiert…
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="h-4 w-4 mr-1" />
+                        Mit KI analysieren
+                      </>
+                    )}
+                  </Button>
+                  <Button
+                    type="button"
+                    disabled={loading || aiAnalyzing}
+                    onClick={() => void createFromPaste()}
+                  >
+                    Import anlegen
+                  </Button>
+                </div>
+              </div>
+            </CollapsibleContent>
+          </section>
+        </Collapsible>
 
         {pendingList.length > 0 && (
-          <section className="rounded-xl border bg-card p-4 space-y-2">
-            <h2 className="font-medium text-sm">Ausstehende Imports ({pendingList.length})</h2>
-            <ul className="divide-y">
+          <section className="rounded-xl border bg-muted/20 overflow-hidden">
+            <div className="px-4 py-3.5 border-b border-border/60 bg-card/60">
+              <ImportSectionHeader title="Ausstehende Imports" count={pendingList.length} />
+            </div>
+            <ul className="divide-y divide-border/60 bg-card/80">
               {pendingList.map((p) => (
-                <li key={p.id} className="py-2 flex items-start gap-2">
+                <li key={p.id} className="py-2.5 px-4 flex items-start gap-2">
                   <button
                     type="button"
-                    className="flex-1 text-left text-sm hover:underline"
+                    className="flex-1 text-left text-sm hover:underline min-w-0"
                     onClick={() => void loadPending(p.id)}
                   >
-                    <span className="font-medium">{p.betreff ?? '(Ohne Betreff)'}</span>
-                    <span className="block text-xs text-muted-foreground">{p.absender}</span>
+                    <span className="font-medium block truncate">{p.betreff ?? '(Ohne Betreff)'}</span>
+                    <span className="block text-xs text-muted-foreground truncate">{p.absender}</span>
                   </button>
                   <Button type="button" variant="ghost" size="sm" onClick={() => void dismiss(p.id)}>
                     Verwerfen
@@ -756,17 +905,9 @@ export function BookingImportDialog({
                     </Select>
                   </div>
                 )}
-                <div
-                  className={cn(
-                    'space-y-1.5 rounded-lg p-2 -m-2',
-                    dateRangeChanged &&
-                      'bg-amber-50/80 ring-1 ring-amber-300/80 dark:bg-amber-950/20 dark:ring-amber-700/60'
-                  )}
-                >
+                <div className="space-y-1.5">
                   <div className="flex items-center justify-between gap-2 min-h-5">
-                    <Label className={cn(dateRangeChanged && 'text-amber-950 dark:text-amber-100')}>
-                      Zeitraum
-                    </Label>
+                    <Label>Zeitraum</Label>
                     {dateRangeChanged && selectedStay && (
                       <PreviousValuePopover
                         previousValue={`${selectedStay.start_datum ?? '—'} – ${selectedStay.end_datum ?? '—'}`}
@@ -783,6 +924,7 @@ export function BookingImportDialog({
                     }}
                     dialogTitle="Zeitraum wählen"
                     emptyLabel="Zeitraum wählen"
+                    buttonClassName={dateRangeChanged ? CHANGED_FIELD_RING : undefined}
                   />
                 </div>
                 {onlyEmailLink && (
@@ -977,16 +1119,10 @@ export function BookingImportDialog({
                           : undefined
                       }
                     >
-                      <Input
-                        type="number"
-                        step="0.01"
-                        value={booking.preis_gesamt ?? ''}
-                        onChange={(e) =>
-                          setBooking((b) => ({
-                            ...b,
-                            preis_gesamt: e.target.value ? Number(e.target.value) : null,
-                          }))
-                        }
+                      <CurrencyInput
+                        value={booking.preis_gesamt}
+                        currency={booking.waehrung}
+                        onChange={(preis_gesamt) => setBooking((b) => ({ ...b, preis_gesamt }))}
                       />
                     </ImportField>
                   )}
@@ -1000,15 +1136,11 @@ export function BookingImportDialog({
                           : undefined
                       }
                     >
-                      <Input
-                        type="number"
-                        step="0.01"
-                        value={booking.anzahlung_betrag ?? ''}
-                        onChange={(e) =>
-                          setBooking((b) => ({
-                            ...b,
-                            anzahlung_betrag: e.target.value ? Number(e.target.value) : null,
-                          }))
+                      <CurrencyInput
+                        value={booking.anzahlung_betrag}
+                        currency={booking.waehrung}
+                        onChange={(anzahlung_betrag) =>
+                          setBooking((b) => ({ ...b, anzahlung_betrag }))
                         }
                       />
                     </ImportField>

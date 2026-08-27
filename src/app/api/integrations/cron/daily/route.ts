@@ -4,6 +4,7 @@ import { requireAuth, requireSystemAdmin } from '@/lib/api-auth'
 import { buildTripStatusPayload, findRelevantVacation } from '@/lib/trip-readiness'
 import { processIntegrationCron } from '@/lib/integration-events'
 import { processOptimierungFaelligkeitPush } from '@/lib/optimierung-push-reminders'
+import { processRestzahlungPush } from '@/lib/restzahlung-push-reminders'
 import { processWartungFaelligkeitPush } from '@/lib/wartung-push-reminders'
 
 function verifyCronSecret(request: NextRequest): boolean {
@@ -26,12 +27,14 @@ export async function GET(request: NextRequest) {
     const processed = await processIntegrationCron(db)
     const optimierungPush = await processOptimierungFaelligkeitPush(db)
     const wartungPush = await processWartungFaelligkeitPush(db)
+    const restzahlungPush = await processRestzahlungPush(db)
     return NextResponse.json({
       success: true,
       data: {
         processed_vacations: processed,
         optimierung_reminders: optimierungPush,
         wartung_reminders: wartungPush,
+        restzahlung_reminders: restzahlungPush,
       },
     })
   } catch (error: unknown) {

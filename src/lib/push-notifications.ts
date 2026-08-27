@@ -10,6 +10,7 @@ export type PushNotificationType =
   | 'rastplatz_nearby'
   | 'optimierung_due'
   | 'wartung_due'
+  | 'restzahlung_due'
 
 export type PushNotificationPayload = {
   schema_version: typeof PUSH_SCHEMA_VERSION
@@ -24,7 +25,12 @@ export type PushNotificationPayload = {
   data?: Record<string, string | number | boolean | null>
 }
 
-const VALID_TYPES = new Set<string>(['rastplatz_nearby', 'optimierung_due', 'wartung_due'])
+const VALID_TYPES = new Set<string>([
+  'rastplatz_nearby',
+  'optimierung_due',
+  'wartung_due',
+  'restzahlung_due',
+])
 
 export function isPushNotificationPayload(value: unknown): value is PushNotificationPayload {
   if (!value || typeof value !== 'object') return false
@@ -53,6 +59,12 @@ export function resolvePushUrl(payload: PushNotificationPayload): string {
       return '/tools/optimierungen'
     case 'wartung_due':
       return '/tools/wartung'
+    case 'restzahlung_due': {
+      const urlaubId = payload.data?.urlaub_id
+      return typeof urlaubId === 'string' && urlaubId
+        ? `/urlaube/${encodeURIComponent(urlaubId)}`
+        : '/urlaube'
+    }
     default:
       return '/'
   }
@@ -203,6 +215,30 @@ export function buildWartungDuePush(params: {
     tag: `wartung_due:${params.today}`,
     url: '/tools/wartung',
     data: { count, overdue, date: params.today },
+  }
+}
+
+/** Push 30 Tage vor restzahlung_faellig_am. */
+export function buildRestzahlungDuePush(params: {
+  stayId: string
+  urlaubId: string
+  campingplatzName: string
+  faelligAm: string
+}): PushNotificationPayload {
+  const dateLabel = formatFaelligAmDe(params.faelligAm)
+  const name = truncateTitel(params.campingplatzName, 36)
+  return {
+    schema_version: PUSH_SCHEMA_VERSION,
+    type: 'restzahlung_due',
+    title: 'Restzahlung in 30 Tagen fällig',
+    body: `${name} · fällig am ${dateLabel}`,
+    tag: `restzahlung_due:${params.stayId}:${params.faelligAm}`,
+    url: `/urlaube/${encodeURIComponent(params.urlaubId)}`,
+    data: {
+      stay_id: params.stayId,
+      urlaub_id: params.urlaubId,
+      faellig_am: params.faelligAm,
+    },
   }
 }
 

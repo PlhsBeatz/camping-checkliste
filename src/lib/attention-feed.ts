@@ -34,10 +34,14 @@ import {
   previousStayBefore,
   type GeoPoint,
 } from '@/lib/sonnen-hub-arrival'
+import { formatBookingMoney } from '@/lib/booking-format'
+import type { RestzahlungAttentionStay } from '@/lib/db'
 
 export const MAX_ATTENTION_ITEMS = 7
 /** Optimierungen in der Todo-Liste: fällig innerhalb dieser Tage (oder überfällig). */
 export const OPTIMIERUNG_TODO_HORIZON_DAYS = 90
+/** Restzahlungen in der Todo-Liste: fällig innerhalb dieser Tage (oder überfällig). */
+export const RESTZAHLUNG_TODO_HORIZON_DAYS = 30
 
 export type HubFrame =
   | 'winterpause'
@@ -55,6 +59,7 @@ export type AttentionKind =
   | 'packing_weight'
   | 'packing_vorgemerkt'
   | 'optimierung'
+  | 'restzahlung'
   | 'checkliste'
   | 'vacation_next'
   | 'sonnen_ausrichtung'
@@ -148,6 +153,7 @@ export type AttentionFeedInput = {
   travelNavRouteMatch?: HubTravelNavRouteMatch | null
   faelligkeiten: Faelligkeit[]
   optimierungen: Optimierung[]
+  restzahlungStays?: RestzahlungAttentionStay[]
   checklisten: AttentionCheckliste[]
   snoozes: Map<string, string>
   includeAdminItems: boolean
@@ -169,6 +175,23 @@ function vacationRef(v: Vacation): AttentionVacationRef {
 
 function packingHref(vacationId: string): string {
   return `/packliste?vacation=${encodeURIComponent(vacationId)}`
+}
+
+function formatCalendarDateDe(ymd: string): string {
+  const [y, m, d] = ymd.split('-').map(Number)
+  if (!y || !m || !d) return ymd
+  return new Date(y, m - 1, d).toLocaleDateString('de-DE', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  })
+}
+
+function restzahlungOpenAmount(stay: RestzahlungAttentionStay): number | null {
+  if (stay.preis_gesamt == null || !Number.isFinite(stay.preis_gesamt)) return null
+  const paid = stay.anzahlung_betrag ?? 0
+  const rest = stay.preis_gesamt - paid
+  return rest > 0 ? rest : stay.preis_gesamt
 }
 
 function formatDaysUntil(dueYmd: string, todayYmd: string): string {
@@ -727,6 +750,36 @@ export function buildAttentionFeed(input: AttentionFeedInput): AttentionFeed {
         adminOnly: false,
       })
     }
+  }
+
+  for (const stay of input.restzahlungStays ?? []) {
+    const dueYmd = normalizeCalendarDate(stay.restzahlung_faellig_am)
+    const daysUntil = differenceCalendarDays(dueYmd, todayYmd)
+    if (daysUntil > RESTZAHLUNG_TODO_HORIZON_DAYS) continue
+    const name = stay.campingplatz_name?.trim() || 'Campingplatz'
+    const openAmount = restzahlungOpenAmount(stay)
+    const amountLabel =
+      openAmount != null ? formatBookingMoney(openAmount, stay.waehrung) : null
+    const overdue = daysUntil < 0
+    raw.push({
+      key: `restzahlung:${stay.id}`,
+      kind: 'restzahlung',
+      title: `Restzahlung · ${name}`,
+      reason: amountLabel
+        ? `${formatCalendarDateDe(dueYmd)} · ${amountLabel} · ${formatDaysUntil(dueYmd, todayYmd)}`
+        : `${formatCalendarDateDe(dueYmd)} · ${formatDaysUntil(dueYmd, todayYmd)}`,
+      risk: overdue
+        ? 'Restzahlung überfällig – bitte zeitnah überweisen.'
+        : daysUntil <= 7
+          ? 'Bald fällig – rechtzeitig überweisen.'
+          : null,
+      href: `/urlaube/${encodeURIComponent(stay.urlaub_id)}`,
+      score: overdue ? 640 : daysUntil <= 7 ? 600 : 560,
+      dueYmd,
+      sicherheitsrelevant: false,
+      snoozeAllowed: true,
+      adminOnly: false,
+    })
   }
 
   const departureYmd = relevant

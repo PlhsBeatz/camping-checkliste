@@ -10,7 +10,10 @@ function isPushPayload(raw) {
     raw &&
     typeof raw === 'object' &&
     (raw.schema_version === 1 || raw.schema_version === '1') &&
-    (raw.type === 'rastplatz_nearby' || raw.type === 'optimierung_due') &&
+    (raw.type === 'rastplatz_nearby' ||
+      raw.type === 'optimierung_due' ||
+      raw.type === 'wartung_due' ||
+      raw.type === 'restzahlung_due') &&
     typeof raw.title === 'string' &&
     typeof raw.body === 'string' &&
     typeof raw.tag === 'string'
@@ -20,6 +23,11 @@ function isPushPayload(raw) {
 function resolveUrl(payload) {
   if (payload.url && String(payload.url).trim()) return String(payload.url).trim()
   if (payload.type === 'optimierung_due') return '/tools/optimierungen'
+  if (payload.type === 'wartung_due') return '/tools/wartung'
+  if (payload.type === 'restzahlung_due') {
+    const urlaubId = payload.data && payload.data.urlaub_id
+    return urlaubId ? `/urlaube/${encodeURIComponent(String(urlaubId))}` : '/urlaube'
+  }
   return '/rastplaetze'
 }
 

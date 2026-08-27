@@ -1,5 +1,6 @@
 import type { Buchungsstatus, StayBookingFields } from './booking-types'
 import { BUCHUNGSSTATUS_LABELS } from './booking-types'
+import { formatBookingMoney } from './booking-format'
 import type { VacationCampingStay } from './db'
 
 export type BookingFieldChange = {
@@ -73,7 +74,11 @@ function isEmptyValue(value: unknown): boolean {
   return s === '' || s === '—' || s === '-'
 }
 
-function formatFieldValue(field: keyof StayBookingFields, value: unknown): string | null {
+function formatFieldValue(
+  field: keyof StayBookingFields,
+  value: unknown,
+  currency = 'EUR'
+): string | null {
   if (isEmptyValue(value)) return null
   if (field === 'buchungsstatus') {
     const key = String(value) as Buchungsstatus
@@ -81,7 +86,7 @@ function formatFieldValue(field: keyof StayBookingFields, value: unknown): strin
   }
   if (field === 'preis_gesamt' || field === 'anzahlung_betrag') {
     const n = typeof value === 'number' ? value : parseFloat(String(value))
-    return Number.isFinite(n) ? n.toFixed(2) : null
+    return Number.isFinite(n) ? formatBookingMoney(n, currency) : null
   }
   return String(value).trim()
 }
@@ -122,10 +127,11 @@ export function mergeStayBookingFields(
   const merged: StayBookingFields = { ...existing }
   const changes: BookingFieldChange[] = []
   const preserved: BookingFieldPreserved[] = []
+  const currency = existing.waehrung ?? incoming.waehrung ?? 'EUR'
 
   for (const field of STRING_FIELDS) {
     const incomingRaw = incoming[field]
-    const existingFormatted = formatFieldValue(field, existing[field])
+    const existingFormatted = formatFieldValue(field, existing[field], currency)
 
     if (isEmptyValue(incomingRaw)) {
       if (existingFormatted) {
@@ -138,7 +144,7 @@ export function mergeStayBookingFields(
       continue
     }
 
-    const incomingFormatted = formatFieldValue(field, incomingRaw)
+    const incomingFormatted = formatFieldValue(field, incomingRaw, currency)
     if (!incomingFormatted) continue
 
     if (existingFormatted === incomingFormatted) {
@@ -158,8 +164,8 @@ export function mergeStayBookingFields(
   }
 
   if (incoming.buchungsstatus != null) {
-    const existingFormatted = formatFieldValue('buchungsstatus', existing.buchungsstatus)
-    const incomingFormatted = formatFieldValue('buchungsstatus', incoming.buchungsstatus)
+    const existingFormatted = formatFieldValue('buchungsstatus', existing.buchungsstatus, currency)
+    const incomingFormatted = formatFieldValue('buchungsstatus', incoming.buchungsstatus, currency)
     if (existingFormatted !== incomingFormatted) {
       merged.buchungsstatus = incoming.buchungsstatus
       if (existingFormatted && incomingFormatted) {
@@ -171,17 +177,17 @@ export function mergeStayBookingFields(
         })
       }
     }
-  } else if (formatFieldValue('buchungsstatus', existing.buchungsstatus)) {
+  } else if (formatFieldValue('buchungsstatus', existing.buchungsstatus, currency)) {
     preserved.push({
       field: 'buchungsstatus',
       label: FIELD_LABELS.buchungsstatus,
-      value: formatFieldValue('buchungsstatus', existing.buchungsstatus)!,
+      value: formatFieldValue('buchungsstatus', existing.buchungsstatus, currency)!,
     })
   }
 
   for (const field of NUMBER_FIELDS) {
     const incomingRaw = incoming[field]
-    const existingFormatted = formatFieldValue(field, existing[field])
+    const existingFormatted = formatFieldValue(field, existing[field], currency)
 
     if (incomingRaw == null || incomingRaw === '') {
       if (existingFormatted) {
@@ -194,7 +200,7 @@ export function mergeStayBookingFields(
       continue
     }
 
-    const incomingFormatted = formatFieldValue(field, incomingRaw)
+    const incomingFormatted = formatFieldValue(field, incomingRaw, currency)
     if (!incomingFormatted) continue
 
     merged[field] = typeof incomingRaw === 'number' ? incomingRaw : parseFloat(String(incomingRaw))
