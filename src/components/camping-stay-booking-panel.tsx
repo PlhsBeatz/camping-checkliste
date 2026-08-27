@@ -128,7 +128,6 @@ export function CampingStayBookingPanel({
 }: Props) {
   const [open, setOpen] = useState(false)
   const isExpandedDetails = variant === 'expanded-details'
-  const showEditForm = canEdit && (isExpandedDetails || open)
   const [saving, setSaving] = useState(false)
   const { showBottomToast, bottomToast } = useBottomToast()
   const [form, setForm] = useState<StayBookingFields>({
