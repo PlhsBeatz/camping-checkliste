@@ -22,6 +22,7 @@ import {
 } from '@/lib/booking-types'
 import { cn } from '@/lib/utils'
 import { ChevronDown, ChevronUp, Copy, ExternalLink, Mail } from 'lucide-react'
+import { GmailOpenLink } from '@/components/gmail-open-link'
 import { buildPlatzplanUrl } from '@/lib/platzplan-url'
 import { useBottomToast } from '@/components/undo-toast'
 import { CurrencyInput } from '@/components/currency-input'
@@ -279,15 +280,13 @@ export function CampingStayBookingPanel({
               <Mail className="h-3 w-3" />
               {EMAIL_TYP_LABELS[em.email_typ]}
               {em.gmail_suchlink && (
-                <a
-                  href={em.gmail_suchlink}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                <GmailOpenLink
+                  webHref={em.gmail_suchlink}
                   className="text-brand-heading hover:underline inline-flex items-center gap-0.5"
                   onClick={(e) => e.stopPropagation()}
                 >
                   <ExternalLink className="h-3 w-3" />
-                </a>
+                </GmailOpenLink>
               )}
             </span>
           ))}

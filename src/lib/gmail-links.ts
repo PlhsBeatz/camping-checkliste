@@ -25,3 +25,36 @@ export function buildGmailSearchLink(opts: {
   if (parts.length === 0) return null
   return `${base}${encodeURIComponent(parts.join(' '))}`
 }
+
+function extractGmailSearchQuery(webUrl: string): string | null {
+  const match = webUrl.match(/#search\/(.+)$/)
+  if (!match?.[1]) return null
+  try {
+    return decodeURIComponent(match[1])
+  } catch {
+    return match[1]
+  }
+}
+
+/**
+ * Auf Smartphones Gmail-App bevorzugt öffnen (Android Intent / iOS URL-Scheme).
+ * Auf Desktop bleibt der normale Web-Link unverändert.
+ */
+export function buildGmailMobileHref(
+  webUrl: string,
+  userAgent = typeof navigator !== 'undefined' ? navigator.userAgent : ''
+): string {
+  const query = extractGmailSearchQuery(webUrl)
+  if (!query) return webUrl
+
+  if (/Android/i.test(userAgent)) {
+    const fallback = encodeURIComponent(webUrl)
+    return `intent://mail.google.com/mail/u/0/#search/${encodeURIComponent(query)}#Intent;scheme=https;action=android.intent.action.VIEW;package=com.google.android.gm;S.browser_fallback_url=${fallback};end`
+  }
+
+  if (/iPhone|iPad|iPod/i.test(userAgent)) {
+    return `googlegmail:///search?query=${encodeURIComponent(query)}`
+  }
+
+  return webUrl
+}

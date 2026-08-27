@@ -2,6 +2,7 @@
 
 import { ExternalLink, Mail } from 'lucide-react'
 import { ResponsiveModal } from '@/components/ui/responsive-modal'
+import { GmailOpenLink } from '@/components/gmail-open-link'
 import type { UrlaubCampingplatzEmail } from '@/lib/booking-types'
 import { EMAIL_TYP_LABELS } from '@/lib/booking-types'
 import { format } from 'date-fns'
@@ -69,15 +70,13 @@ export function StayEmailsDialog({
                 </p>
               )}
               {em.gmail_suchlink && (
-                <a
-                  href={em.gmail_suchlink}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                <GmailOpenLink
+                  webHref={em.gmail_suchlink}
                   className="inline-flex items-center gap-1 text-xs font-medium text-brand-heading hover:underline"
                 >
                   In Gmail öffnen
                   <ExternalLink className="h-3.5 w-3.5" />
-                </a>
+                </GmailOpenLink>
               )}
             </li>
           ))}

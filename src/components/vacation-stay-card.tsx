@@ -46,7 +46,7 @@ export function VacationStayCard({
   const isExpandable = hasBookingSummary || emails.length > 0 || canEdit
 
   const actionBtnClass = cn(
-    'h-9 w-full sm:flex-1 sm:min-w-0 text-xs sm:text-sm font-medium border-0',
+    'h-9 flex-1 min-w-0 text-[11px] sm:text-sm font-medium border-0 px-2',
     stayActionButtonClass()
   )
 
@@ -62,7 +62,8 @@ export function VacationStayCard({
           type="button"
           className={cn(
             'w-full text-left px-3 py-2 flex gap-3 items-start transition-colors',
-            isExpandable && 'hover:bg-muted cursor-pointer',
+            isExpandable &&
+              'hover:bg-muted hover:ring-1 hover:ring-[rgb(45,79,30)]/10 cursor-pointer',
             !isExpandable && 'cursor-default'
           )}
           onClick={() => isExpandable && setOpen((o) => !o)}
@@ -138,14 +139,14 @@ export function VacationStayCard({
         {open && isExpandable && (
           <div className="border-t border-subtle px-3 py-3 space-y-3 bg-muted/15">
             <div
-              className="flex flex-col sm:flex-row gap-2"
+              className="flex flex-row flex-wrap gap-1.5 sm:gap-2"
               onClick={(e) => e.stopPropagation()}
             >
-              <Button type="button" className={actionBtnClass} asChild>
+              <Button className={actionBtnClass} asChild>
                 <Link href={`/campingplaetze/${cp.id}`}>Campingplatz</Link>
               </Button>
               {platzplanUrl && (
-                <Button type="button" className={actionBtnClass} asChild>
+                <Button className={actionBtnClass} asChild>
                   <a href={platzplanUrl} target="_blank" rel="noopener noreferrer">
                     Platzplan
                   </a>

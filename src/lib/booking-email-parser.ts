@@ -125,6 +125,61 @@ function firstMatch(text: string, patterns: RegExp[]): string | null {
   return null
 }
 
+const ZUGANGSCODE_STOP_WORDS = new Set([
+  'g',
+  'de',
+  'en',
+  'qr',
+  'bar',
+  'der',
+  'die',
+  'das',
+  'ist',
+  'für',
+  'fur',
+  'wird',
+  'scan',
+  'lautet',
+  'lauten',
+  'befindet',
+  'steht',
+  'siehe',
+  'bitte',
+  'nicht',
+  'kein',
+  'keine',
+])
+
+/** Validiert extrahierte Zugangscodes – filtert generische Treffer wie „g“ aus „Code:“. */
+function isPlausibleAccessCode(code: string): boolean {
+  const trimmed = code.trim()
+  if (trimmed.length < 3 || trimmed.length > 24) return false
+  if (ZUGANGSCODE_STOP_WORDS.has(trimmed.toLowerCase())) return false
+  if (/^[a-zA-Z]$/.test(trimmed)) return false
+  if (/^\d+$/.test(trimmed)) return trimmed.length >= 4
+  if (/^[A-Za-z0-9\-#]+$/.test(trimmed)) {
+    return trimmed.length >= 4 || /\d/.test(trimmed)
+  }
+  return false
+}
+
+function parseZugangscode(text: string): string | null {
+  const patterns = [
+    /(?:Zugangscode|Tor(?:-)?code|Einfahrtscode|Schranken(?:code)?)[:\s#]+([A-Za-z0-9\-#]{3,24})/gi,
+    /\bPIN[:\s#]+([0-9]{4,8})\b/gi,
+    /(?:Zugang|Tor)[:\s#]+([0-9]{4,8})\b/gi,
+  ]
+  for (const re of patterns) {
+    re.lastIndex = 0
+    let match: RegExpExecArray | null
+    while ((match = re.exec(text)) !== null) {
+      const candidate = match[1]?.trim()
+      if (candidate && isPlausibleAccessCode(candidate)) return candidate
+    }
+  }
+  return null
+}
+
 function inferEmailTyp(subject: string, body: string): CampingStayEmailTyp {
   const combined = `${subject} ${body}`.toLowerCase()
   if (/storno|stornierung|cancel/i.test(combined)) return 'stornierung'
@@ -196,9 +251,7 @@ export function parseBookingEmail(
     /Abreise(?:zeit)?[:\s]*([0-9]{1,2}[:.][0-9]{2}[^,\n]*)/i,
   ])
 
-  const zugangscode = firstMatch(text, [
-    /(?:Tor(?:code)?|Zugangscode|PIN|Code)[:\s#]*([A-Za-z0-9\-#]+)/i,
-  ])
+  const zugangscode = parseZugangscode(text)
 
   const unterkunftstyp = firstMatch(text, [
     /(?:Unterkunft|Stellplatz(?:typ)?|Platztyp)[:\s]*([^\n,]{3,40})/i,
