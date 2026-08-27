@@ -24,9 +24,13 @@ const BUCHUNGSSTATUS_VALUES: Buchungsstatus[] = [
 export type BookingAiAnalyzeInput = {
   betreff: string
   emailText: string
-  pdfTexts: ExtractedBookingPdf[]
+  pdfFiles: ExtractedBookingPdf[]
   stayContext: string
 }
+
+type OpenRouterContentPart =
+  | { type: 'text'; text: string }
+  | { type: 'file'; file: { filename: string; file_data: string } }
 
 function nullIfEmpty(v: unknown): string | null {
   if (v == null) return null
@@ -75,15 +79,10 @@ function normalizeAiParsed(raw: Record<string, unknown>): ParsedBookingFields {
 }
 
 function buildUserPrompt(input: BookingAiAnalyzeInput): string {
-  const pdfBlock =
-    input.pdfTexts.length === 0
+  const pdfList =
+    input.pdfFiles.length === 0
       ? '(Keine relevanten PDF-Anhänge)'
-      : input.pdfTexts
-          .map(
-            (p, i) =>
-              `--- PDF ${i + 1}: ${p.filename} ---\n${p.text}`
-          )
-          .join('\n\n')
+      : input.pdfFiles.map((p) => `- ${p.filename}`).join('\n')
 
   return [
     'Extrahiere Buchungsdaten für einen Camping-Aufenthalt.',
@@ -93,8 +92,8 @@ function buildUserPrompt(input: BookingAiAnalyzeInput): string {
     'E-Mail-Text:',
     input.emailText || '(leer)',
     '',
-    'PDF-Inhalte (bereits ohne AGB/Widerruf gefiltert):',
-    pdfBlock,
+    'PDF-Anhänge (vollständig als Datei beigefügt, AGB/Widerruf bereits gefiltert):',
+    pdfList,
     '',
     'Bekannte Urlaube und Aufenthalte in der App (zur Zuordnung von Campingplatz/Datum):',
     input.stayContext || '(keine)',
@@ -107,17 +106,45 @@ function buildUserPrompt(input: BookingAiAnalyzeInput): string {
   ].join('\n')
 }
 
+function buildUserContent(input: BookingAiAnalyzeInput): OpenRouterContentPart[] {
+  const parts: OpenRouterContentPart[] = [{ type: 'text', text: buildUserPrompt(input) }]
+  for (const pdf of input.pdfFiles) {
+    parts.push({
+      type: 'file',
+      file: {
+        filename: pdf.filename,
+        file_data: `data:application/pdf;base64,${pdf.base64}`,
+      },
+    })
+  }
+  return parts
+}
+
 const SYSTEM_PROMPT = `Du extrahierst strukturierte Buchungsdaten aus deutschen Camping-E-Mails und PDFs.
 Antworte ausschließlich mit einem JSON-Objekt (kein Markdown, kein Fließtext).
 Datumsformat: YYYY-MM-DD. Unbekannte Felder: null.
 email_typ: reservierungsbestaetigung | buchungsbestaetigung | zahlungsbestaetigung | vor_anreise | stornierung | sonstiges
 buchungsstatus: angefragt | gebucht | bezahlt | storniert | null
-Nutze den Betreff und alle PDFs. Bei widersprüchlichen Angaben bevorzuge das Buchungs-PDF.`
+Nutze den Betreff, den E-Mail-Text und alle beigefügten PDFs vollständig. Bei widersprüchlichen Angaben bevorzuge das Buchungs-PDF.`
 
 export async function analyzeBookingWithOpenRouter(
   apiKey: string,
   input: BookingAiAnalyzeInput
 ): Promise<ParsedBookingFields> {
+  const body: Record<string, unknown> = {
+    model: MODEL,
+    temperature: 0.1,
+    response_format: { type: 'json_object' },
+    messages: [
+      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'user', content: buildUserContent(input) },
+    ],
+  }
+
+  if (input.pdfFiles.length > 0) {
+    body.plugins = [{ id: 'file-parser', pdf: { engine: 'pdf-text' } }]
+  }
+
   const res = await fetch(OPENROUTER_URL, {
     method: 'POST',
     headers: {
@@ -126,15 +153,7 @@ export async function analyzeBookingWithOpenRouter(
       'HTTP-Referer': 'https://github.com/PlhsBeatz/camping-checkliste',
       'X-Title': 'Camping Packliste Buchungsimport',
     },
-    body: JSON.stringify({
-      model: MODEL,
-      temperature: 0.1,
-      response_format: { type: 'json_object' },
-      messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: buildUserPrompt(input) },
-      ],
-    }),
+    body: JSON.stringify(body),
   })
 
   if (!res.ok) {

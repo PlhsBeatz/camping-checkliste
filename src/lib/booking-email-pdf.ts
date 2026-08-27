@@ -1,10 +1,10 @@
 /**
- * PDF-Anhänge aus E-Mails extrahieren, Allgemein-PDFs filtern, Text für KI-Analyse.
+ * PDF-Anhänge aus E-Mails extrahieren, Allgemein-PDFs filtern, für OpenRouter vorbereiten.
  */
 
 export type ExtractedBookingPdf = {
   filename: string
-  text: string
+  base64: string
 }
 
 export type SkippedPdf = {
@@ -18,8 +18,6 @@ export type BookingPdfExtractResult = {
 }
 
 const MAX_PDF_BYTES = 4 * 1024 * 1024
-/** Pro PDF – großzügig, damit mehrseitige Buchungsbestätigungen vollständig ankommen. */
-const MAX_PDF_TEXT_CHARS = 80_000
 
 const GENERIC_FILENAME_RE =
   /(?:^|[\s._-])(agb|agbs|allgemeine[\s-]?gesch|terms|conditions|widerruf|widerrufsbelehrung|datenschutz|privacy|impressum|hausordnung|information(?:sblatt)?|nutzungsbedingungen|stornobedingungen)(?:[\s._-]|$)/i
@@ -46,26 +44,27 @@ function attachmentToBytes(content: unknown): Uint8Array | null {
   return null
 }
 
-function isGenericPdf(filename: string, text: string): boolean {
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = ''
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]!)
+  return btoa(binary)
+}
+
+/** Grobe Textvorschau aus PDF-Rohbytes (ohne Parser) für AGB-Filter. */
+function pdfPreviewText(bytes: Uint8Array): string {
+  const slice = bytes.slice(0, Math.min(bytes.length, 120_000))
+  return new TextDecoder('latin1').decode(slice)
+}
+
+function isGenericPdf(filename: string, bytes: Uint8Array): boolean {
   const fn = filename.toLowerCase()
   if (GENERIC_FILENAME_RE.test(fn)) return true
 
-  const preview = text.slice(0, 3000)
+  const preview = pdfPreviewText(bytes)
   if (GENERIC_CONTENT_RE.test(preview) && !BOOKING_CONTENT_RE.test(preview)) return true
   if (/widerrufsrecht/i.test(preview) && !BOOKING_CONTENT_RE.test(preview)) return true
 
   return false
-}
-
-async function extractPdfText(data: Uint8Array): Promise<string> {
-  try {
-    const { extractText, getDocumentProxy } = await import('unpdf')
-    const pdf = await getDocumentProxy(data)
-    const { text } = await extractText(pdf, { mergePages: true })
-    return (text ?? '').replace(/\s+\n/g, '\n').trim()
-  } catch {
-    return ''
-  }
 }
 
 async function collectPdfAttachments(parsed: {
@@ -88,7 +87,7 @@ async function collectPdfAttachments(parsed: {
 }
 
 /**
- * Liest PDF-Anhänge aus Roh-.eml, filtert AGB/Widerruf o.ä., extrahiert Buchungs-PDF-Text.
+ * Liest PDF-Anhänge aus Roh-.eml, filtert AGB/Widerruf o.ä., liefert Base64 für OpenRouter.
  */
 export async function extractBookingPdfTextsFromRaw(
   raw: ArrayBuffer
@@ -111,20 +110,19 @@ export async function extractBookingPdfTextsFromRaw(
         continue
       }
 
-      const text = await extractPdfText(bytes)
-      if (!text || text.length < 40) {
-        skipped.push({ filename, reason: 'Kein lesbarer Text' })
+      if (bytes.byteLength < 400) {
+        skipped.push({ filename, reason: 'Datei zu klein' })
         continue
       }
 
-      if (isGenericPdf(filename, text)) {
+      if (isGenericPdf(filename, bytes)) {
         skipped.push({ filename, reason: 'Allgemeine Unterlage (AGB/Widerruf o.ä.)' })
         continue
       }
 
       included.push({
         filename,
-        text: text.length > MAX_PDF_TEXT_CHARS ? text.slice(0, MAX_PDF_TEXT_CHARS) : text,
+        base64: bytesToBase64(bytes),
       })
     }
   } catch (error) {

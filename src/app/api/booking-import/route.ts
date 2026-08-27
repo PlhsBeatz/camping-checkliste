@@ -156,7 +156,7 @@ export async function POST(request: NextRequest) {
       const aiParsed = await analyzeBookingWithOpenRouter(apiKey, {
         betreff,
         emailText,
-        pdfTexts: pdfExtract.included,
+        pdfFiles: pdfExtract.included,
         stayContext,
       })
       const parsed = mergeParsedFields(ruleParsed, aiParsed)
