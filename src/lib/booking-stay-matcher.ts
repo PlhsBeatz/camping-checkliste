@@ -138,6 +138,13 @@ export async function suggestStayMatch(
 
     for (const stay of stays) {
       let s = 0
+      if (
+        parsed.buchungsnummer &&
+        stay.buchungsnummer &&
+        parsed.buchungsnummer === stay.buchungsnummer
+      ) {
+        s += 50
+      }
       if (matchedCampingplatzId && stay.campingplatz_id === matchedCampingplatzId) s += 35
       else if (
         matchedCampingplatzName &&

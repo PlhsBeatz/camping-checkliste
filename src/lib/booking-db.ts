@@ -8,6 +8,7 @@ import type {
   UrlaubCampingplatzEmail,
 } from './booking-types'
 import { parseBookingEmail } from './booking-email-parser'
+import { decodeMimeHeaderValue } from './booking-email-headers'
 import { buildGmailSearchLink } from './gmail-links'
 import { suggestStayMatch } from './booking-stay-matcher'
 import {
@@ -30,7 +31,7 @@ function mapPendingRow(row: Record<string, unknown>): BookingImportPending {
     id: String(row.id),
     status: String(row.status) as BookingImportPending['status'],
     quelle: String(row.quelle) as BookingImportPending['quelle'],
-    betreff: row.betreff != null ? String(row.betreff) : null,
+    betreff: row.betreff != null ? decodeMimeHeaderValue(String(row.betreff)) : null,
     absender: row.absender != null ? String(row.absender) : null,
     empfangen_am: String(row.empfangen_am),
     inhalt_text: row.inhalt_text != null ? String(row.inhalt_text) : null,
@@ -52,7 +53,7 @@ function mapEmailRow(row: Record<string, unknown>): UrlaubCampingplatzEmail {
     id: String(row.id),
     stay_id: String(row.stay_id),
     email_typ: String(row.email_typ) as CampingStayEmailTyp,
-    betreff: row.betreff != null ? String(row.betreff) : null,
+    betreff: row.betreff != null ? decodeMimeHeaderValue(String(row.betreff)) : null,
     absender: row.absender != null ? String(row.absender) : null,
     empfangen_am: row.empfangen_am != null ? String(row.empfangen_am) : null,
     gmail_suchlink: row.gmail_suchlink != null ? String(row.gmail_suchlink) : null,

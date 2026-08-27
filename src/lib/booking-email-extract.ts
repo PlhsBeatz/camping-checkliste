@@ -3,6 +3,8 @@
  * Für E-Mails mit PDF-Anhängen – postal-mime würde sonst CPU-Limit (1102) sprengen.
  */
 
+import { decodeMimeHeaderValue, extractSubjectFromRaw } from './booking-email-headers'
+
 const MAX_SCAN_BYTES = 512 * 1024
 /** Bis zu dieser Größe postal-mime (liefert bessere Ergebnisse bei verschachteltem MIME). */
 const MAX_POSTAL_MIME_BYTES = 800 * 1024
@@ -12,6 +14,8 @@ export const BOOKING_EML_MAX_R2_BYTES = 2 * 1024 * 1024
 export type ExtractedEmailBodies = {
   text: string
   html: string
+  /** Dekodierter Betreff (falls aus Roh-Mail extrahiert). */
+  subject: string | null
   usedPostalMime: boolean
 }
 
@@ -153,6 +157,8 @@ export async function extractEmailBodies(
   rawBuffer: ArrayBuffer,
   fallbackSubject: string
 ): Promise<ExtractedEmailBodies> {
+  const decodedFallback = decodeMimeHeaderValue(fallbackSubject)
+
   if (rawBuffer.byteLength <= MAX_POSTAL_MIME_BYTES) {
     try {
       const PostalMime = (await import('postal-mime')).default
@@ -162,8 +168,9 @@ export async function extractEmailBodies(
       })
       const text = parsed.text ?? ''
       const html = parsed.html ?? ''
+      const subject = decodeMimeHeaderValue(parsed.subject ?? decodedFallback)
       if (text.trim() || html.trim()) {
-        return { text, html, usedPostalMime: true }
+        return { text, html, subject, usedPostalMime: true }
       }
     } catch {
       // Fallback unten
@@ -172,10 +179,16 @@ export async function extractEmailBodies(
 
   const scanned = bytesToLatin1(rawBuffer, MAX_SCAN_BYTES)
   const walked = walkRawMime(scanned)
+  const subjectFromRaw = extractSubjectFromRaw(scanned) ?? decodedFallback
 
-  if (!walked.text && !walked.html && fallbackSubject) {
-    return { text: `[Betreff: ${fallbackSubject}]`, html: '', usedPostalMime: false }
+  if (!walked.text && !walked.html && subjectFromRaw) {
+    return {
+      text: `[Betreff: ${subjectFromRaw}]`,
+      html: '',
+      subject: subjectFromRaw,
+      usedPostalMime: false,
+    }
   }
 
-  return { ...walked, usedPostalMime: false }
+  return { ...walked, subject: subjectFromRaw, usedPostalMime: false }
 }

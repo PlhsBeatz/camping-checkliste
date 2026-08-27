@@ -1,4 +1,5 @@
 import type { ParsedBookingFields, CampingStayEmailTyp } from './booking-types'
+import { decodeMimeHeaderValue } from './booking-email-headers'
 
 const FWD_PREFIX = /^(?:Fwd|FW|Wg|Aw):\s*/i
 
@@ -55,7 +56,23 @@ export function stripHtml(html: string): string {
 }
 
 function cleanSubject(subject: string): string {
-  return subject.replace(FWD_PREFIX, '').trim()
+  const decoded = decodeMimeHeaderValue(subject)
+  return decoded.replace(FWD_PREFIX, '').trim()
+}
+
+/** Buchungs-/Reservierungsnummer oft nur im Betreff (z. B. „Reservierungsbestätigung - 12613500“). */
+function parseBookingNumberFromSubject(cleanSubj: string): string | null {
+  if (!cleanSubj) return null
+  const patterns = [
+    /(?:Reservierungs(?:bestätigung|bestaetigung)|Buchungs(?:bestätigung|bestaetigung)|Bestätigung|Confirmation|Booking)\s*[-–—]\s*(\d{4,})/i,
+    /[-–—]\s*(\d{5,})\s*$/,
+    /\bNr\.?\s*(\d{5,})\b/i,
+  ]
+  for (const re of patterns) {
+    const m = cleanSubj.match(re)
+    if (m?.[1]) return m[1]
+  }
+  return null
 }
 
 function parseGermanDate(text: string): string | null {
@@ -162,11 +179,12 @@ export function parseBookingEmail(
     /(?:Stellplatz|Standplatz)\s+([A-Za-z0-9\-/]{1,12})\b/i,
   ])
 
-  const buchungsnummer = firstMatch(combined, [
-    /(?:Buchungs(?:nummer|nr\.?)|Reservierungs(?:nummer|nr\.?)|Booking(?:\s*ID|\s*Nr\.?)|Bestell(?:nummer|nr\.?)|Auftrags(?:nummer|nr\.?))[:\s#]*([A-Za-z0-9\-/]+)/i,
-    /(?:Referenz|Vorgang|Confirmation(?:\s*No\.?)?)[:\s#]*([A-Za-z0-9\-/]+)/i,
-    /(?:Nr\.|No\.|#)\s*([A-Z0-9]{5,20})\b/,
-  ])
+  const buchungsnummer =
+    firstMatch(combined, [
+      /(?:Buchungs(?:nummer|nr\.?)|Reservierungs(?:nummer|nr\.?)|Booking(?:\s*ID|\s*Nr\.?)|Bestell(?:nummer|nr\.?)|Auftrags(?:nummer|nr\.?))[:\s#]*([A-Za-z0-9\-/]+)/i,
+      /(?:Referenz|Vorgang|Confirmation(?:\s*No\.?)?)[:\s#]*([A-Za-z0-9\-/]+)/i,
+      /(?:Nr\.|No\.|#)\s*([A-Z0-9]{5,20})\b/,
+    ]) ?? parseBookingNumberFromSubject(cleanSubj)
 
   const checkin_zeit = firstMatch(text, [
     /Check-?in[:\s]*([0-9]{1,2}[:.][0-9]{2}\s*(?:Uhr)?(?:\s*[-–]\s*[0-9]{1,2}[:.][0-9]{2}\s*(?:Uhr)?)?)/i,
