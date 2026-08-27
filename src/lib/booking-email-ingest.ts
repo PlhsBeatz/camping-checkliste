@@ -4,7 +4,7 @@
  */
 
 import type { D1Database, R2Bucket } from '@cloudflare/workers-types'
-import { parseBookingEmail, stripHtml } from './booking-email-parser'
+import { parseBookingEmail, stripHtml, prepareBookingText } from './booking-email-parser'
 import {
   BOOKING_EML_MAX_R2_BYTES,
   extractEmailBodies,
@@ -29,10 +29,11 @@ export async function ingestBookingEmail(
 
     const { text, html } = await extractEmailBodies(rawBuffer, headerSubject)
     const subject = headerSubject
-    const inhalt = text || stripHtml(html) || text
+    const plainBody = text || stripHtml(html)
+    const inhalt = prepareBookingText(plainBody, subject)
     const messageId = message.headers.get('message-id')
 
-    const parsed = parseBookingEmail(inhalt, subject)
+    const parsed = parseBookingEmail(plainBody, subject)
     const id = crypto.randomUUID()
     const parsedJson = JSON.stringify(parsed)
 

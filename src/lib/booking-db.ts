@@ -215,7 +215,10 @@ export async function createBookingImportPending(
 ): Promise<BookingImportPending | null> {
   try {
     const parsed = parseBookingEmail(opts.inhalt_text, opts.betreff ?? '')
-    const suggestion = await suggestStayMatch(db, parsed)
+    const suggestion = await suggestStayMatch(db, parsed, {
+      betreff: opts.betreff,
+      absender: opts.absender,
+    })
     const id = crypto.randomUUID()
     const parsedJson = JSON.stringify(parsed)
 

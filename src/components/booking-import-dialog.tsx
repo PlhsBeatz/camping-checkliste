@@ -127,8 +127,8 @@ export function BookingImportDialog({
       )
       setStayId(s?.stay_id ?? '_new')
       setCampingplatzId(s?.campingplatz_id ?? '')
-      setStartDatum(p?.start_datum ?? '')
-      setEndDatum(p?.end_datum ?? '')
+      setStartDatum(p?.start_datum ?? s?.suggested_start_datum ?? '')
+      setEndDatum(p?.end_datum ?? s?.suggested_end_datum ?? '')
     } finally {
       setLoading(false)
     }
@@ -203,8 +203,12 @@ export function BookingImportDialog({
       setEmailTyp(data.data.parsed.email_typ ?? 'buchungsbestaetigung')
       if (data.data.suggestion?.urlaub_id) setUrlaubId(data.data.suggestion.urlaub_id)
       else if (initialUrlaubId) setUrlaubId(initialUrlaubId)
-      setStartDatum(data.data.parsed.start_datum ?? '')
-      setEndDatum(data.data.parsed.end_datum ?? '')
+      setStartDatum(
+        data.data.parsed.start_datum ?? data.data.suggestion?.suggested_start_datum ?? ''
+      )
+      setEndDatum(
+        data.data.parsed.end_datum ?? data.data.suggestion?.suggested_end_datum ?? ''
+      )
       const vacRes = await fetch('/api/vacations')
       const vacData = (await vacRes.json()) as ApiResponse<Vacation[]>
       if (vacData.success && vacData.data) setVacations(vacData.data)

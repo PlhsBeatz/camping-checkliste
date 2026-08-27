@@ -2,6 +2,43 @@ import type { ParsedBookingFields, CampingStayEmailTyp } from './booking-types'
 
 const FWD_PREFIX = /^(?:Fwd|FW|Wg|Aw):\s*/i
 
+const FWD_MARKERS = [
+  /---------- Forwarded message ---------/i,
+  /-------- Weitergeleitete Nachricht --------/i,
+  /Begin forwarded message:/i,
+  /Anfang der weitergeleiteten Nachricht:/i,
+]
+
+/** Bereitet E-Mail-Text für Parsing vor (Weiterleitung, HTML, Betreff). */
+export function prepareBookingText(body: string, subject: string): string {
+  let text = body.replace(/\r\n/g, '\n').trim()
+  if (!text && subject) text = ''
+
+  for (const marker of FWD_MARKERS) {
+    const idx = text.search(marker)
+    if (idx >= 0) {
+      const after = text.slice(idx)
+      const originalStart = after.search(
+        /\n(?:From|Von|Betreff|Subject|Datum|Date):[^\n]+\n(?:[^\n]+\n){0,6}/i
+      )
+      if (originalStart >= 0) {
+        text = after.slice(originalStart + 1)
+      } else {
+        text = after.replace(marker, '').trim()
+      }
+      break
+    }
+  }
+
+  text = text.replace(/^>+\s?/gm, '')
+
+  const cleanSubj = cleanSubject(subject)
+  if (cleanSubj) {
+    return `${text}\n\nBetreff: ${cleanSubj}`.trim()
+  }
+  return text
+}
+
 /** Entfernt HTML-Tags grob für Plaintext-Parsing. */
 export function stripHtml(html: string): string {
   return html
@@ -28,7 +65,31 @@ function parseGermanDate(text: string): string | null {
   const month = m[2].padStart(2, '0')
   let year = m[3]
   if (year.length === 2) year = `20${year}`
-  return `${year}-${month}-${day}`
+  const iso = `${year}-${month}-${day}`
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return null
+  return iso
+}
+
+function parseDateRange(text: string): { start: string | null; end: string | null } {
+  const patterns: RegExp[] = [
+    /(?:Anreise|Von|From|Check-?in|Reisezeitraum)[:\s]*(\d{1,2}[./]\d{1,2}[./]\d{2,4})[^\d\n]{0,40}(?:Abreise|Bis|To|Check-?out)[:\s]*(\d{1,2}[./]\d{1,2}[./]\d{2,4})/i,
+    /(?:vom|from)\s+(\d{1,2}[./]\d{1,2}[./]\d{2,4})\s*(?:bis|to|–|-)\s*(\d{1,2}[./]\d{1,2}[./]\d{2,4})/i,
+    /(\d{1,2}[./]\d{1,2}[./]\d{2,4})\s*(?:–|-|bis)\s*(\d{1,2}[./]\d{1,2}[./]\d{2,4})/i,
+  ]
+  for (const re of patterns) {
+    const m = text.match(re)
+    if (m?.[1] && m[2]) {
+      return { start: parseGermanDate(m[1]), end: parseGermanDate(m[2]) }
+    }
+  }
+
+  const anreise = text.match(/(?:Anreise|Check-?in)[:\s]*(\d{1,2}[./]\d{1,2}[./]\d{2,4})/i)
+  const abreise = text.match(/(?:Abreise|Check-?out)[:\s]*(\d{1,2}[./]\d{1,2}[./]\d{2,4})/i)
+  return {
+    start: anreise?.[1] ? parseGermanDate(anreise[1]) : null,
+    end: abreise?.[1] ? parseGermanDate(abreise[1]) : null,
+  }
 }
 
 function parseAmount(text: string): number | null {
@@ -68,6 +129,21 @@ function inferEmailTyp(subject: string, body: string): CampingStayEmailTyp {
   return 'sonstiges'
 }
 
+/** Vereinigt gespeicherte und neu geparste Felder (neue Werte haben Vorrang wenn gesetzt). */
+export function mergeParsedFields(
+  stored: ParsedBookingFields | null,
+  fresh: ParsedBookingFields
+): ParsedBookingFields {
+  if (!stored) return fresh
+  const out: ParsedBookingFields = { ...stored }
+  for (const [key, value] of Object.entries(fresh) as [keyof ParsedBookingFields, unknown][]) {
+    if (value != null && value !== '') {
+      ;(out as Record<string, unknown>)[key as string] = value
+    }
+  }
+  return out
+}
+
 /**
  * Regelbasiertes Parsing deutscher Camping-Buchungsmails.
  */
@@ -76,17 +152,20 @@ export function parseBookingEmail(
   subject: string
 ): ParsedBookingFields {
   const cleanSubj = cleanSubject(subject)
-  const text = body.replace(/\r\n/g, '\n')
+  const text = prepareBookingText(body, subject)
+  const combined = `${cleanSubj}\n${text}`
 
-  const platznummer = firstMatch(text, [
+  const platznummer = firstMatch(combined, [
     /(?:Stell)?platz(?:nummer)?[:\s#]*([A-Za-z0-9\-/]+)/i,
     /(?:Pitch|Platz)\s*(?:Nr\.?|#)[:\s]*([A-Za-z0-9\-/]+)/i,
     /Platz\s+([A-Za-z0-9\-/]{1,12})\b/i,
+    /(?:Stellplatz|Standplatz)\s+([A-Za-z0-9\-/]{1,12})\b/i,
   ])
 
-  const buchungsnummer = firstMatch(text, [
-    /(?:Buchungs(?:nummer|nr\.?)|Reservierungs(?:nummer|nr\.?)|Booking(?:\s*ID|\s*Nr\.?)|Bestell(?:nummer|nr\.?))[:\s#]*([A-Za-z0-9\-/]+)/i,
-    /(?:Referenz|Vorgang)[:\s#]*([A-Za-z0-9\-/]+)/i,
+  const buchungsnummer = firstMatch(combined, [
+    /(?:Buchungs(?:nummer|nr\.?)|Reservierungs(?:nummer|nr\.?)|Booking(?:\s*ID|\s*Nr\.?)|Bestell(?:nummer|nr\.?)|Auftrags(?:nummer|nr\.?))[:\s#]*([A-Za-z0-9\-/]+)/i,
+    /(?:Referenz|Vorgang|Confirmation(?:\s*No\.?)?)[:\s#]*([A-Za-z0-9\-/]+)/i,
+    /(?:Nr\.|No\.|#)\s*([A-Z0-9]{5,20})\b/,
   ])
 
   const checkin_zeit = firstMatch(text, [
@@ -115,18 +194,18 @@ export function parseBookingEmail(
   let start_datum: string | null = null
   let end_datum: string | null = null
 
-  const rangeMatch = text.match(
-    /(?:Anreise|Von|From|Check-?in)[:\s]*(\d{1,2}[./]\d{1,2}[./]\d{2,4})[^\d]{0,20}(?:Abreise|Bis|To|Check-?out)[:\s]*(\d{1,2}[./]\d{1,2}[./]\d{2,4})/i
-  )
-  if (rangeMatch?.[1] && rangeMatch[2]) {
-    start_datum = parseGermanDate(rangeMatch[1])
-    end_datum = parseGermanDate(rangeMatch[2])
-  } else {
-    const anreise = text.match(/Anreise[:\s]*(\d{1,2}[./]\d{1,2}[./]\d{2,4})/i)
-    const abreise = text.match(/Abreise[:\s]*(\d{1,2}[./]\d{1,2}[./]\d{2,4})/i)
-    if (anreise?.[1]) start_datum = parseGermanDate(anreise[1])
-    if (abreise?.[1]) end_datum = parseGermanDate(abreise[1])
-  }
+  const range = parseDateRange(combined)
+  start_datum = range.start
+  end_datum = range.end
+
+  const campingplatz_name =
+    firstMatch(combined, [
+      /(?:Camping(?:platz)?|Stellplatz)[:\s]*([^\n,]{3,60})/i,
+    ]) ??
+    firstMatch(cleanSubj, [
+      /(?:Camping(?:platz)?|Stellplatz)\s+([^\-|–]{3,60})/i,
+      /^([A-ZÄÖÜ][^\n–-]{3,50}?)(?:\s*[-–|]\s*(?:Buchung|Reservierung|Booking))/i,
+    ])
 
   const preis_gesamt =
     parseAmount(
@@ -159,10 +238,6 @@ export function parseBookingEmail(
     /(?:Stornierungsfrist|kostenfrei stornieren bis)[:\s]*(\d{1,2}[./]\d{1,2}[./]\d{2,4})/i
   )
   const stornierungsfrist = stornoMatch?.[1] ? parseGermanDate(stornoMatch[1]) : null
-
-  const campingplatz_name = firstMatch(text, [
-    /(?:Camping(?:platz)?|Stellplatz)[:\s]*([^\n,]{3,60})/i,
-  ])
 
   const email_typ = inferEmailTyp(cleanSubj, text)
 

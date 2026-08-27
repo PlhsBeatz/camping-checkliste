@@ -9,9 +9,9 @@ import {
   getBookingImportPending,
   listPendingBookingImports,
 } from '@/lib/booking-db'
-import { parseBookingEmail } from '@/lib/booking-email-parser'
+import { parseBookingEmail, mergeParsedFields } from '@/lib/booking-email-parser'
 import { suggestStayMatch } from '@/lib/booking-stay-matcher'
-import type { CampingStayEmailTyp, StayBookingFields } from '@/lib/booking-types'
+import type { CampingStayEmailTyp, ParsedBookingFields, StayBookingFields } from '@/lib/booking-types'
 
 export async function GET(request: NextRequest) {
   try {
@@ -28,10 +28,18 @@ export async function GET(request: NextRequest) {
       if (!pending) {
         return NextResponse.json({ success: false, error: 'Nicht gefunden' }, { status: 404 })
       }
-      const parsed = pending.parsed_fields_json
-        ? JSON.parse(pending.parsed_fields_json)
+      const storedParsed: ParsedBookingFields | null = pending.parsed_fields_json
+        ? (JSON.parse(pending.parsed_fields_json) as ParsedBookingFields)
         : null
-      const suggestion = parsed ? await suggestStayMatch(db, parsed) : null
+      const freshParsed = parseBookingEmail(
+        pending.inhalt_text ?? '',
+        pending.betreff ?? ''
+      )
+      const parsed = mergeParsedFields(storedParsed, freshParsed)
+      const suggestion = await suggestStayMatch(db, parsed, {
+        betreff: pending.betreff,
+        absender: pending.absender,
+      })
       const vacations = await getVacations(db)
       const stays =
         suggestion?.urlaub_id != null
@@ -102,7 +110,9 @@ export async function POST(request: NextRequest) {
 
     if (body.action === 'analyze' && body.inhalt) {
       const parsed = parseBookingEmail(body.inhalt, body.betreff ?? '')
-      const suggestion = await suggestStayMatch(db, parsed)
+      const suggestion = await suggestStayMatch(db, parsed, {
+        betreff: body.betreff,
+      })
       return NextResponse.json({ success: true, data: { parsed, suggestion } })
     }
 
@@ -118,10 +128,18 @@ export async function POST(request: NextRequest) {
           { status: 500 }
         )
       }
-      const parsed = pending.parsed_fields_json
-        ? JSON.parse(pending.parsed_fields_json)
+      const storedParsed: ParsedBookingFields | null = pending.parsed_fields_json
+        ? (JSON.parse(pending.parsed_fields_json) as ParsedBookingFields)
         : null
-      const suggestion = parsed ? await suggestStayMatch(db, parsed) : null
+      const freshParsed = parseBookingEmail(
+        pending.inhalt_text ?? '',
+        pending.betreff ?? ''
+      )
+      const parsed = mergeParsedFields(storedParsed, freshParsed)
+      const suggestion = await suggestStayMatch(db, parsed, {
+        betreff: pending.betreff,
+        absender: pending.absender,
+      })
       return NextResponse.json({ success: true, data: { pending, parsed, suggestion } })
     }
 
