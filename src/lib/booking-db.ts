@@ -16,6 +16,7 @@ import {
   getCampingStaysForVacation,
   type CampingStayInput,
 } from './db'
+import { mergeStayBookingFields } from './booking-merge'
 
 const MAX_TEXT_LEN = 8000
 
@@ -389,6 +390,20 @@ export async function confirmBookingImport(
 
   if (!stayId) return null
 
+  let bookingToSave = input.booking
+  if (input.stay_id) {
+    const stayRow = await db
+      .prepare('SELECT * FROM urlaub_campingplaetze WHERE id = ? AND urlaub_id = ?')
+      .bind(stayId, input.urlaub_id)
+      .first<Record<string, unknown>>()
+    if (stayRow) {
+      bookingToSave = mergeStayBookingFields(
+        mapStayBookingFromRow(stayRow),
+        input.booking
+      ).merged
+    }
+  }
+
   if (input.start_datum || input.end_datum) {
     await db
       .prepare(
@@ -399,7 +414,7 @@ export async function confirmBookingImport(
     await deriveAndPersistVacationDates(db, input.urlaub_id)
   }
 
-  await updateCampingStayBooking(db, stayId, input.booking)
+  await updateCampingStayBooking(db, stayId, bookingToSave)
 
   const parsed: ParsedBookingFields | null = pending.parsed_fields_json
     ? (JSON.parse(pending.parsed_fields_json) as ParsedBookingFields)

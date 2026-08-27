@@ -29,6 +29,10 @@ import {
   EMAIL_TYP_LABELS,
 } from '@/lib/booking-types'
 import type { StayMatchSuggestion } from '@/lib/booking-stay-matcher'
+import {
+  mergeStayBookingFields,
+  stayToBookingFields,
+} from '@/lib/booking-merge'
 import { invalidateBookingImportBadgeCache } from '@/hooks/use-booking-import-badge'
 import { toast } from 'sonner'
 import { Loader2, Sparkles } from 'lucide-react'
@@ -93,12 +97,57 @@ export function BookingImportDialog({
   const [endDatum, setEndDatum] = useState('')
   const [emailTyp, setEmailTyp] = useState<CampingStayEmailTyp>('buchungsbestaetigung')
   const [booking, setBooking] = useState<StayBookingFields>({})
+  const [existingBooking, setExistingBooking] = useState<StayBookingFields | null>(null)
   const [pasteBetreff, setPasteBetreff] = useState('')
   const [pasteInhalt, setPasteInhalt] = useState('')
   const [loading, setLoading] = useState(false)
   const [aiAnalyzing, setAiAnalyzing] = useState(false)
   const [aiMeta, setAiMeta] = useState<AiAnalyzeMeta | null>(null)
   const [saving, setSaving] = useState(false)
+
+  const applyBookingForStay = useCallback(
+    (stay: VacationCampingStay | null | undefined, parsedFields: ParsedBookingFields | null) => {
+      const incoming = parsedToBooking(parsedFields)
+      if (!stay) {
+        setExistingBooking(null)
+        setBooking(incoming)
+        return
+      }
+      const existing = stayToBookingFields(stay)
+      const { merged } = mergeStayBookingFields(existing, incoming)
+      setExistingBooking(existing)
+      setBooking(merged)
+    },
+    []
+  )
+
+  const parsedBooking = useMemo(() => parsedToBooking(parsed), [parsed])
+
+  const bookingSavePreview = useMemo(() => {
+    if (!existingBooking || stayId === '_new') return null
+    return mergeStayBookingFields(existingBooking, booking)
+  }, [existingBooking, booking, stayId])
+
+  const bookingEmailMerge = useMemo(() => {
+    if (!existingBooking || stayId === '_new') return null
+    return mergeStayBookingFields(existingBooking, parsedBooking)
+  }, [existingBooking, parsedBooking, stayId])
+
+  const handleStayChange = useCallback(
+    (id: string) => {
+      setStayId(id)
+      if (id === '_new') {
+        setExistingBooking(null)
+        setBooking(parsedBooking)
+        return
+      }
+      const stay = stays.find((s) => s.id === id)
+      applyBookingForStay(stay, parsed)
+      setStartDatum(parsed?.start_datum ?? stay?.start_datum ?? '')
+      setEndDatum(parsed?.end_datum ?? stay?.end_datum ?? '')
+    },
+    [applyBookingForStay, parsed, parsedBooking, stays]
+  )
 
   const applyAnalysisResult = useCallback(
     (data: {
@@ -110,21 +159,34 @@ export function BookingImportDialog({
     }) => {
       setParsed(data.parsed)
       setSuggestion(data.suggestion)
-      setBooking(parsedToBooking(data.parsed))
       setEmailTyp(data.parsed.email_typ ?? 'buchungsbestaetigung')
       if (data.vacations) setVacations(data.vacations)
       if (data.stays) setStays(data.stays)
       if (data.ai_meta) setAiMeta(data.ai_meta)
       if (data.suggestion?.urlaub_id) setUrlaubId(data.suggestion.urlaub_id)
       else if (initialUrlaubId) setUrlaubId(initialUrlaubId)
-      if (data.suggestion?.stay_id) setStayId(data.suggestion.stay_id)
+      const nextStayId = data.suggestion?.stay_id ?? '_new'
+      setStayId(nextStayId)
       if (data.suggestion?.campingplatz_id) setCampingplatzId(data.suggestion.campingplatz_id)
+      const matchedStay =
+        nextStayId !== '_new'
+          ? data.stays?.find((s) => s.id === nextStayId)
+          : undefined
+      applyBookingForStay(matchedStay, data.parsed)
       setStartDatum(
-        data.parsed.start_datum ?? data.suggestion?.suggested_start_datum ?? ''
+        data.parsed.start_datum ??
+          matchedStay?.start_datum ??
+          data.suggestion?.suggested_start_datum ??
+          ''
       )
-      setEndDatum(data.parsed.end_datum ?? data.suggestion?.suggested_end_datum ?? '')
+      setEndDatum(
+        data.parsed.end_datum ??
+          matchedStay?.end_datum ??
+          data.suggestion?.suggested_end_datum ??
+          ''
+      )
     },
-    [initialUrlaubId]
+    [initialUrlaubId, applyBookingForStay]
   )
 
   const loadList = useCallback(async () => {
@@ -151,8 +213,8 @@ export function BookingImportDialog({
       setSuggestion(s)
       setVacations(v)
       setStays(st)
-      setBooking(parsedToBooking(p))
       setEmailTyp(p?.email_typ ?? 'buchungsbestaetigung')
+      const nextStayId = s?.stay_id ?? '_new'
       setUrlaubId(
         s?.urlaub_id ??
           pending.vorgeschlagener_urlaub_id ??
@@ -160,14 +222,19 @@ export function BookingImportDialog({
           v[0]?.id ??
           ''
       )
-      setStayId(s?.stay_id ?? '_new')
+      setStayId(nextStayId)
       setCampingplatzId(s?.campingplatz_id ?? '')
-      setStartDatum(p?.start_datum ?? s?.suggested_start_datum ?? '')
-      setEndDatum(p?.end_datum ?? s?.suggested_end_datum ?? '')
+      const matchedStay =
+        nextStayId !== '_new' ? st.find((stay) => stay.id === nextStayId) : undefined
+      applyBookingForStay(matchedStay, p)
+      setStartDatum(
+        p?.start_datum ?? matchedStay?.start_datum ?? s?.suggested_start_datum ?? ''
+      )
+      setEndDatum(p?.end_datum ?? matchedStay?.end_datum ?? s?.suggested_end_datum ?? '')
     } finally {
       setLoading(false)
     }
-  }, [initialUrlaubId])
+  }, [initialUrlaubId, applyBookingForStay])
 
   useEffect(() => {
     if (!open) return
@@ -516,7 +583,7 @@ export function BookingImportDialog({
                 </div>
                 <div>
                   <Label>Aufenthalt</Label>
-                  <Select value={stayId} onValueChange={setStayId}>
+                  <Select value={stayId} onValueChange={handleStayChange}>
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
@@ -560,6 +627,34 @@ export function BookingImportDialog({
                     emptyLabel="Zeitraum wählen"
                   />
                 </div>
+                {stayId !== '_new' && bookingEmailMerge && (
+                  <div className="rounded-md border bg-muted/30 px-3 py-2 text-xs space-y-1">
+                    {bookingEmailMerge.preserved.length > 0 && (
+                      <p className="text-muted-foreground">
+                        <span className="font-medium text-foreground">Bleibt unverändert</span>{' '}
+                        (nicht in dieser E-Mail):{' '}
+                        {bookingEmailMerge.preserved
+                          .map((item) => `${item.label} „${item.value}"`)
+                          .join(' · ')}
+                      </p>
+                    )}
+                    {bookingSavePreview && bookingSavePreview.changes.length > 0 && (
+                      <p className="text-foreground">
+                        <span className="font-medium">Wird aktualisiert:</span>{' '}
+                        {bookingSavePreview.changes
+                          .map((item) => `${item.label} „${item.previous}" → „${item.next}"`)
+                          .join(' · ')}
+                      </p>
+                    )}
+                    {bookingEmailMerge.preserved.length === 0 &&
+                      bookingSavePreview &&
+                      bookingSavePreview.changes.length === 0 && (
+                        <p className="text-muted-foreground">
+                          Keine Buchungsfelder ändern sich – diese E-Mail wird nur verknüpft.
+                        </p>
+                      )}
+                  </div>
+                )}
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <Label>Platznummer</Label>
