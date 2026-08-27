@@ -137,6 +137,7 @@ export function CampingStayBookingPanel({
                 stay.buchungsstatus}
             </span>
           )}
+          {stay.kontakt_platz && <span>Kontakt: {stay.kontakt_platz}</span>}
         </div>
       )}
 
@@ -272,6 +273,14 @@ export function CampingStayBookingPanel({
               <Input
                 value={form.zugangscode ?? ''}
                 onChange={(e) => setForm((f) => ({ ...f, zugangscode: e.target.value }))}
+              />
+            </div>
+            <div>
+              <Label className="text-xs">Kontakt Platz</Label>
+              <Input
+                value={form.kontakt_platz ?? ''}
+                onChange={(e) => setForm((f) => ({ ...f, kontakt_platz: e.target.value }))}
+                placeholder="Telefon, E-Mail am Platz"
               />
             </div>
             <div>

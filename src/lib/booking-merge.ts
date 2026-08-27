@@ -21,6 +21,16 @@ export type BookingMergeResult = {
   preserved: BookingFieldPreserved[]
 }
 
+export function bookingChangesByField(
+  preview: BookingMergeResult | null | undefined
+): Partial<Record<keyof StayBookingFields, BookingFieldChange>> {
+  const out: Partial<Record<keyof StayBookingFields, BookingFieldChange>> = {}
+  for (const change of preview?.changes ?? []) {
+    out[change.field] = change
+  }
+  return out
+}
+
 const FIELD_LABELS: Record<keyof StayBookingFields, string> = {
   platznummer: 'Platznummer',
   buchungsnummer: 'Buchungsnummer',

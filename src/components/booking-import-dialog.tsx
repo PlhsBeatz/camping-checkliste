@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -12,6 +12,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
 import { ResponsiveModal } from '@/components/ui/responsive-modal'
 import { StayDateRangePicker } from '@/components/stay-date-range-picker'
 import type { ApiResponse } from '@/lib/api-types'
@@ -30,12 +35,15 @@ import {
 } from '@/lib/booking-types'
 import type { StayMatchSuggestion } from '@/lib/booking-stay-matcher'
 import {
+  bookingChangesByField,
   mergeStayBookingFields,
   stayToBookingFields,
+  type BookingFieldChange,
 } from '@/lib/booking-merge'
 import { invalidateBookingImportBadgeCache } from '@/hooks/use-booking-import-badge'
+import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
-import { Loader2, Sparkles } from 'lucide-react'
+import { History, Loader2, Sparkles } from 'lucide-react'
 
 type AiAnalyzeMeta = {
   pdfs_used: string[]
@@ -61,6 +69,100 @@ function parsedToBooking(parsed: ParsedBookingFields | null): StayBookingFields 
     stornierungsfrist: parsed.stornierungsfrist ?? '',
     kontakt_platz: parsed.kontakt_platz ?? '',
   }
+}
+
+function isBookingFieldVisible(
+  field: keyof StayBookingFields,
+  booking: StayBookingFields,
+  change?: BookingFieldChange
+): boolean {
+  const always = new Set<keyof StayBookingFields>([
+    'platznummer',
+    'buchungsnummer',
+    'buchungsstatus',
+  ])
+  if (always.has(field)) return true
+  if (change) return true
+  const value = booking[field]
+  if (value == null) return false
+  if (typeof value === 'number') return Number.isFinite(value)
+  return String(value).trim() !== ''
+}
+
+function PreviousValuePopover({
+  previousValue,
+  onKeepPrevious,
+}: {
+  previousValue: string
+  onKeepPrevious?: () => void
+}) {
+  const [open, setOpen] = useState(false)
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="shrink-0 rounded p-0.5 text-amber-700 hover:bg-amber-100/80 dark:text-amber-300 dark:hover:bg-amber-900/40"
+          aria-label={`Vorheriger Wert: ${previousValue}`}
+          title={`Vorher: ${previousValue}`}
+        >
+          <History className="h-3.5 w-3.5" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent side="top" align="end" className="w-auto p-2.5">
+        <p className="text-xs text-muted-foreground">
+          Vorher: <span className="font-medium text-foreground">{previousValue}</span>
+        </p>
+        {onKeepPrevious && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="mt-2 h-7 w-full text-xs"
+            onClick={() => {
+              onKeepPrevious()
+              setOpen(false)
+            }}
+          >
+            Alten Wert behalten
+          </Button>
+        )}
+      </PopoverContent>
+    </Popover>
+  )
+}
+
+function ImportField({
+  label,
+  change,
+  onKeepPrevious,
+  children,
+}: {
+  label: string
+  change?: BookingFieldChange
+  onKeepPrevious?: () => void
+  children: ReactNode
+}) {
+  return (
+    <div
+      className={cn(
+        'space-y-1.5 rounded-lg p-2 -m-2',
+        change && 'bg-amber-50/80 ring-1 ring-amber-300/80 dark:bg-amber-950/20 dark:ring-amber-700/60'
+      )}
+    >
+      <div className="flex items-center justify-between gap-2 min-h-5">
+        <Label className={cn(change && 'text-amber-950 dark:text-amber-100')}>{label}</Label>
+        {change && (
+          <PreviousValuePopover
+            previousValue={change.previous}
+            onKeepPrevious={onKeepPrevious}
+          />
+        )}
+      </div>
+      {children}
+    </div>
+  )
 }
 
 export type BookingImportDialogProps = {
@@ -128,10 +230,50 @@ export function BookingImportDialog({
     return mergeStayBookingFields(existingBooking, booking)
   }, [existingBooking, booking, stayId])
 
-  const bookingEmailMerge = useMemo(() => {
-    if (!existingBooking || stayId === '_new') return null
-    return mergeStayBookingFields(existingBooking, parsedBooking)
-  }, [existingBooking, parsedBooking, stayId])
+  const bookingChanges = useMemo(
+    () => bookingChangesByField(bookingSavePreview),
+    [bookingSavePreview]
+  )
+
+  const selectedStay = useMemo(
+    () => (stayId === '_new' ? null : stays.find((s) => s.id === stayId) ?? null),
+    [stayId, stays]
+  )
+
+  const dateRangeChanged =
+    selectedStay != null &&
+    ((startDatum && selectedStay.start_datum && startDatum !== selectedStay.start_datum) ||
+      (endDatum && selectedStay.end_datum && endDatum !== selectedStay.end_datum))
+
+  const onlyEmailLink =
+    stayId !== '_new' &&
+    bookingSavePreview != null &&
+    bookingSavePreview.changes.length === 0 &&
+    !dateRangeChanged
+
+  const revertBookingField = useCallback(
+    (field: keyof StayBookingFields) => {
+      if (!existingBooking) return
+      const previous = existingBooking[field]
+      setBooking((b) => ({
+        ...b,
+        [field]:
+          previous ??
+          (field === 'preis_gesamt' || field === 'anzahlung_betrag'
+            ? null
+            : field === 'buchungsstatus'
+              ? null
+              : ''),
+      }))
+    },
+    [existingBooking]
+  )
+
+  const revertDateRange = useCallback(() => {
+    if (!selectedStay) return
+    setStartDatum(selectedStay.start_datum ?? '')
+    setEndDatum(selectedStay.end_datum ?? '')
+  }, [selectedStay])
 
   const handleStayChange = useCallback(
     (id: string) => {
@@ -614,8 +756,24 @@ export function BookingImportDialog({
                     </Select>
                   </div>
                 )}
-                <div>
-                  <Label>Zeitraum</Label>
+                <div
+                  className={cn(
+                    'space-y-1.5 rounded-lg p-2 -m-2',
+                    dateRangeChanged &&
+                      'bg-amber-50/80 ring-1 ring-amber-300/80 dark:bg-amber-950/20 dark:ring-amber-700/60'
+                  )}
+                >
+                  <div className="flex items-center justify-between gap-2 min-h-5">
+                    <Label className={cn(dateRangeChanged && 'text-amber-950 dark:text-amber-100')}>
+                      Zeitraum
+                    </Label>
+                    {dateRangeChanged && selectedStay && (
+                      <PreviousValuePopover
+                        previousValue={`${selectedStay.start_datum ?? '—'} – ${selectedStay.end_datum ?? '—'}`}
+                        onKeepPrevious={revertDateRange}
+                      />
+                    )}
+                  </div>
                   <StayDateRangePicker
                     startDatum={startDatum}
                     endDatum={endDatum}
@@ -627,75 +785,82 @@ export function BookingImportDialog({
                     emptyLabel="Zeitraum wählen"
                   />
                 </div>
-                {stayId !== '_new' && bookingEmailMerge && (
-                  <div className="rounded-md border bg-muted/30 px-3 py-2 text-xs space-y-1">
-                    {bookingEmailMerge.preserved.length > 0 && (
-                      <p className="text-muted-foreground">
-                        <span className="font-medium text-foreground">Bleibt unverändert</span>{' '}
-                        (nicht in dieser E-Mail):{' '}
-                        {bookingEmailMerge.preserved
-                          .map((item) => `${item.label} „${item.value}"`)
-                          .join(' · ')}
-                      </p>
-                    )}
-                    {bookingSavePreview && bookingSavePreview.changes.length > 0 && (
-                      <p className="text-foreground">
-                        <span className="font-medium">Wird aktualisiert:</span>{' '}
-                        {bookingSavePreview.changes
-                          .map((item) => `${item.label} „${item.previous}" → „${item.next}"`)
-                          .join(' · ')}
-                      </p>
-                    )}
-                    {bookingEmailMerge.preserved.length === 0 &&
-                      bookingSavePreview &&
-                      bookingSavePreview.changes.length === 0 && (
-                        <p className="text-muted-foreground">
-                          Keine Buchungsfelder ändern sich – diese E-Mail wird nur verknüpft.
-                        </p>
-                      )}
-                  </div>
+                {onlyEmailLink && (
+                  <p className="text-xs text-muted-foreground">
+                    Keine Buchungsfelder ändern sich – diese E-Mail wird nur verknüpft.
+                  </p>
                 )}
                 <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <Label>Platznummer</Label>
-                    <Input
-                      value={booking.platznummer ?? ''}
-                      onChange={(e) => setBooking((b) => ({ ...b, platznummer: e.target.value }))}
-                    />
-                  </div>
-                  <div>
-                    <Label>Buchungsnummer</Label>
-                    <Input
-                      value={booking.buchungsnummer ?? ''}
-                      onChange={(e) => setBooking((b) => ({ ...b, buchungsnummer: e.target.value }))}
-                    />
-                  </div>
-                  <div>
-                    <Label>Status</Label>
-                    <Select
-                      value={booking.buchungsstatus ?? '_none'}
-                      onValueChange={(v) =>
-                        setBooking((b) => ({
-                          ...b,
-                          buchungsstatus: v === '_none' ? null : (v as Buchungsstatus),
-                        }))
+                  {isBookingFieldVisible('platznummer', booking, bookingChanges.platznummer) && (
+                    <ImportField
+                      label="Platznummer"
+                      change={bookingChanges.platznummer}
+                      onKeepPrevious={
+                        bookingChanges.platznummer
+                          ? () => revertBookingField('platznummer')
+                          : undefined
                       }
                     >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="_none">—</SelectItem>
-                        {BUCHUNGSSTATUS_OPTIONS.map((s) => (
-                          <SelectItem key={s} value={s}>
-                            {BUCHUNGSSTATUS_LABELS[s]}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label>E-Mail-Typ</Label>
+                      <Input
+                        value={booking.platznummer ?? ''}
+                        onChange={(e) =>
+                          setBooking((b) => ({ ...b, platznummer: e.target.value }))
+                        }
+                      />
+                    </ImportField>
+                  )}
+                  {isBookingFieldVisible('buchungsnummer', booking, bookingChanges.buchungsnummer) && (
+                    <ImportField
+                      label="Buchungsnummer"
+                      change={bookingChanges.buchungsnummer}
+                      onKeepPrevious={
+                        bookingChanges.buchungsnummer
+                          ? () => revertBookingField('buchungsnummer')
+                          : undefined
+                      }
+                    >
+                      <Input
+                        value={booking.buchungsnummer ?? ''}
+                        onChange={(e) =>
+                          setBooking((b) => ({ ...b, buchungsnummer: e.target.value }))
+                        }
+                      />
+                    </ImportField>
+                  )}
+                  {isBookingFieldVisible('buchungsstatus', booking, bookingChanges.buchungsstatus) && (
+                    <ImportField
+                      label="Status"
+                      change={bookingChanges.buchungsstatus}
+                      onKeepPrevious={
+                        bookingChanges.buchungsstatus
+                          ? () => revertBookingField('buchungsstatus')
+                          : undefined
+                      }
+                    >
+                      <Select
+                        value={booking.buchungsstatus ?? '_none'}
+                        onValueChange={(v) =>
+                          setBooking((b) => ({
+                            ...b,
+                            buchungsstatus: v === '_none' ? null : (v as Buchungsstatus),
+                          }))
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="_none">—</SelectItem>
+                          {BUCHUNGSSTATUS_OPTIONS.map((s) => (
+                            <SelectItem key={s} value={s}>
+                              {BUCHUNGSSTATUS_LABELS[s]}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </ImportField>
+                  )}
+                  <ImportField label="E-Mail-Typ">
                     <Select
                       value={emailTyp}
                       onValueChange={(v) => setEmailTyp(v as CampingStayEmailTyp)}
@@ -711,7 +876,205 @@ export function BookingImportDialog({
                         ))}
                       </SelectContent>
                     </Select>
-                  </div>
+                  </ImportField>
+                  {isBookingFieldVisible('checkin_zeit', booking, bookingChanges.checkin_zeit) && (
+                    <ImportField
+                      label="Check-in"
+                      change={bookingChanges.checkin_zeit}
+                      onKeepPrevious={
+                        bookingChanges.checkin_zeit
+                          ? () => revertBookingField('checkin_zeit')
+                          : undefined
+                      }
+                    >
+                      <Input
+                        value={booking.checkin_zeit ?? ''}
+                        onChange={(e) =>
+                          setBooking((b) => ({ ...b, checkin_zeit: e.target.value }))
+                        }
+                      />
+                    </ImportField>
+                  )}
+                  {isBookingFieldVisible('checkout_zeit', booking, bookingChanges.checkout_zeit) && (
+                    <ImportField
+                      label="Check-out"
+                      change={bookingChanges.checkout_zeit}
+                      onKeepPrevious={
+                        bookingChanges.checkout_zeit
+                          ? () => revertBookingField('checkout_zeit')
+                          : undefined
+                      }
+                    >
+                      <Input
+                        value={booking.checkout_zeit ?? ''}
+                        onChange={(e) =>
+                          setBooking((b) => ({ ...b, checkout_zeit: e.target.value }))
+                        }
+                      />
+                    </ImportField>
+                  )}
+                  {isBookingFieldVisible('unterkunftstyp', booking, bookingChanges.unterkunftstyp) && (
+                    <ImportField
+                      label="Unterkunftstyp"
+                      change={bookingChanges.unterkunftstyp}
+                      onKeepPrevious={
+                        bookingChanges.unterkunftstyp
+                          ? () => revertBookingField('unterkunftstyp')
+                          : undefined
+                      }
+                    >
+                      <Input
+                        value={booking.unterkunftstyp ?? ''}
+                        onChange={(e) =>
+                          setBooking((b) => ({ ...b, unterkunftstyp: e.target.value }))
+                        }
+                      />
+                    </ImportField>
+                  )}
+                  {isBookingFieldVisible('kontakt_platz', booking, bookingChanges.kontakt_platz) && (
+                    <ImportField
+                      label="Kontakt Platz"
+                      change={bookingChanges.kontakt_platz}
+                      onKeepPrevious={
+                        bookingChanges.kontakt_platz
+                          ? () => revertBookingField('kontakt_platz')
+                          : undefined
+                      }
+                    >
+                      <Input
+                        value={booking.kontakt_platz ?? ''}
+                        onChange={(e) =>
+                          setBooking((b) => ({ ...b, kontakt_platz: e.target.value }))
+                        }
+                      />
+                    </ImportField>
+                  )}
+                  {isBookingFieldVisible('zugangscode', booking, bookingChanges.zugangscode) && (
+                    <ImportField
+                      label="Zugangscode"
+                      change={bookingChanges.zugangscode}
+                      onKeepPrevious={
+                        bookingChanges.zugangscode
+                          ? () => revertBookingField('zugangscode')
+                          : undefined
+                      }
+                    >
+                      <Input
+                        value={booking.zugangscode ?? ''}
+                        onChange={(e) =>
+                          setBooking((b) => ({ ...b, zugangscode: e.target.value }))
+                        }
+                      />
+                    </ImportField>
+                  )}
+                  {isBookingFieldVisible('preis_gesamt', booking, bookingChanges.preis_gesamt) && (
+                    <ImportField
+                      label="Preis gesamt"
+                      change={bookingChanges.preis_gesamt}
+                      onKeepPrevious={
+                        bookingChanges.preis_gesamt
+                          ? () => revertBookingField('preis_gesamt')
+                          : undefined
+                      }
+                    >
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={booking.preis_gesamt ?? ''}
+                        onChange={(e) =>
+                          setBooking((b) => ({
+                            ...b,
+                            preis_gesamt: e.target.value ? Number(e.target.value) : null,
+                          }))
+                        }
+                      />
+                    </ImportField>
+                  )}
+                  {isBookingFieldVisible('anzahlung_betrag', booking, bookingChanges.anzahlung_betrag) && (
+                    <ImportField
+                      label="Anzahlung"
+                      change={bookingChanges.anzahlung_betrag}
+                      onKeepPrevious={
+                        bookingChanges.anzahlung_betrag
+                          ? () => revertBookingField('anzahlung_betrag')
+                          : undefined
+                      }
+                    >
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={booking.anzahlung_betrag ?? ''}
+                        onChange={(e) =>
+                          setBooking((b) => ({
+                            ...b,
+                            anzahlung_betrag: e.target.value ? Number(e.target.value) : null,
+                          }))
+                        }
+                      />
+                    </ImportField>
+                  )}
+                  {isBookingFieldVisible(
+                    'restzahlung_faellig_am',
+                    booking,
+                    bookingChanges.restzahlung_faellig_am
+                  ) && (
+                    <ImportField
+                      label="Restzahlung fällig"
+                      change={bookingChanges.restzahlung_faellig_am}
+                      onKeepPrevious={
+                        bookingChanges.restzahlung_faellig_am
+                          ? () => revertBookingField('restzahlung_faellig_am')
+                          : undefined
+                      }
+                    >
+                      <Input
+                        value={booking.restzahlung_faellig_am ?? ''}
+                        onChange={(e) =>
+                          setBooking((b) => ({ ...b, restzahlung_faellig_am: e.target.value }))
+                        }
+                      />
+                    </ImportField>
+                  )}
+                  {isBookingFieldVisible('buchungsdatum', booking, bookingChanges.buchungsdatum) && (
+                    <ImportField
+                      label="Buchungsdatum"
+                      change={bookingChanges.buchungsdatum}
+                      onKeepPrevious={
+                        bookingChanges.buchungsdatum
+                          ? () => revertBookingField('buchungsdatum')
+                          : undefined
+                      }
+                    >
+                      <Input
+                        value={booking.buchungsdatum ?? ''}
+                        onChange={(e) =>
+                          setBooking((b) => ({ ...b, buchungsdatum: e.target.value }))
+                        }
+                      />
+                    </ImportField>
+                  )}
+                  {isBookingFieldVisible(
+                    'stornierungsfrist',
+                    booking,
+                    bookingChanges.stornierungsfrist
+                  ) && (
+                    <ImportField
+                      label="Stornierungsfrist"
+                      change={bookingChanges.stornierungsfrist}
+                      onKeepPrevious={
+                        bookingChanges.stornierungsfrist
+                          ? () => revertBookingField('stornierungsfrist')
+                          : undefined
+                      }
+                    >
+                      <Input
+                        value={booking.stornierungsfrist ?? ''}
+                        onChange={(e) =>
+                          setBooking((b) => ({ ...b, stornierungsfrist: e.target.value }))
+                        }
+                      />
+                    </ImportField>
+                  )}
                 </div>
                 {selectedId && (
                   <div className="flex gap-2">
