@@ -370,6 +370,10 @@ export interface VacationCampingStay {
   extras_json?: string | null
   kontakt_platz?: string | null
   notizen_buchung?: string | null
+  /** Buchung endet absichtlich 1 Tag nach geplantem Aufenthalt (Abreisetag). */
+  buchung_abreise_extra_tag?: number | null
+  /** Tatsächliches Abreisedatum laut Buchung (wenn extra_tag). */
+  buchung_end_datum?: string | null
   created_at: string
   campingplatz: Campingplatz
 }
@@ -5782,6 +5786,14 @@ function mapVacationCampingStayRow(
       withBookingFields && row.stay_notizen_buchung != null
         ? String(row.stay_notizen_buchung)
         : null,
+    buchung_abreise_extra_tag:
+      withBookingFields && row.stay_buchung_abreise_extra_tag != null
+        ? Number(row.stay_buchung_abreise_extra_tag)
+        : null,
+    buchung_end_datum:
+      withBookingFields && row.stay_buchung_end_datum != null
+        ? String(row.stay_buchung_end_datum)
+        : null,
     created_at: String(row.stay_created_at || ''),
     campingplatz: mapCampingplatzRow(row),
   }
@@ -5814,7 +5826,9 @@ export async function getCampingStaysForVacation(
          uc.restzahlung_faellig_am AS stay_restzahlung_faellig_am,
          uc.buchungsdatum AS stay_buchungsdatum, uc.stornierungsfrist AS stay_stornierungsfrist,
          uc.extras_json AS stay_extras_json, uc.kontakt_platz AS stay_kontakt_platz,
-         uc.notizen_buchung AS stay_notizen_buchung`
+         uc.notizen_buchung AS stay_notizen_buchung,
+         uc.buchung_abreise_extra_tag AS stay_buchung_abreise_extra_tag,
+         uc.buchung_end_datum AS stay_buchung_end_datum`
 
   for (const withBooking of [true, false]) {
     try {

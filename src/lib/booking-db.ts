@@ -361,6 +361,8 @@ export type ConfirmBookingImportInput = {
   end_datum?: string | null
   email_typ?: CampingStayEmailTyp
   booking: StayBookingFields
+  buchung_abreise_extra_tag?: boolean
+  buchung_end_datum?: string | null
 }
 
 export async function confirmBookingImport(
@@ -428,11 +430,29 @@ export async function confirmBookingImport(
   if (input.start_datum || input.end_datum) {
     await db
       .prepare(
-        'UPDATE urlaub_campingplaetze SET start_datum = COALESCE(?, start_datum), end_datum = COALESCE(?, end_datum) WHERE id = ?'
+        `UPDATE urlaub_campingplaetze SET start_datum = COALESCE(?, start_datum), end_datum = COALESCE(?, end_datum) WHERE id = ?`
       )
       .bind(input.start_datum ?? null, input.end_datum ?? null, stayId)
       .run()
     await deriveAndPersistVacationDates(db, input.urlaub_id)
+  }
+
+  try {
+    await db
+      .prepare(
+        `UPDATE urlaub_campingplaetze SET
+          buchung_abreise_extra_tag = ?,
+          buchung_end_datum = ?
+         WHERE id = ?`
+      )
+      .bind(
+        input.buchung_abreise_extra_tag ? 1 : 0,
+        input.buchung_abreise_extra_tag ? input.buchung_end_datum ?? null : null,
+        stayId
+      )
+      .run()
+  } catch {
+    // Migration 0053 noch nicht angewendet
   }
 
   await updateCampingStayBooking(db, stayId, bookingToSave)

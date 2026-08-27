@@ -23,6 +23,10 @@ import {
 import { cn } from '@/lib/utils'
 import { ChevronDown, ChevronUp, Copy, ExternalLink, Mail } from 'lucide-react'
 import { buildPlatzplanUrl } from '@/lib/platzplan-url'
+import { useBottomToast } from '@/components/undo-toast'
+import { CurrencyInput } from '@/components/currency-input'
+import { formatBookingMoney } from '@/lib/booking-format'
+import { formatCalendarDateDe } from '@/lib/booking-stay-dates'
 import { toast } from 'sonner'
 
 type Props = {
@@ -32,6 +36,87 @@ type Props = {
   onSaved?: () => void
   /** In Urlaub-Detail-Karte: nur Details ohne Summary/Rahmen */
   variant?: 'standalone' | 'expanded-details'
+}
+
+function BookingDetailsReadonly({
+  stay,
+  className,
+}: {
+  stay: VacationCampingStay
+  className?: string
+}) {
+  const currency = stay.waehrung ?? 'EUR'
+  return (
+    <dl className={cn('grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2 text-sm', className)}>
+      {stay.preis_gesamt != null && Number.isFinite(stay.preis_gesamt) && (
+        <div>
+          <dt className="text-xs text-muted-foreground">Preis gesamt</dt>
+          <dd className="font-medium tabular-nums">
+            {formatBookingMoney(stay.preis_gesamt, currency)}
+          </dd>
+        </div>
+      )}
+      {stay.anzahlung_betrag != null && Number.isFinite(stay.anzahlung_betrag) && (
+        <div>
+          <dt className="text-xs text-muted-foreground">Anzahlung</dt>
+          <dd className="font-medium tabular-nums">
+            {formatBookingMoney(stay.anzahlung_betrag, currency)}
+          </dd>
+        </div>
+      )}
+      {stay.restzahlung_faellig_am && (
+        <div>
+          <dt className="text-xs text-muted-foreground">Restzahlung fällig</dt>
+          <dd className="font-medium">{formatCalendarDateDe(stay.restzahlung_faellig_am)}</dd>
+        </div>
+      )}
+      {stay.checkin_zeit && (
+        <div>
+          <dt className="text-xs text-muted-foreground">Check-in</dt>
+          <dd>{stay.checkin_zeit}</dd>
+        </div>
+      )}
+      {stay.checkout_zeit && (
+        <div>
+          <dt className="text-xs text-muted-foreground">Check-out</dt>
+          <dd>{stay.checkout_zeit}</dd>
+        </div>
+      )}
+      {stay.zugangscode && (
+        <div>
+          <dt className="text-xs text-muted-foreground">Zugangscode</dt>
+          <dd>{stay.zugangscode}</dd>
+        </div>
+      )}
+      {stay.kontakt_platz && (
+        <div>
+          <dt className="text-xs text-muted-foreground">Kontakt Platz</dt>
+          <dd>{stay.kontakt_platz}</dd>
+        </div>
+      )}
+      {Boolean(stay.buchung_abreise_extra_tag) && (
+        <div className="sm:col-span-2">
+          <dt className="text-xs text-muted-foreground">Abreise Buchung</dt>
+          <dd className="flex flex-wrap items-center gap-2">
+            <span className="inline-flex items-center rounded-full bg-accent-orange/15 text-accent-orange px-2 py-0.5 text-[11px] font-medium">
+              +1 Tag länger gebucht
+            </span>
+            {stay.buchung_end_datum && (
+              <span className="text-xs text-muted-foreground">
+                Gebucht bis {formatCalendarDateDe(stay.buchung_end_datum)}
+              </span>
+            )}
+          </dd>
+        </div>
+      )}
+      {stay.notizen_buchung && (
+        <div className="sm:col-span-2">
+          <dt className="text-xs text-muted-foreground">Notizen</dt>
+          <dd>{stay.notizen_buchung}</dd>
+        </div>
+      )}
+    </dl>
+  )
 }
 
 export function CampingStayBookingPanel({
@@ -45,6 +130,7 @@ export function CampingStayBookingPanel({
   const isExpandedDetails = variant === 'expanded-details'
   const showEditForm = canEdit && (isExpandedDetails || open)
   const [saving, setSaving] = useState(false)
+  const { showBottomToast, bottomToast } = useBottomToast()
   const [form, setForm] = useState<StayBookingFields>({
     platznummer: stay.platznummer ?? '',
     buchungsnummer: stay.buchungsnummer ?? '',
@@ -63,11 +149,25 @@ export function CampingStayBookingPanel({
     notizen_buchung: stay.notizen_buchung ?? '',
   })
 
+  const hasBookingDetails =
+    stay.preis_gesamt != null ||
+    stay.anzahlung_betrag != null ||
+    Boolean(stay.restzahlung_faellig_am) ||
+    Boolean(stay.checkin_zeit) ||
+    Boolean(stay.checkout_zeit) ||
+    Boolean(stay.zugangscode) ||
+    Boolean(stay.unterkunftstyp) ||
+    Boolean(stay.kontakt_platz) ||
+    Boolean(stay.notizen_buchung) ||
+    Boolean(stay.buchung_abreise_extra_tag)
+
   const hasBookingSummary =
-    stay.platznummer ||
-    stay.buchungsnummer ||
-    stay.buchungsstatus ||
+    Boolean(stay.platznummer || stay.buchungsnummer || stay.buchungsstatus) ||
+    hasBookingDetails ||
     emails.length > 0
+
+  const showReadonlyDetails = isExpandedDetails && hasBookingDetails && !canEdit
+  const showEditForm = canEdit && (isExpandedDetails || open)
 
   const platzplanUrl = buildPlatzplanUrl(stay.campingplatz, stay.platznummer)
 
@@ -108,7 +208,7 @@ export function CampingStayBookingPanel({
         toast.error(data.error ?? 'Speichern fehlgeschlagen')
         return
       }
-      toast.success('Buchungsdaten gespeichert')
+      showBottomToast('Buchungsdaten gespeichert')
       onSaved?.()
     } catch {
       toast.error('Speichern fehlgeschlagen')
@@ -120,8 +220,37 @@ export function CampingStayBookingPanel({
   if (!hasBookingSummary && !canEdit) return null
   if (isExpandedDetails && !hasBookingSummary && !canEdit && emails.length === 0) return null
 
+  const currency = stay.waehrung ?? 'EUR'
+
   const content = (
     <>
+      {isExpandedDetails && hasBookingDetails && (
+        <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+          {stay.platznummer && (
+            <span>
+              Platz <strong className="text-foreground">{stay.platznummer}</strong>
+            </span>
+          )}
+          {stay.buchungsnummer && <span>Buchung: {stay.buchungsnummer}</span>}
+          {stay.buchungsstatus && (
+            <span>
+              {BUCHUNGSSTATUS_LABELS[stay.buchungsstatus as Buchungsstatus] ??
+                stay.buchungsstatus}
+            </span>
+          )}
+          {stay.preis_gesamt != null && Number.isFinite(stay.preis_gesamt) && (
+            <span className="font-medium text-foreground tabular-nums">
+              {formatBookingMoney(stay.preis_gesamt, currency)}
+            </span>
+          )}
+          {Boolean(stay.buchung_abreise_extra_tag) && (
+            <span className="inline-flex items-center rounded-full bg-accent-orange/15 text-accent-orange px-2 py-0.5 text-[10px] font-medium">
+              +1 Tag Abreise
+            </span>
+          )}
+        </div>
+      )}
+
       {!isExpandedDetails &&
         (stay.platznummer || stay.buchungsnummer || stay.buchungsstatus) && (
         <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground mb-2">
@@ -206,8 +335,10 @@ export function CampingStayBookingPanel({
         )}
       </div>
 
+      {showReadonlyDetails && <BookingDetailsReadonly stay={stay} />}
+
       {showEditForm && (
-        <div className={cn('mt-3 space-y-3 border-t pt-3')}>
+        <div className={cn('mt-3 space-y-3 border-t pt-3', !isExpandedDetails && 'mt-3')}>
           <div className="grid grid-cols-2 gap-2">
             <div>
               <Label className="text-xs">Platznummer</Label>
@@ -285,16 +416,18 @@ export function CampingStayBookingPanel({
             </div>
             <div>
               <Label className="text-xs">Preis gesamt</Label>
-              <Input
-                type="number"
-                step="0.01"
-                value={form.preis_gesamt ?? ''}
-                onChange={(e) =>
-                  setForm((f) => ({
-                    ...f,
-                    preis_gesamt: e.target.value ? Number(e.target.value) : null,
-                  }))
-                }
+              <CurrencyInput
+                value={form.preis_gesamt}
+                currency={form.waehrung}
+                onChange={(preis_gesamt) => setForm((f) => ({ ...f, preis_gesamt }))}
+              />
+            </div>
+            <div>
+              <Label className="text-xs">Anzahlung</Label>
+              <CurrencyInput
+                value={form.anzahlung_betrag}
+                currency={form.waehrung}
+                onChange={(anzahlung_betrag) => setForm((f) => ({ ...f, anzahlung_betrag }))}
               />
             </div>
           </div>
@@ -314,12 +447,20 @@ export function CampingStayBookingPanel({
   )
 
   if (isExpandedDetails) {
-    return <div className="text-sm space-y-3">{content}</div>
+    return (
+      <>
+        <div className="text-sm space-y-3">{content}</div>
+        {bottomToast}
+      </>
+    )
   }
 
   return (
+    <>
     <div className="mt-2 rounded-lg border border-dashed border-subtle bg-muted/20 px-3 py-2 text-sm">
       {content}
     </div>
+    {bottomToast}
+    </>
   )
 }

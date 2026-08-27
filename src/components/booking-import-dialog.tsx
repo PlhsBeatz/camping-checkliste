@@ -56,7 +56,13 @@ import {
   type BookingFieldChange,
 } from '@/lib/booking-merge'
 import { invalidateBookingImportBadgeCache } from '@/hooks/use-booking-import-badge'
-import { formatBookingMoney, parseBookingMoneyInput } from '@/lib/booking-format'
+import { useBottomToast } from '@/components/undo-toast'
+import { CurrencyInput } from '@/components/currency-input'
+import {
+  BookingExtraDayDialog,
+  buildExtraDayRangeLabels,
+} from '@/components/booking-extra-day-dialog'
+import { isExtraDepartureDayBooking } from '@/lib/booking-stay-dates'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { ChevronDown, History, Loader2, Sparkles } from 'lucide-react'
@@ -83,7 +89,7 @@ function applyChangedRing(node: ReactNode, changed: boolean): ReactNode {
       className: cn(el.props.className, CHANGED_FIELD_RING),
     })
   }
-  if ((el.type as { displayName?: string }).displayName === 'CurrencyInput') {
+  if (el.type === CurrencyInput) {
     return cloneElement(el, { highlighted: true })
   }
   const childNodes = el.props.children
@@ -93,53 +99,6 @@ function applyChangedRing(node: ReactNode, changed: boolean): ReactNode {
   }
   return node
 }
-
-function CurrencyInput({
-  value,
-  currency,
-  onChange,
-  className,
-  highlighted = false,
-}: {
-  value: number | null | undefined
-  currency?: string | null
-  onChange: (value: number | null) => void
-  className?: string
-  highlighted?: boolean
-}) {
-  const [focused, setFocused] = useState(false)
-  const [draft, setDraft] = useState('')
-
-  const displayValue = focused
-    ? draft
-    : value != null && Number.isFinite(value)
-      ? formatBookingMoney(value, currency)
-      : ''
-
-  return (
-    <Input
-      inputMode="decimal"
-      className={cn(className, highlighted && CHANGED_FIELD_RING)}
-      value={displayValue}
-      onFocus={() => {
-        setFocused(true)
-        setDraft(value != null && Number.isFinite(value) ? String(value) : '')
-      }}
-      onBlur={() => {
-        setFocused(false)
-        const parsed = parseBookingMoneyInput(draft)
-        onChange(parsed)
-      }}
-      onChange={(e) => {
-        setDraft(e.target.value)
-        const parsed = parseBookingMoneyInput(e.target.value)
-        if (parsed != null) onChange(parsed)
-        else if (!e.target.value.trim()) onChange(null)
-      }}
-    />
-  )
-}
-CurrencyInput.displayName = 'CurrencyInput'
 
 function ImportSectionHeader({
   title,
@@ -172,6 +131,8 @@ function ImportSectionHeader({
     </div>
   )
 }
+
+type DateRangeResolution = 'extra_day' | 'update_stay' | null
 
 type AiAnalyzeMeta = {
   pdfs_used: string[]
@@ -330,6 +291,27 @@ export function BookingImportDialog({
   const [aiAnalyzing, setAiAnalyzing] = useState(false)
   const [aiMeta, setAiMeta] = useState<AiAnalyzeMeta | null>(null)
   const [saving, setSaving] = useState(false)
+  const [dateRangeResolution, setDateRangeResolution] = useState<DateRangeResolution>(null)
+  const [bookedEndDatum, setBookedEndDatum] = useState<string | null>(null)
+  const [extraDayPromptOpen, setExtraDayPromptOpen] = useState(false)
+  const { showBottomToast, bottomToast } = useBottomToast()
+
+  const clearReviewState = useCallback(() => {
+    setSelectedId(null)
+    setParsed(null)
+    setSuggestion(null)
+    setExistingBooking(null)
+    setBooking({})
+    setStayId('_new')
+    setCampingplatzId('')
+    setStartDatum('')
+    setEndDatum('')
+    setEmailTyp('buchungsbestaetigung')
+    setAiMeta(null)
+    setDateRangeResolution(null)
+    setBookedEndDatum(null)
+    setExtraDayPromptOpen(false)
+  }, [])
 
   const applyBookingForStay = useCallback(
     (stay: VacationCampingStay | null | undefined, parsedFields: ParsedBookingFields | null) => {
@@ -364,8 +346,31 @@ export function BookingImportDialog({
     [stayId, stays]
   )
 
+  const extraDayCase = useMemo(() => {
+    if (!selectedStay) return false
+    return isExtraDepartureDayBooking(
+      selectedStay.start_datum,
+      selectedStay.end_datum,
+      startDatum || parsed?.start_datum,
+      endDatum || parsed?.end_datum
+    )
+  }, [selectedStay, startDatum, endDatum, parsed])
+
+  const extraDayLabels = useMemo(() => {
+    if (!selectedStay) {
+      return { stayRangeLabel: '—', importRangeLabel: '—' }
+    }
+    return buildExtraDayRangeLabels(
+      selectedStay.start_datum,
+      selectedStay.end_datum,
+      startDatum || parsed?.start_datum,
+      endDatum || parsed?.end_datum
+    )
+  }, [selectedStay, startDatum, endDatum, parsed])
+
   const dateRangeChanged =
     selectedStay != null &&
+    !(extraDayCase && dateRangeResolution === 'extra_day') &&
     ((startDatum && selectedStay.start_datum && startDatum !== selectedStay.start_datum) ||
       (endDatum && selectedStay.end_datum && endDatum !== selectedStay.end_datum))
 
@@ -373,7 +378,8 @@ export function BookingImportDialog({
     stayId !== '_new' &&
     bookingSavePreview != null &&
     bookingSavePreview.changes.length === 0 &&
-    !dateRangeChanged
+    !dateRangeChanged &&
+    !(extraDayCase && dateRangeResolution === 'extra_day')
 
   const revertBookingField = useCallback(
     (field: keyof StayBookingFields) => {
@@ -401,6 +407,9 @@ export function BookingImportDialog({
 
   const handleStayChange = useCallback(
     (id: string) => {
+      setDateRangeResolution(null)
+      setBookedEndDatum(null)
+      setExtraDayPromptOpen(false)
       setStayId(id)
       if (id === '_new') {
         setExistingBooking(null)
@@ -503,9 +512,12 @@ export function BookingImportDialog({
   }, [initialUrlaubId, applyBookingForStay])
 
   useEffect(() => {
-    if (!open) return
+    if (!open) {
+      clearReviewState()
+      return
+    }
     void loadList()
-  }, [open, loadList])
+  }, [open, loadList, clearReviewState])
 
   useEffect(() => {
     if (!open || !initialUrlaubId || initialPendingId) return
@@ -540,6 +552,36 @@ export function BookingImportDialog({
       if (data.success && data.data) setStays(data.data.stays ?? [])
     })()
   }, [urlaubId])
+
+  useEffect(() => {
+    if (!selectedStay || stayId === '_new' || !extraDayCase) {
+      if (!extraDayCase) {
+        setDateRangeResolution(null)
+        setBookedEndDatum(null)
+        setExtraDayPromptOpen(false)
+      }
+      return
+    }
+    const importEnd = endDatum || parsed?.end_datum || null
+    setBookedEndDatum(importEnd)
+    if (!dateRangeResolution) {
+      setExtraDayPromptOpen(true)
+    }
+  }, [selectedStay, stayId, extraDayCase, endDatum, parsed, dateRangeResolution])
+
+  const chooseExtraDayBooking = useCallback(() => {
+    if (!selectedStay) return
+    setDateRangeResolution('extra_day')
+    setStartDatum(selectedStay.start_datum ?? '')
+    setEndDatum(selectedStay.end_datum ?? '')
+    setBookedEndDatum(endDatum || parsed?.end_datum || null)
+    setExtraDayPromptOpen(false)
+  }, [selectedStay, endDatum, parsed])
+
+  const chooseUpdateStayDates = useCallback(() => {
+    setDateRangeResolution('update_stay')
+    setExtraDayPromptOpen(false)
+  }, [])
 
   const analyzePaste = async () => {
     if (!pasteInhalt.trim()) {
@@ -657,8 +699,13 @@ export function BookingImportDialog({
       toast.error('Campingplatz auswählen oder bestehenden Aufenthalt wählen')
       return
     }
+    if (extraDayCase && !dateRangeResolution) {
+      setExtraDayPromptOpen(true)
+      return
+    }
     setSaving(true)
     try {
+      const keepExtraDay = extraDayCase && dateRangeResolution === 'extra_day'
       const res = await fetch('/api/booking-import', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -668,10 +715,12 @@ export function BookingImportDialog({
           urlaub_id: urlaubId,
           stay_id: stayId === '_new' ? null : stayId,
           campingplatz_id: stayId === '_new' ? campingplatzId : null,
-          start_datum: startDatum || null,
-          end_datum: endDatum || null,
+          start_datum: keepExtraDay ? selectedStay?.start_datum ?? startDatum : startDatum || null,
+          end_datum: keepExtraDay ? selectedStay?.end_datum ?? endDatum : endDatum || null,
           email_typ: emailTyp,
           booking,
+          buchung_abreise_extra_tag: keepExtraDay,
+          buchung_end_datum: keepExtraDay ? bookedEndDatum : null,
         }),
       })
       const data = (await res.json()) as ApiResponse<{ stay_id: string }>
@@ -681,8 +730,8 @@ export function BookingImportDialog({
       }
       invalidateBookingImportBadgeCache()
       await loadList()
-      toast.success('Buchung gespeichert')
-      setSelectedId(null)
+      clearReviewState()
+      showBottomToast('Buchung gespeichert')
       onConfirmed?.()
     } finally {
       setSaving(false)
@@ -697,7 +746,7 @@ export function BookingImportDialog({
     })
     invalidateBookingImportBadgeCache()
     await loadList()
-    if (selectedId === id) setSelectedId(null)
+    if (selectedId === id) clearReviewState()
   }
 
   const campingplatzOptions = useMemo(() => {
@@ -716,6 +765,7 @@ export function BookingImportDialog({
       : ''
 
   return (
+    <>
     <ResponsiveModal
       open={open}
       onOpenChange={onOpenChange}
@@ -921,11 +971,30 @@ export function BookingImportDialog({
                     onChange={(start, end) => {
                       setStartDatum(start)
                       setEndDatum(end)
+                      setDateRangeResolution(null)
                     }}
                     dialogTitle="Zeitraum wählen"
                     emptyLabel="Zeitraum wählen"
                     buttonClassName={dateRangeChanged ? CHANGED_FIELD_RING : undefined}
                   />
+                  {extraDayCase && dateRangeResolution === 'extra_day' && (
+                    <p className="text-xs text-muted-foreground rounded-md bg-muted/50 px-2 py-1.5">
+                      Buchung endet einen Tag später ({extraDayLabels.importRangeLabel}) – Absicht.
+                      Aufenthalt bleibt {extraDayLabels.stayRangeLabel}.{' '}
+                      <button
+                        type="button"
+                        className="text-brand-heading underline underline-offset-2"
+                        onClick={() => setExtraDayPromptOpen(true)}
+                      >
+                        Erneut wählen
+                      </button>
+                    </p>
+                  )}
+                  {extraDayCase && !dateRangeResolution && (
+                    <p className="text-xs text-amber-800 dark:text-amber-200 rounded-md bg-amber-50/80 dark:bg-amber-950/30 px-2 py-1.5">
+                      Abweichung beim Abreisetag – bitte vor dem Speichern klären.
+                    </p>
+                  )}
                 </div>
                 {onlyEmailLink && (
                   <p className="text-xs text-muted-foreground">
@@ -1232,5 +1301,15 @@ export function BookingImportDialog({
         </section>
       </div>
     </ResponsiveModal>
+    <BookingExtraDayDialog
+      open={extraDayPromptOpen}
+      onOpenChange={setExtraDayPromptOpen}
+      stayRangeLabel={extraDayLabels.stayRangeLabel}
+      importRangeLabel={extraDayLabels.importRangeLabel}
+      onChooseExtraDay={chooseExtraDayBooking}
+      onChooseUpdateStay={chooseUpdateStayDates}
+    />
+    {bottomToast}
+    </>
   )
 }

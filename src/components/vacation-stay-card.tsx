@@ -7,6 +7,7 @@ import { ChevronDown } from 'lucide-react'
 import type { VacationCampingStay } from '@/lib/db'
 import type { UrlaubCampingplatzEmail } from '@/lib/booking-types'
 import { BUCHUNGSSTATUS_LABELS, type Buchungsstatus } from '@/lib/booking-types'
+import { formatBookingMoney } from '@/lib/booking-format'
 import { campingplatzListThumbnailSrc } from '@/lib/campingplatz-photo-url'
 import { buildPlatzplanUrl } from '@/lib/platzplan-url'
 import { CampingStayBookingPanel } from '@/components/camping-stay-booking-panel'
@@ -38,7 +39,9 @@ export function VacationStayCard({
   const platzplanUrl = buildPlatzplanUrl(cp, stay.platznummer)
 
   const hasBookingSummary =
-    Boolean(stay.platznummer || stay.buchungsnummer || stay.buchungsstatus)
+    Boolean(stay.platznummer || stay.buchungsnummer || stay.buchungsstatus) ||
+    stay.preis_gesamt != null ||
+    Boolean(stay.buchung_abreise_extra_tag)
 
   const isExpandable = hasBookingSummary || emails.length > 0 || canEdit
 
@@ -103,6 +106,16 @@ export function VacationStayCard({
                   <span>
                     {BUCHUNGSSTATUS_LABELS[stay.buchungsstatus as Buchungsstatus] ??
                       stay.buchungsstatus}
+                  </span>
+                )}
+                {stay.preis_gesamt != null && Number.isFinite(stay.preis_gesamt) && (
+                  <span className="font-medium text-foreground tabular-nums">
+                    {formatBookingMoney(stay.preis_gesamt, stay.waehrung)}
+                  </span>
+                )}
+                {Boolean(stay.buchung_abreise_extra_tag) && (
+                  <span className="inline-flex items-center rounded-full bg-accent-orange/15 text-accent-orange px-1.5 py-0.5 text-[10px] font-medium">
+                    +1 Tag
                   </span>
                 )}
               </div>

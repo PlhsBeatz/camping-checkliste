@@ -83,6 +83,8 @@ export async function POST(request: NextRequest) {
       end_datum?: string | null
       email_typ?: CampingStayEmailTyp
       booking?: StayBookingFields
+      buchung_abreise_extra_tag?: boolean
+      buchung_end_datum?: string | null
     }
 
     if (body.action === 'dismiss' && body.pending_id) {
@@ -100,6 +102,8 @@ export async function POST(request: NextRequest) {
         end_datum: body.end_datum,
         email_typ: body.email_typ,
         booking: body.booking,
+        buchung_abreise_extra_tag: body.buchung_abreise_extra_tag,
+        buchung_end_datum: body.buchung_end_datum,
       })
       if (!result) {
         return NextResponse.json(

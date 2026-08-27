@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
 import { Undo2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -8,13 +8,14 @@ import { cn } from '@/lib/utils'
 const SWIPE_DISMISS_THRESHOLD = 72
 const SWIPE_DRAG_LOCK_PX = 8
 
-interface UndoToastProps {
+export interface UndoToastProps {
   isVisible: boolean
   /** Packliste: Kurzname des Gegenstands; wird zu „… als gepackt markiert“. */
   itemName?: string
   /** Wenn gesetzt, wird dieser Text statt der Packlisten-Formulierung angezeigt (z. B. Checkliste). */
   message?: string
-  onUndo: () => void
+  /** Ohne Callback wird nur die Meldung angezeigt (z. B. nach Speichern). */
+  onUndo?: () => void
   onDismiss: () => void
   duration?: number
 }
@@ -124,6 +125,8 @@ export function UndoToast({
         ? `${itemName} als gepackt markiert`
         : ''
 
+  const showUndo = typeof onUndo === 'function'
+
   return (
     <div
       data-undo-toast
@@ -134,7 +137,10 @@ export function UndoToast({
       onTouchCancel={stopTouchPropagation}
     >
       <div
-        className="bg-primary text-primary-foreground rounded-lg shadow-xl p-4 flex items-center justify-between border border-primary-foreground/10 touch-pan-y cursor-grab active:cursor-grabbing"
+        className={cn(
+          'bg-primary text-primary-foreground rounded-lg shadow-xl p-4 flex items-center border border-primary-foreground/10 touch-pan-y cursor-grab active:cursor-grabbing',
+          showUndo ? 'justify-between' : 'justify-start'
+        )}
         style={{
           transform: `translateX(${dragX}px)`,
           opacity: Math.max(0.35, 1 - Math.abs(dragX) / 280),
@@ -145,31 +151,67 @@ export function UndoToast({
         onPointerUp={finishSwipe}
         onPointerCancel={finishSwipe}
       >
-        <div className="flex-1 pr-4">
+        <div className={cn('flex-1', showUndo && 'pr-4')}>
           <p className="text-sm font-medium">
             {line}
           </p>
         </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          data-undo-action
-          onPointerDown={(event) => event.stopPropagation()}
-          onClick={(event) => {
-            event.stopPropagation()
-            onUndo()
-            onDismiss()
-          }}
-          className={cn(
-            "bg-orange-500 hover:bg-orange-600 text-white font-bold uppercase tracking-wide",
-            "px-4 py-2 rounded-md transition-colors duration-200",
-            "flex items-center gap-2 shrink-0"
-          )}
-        >
-          <Undo2 className="h-4 w-4" />
-          Rückgängig
-        </Button>
+        {showUndo && (
+          <Button
+            variant="ghost"
+            size="sm"
+            data-undo-action
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={(event) => {
+              event.stopPropagation()
+              onUndo!()
+              onDismiss()
+            }}
+            className={cn(
+              "bg-orange-500 hover:bg-orange-600 text-white font-bold uppercase tracking-wide",
+              "px-4 py-2 rounded-md transition-colors duration-200",
+              "flex items-center gap-2 shrink-0"
+            )}
+          >
+            <Undo2 className="h-4 w-4" />
+            Rückgängig
+          </Button>
+        )}
       </div>
     </div>
   )
+}
+
+type BottomToastState = {
+  message: string
+  onUndo?: () => void
+} | null
+
+/** Einheitlicher Bottom-Toast (mit optionalem Rückgängig) für Erfolgsmeldungen. */
+export function useBottomToast(): {
+  showBottomToast: (message: string, onUndo?: () => void) => void
+  dismissBottomToast: () => void
+  bottomToast: ReactNode
+} {
+  const [state, setState] = useState<BottomToastState>(null)
+
+  const showBottomToast = useCallback((message: string, onUndo?: () => void) => {
+    setState({ message, onUndo })
+  }, [])
+
+  const dismissBottomToast = useCallback(() => {
+    setState(null)
+  }, [])
+
+  const bottomToast =
+    state != null ? (
+      <UndoToast
+        isVisible
+        message={state.message}
+        onUndo={state.onUndo}
+        onDismiss={dismissBottomToast}
+      />
+    ) : null
+
+  return { showBottomToast, dismissBottomToast, bottomToast }
 }
