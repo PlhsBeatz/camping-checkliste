@@ -9,7 +9,7 @@ const MAX_SCAN_BYTES = 512 * 1024
 /** Bis zu dieser Größe postal-mime (liefert bessere Ergebnisse bei verschachteltem MIME). */
 const MAX_POSTAL_MIME_BYTES = 800 * 1024
 
-export const BOOKING_EML_MAX_R2_BYTES = 2 * 1024 * 1024
+export const BOOKING_EML_MAX_R2_BYTES = 5 * 1024 * 1024
 
 export type ExtractedEmailBodies = {
   text: string

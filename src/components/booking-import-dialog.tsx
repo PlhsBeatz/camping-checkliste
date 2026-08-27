@@ -31,7 +31,13 @@ import {
 import type { StayMatchSuggestion } from '@/lib/booking-stay-matcher'
 import { invalidateBookingImportBadgeCache } from '@/hooks/use-booking-import-badge'
 import { toast } from 'sonner'
-import { Loader2 } from 'lucide-react'
+import { Loader2, Sparkles } from 'lucide-react'
+
+type AiAnalyzeMeta = {
+  pdfs_used: string[]
+  pdfs_skipped: Array<{ filename: string; reason: string }>
+  model: string
+}
 
 function parsedToBooking(parsed: ParsedBookingFields | null): StayBookingFields {
   if (!parsed) return {}
@@ -90,7 +96,36 @@ export function BookingImportDialog({
   const [pasteBetreff, setPasteBetreff] = useState('')
   const [pasteInhalt, setPasteInhalt] = useState('')
   const [loading, setLoading] = useState(false)
+  const [aiAnalyzing, setAiAnalyzing] = useState(false)
+  const [aiMeta, setAiMeta] = useState<AiAnalyzeMeta | null>(null)
   const [saving, setSaving] = useState(false)
+
+  const applyAnalysisResult = useCallback(
+    (data: {
+      parsed: ParsedBookingFields
+      suggestion: StayMatchSuggestion | null
+      vacations?: Vacation[]
+      stays?: VacationCampingStay[]
+      ai_meta?: AiAnalyzeMeta
+    }) => {
+      setParsed(data.parsed)
+      setSuggestion(data.suggestion)
+      setBooking(parsedToBooking(data.parsed))
+      setEmailTyp(data.parsed.email_typ ?? 'buchungsbestaetigung')
+      if (data.vacations) setVacations(data.vacations)
+      if (data.stays) setStays(data.stays)
+      if (data.ai_meta) setAiMeta(data.ai_meta)
+      if (data.suggestion?.urlaub_id) setUrlaubId(data.suggestion.urlaub_id)
+      else if (initialUrlaubId) setUrlaubId(initialUrlaubId)
+      if (data.suggestion?.stay_id) setStayId(data.suggestion.stay_id)
+      if (data.suggestion?.campingplatz_id) setCampingplatzId(data.suggestion.campingplatz_id)
+      setStartDatum(
+        data.parsed.start_datum ?? data.suggestion?.suggested_start_datum ?? ''
+      )
+      setEndDatum(data.parsed.end_datum ?? data.suggestion?.suggested_end_datum ?? '')
+    },
+    [initialUrlaubId]
+  )
 
   const loadList = useCallback(async () => {
     const res = await fetch('/api/booking-import')
@@ -197,23 +232,58 @@ export function BookingImportDialog({
         return
       }
       setSelectedId(null)
-      setParsed(data.data.parsed)
-      setSuggestion(data.data.suggestion)
-      setBooking(parsedToBooking(data.data.parsed))
-      setEmailTyp(data.data.parsed.email_typ ?? 'buchungsbestaetigung')
-      if (data.data.suggestion?.urlaub_id) setUrlaubId(data.data.suggestion.urlaub_id)
-      else if (initialUrlaubId) setUrlaubId(initialUrlaubId)
-      setStartDatum(
-        data.data.parsed.start_datum ?? data.data.suggestion?.suggested_start_datum ?? ''
-      )
-      setEndDatum(
-        data.data.parsed.end_datum ?? data.data.suggestion?.suggested_end_datum ?? ''
-      )
+      setAiMeta(null)
+      applyAnalysisResult(data.data)
       const vacRes = await fetch('/api/vacations')
       const vacData = (await vacRes.json()) as ApiResponse<Vacation[]>
       if (vacData.success && vacData.data) setVacations(vacData.data)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const analyzeWithAi = async () => {
+    const inhalt = pasteInhalt.trim()
+    if (!selectedId && !inhalt) {
+      toast.error('Bitte E-Mail-Text einfügen oder einen ausstehenden Import wählen')
+      return
+    }
+    setAiAnalyzing(true)
+    try {
+      const res = await fetch('/api/booking-import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'analyze-ai',
+          pending_id: selectedId ?? undefined,
+          betreff: pasteBetreff || undefined,
+          inhalt: selectedId ? undefined : inhalt,
+        }),
+      })
+      const data = (await res.json()) as ApiResponse<{
+        parsed: ParsedBookingFields
+        suggestion: StayMatchSuggestion | null
+        vacations: Vacation[]
+        stays: VacationCampingStay[]
+        ai_meta: AiAnalyzeMeta
+      }>
+      if (!data.success || !data.data) {
+        toast.error(data.error ?? 'KI-Analyse fehlgeschlagen')
+        return
+      }
+      applyAnalysisResult(data.data)
+      const meta = data.data.ai_meta
+      const pdfInfo =
+        meta.pdfs_used.length > 0
+          ? `${meta.pdfs_used.length} PDF(s) ausgewertet`
+          : selectedId
+            ? 'ohne PDF (keine .eml in R2)'
+            : 'nur E-Mail-Text'
+      const skipped =
+        meta.pdfs_skipped.length > 0 ? `, ${meta.pdfs_skipped.length} übersprungen` : ''
+      toast.success(`KI-Analyse fertig (${pdfInfo}${skipped})`)
+    } finally {
+      setAiAnalyzing(false)
     }
   }
 
@@ -336,10 +406,28 @@ export function BookingImportDialog({
             />
           </div>
           <div className="flex gap-2 flex-wrap">
-            <Button type="button" variant="outline" disabled={loading} onClick={() => void analyzePaste()}>
+            <Button type="button" variant="outline" disabled={loading || aiAnalyzing} onClick={() => void analyzePaste()}>
               Analysieren
             </Button>
-            <Button type="button" disabled={loading} onClick={() => void createFromPaste()}>
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={loading || aiAnalyzing}
+              onClick={() => void analyzeWithAi()}
+            >
+              {aiAnalyzing ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                  KI analysiert…
+                </>
+              ) : (
+                <>
+                  <Sparkles className="h-4 w-4 mr-1" />
+                  Mit KI analysieren
+                </>
+              )}
+            </Button>
+            <Button type="button" disabled={loading || aiAnalyzing} onClick={() => void createFromPaste()}>
               Import anlegen
             </Button>
           </div>
@@ -370,11 +458,42 @@ export function BookingImportDialog({
 
         {(selectedId || parsed) && (
           <section className="rounded-xl border bg-card p-4 space-y-4">
-            <h2 className="font-medium">Review</h2>
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <h2 className="font-medium">Review</h2>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                disabled={loading || aiAnalyzing}
+                onClick={() => void analyzeWithAi()}
+              >
+                {aiAnalyzing ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                    KI analysiert…
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="h-4 w-4 mr-1" />
+                    Mit KI analysieren
+                  </>
+                )}
+              </Button>
+            </div>
             {loading ? (
               <Loader2 className="h-5 w-5 animate-spin" />
             ) : (
               <>
+                {aiMeta && (
+                  <p className="text-xs text-muted-foreground rounded-md bg-muted/50 px-2 py-1.5">
+                    KI ({aiMeta.model}):{' '}
+                    {aiMeta.pdfs_used.length > 0
+                      ? `${aiMeta.pdfs_used.length} PDF(s): ${aiMeta.pdfs_used.join(', ')}`
+                      : 'keine PDFs ausgewertet'}
+                    {aiMeta.pdfs_skipped.length > 0 &&
+                      ` · übersprungen: ${aiMeta.pdfs_skipped.map((s) => `${s.filename} (${s.reason})`).join('; ')}`}
+                  </p>
+                )}
                 {suggestion && (
                   <p className="text-xs text-muted-foreground">
                     Vorschlag: {suggestion.urlaub_titel} ({suggestion.confidence})
