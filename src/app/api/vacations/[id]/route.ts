@@ -9,6 +9,7 @@ import {
 } from '@/lib/db'
 import { requireAuth } from '@/lib/api-auth'
 import { canAccessVacation } from '@/lib/permissions'
+import { getEmailsForStays } from '@/lib/booking-db'
 
 export async function GET(
   request: NextRequest,
@@ -42,9 +43,14 @@ export async function GET(
       return NextResponse.json({ success: false, error: 'Kein Zugriff' }, { status: 403 })
     }
 
+    const stayEmails = await getEmailsForStays(
+      db,
+      stays.map((stay) => stay.id)
+    )
+
     return NextResponse.json({
       success: true,
-      data: { vacation, mitreisende, campingplaetze, stays },
+      data: { vacation, mitreisende, campingplaetze, stays, stayEmails },
     })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error)

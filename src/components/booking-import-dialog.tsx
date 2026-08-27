@@ -55,7 +55,7 @@ import {
   stayToBookingFields,
   type BookingFieldChange,
 } from '@/lib/booking-merge'
-import { invalidateBookingImportBadgeCache } from '@/hooks/use-booking-import-badge'
+import { notifyBookingImportChanged } from '@/lib/booking-import-events'
 import { useBottomToast } from '@/components/undo-toast'
 import { CurrencyInput } from '@/components/currency-input'
 import {
@@ -466,8 +466,12 @@ export function BookingImportDialog({
 
   const loadList = useCallback(async () => {
     const res = await fetch('/api/booking-import')
-    const data = (await res.json()) as ApiResponse<{ list: BookingImportPending[] }>
-    if (data.success && data.data) setPendingList(data.data.list)
+    const data = (await res.json()) as ApiResponse<{ list: BookingImportPending[]; count?: number }>
+    if (data.success && data.data) {
+      setPendingList(data.data.list)
+      const count = data.data.count ?? data.data.list.length
+      notifyBookingImportChanged(count)
+    }
   }, [])
 
   const loadPending = useCallback(async (id: string) => {
@@ -681,7 +685,6 @@ export function BookingImportDialog({
         toast.error('Import fehlgeschlagen')
         return
       }
-      invalidateBookingImportBadgeCache()
       await loadList()
       await loadPending(data.data.pending.id)
       toast.success('Import angelegt – bitte prüfen und speichern')
@@ -728,7 +731,6 @@ export function BookingImportDialog({
         toast.error('Speichern fehlgeschlagen')
         return
       }
-      invalidateBookingImportBadgeCache()
       await loadList()
       clearReviewState()
       showBottomToast('Buchung gespeichert')
@@ -744,7 +746,6 @@ export function BookingImportDialog({
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'dismiss', pending_id: id }),
     })
-    invalidateBookingImportBadgeCache()
     await loadList()
     if (selectedId === id) clearReviewState()
   }

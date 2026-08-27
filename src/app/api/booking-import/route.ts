@@ -24,6 +24,12 @@ export async function GET(request: NextRequest) {
     const db = await getDB(env)
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
+    const countOnly = searchParams.get('count') === '1'
+
+    if (countOnly) {
+      const count = await countPendingBookingImports(db)
+      return NextResponse.json({ success: true, data: { count } })
+    }
 
     if (id) {
       const pending = await getBookingImportPending(db, id)

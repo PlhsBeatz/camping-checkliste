@@ -1,10 +1,11 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { usePathname } from 'next/navigation'
+import { BOOKING_IMPORT_CHANGED_EVENT } from '@/lib/booking-import-events'
+import { useReconnectRefetch } from '@/hooks/use-reconnect-refetch'
 
 const CACHE_KEY = 'camping-booking-import-badge'
-const CACHE_MS = 30_000
+const CACHE_MS = 45_000
 
 function readCache(): number | null {
   try {
@@ -27,12 +28,19 @@ function writeCache(count: number) {
   }
 }
 
+function clearCache() {
+  try {
+    sessionStorage.removeItem(CACHE_KEY)
+  } catch {
+    /* ignore */
+  }
+}
+
 export function useBookingImportBadge() {
   const [count, setCount] = useState(0)
-  const pathname = usePathname()
 
-  const load = useCallback(async (bypassCache = false) => {
-    if (!bypassCache) {
+  const load = useCallback(async (opts?: { bypassCache?: boolean }) => {
+    if (!opts?.bypassCache) {
       const cached = readCache()
       if (cached != null) {
         setCount(cached)
@@ -40,28 +48,45 @@ export function useBookingImportBadge() {
       }
     }
     try {
-      const res = await fetch('/api/booking-import')
+      const res = await fetch('/api/booking-import?count=1', { cache: 'no-store' })
       if (!res.ok) return
       const data = (await res.json()) as { success?: boolean; data?: { count?: number } }
       const c = data.success ? Number(data.data?.count ?? 0) : 0
       setCount(c)
       writeCache(c)
     } catch {
-      /* ignore */
+      /* Offline: Badge bleibt beim letzten Wert */
     }
   }, [])
 
   useEffect(() => {
     void load()
-  }, [load, pathname])
+  }, [load])
+
+  useReconnectRefetch(() => {
+    clearCache()
+    void load({ bypassCache: true })
+  })
+
+  useEffect(() => {
+    const onChange = (event: Event) => {
+      const detail = (event as CustomEvent<{ count?: number }>).detail
+      if (typeof detail?.count === 'number') {
+        setCount(detail.count)
+        writeCache(detail.count)
+        return
+      }
+      clearCache()
+      void load({ bypassCache: true })
+    }
+    window.addEventListener(BOOKING_IMPORT_CHANGED_EVENT, onChange)
+    return () => window.removeEventListener(BOOKING_IMPORT_CHANGED_EVENT, onChange)
+  }, [load])
 
   return count
 }
 
+/** @deprecated Nutze notifyBookingImportChanged aus booking-import-events */
 export function invalidateBookingImportBadgeCache() {
-  try {
-    sessionStorage.removeItem(CACHE_KEY)
-  } catch {
-    /* ignore */
-  }
+  clearCache()
 }

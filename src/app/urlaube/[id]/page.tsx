@@ -362,6 +362,7 @@ export default function UrlaubDetailPage() {
         mitreisende: Mitreisender[]
         campingplaetze: Campingplatz[]
         stays?: VacationCampingStay[]
+        stayEmails?: Record<string, UrlaubCampingplatzEmail[]>
       }>
       if (!data.success || !data.data) {
         if (typeof navigator !== 'undefined' && !navigator.onLine) {
@@ -388,23 +389,7 @@ export default function UrlaubDetailPage() {
       setMitreisende(data.data.mitreisende)
       setCampingplaetze(data.data.campingplaetze)
       setStays(data.data.stays ?? [])
-      const loadedStays = data.data.stays ?? []
-      if (loadedStays.length > 0) {
-        const emailEntries = await Promise.all(
-          loadedStays.map(async (stay) => {
-            try {
-              const er = await fetch(`/api/vacations/stays/${stay.id}/emails`)
-              const ed = (await er.json()) as ApiResponse<UrlaubCampingplatzEmail[]>
-              return [stay.id, ed.success && ed.data ? ed.data : []] as const
-            } catch {
-              return [stay.id, []] as const
-            }
-          })
-        )
-        setStayEmails(Object.fromEntries(emailEntries))
-      } else {
-        setStayEmails({})
-      }
+      setStayEmails(data.data.stayEmails ?? {})
     } catch {
       if (typeof navigator !== 'undefined' && !navigator.onLine) {
         const cached = await getCachedVacations()
