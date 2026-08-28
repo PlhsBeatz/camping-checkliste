@@ -108,17 +108,17 @@ function PackingWeightBadge({
   return (
     <span
       className={cn(
-        'text-right shrink-0 leading-none',
+        'flex flex-col items-end shrink-0 leading-none',
         over ? 'text-red-600' : 'text-amber-600'
       )}
       title={over ? 'Zuladung überschritten' : 'Wenig Gewichtsreserve'}
       aria-label={over ? `Zuladung überschritten, ${kg} kg über` : `${kg} kg Reserve`}
     >
-      <span className="material-icons text-lg leading-none" aria-hidden>
+      <span className="material-icons text-lg leading-none block" aria-hidden>
         monitor_weight
       </span>
-      <span className="block text-sm font-semibold tabular-nums mt-0.5">{kg} kg</span>
-      <span className="block text-[10px] mt-0.5">{over ? 'über' : 'Reserve'}</span>
+      <span className="text-sm font-semibold tabular-nums mt-0.5">{kg} kg</span>
+      <span className="text-[10px] mt-0.5">{over ? 'über' : 'Reserve'}</span>
     </span>
   )
 }

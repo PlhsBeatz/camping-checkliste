@@ -411,3 +411,24 @@ gmp-place-autocomplete::part(prediction-item) {
 .rastplatz-leaflet-map .leaflet-bottom {
   z-index: 7 !important;
 }
+
+@keyframes suggestion-focus-flash {
+  0%,
+  20% {
+    box-shadow: 0 0 0 3px rgb(45 79 30 / 0.7);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgb(45 79 30 / 0);
+  }
+}
+
+.suggestion-focus-flash {
+  animation: suggestion-focus-flash 1.8s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .suggestion-focus-flash {
+    animation: none;
+    box-shadow: 0 0 0 3px rgb(45 79 30 / 0.55);
+  }
+}

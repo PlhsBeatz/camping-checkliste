@@ -182,7 +182,16 @@ export async function createAlternativeGroup(
     }
   }
   await db.batch(statements)
-  return getAlternativeGroupById(db, id)
+  const created = await getAlternativeGroupById(db, id)
+  if (created) return created
+  const items: AlternativeItem[] = options.flatMap((optionIds, option_index) =>
+    (optionIds ?? []).map((gegenstand_id) => ({
+      gegenstand_id,
+      was: '',
+      option_index,
+    }))
+  )
+  return mapGroup({ id, titel: titel ?? null, genau_eines: 1 }, items)
 }
 
 export async function deleteAlternativeGroup(db: D1Database, groupId: string): Promise<boolean> {

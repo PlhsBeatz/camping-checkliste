@@ -57,7 +57,7 @@ import {
   groupsForGegenstand,
   type AlternativeGroup,
 } from '@/lib/packing-alternatives'
-import { EquipmentAlternativeEditor } from '@/components/equipment-alternative-editor'
+import { EquipmentAlternativeEditor, type EquipmentAlternativeEditorHandle } from '@/components/equipment-alternative-editor'
 
 interface CategoryWithMain extends Category {
   hauptkategorie_titel: string
@@ -111,6 +111,7 @@ export default function AusruestungPage() {
   const [addEquipmentCategoryScrollTarget, setAddEquipmentCategoryScrollTarget] =
     useState<CategorySelectScrollTarget | null>(null)
   const [alternativeGroups, setAlternativeGroups] = useState<AlternativeGroup[]>([])
+  const alternativeEditorRef = useRef<EquipmentAlternativeEditorHandle>(null)
   const [showAlternativeGroupsDialog, setShowAlternativeGroupsDialog] = useState(false)
   const [alternativeGroupsLoading, setAlternativeGroupsLoading] = useState(false)
   const alternativeGroupsLoadedRef = useRef(false)
@@ -409,6 +410,9 @@ export default function AusruestungPage() {
 
     setIsSaving(true)
     try {
+      const xorOk = await alternativeEditorRef.current?.savePending()
+      if (xorOk === false) return
+
       const payload = {
         id: editingItem.id,
         ...buildEquipmentApiPayload(formData),
@@ -750,6 +754,7 @@ export default function AusruestungPage() {
           />
           {editingItem && (
             <EquipmentAlternativeEditor
+              ref={alternativeEditorRef}
               key={editingItem.id}
               currentItem={editingItem}
               equipmentItems={equipmentItems}

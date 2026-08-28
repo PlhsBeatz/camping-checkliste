@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { forwardRef, useCallback, useImperativeHandle, useState } from 'react'
 import { ChevronDown, ChevronRight, Trash2, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -13,19 +13,24 @@ import {
   type AlternativeGroup,
 } from '@/lib/packing-alternatives'
 
-export function EquipmentAlternativeEditor({
-  currentItem,
-  equipmentItems,
-  groups,
-  canEdit,
-  onGroupsChange,
-}: {
-  currentItem: EquipmentItem
-  equipmentItems: EquipmentItem[]
-  groups: AlternativeGroup[]
-  canEdit: boolean
-  onGroupsChange: (next: AlternativeGroup[]) => void
-}) {
+export type EquipmentAlternativeEditorHandle = {
+  /** Speichert eine offene Auswahl. true = nichts offen oder erfolgreich. */
+  savePending: () => Promise<boolean>
+}
+
+export const EquipmentAlternativeEditor = forwardRef<
+  EquipmentAlternativeEditorHandle,
+  {
+    currentItem: EquipmentItem
+    equipmentItems: EquipmentItem[]
+    groups: AlternativeGroup[]
+    canEdit: boolean
+    onGroupsChange: (next: AlternativeGroup[]) => void
+  }
+>(function EquipmentAlternativeEditor(
+  { currentItem, equipmentItems, groups, canEdit, onGroupsChange },
+  ref
+) {
   const [query, setQuery] = useState('')
   const [otherIds, setOtherIds] = useState<string[]>([])
   const [saving, setSaving] = useState(false)
@@ -57,12 +62,15 @@ export function EquipmentAlternativeEditor({
     setQuery('')
   }
 
-  const save = async () => {
-    if (otherIds.length === 0 || saving) return
+  const save = useCallback(async (): Promise<boolean> => {
+    if (otherIds.length === 0) return true
+    if (saving) return false
     setSaving(true)
     try {
       const options = [[currentItem.id], otherIds]
-      const otherNames = selected.map((e) => e.was)
+      const otherNames = otherIds
+        .map((id) => equipmentItems.find((e) => e.id === id)?.was)
+        .filter(Boolean) as string[]
       const titel =
         otherNames.length === 1
           ? `${currentItem.was} oder ${otherNames[0]}`
@@ -75,18 +83,22 @@ export function EquipmentAlternativeEditor({
       const json = (await res.json()) as ApiResponse<AlternativeGroup>
       if (!json.success || !json.data) {
         alert(json.error ?? 'Alternative konnte nicht gespeichert werden')
-        return
+        return false
       }
       onGroupsChange([...groups, json.data])
       setOtherIds([])
       setQuery('')
       setExpanded(true)
+      return true
     } catch {
       alert('Alternative konnte nicht gespeichert werden')
+      return false
     } finally {
       setSaving(false)
     }
-  }
+  }, [otherIds, saving, currentItem, equipmentItems, groups, onGroupsChange])
+
+  useImperativeHandle(ref, () => ({ savePending: () => save() }), [save])
 
   const removeGroup = async (groupId: string) => {
     const res = await fetch('/api/packing-alternatives', {
@@ -207,6 +219,11 @@ export function EquipmentAlternativeEditor({
                   ))}
                 </ul>
               )}
+              {otherIds.length > 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  Wird mit „Aktualisieren“ gespeichert, oder direkt hier:
+                </p>
+              ) : null}
               <Button
                 type="button"
                 size="sm"
@@ -222,4 +239,4 @@ export function EquipmentAlternativeEditor({
       </CollapsibleContent>
     </Collapsible>
   )
-}
+})

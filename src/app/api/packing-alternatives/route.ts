@@ -58,7 +58,10 @@ export async function POST(request: NextRequest) {
     const input = body.options && body.options.length >= 2 ? body.options : (body.gegenstandIds ?? [])
     const group = await createAlternativeGroup(db, input, body.titel ?? null)
     if (!group) {
-      return NextResponse.json({ success: false, error: 'Mindestens zwei Gegenstände' }, { status: 400 })
+      return NextResponse.json(
+        { success: false, error: 'Mindestens zwei Gegenstände auf zwei Seiten' },
+        { status: 400 }
+      )
     }
     return NextResponse.json({ success: true, data: group })
   } catch (error: unknown) {

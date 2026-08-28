@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { Suspense, useCallback, useEffect, useState } from 'react'
 import { NavigationSidebar } from '@/components/navigation-sidebar'
 import { SmartSuggestionCard } from '@/components/smart-suggestion-card'
 import { Button } from '@/components/ui/button'
@@ -10,14 +10,16 @@ import type { ApiResponse } from '@/lib/api-types'
 import type { SmartSuggestion } from '@/lib/smart-suggestions'
 import { notifySmartSuggestionsChanged } from '@/lib/smart-suggestions-events'
 import { useReconnectRefetch } from '@/hooks/use-reconnect-refetch'
+import { useSmartSuggestionAct } from '@/hooks/use-smart-suggestion-act'
+import { useSuggestionFocusFlash, useSuggestionFocusId } from '@/hooks/use-suggestion-focus-flash'
 
-export default function VorschlaegePage() {
+function VorschlaegePageContent() {
+  const focusId = useSuggestionFocusId()
   const [showNav, setShowNav] = useState(false)
   const [items, setItems] = useState<SmartSuggestion[]>([])
-  const [busyId, setBusyId] = useState<string | null>(null)
 
   const load = useCallback(async () => {
-    const res = await fetch('/api/suggestions')
+    const res = await fetch('/api/suggestions', { cache: 'no-store' })
     const json = (await res.json()) as ApiResponse<SmartSuggestion[]>
     if (json.success && json.data) {
       setItems(json.data)
@@ -32,33 +34,9 @@ export default function VorschlaegePage() {
     void load()
   })
 
-  const act = async (
-    id: string,
-    action: 'accept' | 'dismiss' | 'snooze',
-    extra?: { url?: string }
-  ) => {
-    setBusyId(id)
-    try {
-      const res = await fetch('/api/suggestions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id,
-          action,
-          days: action === 'snooze' ? 7 : undefined,
-          url: extra?.url,
-        }),
-      })
-      const json = (await res.json()) as ApiResponse<unknown>
-      if (!json.success) {
-        alert(json.error ?? 'Aktion fehlgeschlagen')
-        return
-      }
-      await load()
-    } finally {
-      setBusyId(null)
-    }
-  }
+  const { busyId, act } = useSmartSuggestionAct(load)
+  const focusReady = Boolean(focusId && items.some((s) => s.id === focusId))
+  const flashing = useSuggestionFocusFlash(focusReady ? focusId : null)
 
   return (
     <div className="min-h-screen flex max-w-full overflow-x-clip">
@@ -90,12 +68,13 @@ export default function VorschlaegePage() {
           {items.length === 0 ? (
             <p className="text-sm text-muted-foreground">Keine offenen Vorschläge.</p>
           ) : (
-            <div className="grid gap-4 xl:grid-cols-2">
+            <div className="grid gap-4 xl:grid-cols-2 min-w-0">
               {items.map((s) => (
                 <SmartSuggestionCard
                   key={s.id}
                   suggestion={s}
                   busy={busyId === s.id}
+                  highlighted={flashing && s.id === focusId}
                   onAct={(action, extra) => void act(s.id, action, extra)}
                 />
               ))}
@@ -104,5 +83,13 @@ export default function VorschlaegePage() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function VorschlaegePage() {
+  return (
+    <Suspense fallback={null}>
+      <VorschlaegePageContent />
+    </Suspense>
   )
 }

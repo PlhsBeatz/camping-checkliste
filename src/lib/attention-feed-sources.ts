@@ -149,7 +149,7 @@ export async function loadAttentionFeedInput(
       kind: s.kind,
       titel: s.titel,
       begruendung: s.begruendung,
-      href: s.kind === 'packing_add' ? '/tools/vorschlaege' : suggestionHref(s),
+      href: suggestionHref(s),
       adminOnly: suggestionAdminOnly(s.kind),
       vacationTitel: vacationTitelForSuggestion(s, vacations),
     })),

@@ -4,6 +4,7 @@
 import type { D1Database } from '@cloudflare/workers-types'
 import { addCalendarDays, todayInAppTimezone } from '@/lib/app-timezone'
 import { xorSuggestionContentRelated } from '@/lib/xor-relatedness'
+import { suggestionInboxHref } from '@/lib/smart-suggestion-focus'
 
 export const SMART_SUGGESTION_KINDS = [
   'packing_add',
@@ -277,7 +278,10 @@ export async function snoozeSmartSuggestion(
 }
 
 export function suggestionHref(s: SmartSuggestion): string {
-  if (s.kind === 'platzplan' || s.kind === 'place_gap') {
+  if (s.kind === 'platzplan' || s.kind === 'packing_add' || s.kind === 'packing_copack') {
+    return suggestionInboxHref(s.id)
+  }
+  if (s.kind === 'place_gap') {
     const cpId = String(s.payload.campingplatz_id ?? s.kontext_id ?? '')
     return cpId ? `/campingplaetze/${encodeURIComponent(cpId)}` : '/campingplaetze'
   }
@@ -285,7 +289,7 @@ export function suggestionHref(s: SmartSuggestion): string {
   if (s.kontext_typ === 'vacation' && s.kontext_id) {
     return `/packliste?vacation=${encodeURIComponent(s.kontext_id)}`
   }
-  return '/tools/vorschlaege'
+  return suggestionInboxHref(s.id)
 }
 
 export function suggestionAdminOnly(kind: SmartSuggestionKind): boolean {
