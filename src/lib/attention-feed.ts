@@ -63,6 +63,7 @@ export type AttentionKind =
   | 'checkliste'
   | 'vacation_next'
   | 'sonnen_ausrichtung'
+  | 'vorschlag'
 
 export type AttentionItem = {
   key: string
@@ -161,6 +162,13 @@ export type AttentionFeedInput = {
   includeOptimierungItems: boolean
   /** false = Badge-Count ohne Fahrt-Leiste (Rasterplätze/Polyline). */
   includeTravelNav?: boolean
+  smartSuggestions?: Array<{
+    id: string
+    titel: string
+    begruendung: string | null
+    href: string
+    adminOnly: boolean
+  }>
 }
 
 function vacationRef(v: Vacation): AttentionVacationRef {
@@ -859,6 +867,23 @@ export function buildAttentionFeed(input: AttentionFeedInput): AttentionFeed {
       sicherheitsrelevant: false,
       snoozeAllowed: true,
       adminOnly: false,
+    })
+  }
+
+  for (const s of input.smartSuggestions ?? []) {
+    if (s.adminOnly && !input.includeAdminItems) continue
+    raw.push({
+      key: `vorschlag:${s.id}`,
+      kind: 'vorschlag',
+      title: s.titel,
+      reason: s.begruendung || 'Vorschlag aus euren Daten',
+      risk: null,
+      href: s.href,
+      score: 520,
+      dueYmd: null,
+      sicherheitsrelevant: false,
+      snoozeAllowed: true,
+      adminOnly: s.adminOnly,
     })
   }
 

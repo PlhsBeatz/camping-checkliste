@@ -19,6 +19,8 @@ import {
   CampingplatzTyp,
 } from '@/lib/db'
 import { requireAuth, requireAdmin } from '@/lib/api-auth'
+import { runInBackground } from '@/lib/wait-until'
+import { researchPlatzplanForCampingplatz, shouldResearchPlatzplan } from '@/lib/platzplan-research'
 
 export async function GET(request: NextRequest) {
   try {
@@ -93,6 +95,9 @@ export async function POST(request: NextRequest) {
       platzplan_url?: string | null
       platzplan_url_vorlage?: string | null
       platzplan_hinweis?: string | null
+      google_place_id?: string | null
+      telefon?: string | null
+      oeffnungszeiten?: string | null
     }
 
     if (!body.name || !body.land || !body.ort || !body.platz_typ) {
@@ -118,6 +123,9 @@ export async function POST(request: NextRequest) {
       photo_name: body.photo_name ?? null,
       aufwunschliste: body.aufwunschliste,
       top_favorit: body.top_favorit,
+      google_place_id: body.google_place_id ?? null,
+      telefon: body.telefon ?? null,
+      oeffnungszeiten: body.oeffnungszeiten ?? null,
     })
 
     if (!campingplatz) {
@@ -154,6 +162,13 @@ export async function POST(request: NextRequest) {
 
     const withJoin = await getCampingplatzById(db, campingplatz.id)
     const cp = withJoin ?? campingplatz
+    if (shouldResearchPlatzplan(cp)) {
+      await runInBackground(
+        researchPlatzplanForCampingplatz(db, cp.id, {
+          apiKey: env.OPENROUTER_API_KEY?.trim() ?? null,
+        })
+      )
+    }
     const urlaube_zuordnungen = await getUrlaubCountForCampingplatz(db, cp.id)
     return NextResponse.json({ success: true, data: { ...cp, urlaube_zuordnungen } }, { status: 201 })
   } catch (error: unknown) {
@@ -193,6 +208,9 @@ export async function PUT(request: NextRequest) {
       platzplan_url?: string | null
       platzplan_url_vorlage?: string | null
       platzplan_hinweis?: string | null
+      google_place_id?: string | null
+      telefon?: string | null
+      oeffnungszeiten?: string | null
     }
 
     if (!body.id) {
@@ -220,6 +238,9 @@ export async function PUT(request: NextRequest) {
       platzplan_url: body.platzplan_url ?? null,
       platzplan_url_vorlage: body.platzplan_url_vorlage ?? null,
       platzplan_hinweis: body.platzplan_hinweis ?? null,
+      google_place_id: body.google_place_id,
+      telefon: body.telefon,
+      oeffnungszeiten: body.oeffnungszeiten,
     })
 
     if (!updated) {
@@ -254,6 +275,13 @@ export async function PUT(request: NextRequest) {
 
     const withJoin = await getCampingplatzById(db, updated.id)
     const cp = withJoin ?? updated
+    if (shouldResearchPlatzplan(cp)) {
+      await runInBackground(
+        researchPlatzplanForCampingplatz(db, cp.id, {
+          apiKey: env.OPENROUTER_API_KEY?.trim() ?? null,
+        })
+      )
+    }
     const urlaube_zuordnungen = await getUrlaubCountForCampingplatz(db, cp.id)
     return NextResponse.json({ success: true, data: { ...cp, urlaube_zuordnungen } })
   } catch (error: unknown) {

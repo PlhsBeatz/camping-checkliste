@@ -6,6 +6,8 @@ import { processIntegrationCron } from '@/lib/integration-events'
 import { processOptimierungFaelligkeitPush } from '@/lib/optimierung-push-reminders'
 import { processRestzahlungPush } from '@/lib/restzahlung-push-reminders'
 import { processWartungFaelligkeitPush } from '@/lib/wartung-push-reminders'
+import { refreshPackingPatternsAndSuggestions } from '@/lib/packing-patterns'
+import { researchPlatzplanForCampingplatz } from '@/lib/platzplan-research'
 
 function verifyCronSecret(request: NextRequest): boolean {
   const expected = process.env.INTEGRATION_CRON_SECRET?.trim()
@@ -28,6 +30,28 @@ export async function GET(request: NextRequest) {
     const optimierungPush = await processOptimierungFaelligkeitPush(db)
     const wartungPush = await processWartungFaelligkeitPush(db)
     const restzahlungPush = await processRestzahlungPush(db)
+    const packingPatterns = await refreshPackingPatternsAndSuggestions(db)
+    let platzplanJobs = 0
+    try {
+      const missing = await db
+        .prepare(
+          `SELECT id FROM campingplaetze
+           WHERE is_archived = 0
+             AND webseite IS NOT NULL AND TRIM(webseite) != ''
+             AND (platzplan_url IS NULL OR TRIM(platzplan_url) = '')
+             AND (platzplan_url_vorlage IS NULL OR TRIM(platzplan_url_vorlage) = '')
+           LIMIT 2`
+        )
+        .all<{ id: string }>()
+      for (const row of missing.results || []) {
+        await researchPlatzplanForCampingplatz(db, row.id, {
+          apiKey: env.OPENROUTER_API_KEY?.trim() ?? null,
+        })
+        platzplanJobs++
+      }
+    } catch (error) {
+      console.error('Cron Platzplan-Suche:', error)
+    }
     return NextResponse.json({
       success: true,
       data: {
@@ -35,6 +59,8 @@ export async function GET(request: NextRequest) {
         optimierung_reminders: optimierungPush,
         wartung_reminders: wartungPush,
         restzahlung_reminders: restzahlungPush,
+        packing_patterns: packingPatterns,
+        platzplan_jobs: platzplanJobs,
       },
     })
   } catch (error: unknown) {

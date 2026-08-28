@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils'
 import { isConfigRoute } from '@/lib/config-navigation'
 import { useAttentionBadge } from '@/hooks/use-attention-badge'
 import { useBookingImportBadge } from '@/components/booking-import-badge-provider'
+import { useSmartSuggestionsBadge } from '@/hooks/use-smart-suggestions-badge'
 
 interface NavigationSidebarProps {
   isOpen: boolean
@@ -22,6 +23,7 @@ export function NavigationSidebar({ isOpen, onClose }: NavigationSidebarProps) {
   const [toolsExpanded, setToolsExpanded] = useState(false)
   const attentionCount = useAttentionBadge()
   const bookingImportCount = useBookingImportBadge()
+  const suggestionsCount = useSmartSuggestionsBadge()
 
   useEffect(() => {
     if (pathname.startsWith('/tools')) setToolsExpanded(true)
@@ -78,11 +80,13 @@ export function NavigationSidebar({ isOpen, onClose }: NavigationSidebarProps) {
     label: string
     href: string
     requiresRead?: 'wartung' | 'optimierung'
+    badge?: number
   }[] = [
     { label: 'SONNEN-AUSRICHTUNG', href: '/tools/sonnen-ausrichtung' },
     { label: 'CHECKLISTEN', href: '/tools/checklisten' },
     { label: 'WARTUNG', href: '/tools/wartung', requiresRead: 'wartung' },
     { label: 'OPTIMIERUNGEN', href: '/tools/optimierungen', requiresRead: 'optimierung' },
+    { label: 'VORSCHLÄGE', href: '/tools/vorschlaege', badge: suggestionsCount },
   ]
 
   const visibleToolsItems = toolsItems.filter((item) => {
@@ -182,13 +186,18 @@ export function NavigationSidebar({ isOpen, onClose }: NavigationSidebarProps) {
                     href={item.href}
                     onClick={() => onClose()}
                     className={cn(
-                      "block px-4 py-2 text-xs tracking-wide rounded-lg transition-colors",
+                      "flex items-center justify-between px-4 py-2 text-xs tracking-wide rounded-lg transition-colors",
                       pathname === item.href || pathname.startsWith(item.href + '/')
                         ? "text-brand-heading font-medium bg-muted"
                         : navItemIdle
                     )}
                   >
-                    {item.label}
+                    <span>{item.label}</span>
+                    {item.badge != null && item.badge > 0 ? (
+                      <span className="min-w-[1.25rem] h-5 px-1 rounded-full text-[10px] font-semibold flex items-center justify-center tabular-nums bg-[rgb(45,79,30)] text-white">
+                        {item.badge > 9 ? '9+' : item.badge}
+                      </span>
+                    ) : null}
                   </Link>
                 ))}
               </div>

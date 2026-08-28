@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { PackingList } from '@/components/packing-list-enhanced'
 import { PackingListGenerator } from '@/components/packing-list-generator'
 import { AddSingleItemDialog } from '@/components/add-single-item-dialog'
+import { PackingXorBanner } from '@/components/packing-xor-banner'
 import { NavigationSidebar } from '@/components/navigation-sidebar'
 import { PackingSettingsSidebar } from '@/components/packing-settings-sidebar'
 import { Plus, Sparkles, Menu, Search, Users } from 'lucide-react'
@@ -240,6 +241,7 @@ function HomeContent() {
     return packProfileScopeMitreisende
   }, [user, vacationMitreisende, packProfileScopeMitreisende])
   const [selectedVacationId, setSelectedVacationId] = useState<string | null>(null)
+  const [xorJustRemoved, setXorJustRemoved] = useState<{ id: string; was: string } | null>(null)
   const [vacationStays, setVacationStays] = useState<VacationCampingStay[]>([])
   const [homeCoords, setHomeCoords] = useState<{ lat: number; lng: number } | null>(null)
   const [rastplaetze, setRastplaetze] = useState<Rastplatz[]>([])
@@ -3122,6 +3124,10 @@ function HomeContent() {
           return
         }
 
+        if (item.gegenstand_id) {
+          setXorJustRemoved({ id: item.gegenstand_id, was: item.was })
+        }
+
         showDeleteUndoToast(
           formatDeleteUndoMessage(displayName),
           buildDeleteUndoAction(snapshot, {
@@ -3509,6 +3515,13 @@ function HomeContent() {
               </div>
 
               {/* Packing List: Progress + Tabs fix oben, Inhalt scrollt */}
+              <PackingXorBanner
+                vacationId={selectedVacationId}
+                packedGegenstandIds={packingItems
+                  .map((p) => p.gegenstand_id)
+                  .filter((id): id is string => !!id)}
+                justRemoved={xorJustRemoved}
+              />
               <PackingList
                   items={packingItems}
                   onToggle={handleTogglePacked}

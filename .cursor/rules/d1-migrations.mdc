@@ -1,0 +1,24 @@
+---
+description: D1-Migrationen immer über wrangler migrations apply ausführen
+alwaysApply: true
+---
+
+# D1-Migrationen
+
+Neue SQL-Dateien liegen in `migrations/` (fortlaufende Nummer, z. B. `0055_….sql`).
+
+**Lokal immer so anwenden:**
+
+```bash
+npx wrangler d1 migrations apply camping-db --local
+```
+
+**Produktion:**
+
+```bash
+npx wrangler d1 migrations apply camping-db --remote
+```
+
+Nicht verwenden: `wrangler d1 execute … --file=./migrations/….sql`. Das SQL läuft dann, Wrangler trägt die Datei aber nicht in `d1_migrations` ein. Danach schlägt `migrations apply` fehl (Tabelle/Spalte existiert schon).
+
+Falls SQL versehentlich per `--file` gelaufen ist: den Dateinamen in `d1_migrations` eintragen (`INSERT INTO d1_migrations (name) VALUES ('0054_smart_features.sql');`), nicht die Migration erneut ausführen.

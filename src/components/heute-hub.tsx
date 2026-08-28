@@ -41,6 +41,7 @@ const KIND_META: Record<AttentionKind, { label: string; icon: string }> = {
   checkliste: { label: 'Checkliste', icon: 'fact_check' },
   vacation_next: { label: 'Urlaub', icon: 'event' },
   sonnen_ausrichtung: { label: 'Sonne', icon: 'wb_sunny' },
+  vorschlag: { label: 'Vorschlag', icon: 'lightbulb' },
 }
 
 function formatHubDateRange(start: string, end: string): string {

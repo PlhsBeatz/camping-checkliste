@@ -43,6 +43,7 @@ import {
   cacheMitreisende,
 } from '@/lib/offline-db'
 import { useReconnectRefetch } from '@/hooks/use-reconnect-refetch'
+import { useCategorySuggestion } from '@/hooks/use-category-suggestion'
 
 interface CategoryWithMain extends Category {
   hauptkategorie_titel: string
@@ -98,6 +99,17 @@ export default function AusruestungPage() {
   
   // Form state
   const [formData, setFormData] = useState<EquipmentFormValues>(createDefaultEquipmentFormValues())
+  const { suggestion: addCategorySuggestion, loading: addCategoryLoading } = useCategorySuggestion(
+    formData.was,
+    showAddDialog
+  )
+
+  useEffect(() => {
+    if (!showAddDialog || !addCategorySuggestion || formData.kategorie_id) return
+    setFormData((prev) =>
+      prev.kategorie_id ? prev : { ...prev, kategorie_id: addCategorySuggestion.kategorie_id }
+    )
+  }, [showAddDialog, addCategorySuggestion, formData.kategorie_id])
 
   // Sidebar offen: Body-Scroll sperren
   useEffect(() => {
@@ -544,6 +556,17 @@ export default function AusruestungPage() {
             individuelleMitreisendeExtraOpen={individuelleMitreisendeExtraOffen}
             onIndividuelleMitreisendeExtraOpenChange={setIndividuelleMitreisendeExtraOffen}
           />
+          {addCategoryLoading && (
+            <p className="text-xs text-muted-foreground">Kategorie wird vorgeschlagen…</p>
+          )}
+          {addCategorySuggestion?.duplicate && (
+            <p className="text-xs text-amber-800 dark:text-amber-200">
+              Ähnlich zu vorhandener Ausrüstung „{addCategorySuggestion.duplicate.was}“.
+            </p>
+          )}
+          {addCategorySuggestion && !addCategorySuggestion.duplicate && (
+            <p className="text-xs text-muted-foreground">{addCategorySuggestion.begruendung}</p>
+          )}
 
           <div className="flex gap-2 pt-4">
             <Button onClick={handleSaveEquipment} disabled={isSaving} className="flex-1">

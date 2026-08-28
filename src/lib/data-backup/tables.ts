@@ -47,6 +47,11 @@ export const BACKUP_TABLE_ORDER: string[] = [
   'faelligkeiten_historie',
   'verbrauch_messungen',
   'attention_snooze',
+  'smart_vorschlaege',
+  'packing_pattern_snapshot',
+  'ausruestung_alternativgruppen',
+  'ausruestung_alternativgruppe_items',
+  'ai_call_cache',
 ]
 
 /** Legacy-API: gleiche Tabellen wie equipment ∪ referenceStammdaten */
@@ -118,6 +123,10 @@ const TOOLS = new Set([
   'optimierungen_links',
   'optimierungen_fotos',
   'attention_snooze',
+  'smart_vorschlaege',
+  'packing_pattern_snapshot',
+  'ausruestung_alternativgruppen',
+  'ausruestung_alternativgruppe_items',
 ])
 
 /** Wartung & Verbrauch (Fälligkeiten, Vorlagen, Historie, Messungen) */
@@ -180,6 +189,11 @@ export const PK_PARTS: Record<string, string[]> = {
   faelligkeiten_historie: ['id'],
   verbrauch_messungen: ['id'],
   attention_snooze: ['item_key'],
+  smart_vorschlaege: ['id'],
+  packing_pattern_snapshot: ['id'],
+  ausruestung_alternativgruppen: ['id'],
+  ausruestung_alternativgruppe_items: ['gruppe_id', 'gegenstand_id'],
+  ai_call_cache: ['cache_key'],
 }
 
 export function rowKey(table: string, row: Record<string, unknown>): string {

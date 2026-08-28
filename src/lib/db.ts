@@ -264,6 +264,9 @@ export interface Campingplatz {
   /** URL-Vorlage mit {platznummer} Platzhalter */
   platzplan_url_vorlage?: string | null
   platzplan_hinweis?: string | null
+  google_place_id?: string | null
+  telefon?: string | null
+  oeffnungszeiten?: string | null
   created_at: string
   updated_at?: string
   /** Aus JOIN campingplatz_fotos (is_cover = 1) */
@@ -595,6 +598,9 @@ function mapCampingplatzRow(row: Record<string, unknown>): Campingplatz {
       row.platzplan_url_vorlage != null ? String(row.platzplan_url_vorlage) : null,
     platzplan_hinweis:
       row.platzplan_hinweis != null ? String(row.platzplan_hinweis) : null,
+    google_place_id: row.google_place_id != null ? String(row.google_place_id) : null,
+    telefon: row.telefon != null ? String(row.telefon) : null,
+    oeffnungszeiten: row.oeffnungszeiten != null ? String(row.oeffnungszeiten) : null,
     created_at: String(row.created_at || ''),
     updated_at: row.updated_at != null ? String(row.updated_at) : undefined,
     cover_foto_id:
@@ -5486,6 +5492,9 @@ export async function createCampingplatz(
     photo_name?: string | null
     aufwunschliste?: boolean
     top_favorit?: boolean
+    google_place_id?: string | null
+    telefon?: string | null
+    oeffnungszeiten?: string | null
   }
 ): Promise<Campingplatz | null> {
   try {
@@ -5495,8 +5504,8 @@ export async function createCampingplatz(
     await db
       .prepare(
         `INSERT INTO campingplaetze 
-         (id, name, land, bundesland, ort, webseite, video_link, platz_typ, pros, cons, adresse, lat, lng, photo_name, aufwunschliste, top_favorit) 
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+         (id, name, land, bundesland, ort, webseite, video_link, platz_typ, pros, cons, adresse, lat, lng, photo_name, aufwunschliste, top_favorit, google_place_id, telefon, oeffnungszeiten) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .bind(
         id,
@@ -5514,7 +5523,10 @@ export async function createCampingplatz(
         data.lng ?? null,
         data.photo_name ?? null,
         auf,
-        top
+        top,
+        data.google_place_id ?? null,
+        data.telefon ?? null,
+        data.oeffnungszeiten ?? null
       )
       .run()
     return getCampingplatzById(db, id)
@@ -5547,6 +5559,9 @@ export async function updateCampingplatz(
     platzplan_url: string | null
     platzplan_url_vorlage: string | null
     platzplan_hinweis: string | null
+    google_place_id: string | null
+    telefon: string | null
+    oeffnungszeiten: string | null
   }>
 ): Promise<Campingplatz | null> {
   try {
@@ -5628,6 +5643,18 @@ export async function updateCampingplatz(
     if (updates.platzplan_hinweis !== undefined) {
       fields.push('platzplan_hinweis = ?')
       values.push(updates.platzplan_hinweis)
+    }
+    if (updates.google_place_id !== undefined) {
+      fields.push('google_place_id = ?')
+      values.push(updates.google_place_id)
+    }
+    if (updates.telefon !== undefined) {
+      fields.push('telefon = ?')
+      values.push(updates.telefon)
+    }
+    if (updates.oeffnungszeiten !== undefined) {
+      fields.push('oeffnungszeiten = ?')
+      values.push(updates.oeffnungszeiten)
     }
 
     if (fields.length === 0) {

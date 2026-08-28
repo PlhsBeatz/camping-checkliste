@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { ResponsiveModal } from '@/components/ui/responsive-modal'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -26,6 +26,7 @@ import {
   type EquipmentFormValues,
   type MitreisendenZeile,
 } from '@/lib/equipment-form'
+import { useCategorySuggestion } from '@/hooks/use-category-suggestion'
 
 interface AddSingleItemDialogProps {
   open: boolean
@@ -97,6 +98,9 @@ export function AddSingleItemDialog({
     mitreisendeProp.map(mitreisendenZeileAusApi)
   )
   const [individuelleMitreisendeExtraOffen, setIndividuelleMitreisendeExtraOffen] = useState(false)
+  const { suggestion: categorySuggestion, loading: categorySuggestLoading } =
+    useCategorySuggestion(packForm.was, open)
+  const appliedCategoryName = useRef('')
 
   const vacationMitreisendeIds = useMemo(
     () => vacationMitreisende.map((m) => m.id),
@@ -203,6 +207,23 @@ export function AddSingleItemDialog({
       kategorie_id: nextPack.kategorie_id,
     }))
   }
+
+  useEffect(() => {
+    if (!open) {
+      appliedCategoryName.current = ''
+      return
+    }
+    if (!categorySuggestion) return
+    const kat = categorySuggestion.kategorie_id
+    setPackForm((prev) => {
+      if (prev.kategorie_id) return prev
+      const key = prev.was.trim()
+      if (!key || appliedCategoryName.current === key) return prev
+      appliedCategoryName.current = key
+      return { ...prev, kategorie_id: kat }
+    })
+    setEquipmentForm((prev) => (prev.kategorie_id ? prev : { ...prev, kategorie_id: kat }))
+  }, [open, categorySuggestion])
 
   const handleSubmit = async () => {
     const was = packForm.was.trim()
@@ -358,6 +379,17 @@ export function AddSingleItemDialog({
               mainCategories={mainCategories}
               scrollTarget={categorySelectScrollTarget}
             />
+            {categorySuggestLoading && (
+              <p className="text-xs text-muted-foreground mt-1">Kategorie wird vorgeschlagen…</p>
+            )}
+            {categorySuggestion?.duplicate && (
+              <p className="text-xs text-amber-800 dark:text-amber-200 mt-1">
+                Ähnlich zu vorhandener Ausrüstung „{categorySuggestion.duplicate.was}“.
+              </p>
+            )}
+            {categorySuggestion && !categorySuggestion.duplicate && (
+              <p className="text-xs text-muted-foreground mt-1">{categorySuggestion.begruendung}</p>
+            )}
           </div>
         </div>
 

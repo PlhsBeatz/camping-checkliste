@@ -1,9 +1,13 @@
 import type { ParsedBookingFields, Buchungsstatus, CampingStayEmailTyp } from './booking-types'
 import type { ExtractedBookingPdf } from './booking-email-pdf'
 import { getVacations, getCampingStaysForVacations } from './db'
+import {
+  chatJson,
+  OPENROUTER_DEFAULT_MODEL,
+  type OpenRouterContentPart,
+} from './ai/openrouter-client'
 
-const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions'
-const MODEL = 'openai/gpt-4o-mini'
+const MODEL = OPENROUTER_DEFAULT_MODEL
 
 const EMAIL_TYP_VALUES: CampingStayEmailTyp[] = [
   'reservierungsbestaetigung',
@@ -27,10 +31,6 @@ export type BookingAiAnalyzeInput = {
   pdfFiles: ExtractedBookingPdf[]
   stayContext: string
 }
-
-type OpenRouterContentPart =
-  | { type: 'text'; text: string }
-  | { type: 'file'; file: { filename: string; file_data: string } }
 
 function nullIfEmpty(v: unknown): string | null {
   if (v == null) return null
@@ -131,50 +131,17 @@ export async function analyzeBookingWithOpenRouter(
   apiKey: string,
   input: BookingAiAnalyzeInput
 ): Promise<ParsedBookingFields> {
-  const body: Record<string, unknown> = {
+  const result = await chatJson({
+    apiKey,
+    system: SYSTEM_PROMPT,
+    user: buildUserContent(input),
     model: MODEL,
     temperature: 0.1,
-    response_format: { type: 'json_object' },
-    messages: [
-      { role: 'system', content: SYSTEM_PROMPT },
-      { role: 'user', content: buildUserContent(input) },
-    ],
-  }
-
-  if (input.pdfFiles.length > 0) {
-    body.plugins = [{ id: 'file-parser', pdf: { engine: 'pdf-text' } }]
-  }
-
-  const res = await fetch(OPENROUTER_URL, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-      'HTTP-Referer': 'https://github.com/PlhsBeatz/camping-checkliste',
-      'X-Title': 'Camping Packliste Buchungsimport',
-    },
-    body: JSON.stringify(body),
+    pdfPlugin: input.pdfFiles.length > 0,
+    trigger: 'explicit',
+    title: 'Camping Packliste Buchungsimport',
   })
-
-  if (!res.ok) {
-    const errText = await res.text().catch(() => '')
-    throw new Error(`OpenRouter ${res.status}: ${errText.slice(0, 300)}`)
-  }
-
-  const data = (await res.json()) as {
-    choices?: Array<{ message?: { content?: string } }>
-  }
-  const content = data.choices?.[0]?.message?.content
-  if (!content) throw new Error('Leere KI-Antwort')
-
-  let json: Record<string, unknown>
-  try {
-    json = JSON.parse(content) as Record<string, unknown>
-  } catch {
-    throw new Error('KI-Antwort ist kein gültiges JSON')
-  }
-
-  return normalizeAiParsed(json)
+  return normalizeAiParsed(result.json)
 }
 
 /** Kompakte Aufenthalts-Liste für den KI-Prompt. */

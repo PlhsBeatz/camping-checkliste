@@ -38,6 +38,8 @@ type NewPlace = {
   websiteUri?: string
   types?: string[]
   primaryType?: string
+  nationalPhoneNumber?: string
+  regularOpeningHours?: { weekdayDescriptions?: string[] }
   fetchFields?: (opts: { fields: string[] }) => Promise<void>
 }
 
@@ -54,6 +56,8 @@ export type CampingplatzAddressResolve = {
   website?: string | null
   /** Google Place ID (ChIJ…), falls aus Autocomplete */
   googlePlaceId?: string | null
+  telefon?: string | null
+  oeffnungszeiten?: string | null
   /** Google-Typen (z. B. aus Link-Import) */
   googleTypes?: string[]
   /** Primärtyp laut Google (z. B. restaurant) */
@@ -402,6 +406,8 @@ export function CampingplatzAddressAutocomplete(props: CampingplatzAddressAutoco
             'websiteURI',
             'types',
             'primaryType',
+            'nationalPhoneNumber',
+            'regularOpeningHours',
           ],
         })
         const addr = (place.formattedAddress ?? value) as string
@@ -431,6 +437,8 @@ export function CampingplatzAddressAutocomplete(props: CampingplatzAddressAutoco
           placeName,
           website,
           googlePlaceId: rawGooglePlaceIdFromPlace(place),
+          telefon: place.nationalPhoneNumber?.trim() || null,
+          oeffnungszeiten: place.regularOpeningHours?.weekdayDescriptions?.join('\n') || null,
           googleTypes: place.types,
           primaryType: place.primaryType,
         })

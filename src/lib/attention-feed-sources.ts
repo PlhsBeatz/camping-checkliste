@@ -17,6 +17,7 @@ import {
 import { getFaelligkeitenForHub } from '@/lib/db-wartung'
 import { getAttentionSnoozes } from '@/lib/db-attention'
 import { findCurrentOrNextVacation, type AttentionFeedInput } from '@/lib/attention-feed'
+import { listSmartSuggestions, suggestionAdminOnly, suggestionHref } from '@/lib/smart-suggestions'
 import { findRelevantVacation } from '@/lib/trip-readiness'
 import { parseGeoPoint, type GeoPoint } from '@/lib/sonnen-hub-arrival'
 import { todayInAppTimezone } from '@/lib/app-timezone'
@@ -60,6 +61,7 @@ export async function loadAttentionFeedInput(
     user,
     optimierungen,
     restzahlungStays,
+    suggestionRows,
   ] = await Promise.all([
     relevant ? getPackingItemsForHub(db, relevant.id) : Promise.resolve<PackingItem[]>([]),
     relevant ? getPackStatus(db, relevant.id) : Promise.resolve<PackStatusData | null>(null),
@@ -82,6 +84,7 @@ export async function loadAttentionFeedInput(
       ? getOptimierungen(db, undefined, { relations: false })
       : Promise.resolve([]),
     getRestzahlungAttentionStays(db),
+    listSmartSuggestions(db, { status: 'open', limit: 8 }),
   ])
 
   const homeCoords = user ? parseGeoPoint(user.heimat_lat, user.heimat_lng) : null
@@ -126,5 +129,12 @@ export async function loadAttentionFeedInput(
     includeWartungItems: opts.includeWartungItems,
     includeOptimierungItems: opts.includeOptimierungItems,
     includeTravelNav: full,
+    smartSuggestions: suggestionRows.map((s) => ({
+      id: s.id,
+      titel: s.titel,
+      begruendung: s.begruendung,
+      href: suggestionHref(s),
+      adminOnly: suggestionAdminOnly(s.kind),
+    })),
   }
 }

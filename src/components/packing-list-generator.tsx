@@ -29,7 +29,7 @@ interface PackingListGeneratorProps {
 export function PackingListGenerator({ 
   open, 
   onOpenChange, 
-  vacationId: _vacationId, 
+  vacationId,
   onGenerate 
 }: PackingListGeneratorProps) {
   const [tags, setTags] = useState<Tag[]>([])
@@ -38,12 +38,40 @@ export function PackingListGenerator({
   const [includeStandard, setIncludeStandard] = useState(true)
   const [previewItems, setPreviewItems] = useState<EquipmentItem[]>([])
   const [isLoading, setIsLoading] = useState(false)
+  const [extraAdds, setExtraAdds] = useState<Array<{ gegenstand_id: string; was: string; count: number }>>([])
+  const [tempRepeats, setTempRepeats] = useState<Array<{ was: string; count: number }>>([])
+  const [selectedExtraIds, setSelectedExtraIds] = useState<string[]>([])
 
   useEffect(() => {
     if (open) {
       fetchTags()
+      setSelectedExtraIds([])
+      void fetch('/api/suggestions/packing-hints?vacationId=' + encodeURIComponent(vacationId))
+        .then((r) => r.json() as Promise<ApiResponse<{
+          seasonTagIds?: string[]
+          frequentAdds?: Array<{ gegenstand_id: string; was: string; count: number }>
+          tempRepeats?: Array<{ was: string; count: number }>
+        }>>)
+        .then((json: ApiResponse<{
+          seasonTagIds?: string[]
+          frequentAdds?: Array<{ gegenstand_id: string; was: string; count: number }>
+          tempRepeats?: Array<{ was: string; count: number }>
+        }>) => {
+          if (!json.success || !json.data) return
+          const season = json.data.seasonTagIds ?? []
+          if (season.length > 0) {
+            setSelectedTags((prev) => {
+              const merged = [...prev]
+              for (const id of season) if (!merged.includes(id)) merged.push(id)
+              return merged
+            })
+          }
+          setExtraAdds(json.data.frequentAdds ?? [])
+          setTempRepeats(json.data.tempRepeats ?? [])
+        })
+        .catch(() => {})
     }
-  }, [open])
+  }, [open, vacationId])
 
   useEffect(() => {
     if (open) {
@@ -122,17 +150,29 @@ export function PackingListGenerator({
   }
 
   const handleGenerate = async () => {
-    if (previewItems.length === 0) {
-      alert('Keine Gegenstände ausgewählt')
-      return
-    }
-
     setIsLoading(true)
     try {
-      await onGenerate(previewItems)
+      let items = previewItems
+      if (selectedExtraIds.length > 0) {
+        const res = await fetch('/api/equipment-items')
+        const data = (await res.json()) as ApiResponse<EquipmentItem[]>
+        const byId = new Map((data.data ?? []).map((e) => [e.id, e]))
+        const extra: EquipmentItem[] = []
+        for (const id of selectedExtraIds) {
+          const eq = byId.get(id)
+          if (eq && !items.some((p) => p.id === id)) extra.push(eq)
+        }
+        items = [...items, ...extra]
+      }
+      if (items.length === 0) {
+        alert('Keine Gegenstände ausgewählt')
+        return
+      }
+      await onGenerate(items)
       onOpenChange(false)
       setSelectedTags([])
       setIncludeStandard(true)
+      setSelectedExtraIds([])
     } catch (error) {
       console.error('Failed to generate packing list:', error)
       alert('Fehler beim Generieren der Packliste')
@@ -233,6 +273,45 @@ export function PackingListGenerator({
             </CardContent>
           </Card>
 
+          {(extraAdds.length > 0 || tempRepeats.length > 0) && (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-medium">Aus euren letzten Reisen</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {extraAdds.slice(0, 8).map((add) => (
+                  <label
+                    key={add.gegenstand_id}
+                    className="flex items-center gap-2 text-sm cursor-pointer"
+                  >
+                    <Checkbox
+                      checked={selectedExtraIds.includes(add.gegenstand_id)}
+                      onCheckedChange={(c) => {
+                        setSelectedExtraIds((prev) =>
+                          c
+                            ? prev.includes(add.gegenstand_id)
+                              ? prev
+                              : [...prev, add.gegenstand_id]
+                            : prev.filter((id) => id !== add.gegenstand_id)
+                        )
+                      }}
+                      className={EQUIPMENT_CHIP_CHECKBOX_CLASS}
+                    />
+                    <span>
+                      {add.was}{' '}
+                      <span className="text-xs text-muted-foreground">({add.count}×)</span>
+                    </span>
+                  </label>
+                ))}
+                {tempRepeats.slice(0, 5).map((t) => (
+                  <p key={t.was} className="text-xs text-muted-foreground">
+                    „{t.was}“ war {t.count}× nur temporär – in die Ausrüstung übernehmen?
+                  </p>
+                ))}
+              </CardContent>
+            </Card>
+          )}
+
           {/* Preview */}
           <Card>
             <CardHeader className="pb-3">
@@ -298,7 +377,7 @@ export function PackingListGenerator({
             </Button>
             <Button
               onClick={handleGenerate}
-              disabled={isLoading || previewItems.length === 0}
+              disabled={isLoading || (previewItems.length === 0 && selectedExtraIds.length === 0)}
             >
               {isLoading ? 'Wird generiert...' : `${previewItems.length} Gegenstände hinzufügen`}
             </Button>

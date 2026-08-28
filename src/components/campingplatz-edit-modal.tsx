@@ -43,6 +43,9 @@ interface CampingplatzFormState {
   platzplan_url: string
   platzplan_url_vorlage: string
   platzplan_hinweis: string
+  google_place_id: string
+  telefon: string
+  oeffnungszeiten: string
 }
 
 /** UI: Fotos pro Rasterseite (Google liefert max. 10 pro Place-Details-Antwort, ohne Pagination). */
@@ -68,6 +71,9 @@ function createEmptyForm(): CampingplatzFormState {
     platzplan_url: '',
     platzplan_url_vorlage: '',
     platzplan_hinweis: '',
+    google_place_id: '',
+    telefon: '',
+    oeffnungszeiten: '',
   }
 }
 
@@ -98,6 +104,7 @@ export function CampingplatzEditModal({
   const [pendingGoogle, setPendingGoogle] = useState<PlacePhotoForPicker[]>([])
   const [pendingFiles, setPendingFiles] = useState<File[]>([])
   const [fotoBusy, setFotoBusy] = useState(false)
+  const [researchBusy, setResearchBusy] = useState(false)
   const adresseElementRef = useRef<HTMLElement | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
 
@@ -132,6 +139,9 @@ export function CampingplatzEditModal({
         platzplan_url: initialCampingplatz.platzplan_url ?? '',
         platzplan_url_vorlage: initialCampingplatz.platzplan_url_vorlage ?? '',
         platzplan_hinweis: initialCampingplatz.platzplan_hinweis ?? '',
+        google_place_id: initialCampingplatz.google_place_id ?? '',
+        telefon: initialCampingplatz.telefon ?? '',
+        oeffnungszeiten: initialCampingplatz.oeffnungszeiten ?? '',
       })
     } else {
       setEditId(null)
@@ -361,6 +371,9 @@ export function CampingplatzEditModal({
         platzplan_url: string | null
         platzplan_url_vorlage: string | null
         platzplan_hinweis: string | null
+        google_place_id: string | null
+        telefon: string | null
+        oeffnungszeiten: string | null
       } = {
         id: editId ?? undefined,
         name: form.name.trim(),
@@ -380,6 +393,9 @@ export function CampingplatzEditModal({
         platzplan_url: form.platzplan_url.trim() || null,
         platzplan_url_vorlage: form.platzplan_url_vorlage.trim() || null,
         platzplan_hinweis: form.platzplan_hinweis.trim() || null,
+        google_place_id: form.google_place_id.trim() || null,
+        telefon: form.telefon.trim() || null,
+        oeffnungszeiten: form.oeffnungszeiten.trim() || null,
       }
       if (editId) {
         if (savedFotos.length > 0) payload.photo_name = coverGoogle
@@ -499,6 +515,9 @@ export function CampingplatzEditModal({
                   bundesland: r.bundesland ?? prev.bundesland,
                   land: r.land ?? prev.land,
                   webseite: r.website ?? prev.webseite,
+                  google_place_id: r.googlePlaceId ?? prev.google_place_id,
+                  telefon: r.telefon ?? prev.telefon,
+                  oeffnungszeiten: r.oeffnungszeiten ?? prev.oeffnungszeiten,
                 }))
               }}
               onPlacePhotos={(photos) => setPlacePhotos(photos)}
@@ -568,6 +587,29 @@ export function CampingplatzEditModal({
               />
             </div>
           </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <Label htmlFor="cp-telefon">Telefon</Label>
+              <Input
+                id="cp-telefon"
+                value={form.telefon}
+                onChange={(e) => setForm((prev) => ({ ...prev, telefon: e.target.value }))}
+                placeholder="+33 …"
+              />
+            </div>
+            <div>
+              <Label htmlFor="cp-oeffnung">Öffnungszeiten</Label>
+              <Textarea
+                id="cp-oeffnung"
+                value={form.oeffnungszeiten}
+                onChange={(e) =>
+                  setForm((prev) => ({ ...prev, oeffnungszeiten: e.target.value }))
+                }
+                placeholder="Falls Google sie kennt, automatisch"
+                rows={3}
+              />
+            </div>
+          </div>
           <div className="space-y-3 rounded-lg border border-dashed p-3">
             <p className="text-sm font-medium">Platzplan</p>
             <div>
@@ -607,6 +649,44 @@ export function CampingplatzEditModal({
                 rows={2}
               />
             </div>
+            {editId && form.webseite.trim() && !form.platzplan_url.trim() && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={researchBusy}
+                onClick={async () => {
+                  setResearchBusy(true)
+                  try {
+                    const res = await fetch(
+                      `/api/campingplaetze/${encodeURIComponent(editId)}/research-platzplan`,
+                      { method: 'POST' }
+                    )
+                    const data = (await res.json()) as ApiResponse<{
+                      candidates?: Array<{ url: string }>
+                      pickedUrl?: string | null
+                    }>
+                    if (!data.success) {
+                      alert(data.error ?? 'Suche fehlgeschlagen')
+                      return
+                    }
+                    const first = data.data?.pickedUrl || data.data?.candidates?.[0]?.url
+                    if (first && !form.platzplan_url) {
+                      setForm((prev) => ({ ...prev, platzplan_url: first }))
+                    }
+                    alert(
+                      first
+                        ? 'Platzplan-Kandidat eingetragen – bitte prüfen und speichern.'
+                        : 'Kein klarer Platzplan gefunden. Schau unter Vorschläge nach.'
+                    )
+                  } finally {
+                    setResearchBusy(false)
+                  }
+                }}
+              >
+                {researchBusy ? 'Suche…' : 'Platzplan auf der Website suchen'}
+              </Button>
+            )}
           </div>
           <div>
             <Label htmlFor="cp-typ">Platz-Typ *</Label>
