@@ -40,11 +40,13 @@ export async function loadAttentionFeedInput(
     mode?: 'full' | 'count'
   }
 ): Promise<AttentionFeedInput> {
-  const full = opts.mode !== 'count'
+  const countMode = opts.mode === 'count'
+  const full = !countMode
   const vacations = await getVacations(db, opts.mitreisenderFilter)
   const relevant = findRelevantVacation(vacations)
   const hubVacation = findCurrentOrNextVacation(vacations)
   const sameHub = !!relevant && !!hubVacation && relevant.id === hubVacation.id
+  const needsSonnenContext = countMode && !!hubVacation && !!opts.userPosition
 
   const [
     packingItems,
@@ -67,17 +69,19 @@ export async function loadAttentionFeedInput(
     full && hubVacation && !sameHub
       ? getPackStatus(db, hubVacation.id)
       : Promise.resolve<PackStatusData | null>(null),
-    full && hubVacation
+    (full || needsSonnenContext) && hubVacation
       ? getCampingStaysForVacation(db, hubVacation.id)
       : Promise.resolve<VacationCampingStay[]>([]),
     opts.includeWartungItems ? getFaelligkeitenForHub(db) : Promise.resolve([]),
     getChecklistenHubSummaries(db),
     opts.snoozes ? Promise.resolve(opts.snoozes) : getAttentionSnoozes(db),
-    full && opts.userId ? getUserById(db, opts.userId) : Promise.resolve(null),
+    (full || needsSonnenContext) && opts.userId
+      ? getUserById(db, opts.userId)
+      : Promise.resolve(null),
     opts.includeOptimierungItems
       ? getOptimierungen(db, undefined, { relations: false })
       : Promise.resolve([]),
-    full ? getRestzahlungAttentionStays(db) : Promise.resolve<RestzahlungAttentionStay[]>([]),
+    getRestzahlungAttentionStays(db),
   ])
 
   const homeCoords = user ? parseGeoPoint(user.heimat_lat, user.heimat_lng) : null

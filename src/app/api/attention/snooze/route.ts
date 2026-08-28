@@ -42,18 +42,19 @@ export async function POST(request: NextRequest) {
         ? userContext.mitreisenderId
         : undefined
 
+    const snoozes = await getAttentionSnoozes(db)
     const input = await loadAttentionFeedInput(db, {
       includeAdminItems,
       includeWartungItems,
       includeOptimierungItems,
       mitreisenderFilter,
-      snoozes: new Map(),
+      snoozes,
       userId: userContext.userId,
       userPosition: parseGeoPoint(o.lat, o.lng),
     })
 
-    const unsnoozed = buildAttentionFeed(input)
-    const item = unsnoozed.items.find((i) => i.key === itemKey)
+    const feed = buildAttentionFeed(input)
+    const item = feed.items.find((i) => i.key === itemKey)
     if (!item) {
       return NextResponse.json({ error: 'Eintrag nicht gefunden' }, { status: 404 })
     }
@@ -83,11 +84,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Speichern fehlgeschlagen' }, { status: 500 })
     }
 
-    const snoozes = await getAttentionSnoozes(db)
-    const feed = buildAttentionFeed({ ...input, snoozes })
+    const updatedSnoozes = await getAttentionSnoozes(db)
+    const updatedFeed = buildAttentionFeed({ ...input, snoozes: updatedSnoozes })
     return NextResponse.json({
       success: true,
-      data: { ...feed, items: feed.items.slice(0, MAX_ATTENTION_ITEMS) },
+      data: { ...updatedFeed, items: updatedFeed.items.slice(0, MAX_ATTENTION_ITEMS) },
       snoozed_until: cap.untilYmd,
     })
   } catch (error: unknown) {

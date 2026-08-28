@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from 'next/font/google'
 import { PwaUpdatePrompt } from '@/components/pwa-update-prompt'
 import { ThemeProvider } from '@/components/theme-provider'
 import { AuthProvider } from '@/components/auth-provider'
+import { BookingImportBadgeProvider } from '@/components/booking-import-badge-provider'
 import { MustChangePasswordGuard } from '@/components/must-change-password-guard'
 import { OfflineBanner } from '@/components/offline-banner'
 import { PushNavigateListener } from '@/components/push-navigate-listener'
@@ -63,6 +64,7 @@ export default function RootLayout({
       <body className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased text-foreground overflow-x-clip`}>
         <ThemeProvider>
           <AuthProvider>
+            <BookingImportBadgeProvider>
             <OfflineBanner />
             <MustChangePasswordGuard>
               <div className="w-full max-w-full overflow-x-clip">
@@ -72,6 +74,7 @@ export default function RootLayout({
             <PushNavigateListener />
             <PwaUpdatePrompt />
             <Toaster richColors closeButton position="top-center" />
+            </BookingImportBadgeProvider>
           </AuthProvider>
         </ThemeProvider>
       </body>

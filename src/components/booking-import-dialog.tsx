@@ -7,6 +7,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactElement,
   type ReactNode,
@@ -294,6 +295,7 @@ export function BookingImportDialog({
   const [dateRangeResolution, setDateRangeResolution] = useState<DateRangeResolution>(null)
   const [bookedEndDatum, setBookedEndDatum] = useState<string | null>(null)
   const [extraDayPromptOpen, setExtraDayPromptOpen] = useState(false)
+  const skipStaysFetchRef = useRef(false)
   const { showBottomToast, bottomToast } = useBottomToast()
 
   const clearReviewState = useCallback(() => {
@@ -436,7 +438,10 @@ export function BookingImportDialog({
       setSuggestion(data.suggestion)
       setEmailTyp(data.parsed.email_typ ?? 'buchungsbestaetigung')
       if (data.vacations) setVacations(data.vacations)
-      if (data.stays) setStays(data.stays)
+      if (data.stays) {
+        skipStaysFetchRef.current = true
+        setStays(data.stays)
+      }
       if (data.ai_meta) setAiMeta(data.ai_meta)
       if (data.suggestion?.urlaub_id) setUrlaubId(data.suggestion.urlaub_id)
       else if (initialUrlaubId) setUrlaubId(initialUrlaubId)
@@ -491,6 +496,7 @@ export function BookingImportDialog({
       setParsed(p)
       setSuggestion(s)
       setVacations(v)
+      skipStaysFetchRef.current = true
       setStays(st)
       setEmailTyp(p?.email_typ ?? 'buchungsbestaetigung')
       const nextStayId = s?.stay_id ?? '_new'
@@ -527,9 +533,19 @@ export function BookingImportDialog({
     if (!open || !initialUrlaubId || initialPendingId) return
     setUrlaubId(initialUrlaubId)
     void (async () => {
-      const vacRes = await fetch('/api/vacations')
+      const [vacRes, detailRes] = await Promise.all([
+        fetch('/api/vacations'),
+        fetch(`/api/vacations/${initialUrlaubId}`),
+      ])
       const vacData = (await vacRes.json()) as ApiResponse<Vacation[]>
       if (vacData.success && vacData.data) setVacations(vacData.data)
+      const detailData = (await detailRes.json()) as ApiResponse<{
+        stays?: VacationCampingStay[]
+      }>
+      if (detailData.success && detailData.data?.stays) {
+        skipStaysFetchRef.current = true
+        setStays(detailData.data.stays)
+      }
     })()
   }, [open, initialUrlaubId, initialPendingId])
 
@@ -548,6 +564,10 @@ export function BookingImportDialog({
   useEffect(() => {
     if (!urlaubId) {
       setStays([])
+      return
+    }
+    if (skipStaysFetchRef.current) {
+      skipStaysFetchRef.current = false
       return
     }
     void (async () => {

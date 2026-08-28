@@ -1,6 +1,6 @@
 import type { ParsedBookingFields, Buchungsstatus, CampingStayEmailTyp } from './booking-types'
 import type { ExtractedBookingPdf } from './booking-email-pdf'
-import { getVacations, getCampingStaysForVacation } from './db'
+import { getVacations, getCampingStaysForVacations } from './db'
 
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions'
 const MODEL = 'openai/gpt-4o-mini'
@@ -180,10 +180,15 @@ export async function analyzeBookingWithOpenRouter(
 /** Kompakte Aufenthalts-Liste für den KI-Prompt. */
 export async function buildBookingAiStayContext(db: D1Database): Promise<string> {
   const vacations = await getVacations(db)
+  const limited = vacations.slice(0, 25)
+  const staysByVacation = await getCampingStaysForVacations(
+    db,
+    limited.map((v) => v.id)
+  )
   const lines: string[] = []
 
-  for (const v of vacations.slice(0, 25)) {
-    const stays = await getCampingStaysForVacation(db, v.id)
+  for (const v of limited) {
+    const stays = staysByVacation.get(v.id) ?? []
     for (const s of stays) {
       lines.push(
         `- Urlaub „${v.titel}“: ${s.campingplatz.name}, ${s.campingplatz.ort}, ` +

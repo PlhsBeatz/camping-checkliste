@@ -1,7 +1,7 @@
 import type { D1Database } from '@cloudflare/workers-types'
 import type { ParsedBookingFields } from './booking-types'
 import type { Campingplatz } from './db'
-import { getVacations, getCampingStaysForVacation, getCampingplaetze } from './db'
+import { getVacations, getCampingplaetze, getCampingStaysForVacations } from './db'
 
 export type StayMatchSuggestion = {
   urlaub_id: string
@@ -116,6 +116,11 @@ export async function suggestStayMatch(
   type Scored = StayMatchSuggestion & { score: number }
   const candidates: Scored[] = []
 
+  const staysByVacation = await getCampingStaysForVacations(
+    db,
+    vacations.map((v) => v.id)
+  )
+
   for (const v of vacations) {
     let score = 0
     if (
@@ -132,7 +137,7 @@ export async function suggestStayMatch(
         score += 20
     }
 
-    const stays = await getCampingStaysForVacation(db, v.id)
+    const stays = staysByVacation.get(v.id) ?? []
     let bestStay: (typeof stays)[0] | null = null
     let stayScore = 0
 

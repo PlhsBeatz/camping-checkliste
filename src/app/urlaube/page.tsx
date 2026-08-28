@@ -50,7 +50,7 @@ import { format, isSameMonth, isSameYear } from 'date-fns'
 import { de } from 'date-fns/locale'
 import Image from 'next/image'
 import { useAuth } from '@/components/auth-provider'
-import { useBookingImportBadge } from '@/hooks/use-booking-import-badge'
+import { useBookingImportBadge } from '@/components/booking-import-badge-provider'
 
 function UrlaubePageContent() {
   const { canAccessConfig, user } = useAuth()

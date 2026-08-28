@@ -36,10 +36,12 @@ function clearCache() {
   }
 }
 
-export function useBookingImportBadge() {
+/** Intern: einmaliger Badge-State für den Provider. */
+export function useBookingImportBadgeState(enabled: boolean) {
   const [count, setCount] = useState(0)
 
   const load = useCallback(async (opts?: { bypassCache?: boolean }) => {
+    if (!enabled) return
     if (!opts?.bypassCache) {
       const cached = readCache()
       if (cached != null) {
@@ -57,18 +59,24 @@ export function useBookingImportBadge() {
     } catch {
       /* Offline: Badge bleibt beim letzten Wert */
     }
-  }, [])
+  }, [enabled])
 
   useEffect(() => {
+    if (!enabled) {
+      setCount(0)
+      return
+    }
     void load()
-  }, [load])
+  }, [enabled, load])
 
   useReconnectRefetch(() => {
+    if (!enabled) return
     clearCache()
     void load({ bypassCache: true })
   })
 
   useEffect(() => {
+    if (!enabled) return
     const onChange = (event: Event) => {
       const detail = (event as CustomEvent<{ count?: number }>).detail
       if (typeof detail?.count === 'number') {
@@ -81,7 +89,7 @@ export function useBookingImportBadge() {
     }
     window.addEventListener(BOOKING_IMPORT_CHANGED_EVENT, onChange)
     return () => window.removeEventListener(BOOKING_IMPORT_CHANGED_EVENT, onChange)
-  }, [load])
+  }, [enabled, load])
 
   return count
 }

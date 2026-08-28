@@ -9,7 +9,7 @@ import { useAuth } from '@/components/auth-provider'
 import { cn } from '@/lib/utils'
 import { isConfigRoute } from '@/lib/config-navigation'
 import { useAttentionBadge } from '@/hooks/use-attention-badge'
-import { useBookingImportBadge } from '@/hooks/use-booking-import-badge'
+import { useBookingImportBadge } from '@/components/booking-import-badge-provider'
 
 interface NavigationSidebarProps {
   isOpen: boolean

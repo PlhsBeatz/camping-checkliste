@@ -64,6 +64,11 @@ export function useAttentionBadge() {
   }, [])
 
   useEffect(() => {
+    const cached = readBadgeCache()
+    if (cached != null) setCount(cached)
+  }, [])
+
+  useEffect(() => {
     // Home-Hub lädt den vollen Feed und setzt den Badge über notifyAttentionChanged
     if (pathname === '/') return
     void load()

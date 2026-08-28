@@ -5799,17 +5799,31 @@ function mapVacationCampingStayRow(
   }
 }
 
-const CAMPING_STAY_JOIN = `
-         FROM urlaub_campingplaetze uc
-         JOIN campingplaetze c ON uc.campingplatz_id = c.id
-         LEFT JOIN campingplatz_fotos cf ON cf.campingplatz_id = c.id AND cf.is_cover = 1
-         WHERE uc.urlaub_id = ?
-         ORDER BY (uc.start_datum IS NULL), uc.start_datum, COALESCE(uc.sort_index, 999999), c.name`
-
 export async function getCampingStaysForVacation(
   db: D1Database,
   vacationId: string
 ): Promise<VacationCampingStay[]> {
+  const byVacation = await getCampingStaysForVacations(db, [vacationId])
+  return byVacation.get(vacationId) ?? []
+}
+
+/** Batch: Aufenthalte mehrerer Urlaube in einer D1-Abfrage. */
+export async function getCampingStaysForVacations(
+  db: D1Database,
+  vacationIds: string[]
+): Promise<Map<string, VacationCampingStay[]>> {
+  const grouped = new Map<string, VacationCampingStay[]>()
+  for (const id of vacationIds) grouped.set(id, [])
+  if (vacationIds.length === 0) return grouped
+
+  const placeholders = vacationIds.map(() => '?').join(',')
+  const batchJoin = `
+         FROM urlaub_campingplaetze uc
+         JOIN campingplaetze c ON uc.campingplatz_id = c.id
+         LEFT JOIN campingplatz_fotos cf ON cf.campingplatz_id = c.id AND cf.is_cover = 1
+         WHERE uc.urlaub_id IN (${placeholders})
+         ORDER BY uc.urlaub_id, (uc.start_datum IS NULL), uc.start_datum, COALESCE(uc.sort_index, 999999), c.name`
+
   const baseSelect = `SELECT c.*, cf.id AS cover_foto_id, cf.r2_object_key AS cover_r2_object_key,
          cf.google_photo_name AS cover_google_photo_name,
          uc.id AS stay_id, uc.urlaub_id AS stay_urlaub_id, uc.campingplatz_id AS stay_campingplatz_id,
@@ -5834,23 +5848,28 @@ export async function getCampingStaysForVacation(
     try {
       const select = withBooking ? baseSelect + bookingSelect : baseSelect
       const result = await db
-        .prepare(select + CAMPING_STAY_JOIN)
-        .bind(vacationId)
+        .prepare(select + batchJoin)
+        .bind(...vacationIds)
         .all<Record<string, unknown>>()
-      const rows = result.results || []
-      return rows.map((row) => mapVacationCampingStayRow(row, withBooking))
+      for (const row of result.results ?? []) {
+        const stay = mapVacationCampingStayRow(row, withBooking)
+        const list = grouped.get(stay.urlaub_id)
+        if (list) list.push(stay)
+        else grouped.set(stay.urlaub_id, [stay])
+      }
+      return grouped
     } catch (error) {
       if (!withBooking) {
-        console.error('Error fetching camping stays for vacation:', error)
-        return []
+        console.error('Error batch fetching camping stays:', error)
+        return grouped
       }
       console.warn(
-        'Camping stays query without booking columns (Migration 0049 fehlt?) – Fallback wird versucht:',
+        'Batch camping stays query without booking columns (Migration 0049 fehlt?) – Fallback wird versucht:',
         error
       )
     }
   }
-  return []
+  return grouped
 }
 
 export type RestzahlungAttentionStay = {

@@ -62,7 +62,7 @@ import {
 } from '@/lib/client-route-info'
 import { isUsableRoutePolyline } from '@/lib/route-polyline'
 import { useReconnectRefetch } from '@/hooks/use-reconnect-refetch'
-import { useBookingImportBadge } from '@/hooks/use-booking-import-badge'
+import { useBookingImportBadge } from '@/components/booking-import-badge-provider'
 import { getVacationCountdown } from '@/lib/vacation-helpers'
 import { groupAllMitreisendeByGruppe } from '@/lib/pack-profile-groups'
 import {
