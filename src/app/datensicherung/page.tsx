@@ -24,7 +24,7 @@ const PRESET_META: { id: UiPresetKey; label: string; hint: string }[] = [
     id: 'equipment',
     label: 'Ausrüstung',
     hint:
-      'Ausrüstungsgegenstände mit externen Links, Tag-Zuordnungen sowie fest zugeordneten Mitreisenden je Gegenstand.',
+      'Ausrüstungsgegenstände mit externen Links, Tag-Zuordnungen, fest zugeordneten Mitreisenden je Gegenstand sowie Entweder-oder-Gruppen.',
   },
   {
     id: 'referenceStammdaten',

@@ -149,7 +149,8 @@
   }
 }
 
-/* Scroll-Lock von Radix/RemoveScroll: unerwünschten rechten Rand entfernen (Dropdowns/Overlays) */
+/* Scroll-Lock von Radix/RemoveScroll: Rand und Overflow zurücksetzen,
+   damit sticky Seiten-Header nicht hinter Dropdowns verschwinden. */
 html.react-remove-scroll-bar,
 body.react-remove-scroll-bar,
 html[data-scroll-locked],
@@ -166,6 +167,12 @@ body[data-scroll-locked][style*="margin-right"] {
 html body[data-scroll-locked] {
   margin-right: 0 !important;
   padding-right: 0 !important;
+  overflow: visible !important;
+}
+
+html[data-scroll-locked],
+body[data-scroll-locked] {
+  overflow: visible !important;
 }
 
 /* Radix Focus-Guards: sicher hinter Seiten-Header legen */

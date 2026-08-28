@@ -29,6 +29,7 @@ import {
   cacheSegmentRoute,
   cacheHomeLocation,
   cacheAuthUser,
+  cacheAlternativeGroups,
   type SyncQueueEntry,
   normalizeCampingplatzForOfflineCache,
 } from './offline-db'
@@ -54,6 +55,7 @@ import type {
   VerbrauchMessung,
   FaelligkeitVorlage,
 } from './db'
+import type { AlternativeGroup } from './packing-alternatives'
 
 /** Wie `getPackingItems` in `db.ts` nach dem Merge (Hauptkat → Kategorie → Titel). */
 function sortPackingItemsForDisplay(items: PackingItem[]): PackingItem[] {
@@ -135,6 +137,17 @@ export async function fetchAndCache<T>(
     }
   }
   return { data: null, fromCache: false, ok: false }
+}
+
+export async function fetchAndCacheAlternativeGroups(): Promise<AlternativeGroup[]> {
+  const { data } = await fetchAndCache<{ groups?: AlternativeGroup[] }>(
+    '/api/packing-alternatives',
+    async (d) => {
+      await cacheAlternativeGroups(d.groups ?? [])
+    },
+    async () => ({ groups: await getCachedAlternativeGroups() })
+  )
+  return data?.groups ?? []
 }
 
 // ---------------------------------------------------------------------------
@@ -224,6 +237,11 @@ export async function getCachedVacations(): Promise<Vacation[]> {
 export async function getCachedEquipment(): Promise<EquipmentItem[]> {
   const rows = await offlineDb.equipment.toArray()
   return rows.map(stripMeta)
+}
+
+export async function getCachedAlternativeGroups(): Promise<AlternativeGroup[]> {
+  const rows = await offlineDb.alternativeGroups.toArray()
+  return rows.map(stripMeta) as AlternativeGroup[]
 }
 
 export async function getCachedCategories(): Promise<Category[]> {
@@ -426,6 +444,7 @@ function stripMeta<T extends object>(row: T): Omit<T, '_cachedAt' | '_updatedAt'
 export const cacheFns = {
   vacations: cacheVacations,
   equipment: cacheEquipment,
+  alternativeGroups: cacheAlternativeGroups,
   categories: cacheCategories,
   mainCategories: cacheMainCategories,
   tags: cacheTags,

@@ -26,6 +26,8 @@ export type ChatJsonInput = {
   temperature?: number
   /** PDF-Plugin aktivieren, wenn Dateien im User-Content sind */
   pdfPlugin?: boolean
+  /** Zusätzliche OpenRouter-Plugins, z. B. Websuche */
+  plugins?: Array<Record<string, unknown>>
   trigger?: AiTrigger
   referer?: string
   title?: string
@@ -64,8 +66,11 @@ export async function chatJson(input: ChatJsonInput): Promise<ChatJsonResult> {
     ],
   }
 
-  if (input.pdfPlugin) {
-    body.plugins = [{ id: 'file-parser', pdf: { engine: 'pdf-text' } }]
+  if (input.pdfPlugin || (input.plugins && input.plugins.length > 0)) {
+    const plugins: Array<Record<string, unknown>> = []
+    if (input.pdfPlugin) plugins.push({ id: 'file-parser', pdf: { engine: 'pdf-text' } })
+    if (input.plugins) plugins.push(...input.plugins)
+    body.plugins = plugins
   }
 
   const res = await fetch(OPENROUTER_URL, {

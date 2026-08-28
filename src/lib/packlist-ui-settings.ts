@@ -38,6 +38,13 @@ export function resolveVacationIdForUi(): string | null {
   )
 }
 
+/** Hub „Packen bestätigen“: Übersicht statt eigenes Packprofil. */
+export function wantsPacklistOverviewFromUrl(): boolean {
+  if (typeof window === 'undefined') return false
+  const profil = new URLSearchParams(window.location.search).get('profil')
+  return profil === 'uebersicht' || profil === 'alle'
+}
+
 export function readPacklistUiSettings(vacationId: string): PacklistUiSettings | null {
   const mem = memoryByVacation.get(vacationId)
   if (mem) return mem

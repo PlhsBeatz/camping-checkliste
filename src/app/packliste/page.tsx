@@ -13,6 +13,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { Vacation, PackingItem, TransportVehicle, Mitreisender, EquipmentItem, Category, MainCategory, Rastplatz, VacationCampingStay } from '@/lib/db'
 import type { ApiResponse } from '@/lib/api-types'
 import { berechneAnzahl, berechneReiseTage, istKind, regelKurzLabel } from '@/lib/packing-quantity'
+import { packingAddFromEquipment } from '@/lib/packing-item-from-equipment'
 import { packingItemsEqual } from '@/lib/packing-items-equal'
 import {
   getPackingItemsMemory,
@@ -52,11 +53,12 @@ import {
   getPackProfileScopeMitreisende,
   resolveOwnGruppeId,
 } from '@/lib/pack-profile-groups'
-import { useVacationSearchParam } from '@/hooks/use-vacation-search-param'
+import { usePacklistProfilSearchParam, useVacationSearchParam, clearPacklistOverviewProfilFromUrl } from '@/hooks/use-vacation-search-param'
 import {
   getInitialPacklistUiState,
   readPacklistUiSettings,
   resolveVacationIdForUi,
+  wantsPacklistOverviewFromUrl,
   writePacklistUiSettings,
 } from '@/lib/packlist-ui-settings'
 import {
@@ -250,6 +252,8 @@ function HomeContent() {
   
   // Equipment data for FAB modal
   const [equipmentItems, setEquipmentItems] = useState<EquipmentItem[]>([])
+  const equipmentItemsRef = useRef(equipmentItems)
+  equipmentItemsRef.current = equipmentItems
   const [categories, setCategories] = useState<CategoryWithMain[]>([])
   const [mainCategories, setMainCategories] = useState<MainCategory[]>([])
   
@@ -305,12 +309,13 @@ function HomeContent() {
     const vid = resolveVacationIdForUi()
     if (vid) {
       const ui = getInitialPacklistUiState(vid)
+      const openInOverview = wantsPacklistOverviewFromUrl()
       setSelectedVacationId(vid)
-      setSelectedPackProfile(ui.selectedPackProfile)
+      setSelectedPackProfile(openInOverview ? null : ui.selectedPackProfile)
       setHidePackedItems(ui.hidePackedItems)
       setListDisplayMode(ui.listDisplayMode)
       setActiveMainCategory(ui.activeMainCategory)
-      if (ui.selectedPackProfile !== null) {
+      if (openInOverview || ui.selectedPackProfile !== null) {
         setAutoProfileInitializedVacationId(vid)
       }
       lastAppliedDefaultVacationIdRef.current = vid
@@ -354,6 +359,7 @@ function HomeContent() {
 
   const handlePackProfileChange = useCallback(
     (profileId: string | null) => {
+      clearPacklistOverviewProfilFromUrl()
       setSelectedPackProfile(profileId)
       persistPacklistUi({ selectedPackProfile: profileId })
     },
@@ -419,6 +425,8 @@ function HomeContent() {
   const [editingWeightSnapshot, setEditingWeightSnapshot] = useState<number | null>(null)
 
   const urlVacationId = useVacationSearchParam()
+  const urlProfil = usePacklistProfilSearchParam()
+  const urlWantsOverview = urlProfil === 'uebersicht' || urlProfil === 'alle'
 
   // Refetch-Tick: bei Reconnect bumpen → Stammdaten- und Urlaubsliste neu laden
   const [refetchTick, setRefetchTick] = useState(0)
@@ -1040,6 +1048,14 @@ function HomeContent() {
     // Ab hier: Admin-Logik
     if (!selectedVacationId) return
 
+    // Hub „Packen bestätigen“: Übersicht einmalig setzen, URL-Hinweis danach entfernen
+    if (urlWantsOverview) {
+      if (autoProfileInitializedVacationId !== selectedVacationId) {
+        setAutoProfileInitializedVacationId(selectedVacationId)
+      }
+      return
+    }
+
     // Wenn für diesen Urlaub bereits automatisch ein Profil gesetzt wurde, nichts mehr überschreiben
     if (autoProfileInitializedVacationId === selectedVacationId) return
 
@@ -1058,7 +1074,16 @@ function HomeContent() {
     selectedVacationId,
     autoProfileInitializedVacationId,
     handlePackProfileChange,
+    urlWantsOverview,
   ])
+
+  useEffect(() => {
+    if (!urlWantsOverview || !canSelectOtherProfiles || !selectedVacationId) return
+    setSelectedPackProfile(null)
+    setAutoProfileInitializedVacationId(selectedVacationId)
+    persistPacklistUi({ selectedPackProfile: null })
+    clearPacklistOverviewProfilFromUrl()
+  }, [urlWantsOverview, canSelectOtherProfiles, selectedVacationId, persistPacklistUi])
 
   // Fetch Equipment Items for FAB modal
   useEffect(() => {
@@ -1256,6 +1281,12 @@ function HomeContent() {
     }
   }, [selectedVacationId, vacations])
 
+  const currentVacationRef = useRef(currentVacation)
+  currentVacationRef.current = currentVacation
+  const vacationMitreisendeRef = useRef(vacationMitreisende)
+  vacationMitreisendeRef.current = vacationMitreisende
+  const selectedVacationIdRef = useRef(selectedVacationId)
+  selectedVacationIdRef.current = selectedVacationId
 
   const abreiseDatumForPacklist = useMemo(
     () => currentVacation?.abfahrtdatum?.trim() || currentVacation?.startdatum || null,
@@ -1537,7 +1568,10 @@ function HomeContent() {
         vacation?.packliste_default_ansicht === 'alles' ? 'alles' : 'packliste'
       setListDisplayMode(defaultMode)
     }
-    if (saved?.selectedPackProfile !== undefined) {
+    if (urlWantsOverview) {
+      setSelectedPackProfile(null)
+      setAutoProfileInitializedVacationId(selectedVacationId)
+    } else if (saved?.selectedPackProfile !== undefined) {
       setSelectedPackProfile(saved.selectedPackProfile)
       if (saved.selectedPackProfile !== null) {
         setAutoProfileInitializedVacationId(selectedVacationId)
@@ -1550,7 +1584,7 @@ function HomeContent() {
     }
     setPacklistSearchQuery('')
     setPacklistFocusItemId(null)
-  }, [selectedVacationId, vacations, canEditPauschalEntries])
+  }, [selectedVacationId, vacations, canEditPauschalEntries, urlWantsOverview])
 
   /** Nach Packlisten-Laden: Standard-Filter + erster Tab (nicht aus Storage). */
   useEffect(() => {
@@ -1670,6 +1704,97 @@ function HomeContent() {
       pendingMutationsRef.current -= 1
     }
   }
+
+  const addEquipmentIdsToPackingList = useCallback(
+    async (gegenstandIds: string[]) => {
+      const vacationId = selectedVacationIdRef.current
+      const vacation = currentVacationRef.current
+      if (!vacationId || !vacation) {
+        throw new Error('Kein Urlaub gewählt')
+      }
+
+      const uniqueIds = [...new Set(gegenstandIds.filter(Boolean))]
+      if (uniqueIds.length === 0) {
+        throw new Error('Keine Gegenstände zum Ergänzen')
+      }
+
+      const catalog = new Map(equipmentItemsRef.current.map((item) => [item.id, item]))
+      const resolved: EquipmentItem[] = []
+      for (const id of uniqueIds) {
+        let item = catalog.get(id)
+        if (!item) {
+          const res = await fetch(`/api/equipment-items?id=${encodeURIComponent(id)}`, {
+            cache: 'no-store',
+          })
+          const json = (await res.json()) as ApiResponse<EquipmentItem>
+          if (json.success && json.data) {
+            item = json.data
+            catalog.set(id, item)
+          }
+        }
+        if (!item) {
+          throw new Error('Gegenstand nicht in der Ausrüstung gefunden')
+        }
+        resolved.push(item)
+      }
+
+      const alreadyPacked = new Set(
+        packingItemsRef.current
+          .map((item) => item.gegenstand_id)
+          .filter((id): id is string => !!id)
+      )
+      const toAdd = resolved.filter((item) => !alreadyPacked.has(item.id))
+      if (toAdd.length === 0) {
+        throw new Error('Alle vorgeschlagenen Gegenstände sind bereits auf der Packliste.')
+      }
+
+      const items = toAdd.map((item) => {
+        const spec = packingAddFromEquipment(item, vacation, vacationMitreisendeRef.current)
+        return {
+          gegenstandId: item.id,
+          anzahl: Math.max(spec.anzahl, 1),
+          transportId: spec.transportId,
+          mitreisende: spec.mitreisende,
+          pauschalGruppenModus: spec.pauschalGruppenModus,
+        }
+      })
+
+      pendingMutationsRef.current += 1
+      try {
+        const res = await fetch('/api/packing-items/batch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ vacationId, items }),
+        })
+        const batchData = (await res.json()) as ApiResponse<{ added: number; total: number }>
+        if (!res.ok || !batchData.success) {
+          throw new Error(batchData.error ?? 'Die Alternative konnte nicht auf die Packliste.')
+        }
+        if (!batchData.data?.added) {
+          throw new Error('Die Alternative konnte nicht auf die Packliste.')
+        }
+
+        const refreshRes = await fetch(`/api/packing-items?vacationId=${vacationId}`, {
+          cache: 'no-store',
+        })
+        const data = (await refreshRes.json()) as ApiResponse<PackingItem[]>
+        if (data.success && data.data) {
+          applyPackingItemsFromFetch(data.data)
+          const packed = new Set(
+            data.data.map((item) => item.gegenstand_id).filter((id): id is string => !!id)
+          )
+          const missingAfter = toAdd.filter((item) => !packed.has(item.id))
+          if (missingAfter.length > 0) {
+            throw new Error('Die Alternative wurde nicht auf der Packliste gespeichert.')
+          }
+        }
+        setPacklistSearchQuery('')
+      } finally {
+        pendingMutationsRef.current -= 1
+      }
+    },
+    [applyPackingItemsFromFetch]
+  )
 
   const executeSetItemPacked = async (itemId: string, gepackt: boolean) => {
     pendingMutationsRef.current += 1
@@ -3521,6 +3646,8 @@ function HomeContent() {
                   .map((p) => p.gegenstand_id)
                   .filter((id): id is string => !!id)}
                 justRemoved={xorJustRemoved}
+                onAddEquipmentIds={addEquipmentIdsToPackingList}
+                onDismissReplacement={() => setXorJustRemoved(null)}
               />
               <PackingList
                   items={packingItems}

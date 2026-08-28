@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button'
 import { NavigationSidebar } from '@/components/navigation-sidebar'
 import { EquipmentTable } from '@/components/equipment-table'
 import { EquipmentItemFormFields } from '@/components/equipment/equipment-item-form-fields'
-import { Plus, Menu } from 'lucide-react'
+import { Plus, Menu, MoreVertical, Trash2 } from 'lucide-react'
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { EquipmentItem, Category, MainCategory, TransportVehicle, Tag, TagKategorie, Mitreisender } from '@/lib/db'
@@ -12,6 +12,12 @@ import type { FaelligkeitAmpelStatus } from '@/lib/faelligkeit-status'
 import type { ApiResponse } from '@/lib/api-types'
 import { ResponsiveModal } from '@/components/ui/responsive-modal'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { type CategorySelectScrollTarget } from '@/components/category-select-grouped'
 import { cn } from '@/lib/utils'
 import {
@@ -32,6 +38,7 @@ import {
   getCachedTagKategorien,
   getCachedMitreisende,
   notifyEquipmentChanged,
+  fetchAndCacheAlternativeGroups,
 } from '@/lib/offline-sync'
 import {
   cacheEquipment,
@@ -41,9 +48,16 @@ import {
   cacheTags,
   cacheTagKategorien,
   cacheMitreisende,
+  cacheAlternativeGroups,
 } from '@/lib/offline-db'
 import { useReconnectRefetch } from '@/hooks/use-reconnect-refetch'
 import { useCategorySuggestion } from '@/hooks/use-category-suggestion'
+import {
+  formatXorChoice,
+  groupsForGegenstand,
+  type AlternativeGroup,
+} from '@/lib/packing-alternatives'
+import { EquipmentAlternativeEditor } from '@/components/equipment-alternative-editor'
 
 interface CategoryWithMain extends Category {
   hauptkategorie_titel: string
@@ -96,6 +110,10 @@ export default function AusruestungPage() {
     : null
   const [addEquipmentCategoryScrollTarget, setAddEquipmentCategoryScrollTarget] =
     useState<CategorySelectScrollTarget | null>(null)
+  const [alternativeGroups, setAlternativeGroups] = useState<AlternativeGroup[]>([])
+  const [showAlternativeGroupsDialog, setShowAlternativeGroupsDialog] = useState(false)
+  const [alternativeGroupsLoading, setAlternativeGroupsLoading] = useState(false)
+  const alternativeGroupsLoadedRef = useRef(false)
   
   // Form state
   const [formData, setFormData] = useState<EquipmentFormValues>(createDefaultEquipmentFormValues())
@@ -239,6 +257,24 @@ export default function AusruestungPage() {
     fetchTransportVehicles()
   }, [refetchTick])
 
+  const loadAlternativeGroups = useCallback(async (force = false) => {
+    if (!force && alternativeGroupsLoadedRef.current) return
+    setAlternativeGroupsLoading(true)
+    try {
+      const groups = await fetchAndCacheAlternativeGroups()
+      setAlternativeGroups(groups)
+      alternativeGroupsLoadedRef.current = true
+    } catch {
+      /* ignore */
+    } finally {
+      setAlternativeGroupsLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    alternativeGroupsLoadedRef.current = false
+  }, [refetchTick])
+
   // Tags und Tag-Kategorien (Reihenfolge für Dialoge)
   useEffect(() => {
     const fetchTagsAndKategorien = async () => {
@@ -324,6 +360,7 @@ export default function AusruestungPage() {
     setEditingItem(item)
     setFormData(equipmentFormValuesFromItem(item))
     setShowEditDialog(true)
+    void loadAlternativeGroups()
   }
 
   const handleSaveEquipment = async () => {
@@ -433,6 +470,34 @@ export default function AusruestungPage() {
     }
   }
 
+  const handleDeleteAlternativeGroup = async (groupId: string) => {
+    if (!canEditEquipment) return
+    try {
+      const res = await fetch('/api/packing-alternatives', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: groupId }),
+      })
+      const json = (await res.json()) as ApiResponse<unknown>
+      if (!json.success) {
+        alert(json.error ?? 'Gruppe konnte nicht gelöscht werden')
+        return
+      }
+      setAlternativeGroups((prev) => {
+        const next = prev.filter((g) => g.id !== groupId)
+        void cacheAlternativeGroups(next)
+        return next
+      })
+      alternativeGroupsLoadedRef.current = true
+    } catch {
+      alert('Gruppe konnte nicht gelöscht werden')
+    }
+  }
+
+  const editingAltGroups = editingItem
+    ? groupsForGegenstand(alternativeGroups, editingItem.id)
+    : []
+
   return (
     <div className="min-h-screen flex max-w-full overflow-x-clip">
       {/* Navigation Sidebar */}
@@ -469,6 +534,30 @@ export default function AusruestungPage() {
                 </h1>
               </div>
             </div>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-9 w-9 shrink-0 rounded-full border-0 bg-transparent text-foreground shadow-none hover:bg-neutral-100 focus-visible:ring-2 focus-visible:ring-[rgb(45,79,30)]/30"
+                  aria-label="Weitere Aktionen"
+                >
+                  <MoreVertical className="h-5 w-5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="z-40 min-w-[10rem]">
+                <DropdownMenuItem
+                  className="cursor-pointer"
+                  onSelect={() => {
+                    setShowAlternativeGroupsDialog(true)
+                    void loadAlternativeGroups()
+                  }}
+                >
+                  Entweder-oder-Gruppen
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
 
           {/* Equipment Table - füllt verfügbaren Platz, horizontales Scrollen in der Tabelle */}
@@ -579,6 +668,46 @@ export default function AusruestungPage() {
         </div>
       </ResponsiveModal>
 
+      <ResponsiveModal
+        open={showAlternativeGroupsDialog}
+        onOpenChange={setShowAlternativeGroupsDialog}
+        title="Entweder-oder-Gruppen"
+        description="Beim Packen erscheint ein Hinweis, wenn Gegenstände aus beiden Seiten auf der Liste stehen. Eine Seite kann mehrere Teile sein, die zusammen gehören (z. B. Relaxsessel oder Luftsofa und Hocker)."
+        contentClassName="max-w-lg"
+      >
+        {alternativeGroupsLoading ? (
+          <p className="text-sm text-muted-foreground">Gruppen werden geladen…</p>
+        ) : alternativeGroups.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            Noch keine Entweder-oder-Gruppen. Sie können eine Gruppe beim Bearbeiten eines
+            Gegenstands anlegen.
+          </p>
+        ) : (
+          <ul className="space-y-2 max-h-[50vh] overflow-y-auto pr-1">
+            {alternativeGroups.map((g) => (
+              <li
+                key={g.id}
+                className="flex items-start justify-between gap-3 rounded-lg border px-3 py-2 text-sm"
+              >
+                <span>{g.titel?.trim() || formatXorChoice(g.options)}</span>
+                {canEditEquipment && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 shrink-0"
+                    aria-label="Gruppe löschen"
+                    onClick={() => void handleDeleteAlternativeGroup(g.id)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </ResponsiveModal>
+
       {/* Gegenstand löschen – Bestätigung */}
       <ConfirmDialog
         open={!!deleteEquipmentId}
@@ -619,6 +748,23 @@ export default function AusruestungPage() {
             onIndividuelleMitreisendeExtraOpenChange={setIndividuelleMitreisendeExtraOffen}
             categorySelectMode="grouped"
           />
+          {editingItem && (
+            <EquipmentAlternativeEditor
+              key={editingItem.id}
+              currentItem={editingItem}
+              equipmentItems={equipmentItems}
+              groups={editingAltGroups}
+              canEdit={canEditEquipment}
+              onGroupsChange={(next) => {
+                setAlternativeGroups((prev) => {
+                  const replaceIds = new Set(editingAltGroups.map((g) => g.id))
+                  const merged = [...prev.filter((g) => !replaceIds.has(g.id)), ...next]
+                  void cacheAlternativeGroups(merged)
+                  return merged
+                })
+              }}
+            />
+          )}
 
           <div className="flex gap-2 pt-4">
             <Button onClick={handleUpdateEquipment} disabled={isSaving} className="flex-1">

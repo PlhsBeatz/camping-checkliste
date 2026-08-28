@@ -3,6 +3,7 @@
  */
 import type { D1Database } from '@cloudflare/workers-types'
 import { addCalendarDays, todayInAppTimezone } from '@/lib/app-timezone'
+import { xorSuggestionContentRelated } from '@/lib/xor-relatedness'
 
 export const SMART_SUGGESTION_KINDS = [
   'packing_add',
@@ -184,6 +185,9 @@ export async function listSmartSuggestions(
   if (opts?.kind) {
     clauses.push('kind = ?')
     binds.push(opts.kind)
+  } else {
+    // place_gap ist nur internes Such-Protokoll, keine Inbox-Karte
+    clauses.push(`kind != 'place_gap'`)
   }
   if (opts?.kontextId) {
     clauses.push('kontext_id = ?')
@@ -199,7 +203,10 @@ export async function listSmartSuggestions(
       binds.length > 0
         ? await db.prepare(sql).bind(...binds).all<Record<string, unknown>>()
         : await db.prepare(sql).all<Record<string, unknown>>()
-    return (res.results || []).map(mapRow).filter((s): s is SmartSuggestion => s != null)
+    return (res.results || [])
+      .map(mapRow)
+      .filter((s): s is SmartSuggestion => s != null)
+      .filter((s) => s.kind !== 'xor_candidate' || xorSuggestionContentRelated(s.payload, s.titel))
   } catch (error) {
     console.error('listSmartSuggestions:', error)
     return []
@@ -208,16 +215,35 @@ export async function listSmartSuggestions(
 
 export async function countOpenSmartSuggestions(db: D1Database): Promise<number> {
   const today = todayInAppTimezone()
+  const openSql = `(status = 'pending' OR (status = 'snoozed' AND (snoozed_until IS NULL OR snoozed_until <= ?)))`
   try {
-    const row = await db
-      .prepare(
-        `SELECT COUNT(*) as n FROM smart_vorschlaege
-         WHERE status = 'pending'
-            OR (status = 'snoozed' AND (snoozed_until IS NULL OR snoozed_until <= ?))`
-      )
-      .bind(today)
-      .first<{ n: number }>()
-    return Number(row?.n ?? 0)
+    const [countRes, xorRes] = await db.batch([
+      db
+        .prepare(
+          `SELECT COUNT(*) as n FROM smart_vorschlaege
+           WHERE ${openSql} AND kind != 'place_gap' AND kind != 'xor_candidate'`
+        )
+        .bind(today),
+      db
+        .prepare(
+          `SELECT payload, titel FROM smart_vorschlaege
+           WHERE ${openSql} AND kind = 'xor_candidate'`
+        )
+        .bind(today),
+    ])
+    const n = Number((countRes.results?.[0] as { n?: number } | undefined)?.n ?? 0)
+    let xorOk = 0
+    for (const row of xorRes.results ?? []) {
+      const raw = row as { payload?: string; titel?: string }
+      let payload: Record<string, unknown> = {}
+      try {
+        payload = JSON.parse(String(raw.payload ?? '{}')) as Record<string, unknown>
+      } catch {
+        payload = {}
+      }
+      if (xorSuggestionContentRelated(payload, raw.titel)) xorOk++
+    }
+    return n + xorOk
   } catch (error) {
     console.error('countOpenSmartSuggestions:', error)
     return 0

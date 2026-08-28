@@ -77,6 +77,10 @@ export type AttentionItem = {
   sicherheitsrelevant: boolean
   snoozeAllowed: boolean
   adminOnly: boolean
+  /** Nur bei `kind: 'vorschlag'` – für direkte Aktionen im Hub. */
+  suggestionId?: string
+  suggestionKind?: string
+  vacationTitel?: string | null
 }
 
 export type PackingWeightTone = 'low' | 'over'
@@ -90,6 +94,7 @@ export type AttentionPackingCard = {
   openCount: number
   complete: boolean
   weightTone: PackingWeightTone | null
+  weightReserveKg: number | null
 }
 
 export type VacationTileCountdownKind = 'until_start' | 'remaining' | 'today' | 'last_day'
@@ -164,10 +169,12 @@ export type AttentionFeedInput = {
   includeTravelNav?: boolean
   smartSuggestions?: Array<{
     id: string
+    kind: string
     titel: string
     begruendung: string | null
     href: string
     adminOnly: boolean
+    vacationTitel?: string | null
   }>
 }
 
@@ -181,8 +188,11 @@ function vacationRef(v: Vacation): AttentionVacationRef {
   }
 }
 
-function packingHref(vacationId: string): string {
-  return `/packliste?vacation=${encodeURIComponent(vacationId)}`
+function packingHref(vacationId: string, opts?: { profil?: 'uebersicht' }): string {
+  const params = new URLSearchParams()
+  params.set('vacation', vacationId)
+  if (opts?.profil) params.set('profil', opts.profil)
+  return `/packliste?${params.toString()}`
 }
 
 function formatCalendarDateDe(ymd: string): string {
@@ -265,16 +275,26 @@ export function findCurrentOrNextVacation(vacations: Vacation[], now = new Date(
 }
 
 export function packingWeightTone(status: PackStatusData | null | undefined): PackingWeightTone | null {
+  return packingWeightHighlight(status)?.tone ?? null
+}
+
+/** Kritischste Reserve (niedrigster Wert) – für Hub-Karte und Ton. */
+export function packingWeightHighlight(
+  status: PackStatusData | null | undefined
+): { tone: PackingWeightTone; reserveKg: number } | null {
   if (!status) return null
+  let worst: PackStatusData['transportOverview'][number] | null = null
   let over = false
   let low = false
   for (const t of status.transportOverview) {
+    if (!worst || t.reserve < worst.reserve) worst = t
     const reservePct = t.zuladung > 0 ? (t.reserve / t.zuladung) * 100 : 0
     if (t.reserve < 0) over = true
     else if (reservePct < 10 && reservePct >= 0) low = true
   }
-  if (over) return 'over'
-  if (low) return 'low'
+  if (!worst) return null
+  if (over) return { tone: 'over', reserveKg: worst.reserve }
+  if (low) return { tone: 'low', reserveKg: worst.reserve }
   return null
 }
 
@@ -361,8 +381,7 @@ function contextCopy(
   todayYmd: string
 ): { headline: string; subline: string | null } {
   if (relevant) {
-    const ziel = relevant.reiseziel_name?.trim()
-    const name = ziel || relevant.titel
+    const name = relevant.titel
     if (frame === 'departure_day') {
       return { headline: `Heute geht’s los · ${name}`, subline: 'Packliste und Abfahrt zuerst.' }
     }
@@ -583,6 +602,7 @@ export function buildAttentionFeed(input: AttentionFeedInput): AttentionFeed {
   let relevantPacking: AttentionPackingCard | null = null
   if (relevant) {
     const progress = computePackingProgress(input.packingItems, getDepartureDate(relevant), now)
+    const weight = packingWeightHighlight(input.packStatus)
     relevantPacking = {
       vacationId: relevant.id,
       href: packingHref(relevant.id),
@@ -591,7 +611,8 @@ export function buildAttentionFeed(input: AttentionFeedInput): AttentionFeed {
       total: progress.total,
       openCount: progress.open_items_count,
       complete: progress.complete,
-      weightTone: packingWeightTone(input.packStatus),
+      weightTone: weight?.tone ?? null,
+      weightReserveKg: weight?.reserveKg ?? null,
     }
   }
 
@@ -600,6 +621,7 @@ export function buildAttentionFeed(input: AttentionFeedInput): AttentionFeed {
     packing = relevantPacking
   } else if (tileVacation) {
     const progress = computePackingProgress(tilePackingItems, getDepartureDate(tileVacation), now)
+    const weight = packingWeightHighlight(tilePackStatus)
     packing = {
       vacationId: tileVacation.id,
       href: packingHref(tileVacation.id),
@@ -608,7 +630,8 @@ export function buildAttentionFeed(input: AttentionFeedInput): AttentionFeed {
       total: progress.total,
       openCount: progress.open_items_count,
       complete: progress.complete,
-      weightTone: packingWeightTone(tilePackStatus),
+      weightTone: weight?.tone ?? null,
+      weightReserveKg: weight?.reserveKg ?? null,
     }
   }
 
@@ -675,7 +698,7 @@ export function buildAttentionFeed(input: AttentionFeedInput): AttentionFeed {
             ? '1 vorgemerkter Eintrag wartet'
             : `${vorgemerkt} vorgemerkte Einträge warten`,
         risk: null,
-        href: packingHref(relevant.id),
+        href: packingHref(relevant.id, { profil: 'uebersicht' }),
         score: 450,
         dueYmd: null,
         sicherheitsrelevant: false,
@@ -879,11 +902,14 @@ export function buildAttentionFeed(input: AttentionFeedInput): AttentionFeed {
       reason: s.begruendung || 'Vorschlag aus euren Daten',
       risk: null,
       href: s.href,
-      score: 520,
+      score: 40,
       dueYmd: null,
       sicherheitsrelevant: false,
       snoozeAllowed: true,
       adminOnly: s.adminOnly,
+      suggestionId: s.id,
+      suggestionKind: s.kind,
+      vacationTitel: s.vacationTitel ?? null,
     })
   }
 
@@ -895,7 +921,12 @@ export function buildAttentionFeed(input: AttentionFeedInput): AttentionFeed {
   })
 
   const snoozedCount = raw.length - visible.length
-  visible.sort((a, b) => b.score - a.score || a.title.localeCompare(b.title, 'de'))
+  visible.sort((a, b) => {
+    const aHint = a.kind === 'vorschlag' ? 1 : 0
+    const bHint = b.kind === 'vorschlag' ? 1 : 0
+    if (aHint !== bHint) return aHint - bHint
+    return b.score - a.score || a.title.localeCompare(b.title, 'de')
+  })
   const primaryAction = pickPrimaryAction(
     frame,
     visible.slice(0, MAX_ATTENTION_ITEMS),

@@ -16,11 +16,13 @@ import {
   type AttentionItem,
   type AttentionKind,
   type AttentionVacationTile,
+  type PackingWeightTone,
 } from '@/lib/attention-feed'
 import { SNOOZE_PRESET_DAYS } from '@/lib/attention-snooze'
 import { useReconnectRefetch } from '@/hooks/use-reconnect-refetch'
 import { getCachedAttentionFeed, cacheAttentionFeed } from '@/lib/offline-db'
 import { notifyAttentionChanged } from '@/lib/attention-events'
+import { notifySmartSuggestionsChanged } from '@/lib/smart-suggestions-events'
 import { HeuteTravelNav } from '@/components/heute-travel-nav'
 import {
   attentionCoordsQuery,
@@ -94,6 +96,33 @@ function VacationCountdown({ tile }: { tile: AttentionVacationTile }) {
   )
 }
 
+function PackingWeightBadge({
+  tone,
+  reserveKg,
+}: {
+  tone: PackingWeightTone
+  reserveKg: number
+}) {
+  const kg = Math.round(Math.abs(reserveKg))
+  const over = tone === 'over'
+  return (
+    <span
+      className={cn(
+        'text-right shrink-0 leading-none',
+        over ? 'text-red-600' : 'text-amber-600'
+      )}
+      title={over ? 'Zuladung überschritten' : 'Wenig Gewichtsreserve'}
+      aria-label={over ? `Zuladung überschritten, ${kg} kg über` : `${kg} kg Reserve`}
+    >
+      <span className="material-icons text-lg leading-none" aria-hidden>
+        monitor_weight
+      </span>
+      <span className="block text-sm font-semibold tabular-nums mt-0.5">{kg} kg</span>
+      <span className="block text-[10px] mt-0.5">{over ? 'über' : 'Reserve'}</span>
+    </span>
+  )
+}
+
 function OverviewTile({ href, children }: { href: string; children: ReactNode }) {
   return (
     <Link href={href} className="block min-w-0 h-full">
@@ -111,6 +140,7 @@ function HeuteHubContent() {
   const [loading, setLoading] = useState(true)
   const [snoozingKey, setSnoozingKey] = useState<string | null>(null)
   const [snoozeOpenKey, setSnoozeOpenKey] = useState<string | null>(null)
+  const [acceptingKey, setAcceptingKey] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const positionRef = useRef<GeoPoint | null>(null)
 
@@ -184,6 +214,30 @@ function HeuteHubContent() {
     void load()
   })
 
+  const acceptPackingAdd = async (item: AttentionItem) => {
+    if (!item.suggestionId) return
+    setAcceptingKey(item.key)
+    setError(null)
+    try {
+      const res = await fetch('/api/suggestions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: item.suggestionId, action: 'accept' }),
+      })
+      const json = (await res.json()) as ApiResponse<unknown>
+      if (!res.ok || !json.success) {
+        setError(json.error || 'Hinzufügen zur Packliste fehlgeschlagen')
+        return
+      }
+      notifySmartSuggestionsChanged()
+      await load()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Hinzufügen zur Packliste fehlgeschlagen')
+    } finally {
+      setAcceptingKey(null)
+    }
+  }
+
   const snooze = async (item: AttentionItem, days: number) => {
     setSnoozingKey(item.key)
     try {
@@ -220,7 +274,7 @@ function HeuteHubContent() {
 
       <div className={cn('flex-1 transition-all duration-300 min-w-0 bg-scroll-pattern', 'lg:ml-[280px]')}>
         <div className="container mx-auto p-4 md:p-6 space-y-6 max-w-full">
-          <div className="sticky top-0 z-10 flex items-center justify-between gap-3 bg-card shadow pb-4 -mx-4 px-4 -mt-4 pt-4 md:-mx-6 md:px-6 md:-mt-6 md:pt-6 md:pb-4">
+          <div className="sticky top-0 z-30 flex items-center justify-between gap-3 bg-card shadow pb-4 -mx-4 px-4 -mt-4 pt-4 md:-mx-6 md:px-6 md:-mt-6 md:pt-6 md:pb-4">
             <div className="flex items-center gap-4 min-w-0">
               <Button
                 variant="outline"
@@ -257,40 +311,36 @@ function HeuteHubContent() {
                 </h3>
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                   <OverviewTile href={feed.packing?.href ?? '/packliste'}>
-                    <div className="flex items-start justify-between gap-1">
-                      <span
-                        className="material-icons text-xl leading-none text-[rgb(45,79,30)]"
-                        aria-hidden
-                      >
-                        checklist
+                    {feed.packing?.weightTone && feed.packing.weightReserveKg != null ? (
+                      <span className="absolute top-3 right-3">
+                        <PackingWeightBadge
+                          tone={feed.packing.weightTone}
+                          reserveKg={feed.packing.weightReserveKg}
+                        />
                       </span>
-                      {feed.packing?.weightTone === 'over' || feed.packing?.weightTone === 'low' ? (
-                        <span
-                          className={cn(
-                            'material-icons text-lg leading-none',
-                            feed.packing.weightTone === 'over' ? 'text-red-600' : 'text-amber-600'
-                          )}
-                          title={
-                            feed.packing.weightTone === 'over'
-                              ? 'Zuladung überschritten'
-                              : 'Wenig Gewichtsreserve'
-                          }
-                          aria-label={
-                            feed.packing.weightTone === 'over'
-                              ? 'Zuladung überschritten'
-                              : 'Wenig Gewichtsreserve'
-                          }
-                        >
-                          monitor_weight
-                        </span>
-                      ) : null}
-                    </div>
-                    <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                    ) : null}
+                    <span
+                      className="material-icons text-xl leading-none text-[rgb(45,79,30)]"
+                      aria-hidden
+                    >
+                      checklist
+                    </span>
+                    <p
+                      className={cn(
+                        'text-[11px] font-medium uppercase tracking-wide text-muted-foreground',
+                        feed.packing?.weightTone && 'pr-14'
+                      )}
+                    >
                       Packliste
                     </p>
                     {feed.packing ? (
                       <>
-                        <p className="text-sm font-medium text-brand-heading tabular-nums leading-snug">
+                        <p
+                          className={cn(
+                            'text-sm font-medium text-brand-heading tabular-nums leading-snug',
+                            feed.packing.weightTone && 'pr-14'
+                          )}
+                        >
                           {feed.packing.packed}/{feed.packing.total}
                           <span className="text-muted-foreground font-normal"> gepackt</span>
                         </p>
@@ -307,7 +357,7 @@ function HeuteHubContent() {
                   <OverviewTile href={feed.vacationTile?.href ?? '/urlaube'}>
                     {feed.vacationTile?.countdownKind ? (
                       <span
-                        className="absolute top-3 right-3 z-10"
+                        className="absolute top-3 right-3"
                         aria-label={vacationCountdownAria(feed.vacationTile)}
                       >
                         <VacationCountdown tile={feed.vacationTile} />
@@ -367,6 +417,9 @@ function HeuteHubContent() {
                     {items.map((item) => {
                       const meta = KIND_META[item.kind] ?? { label: 'Hinweis', icon: 'info' }
                       const danger = item.kind === 'wartung_sicherheit' || item.kind === 'packing_weight'
+                      const canAddToPacklist =
+                        item.suggestionKind === 'packing_add' && Boolean(item.suggestionId)
+                      const itemBusy = snoozingKey === item.key || acceptingKey === item.key
                       return (
                         <li key={item.key}>
                           <Card className={cn(danger && 'border-destructive/40')}>
@@ -389,6 +442,11 @@ function HeuteHubContent() {
                                     {item.title}
                                   </p>
                                   <p className="text-xs text-muted-foreground mt-0.5">{item.reason}</p>
+                                  {canAddToPacklist && item.vacationTitel ? (
+                                    <p className="text-xs font-medium text-brand-heading mt-1">
+                                      Packliste: {item.vacationTitel}
+                                    </p>
+                                  ) : null}
                                   {item.risk ? (
                                     <p className="text-xs text-destructive/80 mt-1 flex items-start gap-1">
                                       <AlertTriangle className="h-3 w-3 mt-0.5 shrink-0" />
@@ -397,43 +455,57 @@ function HeuteHubContent() {
                                   ) : null}
                                 </div>
                               </Link>
-                              {item.snoozeAllowed ? (
-                                <div className="pl-8">
-                                  {snoozeOpenKey === item.key ? (
-                                    <div className="flex flex-wrap gap-1.5">
-                                      {SNOOZE_PRESET_DAYS.map((d) => (
+                              {canAddToPacklist || item.snoozeAllowed ? (
+                                <div className="pl-8 flex flex-wrap gap-1.5 items-center">
+                                  {canAddToPacklist && snoozeOpenKey !== item.key ? (
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      className="h-8 bg-[rgb(45,79,30)] hover:bg-[rgb(45,79,30)]/90 text-white"
+                                      disabled={itemBusy}
+                                      onClick={() => void acceptPackingAdd(item)}
+                                    >
+                                      {acceptingKey === item.key ? 'Fügt hinzu…' : 'Auf die Packliste'}
+                                    </Button>
+                                  ) : null}
+                                  {item.snoozeAllowed ? (
+                                    snoozeOpenKey === item.key ? (
+                                      <>
+                                        {SNOOZE_PRESET_DAYS.map((d) => (
+                                          <Button
+                                            key={d}
+                                            type="button"
+                                            size="sm"
+                                            variant="outline"
+                                            disabled={itemBusy}
+                                            onClick={() => void snooze(item, d)}
+                                          >
+                                            {d === 1 ? '1 Tag' : `${d} Tage`}
+                                          </Button>
+                                        ))}
                                         <Button
-                                          key={d}
                                           type="button"
                                           size="sm"
-                                          variant="outline"
-                                          disabled={snoozingKey === item.key}
-                                          onClick={() => void snooze(item, d)}
+                                          variant="ghost"
+                                          onClick={() => setSnoozeOpenKey(null)}
                                         >
-                                          {d === 1 ? '1 Tag' : `${d} Tage`}
+                                          Abbrechen
                                         </Button>
-                                      ))}
+                                      </>
+                                    ) : (
                                       <Button
                                         type="button"
                                         size="sm"
                                         variant="ghost"
-                                        onClick={() => setSnoozeOpenKey(null)}
+                                        className="h-8 px-2 text-muted-foreground"
+                                        disabled={itemBusy}
+                                        onClick={() => setSnoozeOpenKey(item.key)}
                                       >
-                                        Abbrechen
+                                        <Clock className="h-3.5 w-3.5 mr-1" />
+                                        Später
                                       </Button>
-                                    </div>
-                                  ) : (
-                                    <Button
-                                      type="button"
-                                      size="sm"
-                                      variant="ghost"
-                                      className="h-8 px-2 text-muted-foreground"
-                                      onClick={() => setSnoozeOpenKey(item.key)}
-                                    >
-                                      <Clock className="h-3.5 w-3.5 mr-1" />
-                                      Später
-                                    </Button>
-                                  )}
+                                    )
+                                  ) : null}
                                 </div>
                               ) : null}
                             </CardContent>

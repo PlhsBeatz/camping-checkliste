@@ -12,12 +12,18 @@ import {
   type PackStatusData,
   type Rastplatz,
   type RestzahlungAttentionStay,
+  type Vacation,
   type VacationCampingStay,
 } from '@/lib/db'
 import { getFaelligkeitenForHub } from '@/lib/db-wartung'
 import { getAttentionSnoozes } from '@/lib/db-attention'
 import { findCurrentOrNextVacation, type AttentionFeedInput } from '@/lib/attention-feed'
-import { listSmartSuggestions, suggestionAdminOnly, suggestionHref } from '@/lib/smart-suggestions'
+import {
+  listSmartSuggestions,
+  suggestionAdminOnly,
+  suggestionHref,
+  type SmartSuggestion,
+} from '@/lib/smart-suggestions'
 import { findRelevantVacation } from '@/lib/trip-readiness'
 import { parseGeoPoint, type GeoPoint } from '@/lib/sonnen-hub-arrival'
 import { todayInAppTimezone } from '@/lib/app-timezone'
@@ -26,6 +32,15 @@ import {
   loadTravelNavRouteMatch,
   type HubTravelNavRouteMatch,
 } from '@/lib/hub-travel-nav'
+
+function vacationTitelForSuggestion(s: SmartSuggestion, vacations: Vacation[]): string | null {
+  if (s.kind !== 'packing_add') return null
+  const fromPayload = String(s.payload.vacation_titel ?? '').trim()
+  if (fromPayload) return fromPayload
+  const id = String(s.payload.vacation_id ?? s.kontext_id ?? '')
+  if (!id) return null
+  return vacations.find((v) => v.id === id)?.titel ?? null
+}
 
 export async function loadAttentionFeedInput(
   db: D1Database,
@@ -131,10 +146,12 @@ export async function loadAttentionFeedInput(
     includeTravelNav: full,
     smartSuggestions: suggestionRows.map((s) => ({
       id: s.id,
+      kind: s.kind,
       titel: s.titel,
       begruendung: s.begruendung,
-      href: suggestionHref(s),
+      href: s.kind === 'packing_add' ? '/tools/vorschlaege' : suggestionHref(s),
       adminOnly: suggestionAdminOnly(s.kind),
+      vacationTitel: vacationTitelForSuggestion(s, vacations),
     })),
   }
 }

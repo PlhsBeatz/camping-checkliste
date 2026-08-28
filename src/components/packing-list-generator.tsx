@@ -44,8 +44,10 @@ export function PackingListGenerator({
 
   useEffect(() => {
     if (open) {
-      fetchTags()
+      setSelectedTags([])
       setSelectedExtraIds([])
+      setPreviewItems([])
+      fetchTags()
       void fetch('/api/suggestions/packing-hints?vacationId=' + encodeURIComponent(vacationId))
         .then((r) => r.json() as Promise<ApiResponse<{
           seasonTagIds?: string[]
@@ -158,9 +160,14 @@ export function PackingListGenerator({
         const data = (await res.json()) as ApiResponse<EquipmentItem[]>
         const byId = new Map((data.data ?? []).map((e) => [e.id, e]))
         const extra: EquipmentItem[] = []
+        const seen = new Set(items.map((p) => p.id))
         for (const id of selectedExtraIds) {
+          if (seen.has(id)) continue
           const eq = byId.get(id)
-          if (eq && !items.some((p) => p.id === id)) extra.push(eq)
+          if (eq) {
+            extra.push(eq)
+            seen.add(id)
+          }
         }
         items = [...items, ...extra]
       }
@@ -189,6 +196,12 @@ export function PackingListGenerator({
     acc[key].push(item)
     return acc
   }, {} as Record<string, EquipmentItem[]>)
+
+  const previewIdSet = useMemo(() => new Set(previewItems.map((item) => item.id)), [previewItems])
+  const uncoveredExtraAdds = useMemo(
+    () => extraAdds.filter((add) => !previewIdSet.has(add.gegenstand_id)),
+    [extraAdds, previewIdSet]
+  )
 
   return (
     <ResponsiveModal
@@ -273,13 +286,13 @@ export function PackingListGenerator({
             </CardContent>
           </Card>
 
-          {(extraAdds.length > 0 || tempRepeats.length > 0) && (
+          {(uncoveredExtraAdds.length > 0 || tempRepeats.length > 0) && (
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm font-medium">Aus euren letzten Reisen</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
-                {extraAdds.slice(0, 8).map((add) => (
+                {uncoveredExtraAdds.slice(0, 8).map((add) => (
                   <label
                     key={add.gegenstand_id}
                     className="flex items-center gap-2 text-sm cursor-pointer"

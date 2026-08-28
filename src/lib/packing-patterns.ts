@@ -1,11 +1,22 @@
 /**
- * Packlisten-Muster aus Historie (ohne KI). Snapshot für Cron + Generator/Hub.
+ * Packlisten-Muster aus Historie. XOR braucht zusätzlich einen inhaltlichen
+ * Zusammenhang; optionales KI-Veto verwirft Zufallspaare.
  */
 import type { D1Database } from '@cloudflare/workers-types'
 import { findCurrentOrNextVacation } from '@/lib/attention-feed'
-import { getVacations } from '@/lib/db'
-import { seasonFromYmd, type SeasonBucket } from '@/lib/packing-season-tags'
-import { upsertSmartSuggestion } from '@/lib/smart-suggestions'
+import { getCampingplaetzeForVacation, getVacations } from '@/lib/db'
+import { formatSeasonBuckets, seasonFromYmd, type SeasonBucket } from '@/lib/packing-season-tags'
+import {
+  fitReasonText,
+  itemFitsTargetTrip,
+  loadItemTripOccurrences,
+  loadTripPackProfiles,
+  profileFromVacation,
+} from '@/lib/packing-trip-match'
+import { setSmartSuggestionStatus, upsertSmartSuggestion } from '@/lib/smart-suggestions'
+import { listAlternativeGroups } from '@/lib/packing-alternatives'
+import { confirmXorCandidatesWithAi } from '@/lib/xor-ai-confirm'
+import { xorItemsRelated, xorOptionsRelated } from '@/lib/xor-relatedness'
 
 export type PackingPatternSnapshot = {
   computed_at: string
@@ -25,11 +36,14 @@ export type PackingPatternSnapshot = {
     confidence: number
   }>
   xor_candidates: Array<{
-    ids: [string, string]
-    names: [string, string]
+    options: Array<{ ids: string[]; names: string[] }>
+    ids: string[]
+    names: string[]
     kategorie_id: string
     together: number
     either: number
+    a_count: number
+    b_count: number
   }>
   never_packed: Array<{ gegenstand_id: string; was: string; trips: number }>
 }
@@ -211,9 +225,30 @@ export async function computePackingPatternSnapshot(db: D1Database): Promise<Pac
   copack.sort((x, y) => y.confidence - x.confidence || y.support - x.support)
   const copackTrim = copack.slice(0, 40)
 
-  const xor_candidates: PackingPatternSnapshot['xor_candidates'] = []
+  const itemStandard = new Map<string, boolean>()
+  for (const rows of byVacation.values()) {
+    for (const row of rows) {
+      if (!itemStandard.has(row.gegenstand_id)) {
+        itemStandard.set(row.gegenstand_id, !!row.is_standard)
+      }
+    }
+  }
+
+  const xorPairs: Array<{
+    ids: [string, string]
+    names: [string, string]
+    kategorie_id: string
+    together: number
+    either: number
+    a_count: number
+    b_count: number
+  }> = []
   const byKat = new Map<string, string[]>()
   for (const [id, kat] of itemKat) {
+    if (itemStandard.get(id)) continue
+    const share = (singleCount.get(id) ?? 0) / tripCount
+    // Staple-Gegenstände (fast immer dabei) sind keine Alternativen
+    if (share > 0.7) continue
     const arr = byKat.get(kat) ?? []
     arr.push(id)
     byKat.set(kat, arr)
@@ -225,14 +260,24 @@ export async function computePackingPatternSnapshot(db: D1Database): Promise<Pac
         const a = ids[i]
         const b = ids[j]
         if (!a || !b) continue
+        const ca = singleCount.get(a) ?? 0
+        const cb = singleCount.get(b) ?? 0
+        // Mindestens drei Reisen je Gegenstand, sonst ist es Zufall (z. B. neu angelegt)
+        if (ca < 3 || cb < 3) continue
         const key = a < b ? `${a}|${b}` : `${b}|${a}`
         const together = pairCount.get(key) ?? 0
-        const either = (singleCount.get(a) ?? 0) + (singleCount.get(b) ?? 0) - together
-        if (either < 3) continue
-        if (together / either > 0.25) continue
-        const minShare = Math.min(singleCount.get(a) ?? 0, singleCount.get(b) ?? 0) / tripCount
-        if (minShare < 0.15) continue
-        xor_candidates.push({
+        const aOnly = ca - together
+        const bOnly = cb - together
+        const either = ca + cb - together
+        if (aOnly < 2 || bOnly < 2) continue
+        if (either < 6) continue
+        if (together / either > 0.12) continue
+        const freqRatio = Math.max(ca, cb) / Math.min(ca, cb)
+        if (freqRatio > 2.5) continue
+        const aWas = itemNames.get(a) ?? ''
+        const bWas = itemNames.get(b) ?? ''
+        if (!xorItemsRelated({ was: aWas }, { was: bWas })) continue
+        xorPairs.push({
           ids: a < b ? [a, b] : [b, a],
           names: [
             itemNames.get(a < b ? a : b) ?? '',
@@ -241,12 +286,115 @@ export async function computePackingPatternSnapshot(db: D1Database): Promise<Pac
           kategorie_id,
           together,
           either,
+          a_count: a < b ? ca : cb,
+          b_count: a < b ? cb : ca,
         })
       }
     }
   }
-  xor_candidates.sort((a, b) => b.either - a.either)
-  const xorTrim = xor_candidates.slice(0, 20)
+  xorPairs.sort((x, y) => {
+    const xAlt = Math.min(x.a_count - x.together, x.b_count - x.together)
+    const yAlt = Math.min(y.a_count - y.together, y.b_count - y.together)
+    return yAlt - xAlt || y.either - x.either
+  })
+
+  const copackConf = (a: string, b: string): number => {
+    const key = a < b ? `${a}|${b}` : `${b}|${a}`
+    const together = pairCount.get(key) ?? 0
+    const min = Math.min(singleCount.get(a) ?? 0, singleCount.get(b) ?? 0)
+    return min === 0 ? 0 : together / min
+  }
+  const pairKey = (a: string, b: string) => (a < b ? `${a}|${b}` : `${b}|${a}`)
+
+  const adj = new Map<string, Set<string>>()
+  const pairByKey = new Map<string, (typeof xorPairs)[number]>()
+  for (const p of xorPairs) {
+    const a = p.ids[0]
+    const b = p.ids[1]
+    if (!a || !b) continue
+    pairByKey.set(pairKey(a, b), p)
+    const sa = adj.get(a) ?? new Set<string>()
+    sa.add(b)
+    adj.set(a, sa)
+    const sb = adj.get(b) ?? new Set<string>()
+    sb.add(a)
+    adj.set(b, sb)
+  }
+
+  const usedPairKeys = new Set<string>()
+  const xorMerged: PackingPatternSnapshot['xor_candidates'] = []
+
+  const soloCandidates = [...adj.entries()].sort((x, y) => y[1].size - x[1].size)
+  for (const [solo, partnerSet] of soloCandidates) {
+    const partners = [...partnerSet]
+    if (partners.length < 2) continue
+    let best: string[] = []
+    for (const seed of partners) {
+      const cluster = [seed]
+      for (const other of partners) {
+        if (other === seed) continue
+        if (cluster.every((m) => copackConf(m, other) >= 0.75)) cluster.push(other)
+      }
+      if (cluster.length > best.length) best = cluster
+    }
+    if (best.length < 2) continue
+    const soloName = itemNames.get(solo) ?? solo
+    const bundleRelated = xorOptionsRelated(
+      [{ was: soloName }],
+      best.map((id) => ({ was: itemNames.get(id) ?? id }))
+    )
+    if (!bundleRelated) continue
+    const keys = best.map((p) => pairKey(solo, p))
+    if (keys.some((k) => usedPairKeys.has(k))) continue
+    for (const k of keys) usedPairKeys.add(k)
+    const sample = pairByKey.get(keys[0] ?? '')
+    const bundleNames = best.map((id) => itemNames.get(id) ?? id)
+    xorMerged.push({
+      options: [
+        { ids: [solo], names: [soloName] },
+        { ids: best, names: bundleNames },
+      ],
+      ids: [solo, ...best].sort(),
+      names: [soloName, bundleNames.join(' und ')],
+      kategorie_id: sample?.kategorie_id ?? itemKat.get(solo) ?? '',
+      together: sample?.together ?? 0,
+      either: sample?.either ?? 0,
+      a_count: singleCount.get(solo) ?? 0,
+      b_count: Math.max(...best.map((id) => singleCount.get(id) ?? 0)),
+    })
+  }
+
+  for (const p of xorPairs) {
+    const k = pairKey(p.ids[0], p.ids[1])
+    if (usedPairKeys.has(k)) continue
+    xorMerged.push({
+      options: [
+        { ids: [p.ids[0]], names: [p.names[0]] },
+        { ids: [p.ids[1]], names: [p.names[1]] },
+      ],
+      ids: [...p.ids].sort(),
+      names: p.names,
+      kategorie_id: p.kategorie_id,
+      together: p.together,
+      either: p.either,
+      a_count: p.a_count,
+      b_count: p.b_count,
+    })
+  }
+
+  xorMerged.sort((a, b) => {
+    const aBundle = Math.max(...a.options.map((o) => o.ids.length))
+    const bBundle = Math.max(...b.options.map((o) => o.ids.length))
+    return bBundle - aBundle || b.either - a.either
+  })
+  const xorTrim: PackingPatternSnapshot['xor_candidates'] = []
+  const xorPerItem = new Map<string, number>()
+  for (const cand of xorMerged) {
+    if (cand.ids.some((id) => (xorPerItem.get(id) ?? 0) >= 1)) continue
+    xorTrim.push(cand)
+    for (const id of cand.ids) xorPerItem.set(id, (xorPerItem.get(id) ?? 0) + 1)
+    if (xorTrim.length >= 6) break
+  }
 
   const packedTrips = new Map<string, { was: string; trips: number; packed: number }>()
   for (const row of lists) {
@@ -272,12 +420,19 @@ export async function computePackingPatternSnapshot(db: D1Database): Promise<Pac
   return snapshot
 }
 
-export async function publishPatternSuggestions(db: D1Database): Promise<number> {
+export async function publishPatternSuggestions(
+  db: D1Database,
+  opts?: { apiKey?: string | null }
+): Promise<number> {
   const snapshot = await getPackingPatternSnapshot(db)
   if (!snapshot) return 0
   const vacations = await getVacations(db)
   const next = findCurrentOrNextVacation(vacations)
   const season = seasonFromYmd(next?.startdatum)
+  const existingAltIds = new Set<string>()
+  for (const g of await listAlternativeGroups(db)) {
+    for (const item of g.items) existingAltIds.add(item.gegenstand_id)
+  }
   let n = 0
 
   const currentIds = new Set<string>()
@@ -293,20 +448,75 @@ export async function publishPatternSuggestions(db: D1Database): Promise<number>
     for (const r of rows.results || []) currentIds.add(r.gegenstand_id)
   }
 
-  for (const add of snapshot.frequent_adds.slice(0, 12)) {
+  const trips = await loadTripPackProfiles(db)
+  const itemOcc = await loadItemTripOccurrences(db, trips)
+  const allTrips = [...trips.values()]
+  let targetProfile = next ? trips.get(next.id) : undefined
+  if (next && !targetProfile) {
+    const places = await getCampingplaetzeForVacation(db, next.id)
+    targetProfile = profileFromVacation(next, places.map((p) => p.land))
+  }
+
+  const keepAddFingerprints = new Set<string>()
+  for (const add of snapshot.frequent_adds.slice(0, 24)) {
     if (next && currentIds.has(add.gegenstand_id)) continue
     if (season && add.seasons.length > 0 && !add.seasons.includes(season)) continue
+    let extraReason: string | null = null
+    if (targetProfile) {
+      const fit = itemFitsTargetTrip(
+        targetProfile,
+        itemOcc.get(add.gegenstand_id) ?? [],
+        allTrips
+      )
+      if (!fit.ok) continue
+      extraReason = fitReasonText(fit.reason, targetProfile.days)
+    }
+    const seasonLabel = formatSeasonBuckets(add.seasons)
+    const begruendung = extraReason
+      ? extraReason
+      : seasonLabel
+        ? `Stand in ${add.count} Packlisten, typisch in der Saison ${seasonLabel}.`
+        : `Stand in ${add.count} Packlisten.`
+    const fingerprint = `add:${add.gegenstand_id}:${next?.id ?? 'any'}`
+    keepAddFingerprints.add(fingerprint)
     const ok = await upsertSmartSuggestion(db, {
       kind: 'packing_add',
-      fingerprint: `add:${add.gegenstand_id}:${season ?? 'any'}`,
+      fingerprint,
       titel: `Oft mitgenommen: ${add.was}`,
-      begruendung: `In ${add.count} Packlisten, typisch in der ${add.seasons.join('/') || 'gleichen'} Saison.`,
-      payload: { gegenstand_id: add.gegenstand_id, was: add.was, vacation_id: next?.id ?? null },
+      begruendung,
+      payload: {
+        gegenstand_id: add.gegenstand_id,
+        was: add.was,
+        vacation_id: next?.id ?? null,
+        vacation_titel: next?.titel ?? null,
+        seasons: add.seasons,
+        count: add.count,
+      },
       kontext_typ: next ? 'vacation' : null,
       kontext_id: next?.id ?? null,
       quelle: 'regel',
     })
     if (ok) n++
+    if (n >= 12) break
+  }
+
+  if (next) {
+    try {
+      const staleAdds = await db
+        .prepare(
+          `SELECT id, fingerprint FROM smart_vorschlaege
+           WHERE kind = 'packing_add' AND status IN ('pending', 'snoozed') AND kontext_id = ?`
+        )
+        .bind(next.id)
+        .all<{ id: string; fingerprint: string }>()
+      for (const row of staleAdds.results || []) {
+        if (!keepAddFingerprints.has(row.fingerprint)) {
+          await setSmartSuggestionStatus(db, row.id, 'dismissed')
+        }
+      }
+    } catch (error) {
+      console.error('stale packing_add cleanup:', error)
+    }
   }
 
   for (const temp of snapshot.temp_repeats.slice(0, 8)) {
@@ -341,6 +551,7 @@ export async function publishPatternSuggestions(db: D1Database): Promise<number>
           was: missingWas,
           paired_was: present,
           vacation_id: next.id,
+          vacation_titel: next.titel,
         },
         kontext_typ: 'vacation',
         kontext_id: next.id,
@@ -350,26 +561,73 @@ export async function publishPatternSuggestions(db: D1Database): Promise<number>
     }
   }
 
-  for (const xor of snapshot.xor_candidates.slice(0, 8)) {
+  const xorFingerprints = new Set<string>()
+  const xorForPublish = await confirmXorCandidatesWithAi(
+    db,
+    opts?.apiKey,
+    snapshot.xor_candidates.slice(0, 6)
+  )
+  for (const xor of xorForPublish.slice(0, 4)) {
+    if (xor.ids.some((id) => existingAltIds.has(id))) continue
+    const fp = `xor:${xor.ids.join('|')}`
+    xorFingerprints.add(fp)
+    const left = xor.options[0]
+    const right = xor.options[1]
+    const leftLabel = left?.names.join(' und ') ?? xor.names[0] ?? ''
+    const rightLabel = right?.names.join(' und ') ?? xor.names[1] ?? ''
+    const isBundle = (left?.ids.length ?? 1) > 1 || (right?.ids.length ?? 1) > 1
     const ok = await upsertSmartSuggestion(db, {
       kind: 'xor_candidate',
-      fingerprint: `xor:${xor.ids.join('|')}`,
-      titel: `Entweder ${xor.names[0]} oder ${xor.names[1]}`,
-      begruendung: `Selten zusammen auf einer Packliste, aber oft genau eines von beiden.`,
-      payload: { gegenstand_ids: xor.ids, names: xor.names, kategorie_id: xor.kategorie_id },
+      fingerprint: fp,
+      titel: `Entweder ${leftLabel} oder ${rightLabel}`,
+      begruendung: isBundle
+        ? `Gleiche Funktion: entweder „${leftLabel}“ oder „${rightLabel}“ zusammen – in den Packlisten fast nie gemischt.`
+        : `Gleiche Funktion, in ${xor.either} Packlisten kam mindestens eines vor, zusammen nur ${xor.together}×.`,
+      payload: {
+        gegenstand_ids: xor.ids,
+        names: [leftLabel, rightLabel],
+        options: xor.options.map((o) => ({
+          gegenstand_ids: o.ids,
+          names: o.names,
+        })),
+        kategorie_id: xor.kategorie_id,
+        together: xor.together,
+        either: xor.either,
+        a_count: xor.a_count,
+        b_count: xor.b_count,
+      },
       quelle: 'regel',
     })
     if (ok) n++
   }
 
+  try {
+    const staleXor = await db
+      .prepare(
+        `SELECT id, fingerprint FROM smart_vorschlaege
+         WHERE kind = 'xor_candidate' AND status IN ('pending', 'snoozed')`
+      )
+      .all<{ id: string; fingerprint: string }>()
+    for (const row of staleXor.results || []) {
+      if (!xorFingerprints.has(row.fingerprint)) {
+        await setSmartSuggestionStatus(db, row.id, 'dismissed')
+      }
+    }
+  } catch (error) {
+    console.error('stale xor cleanup:', error)
+  }
+
   return n
 }
 
-export async function refreshPackingPatternsAndSuggestions(db: D1Database): Promise<{
+export async function refreshPackingPatternsAndSuggestions(
+  db: D1Database,
+  opts?: { apiKey?: string | null }
+): Promise<{
   snapshot_at: string
   suggestions: number
 }> {
   const snapshot = await computePackingPatternSnapshot(db)
-  const suggestions = await publishPatternSuggestions(db)
+  const suggestions = await publishPatternSuggestions(db, opts)
   return { snapshot_at: snapshot.computed_at, suggestions }
 }

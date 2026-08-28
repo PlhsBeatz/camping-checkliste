@@ -157,7 +157,10 @@ export function getTripPhase(
   return 'returned'
 }
 
-/** Nächster relevanter Urlaub (wie pack-status/page.tsx) */
+/**
+ * Aktueller Urlaub, sonst der nächste geplante.
+ * Nach der Rückkehr gilt der letzte Urlaub noch 7 Tage (Nachbereitung).
+ */
 export function findRelevantVacation(vacations: Vacation[], now = new Date()): Vacation | null {
   if (vacations.length === 0) return null
   const today = todayInAppTimezone(now)
@@ -169,14 +172,21 @@ export function findRelevantVacation(vacations: Vacation[], now = new Date()): V
   })
   if (valid.length === 0) return null
 
+  const byStart = (a: Vacation, b: Vacation) =>
+    normalizeCalendarDate(a.startdatum).localeCompare(normalizeCalendarDate(b.startdatum))
+
+  const ongoing = valid
+    .filter((v) => {
+      const start = normalizeCalendarDate(v.startdatum)
+      const end = normalizeCalendarDate(v.enddatum)
+      return start <= today && end >= today
+    })
+    .sort(byStart)
+  if (ongoing[0]) return ongoing[0]
+
   const upcoming = valid.filter((v) => normalizeCalendarDate(v.startdatum) >= today)
   const toUse = upcoming.length > 0 ? upcoming : valid
-  return (
-    toUse.sort(
-      (a, b) =>
-        normalizeCalendarDate(a.startdatum).localeCompare(normalizeCalendarDate(b.startdatum))
-    )[0] ?? null
-  )
+  return toUse.sort(byStart)[0] ?? null
 }
 
 export type TripStatusPayload = {

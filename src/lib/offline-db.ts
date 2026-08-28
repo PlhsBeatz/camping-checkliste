@@ -2,7 +2,7 @@
  * IndexedDB (Dexie) für Offline-Cache der D1-Daten.
  * Speichert: Urlaube, Ausrüstung, Kategorien, Tags, Mitreisende, Transportmittel, Packlisten-Einträge,
  * Tools-Checklisten, Optimierungen, letzte GPS-Position, Tag-Kategorien, Pack-Status, Campingplätze (+ Fotos),
- * Routen, Profil-Heimat-Adresse, Rastplätze und letzte Auth-Session.
+ * Routen, Profil-Heimat-Adresse, Rastplätze, Entweder-oder-Gruppen und letzte Auth-Session.
  *
  * Außerdem: Sync-Queue für Mutationen, die bei Reconnect mit Last-Write-Wins gesendet werden.
  */
@@ -33,6 +33,7 @@ import type {
   FaelligkeitVorlage,
 } from './db'
 import type { AttentionFeed } from './attention-feed'
+import type { AlternativeGroup } from './packing-alternatives'
 
 export interface CachedVacation extends Vacation {
   _cachedAt: number
@@ -123,6 +124,11 @@ export interface CachedVerbrauchMessung extends VerbrauchMessung {
 }
 
 export interface CachedFaelligkeitVorlage extends FaelligkeitVorlage {
+  _cachedAt: number
+  _updatedAt: number
+}
+
+export interface CachedAlternativeGroup extends AlternativeGroup {
   _cachedAt: number
   _updatedAt: number
 }
@@ -249,6 +255,7 @@ export class OfflineDB extends Dexie {
   segmentRoutes!: EntityTable<CachedSegmentRoute, 'id'>
   authUser!: EntityTable<CachedAuthUser, 'id'>
   attentionFeed!: EntityTable<CachedAttentionFeed, 'id'>
+  alternativeGroups!: EntityTable<CachedAlternativeGroup, 'id'>
   syncQueue!: EntityTable<SyncQueueEntry, 'id'>
 
   constructor() {
@@ -459,6 +466,9 @@ export class OfflineDB extends Dexie {
     this.version(10).stores({
       attentionFeed: 'id',
     })
+    this.version(11).stores({
+      alternativeGroups: 'id, _cachedAt, _updatedAt',
+    })
   }
 }
 
@@ -498,6 +508,11 @@ export async function cacheVacations(items: Vacation[]): Promise<void> {
 export async function cacheEquipment(items: EquipmentItem[]): Promise<void> {
   const withMetaItems = items.map((v) => withMeta(v)) as CachedEquipmentItem[]
   await snapshotReplace(offlineDb.equipment, withMetaItems)
+}
+
+export async function cacheAlternativeGroups(items: AlternativeGroup[]): Promise<void> {
+  const withMetaItems = items.map((v) => withMeta(v)) as CachedAlternativeGroup[]
+  await snapshotReplace(offlineDb.alternativeGroups, withMetaItems)
 }
 
 export async function cacheCategories(

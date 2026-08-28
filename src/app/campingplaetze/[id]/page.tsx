@@ -16,6 +16,8 @@ import {
   Pencil,
   Trash2,
   Star,
+  Map,
+  ExternalLink,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { ApiResponse } from '@/lib/api-types'
@@ -54,6 +56,7 @@ import {
   routeInfoToCacheEntry,
   type CampingplatzRouteInfo,
 } from '@/lib/client-route-info'
+import { buildPlatzplanUrl } from '@/lib/platzplan-url'
 
 function CampingplatzDetailEditModalGate({
   detailId,
@@ -381,6 +384,7 @@ export default function CampingplatzDetailPage() {
     const label = raw.replace(/^https?:\/\//i, '')
     return { href, label }
   })()
+  const platzplanUrl = campingplatz ? buildPlatzplanUrl(campingplatz, null) : null
 
   const coverBadge = (
     <span
@@ -612,6 +616,38 @@ export default function CampingplatzDetailPage() {
                           title={campingplatz.name}
                         />
                       </div>
+                    )}
+                  </section>
+
+                  <section className="space-y-2">
+                    <h2 className="text-sm font-semibold text-brand-heading">Platzplan</h2>
+                    {platzplanUrl ? (
+                      <div className="space-y-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="h-7 gap-1.5 bg-card px-2.5 text-xs hover:bg-neutral-50"
+                          asChild
+                        >
+                          <a href={platzplanUrl} target="_blank" rel="noopener noreferrer">
+                            <Map className="h-3.5 w-3.5 shrink-0" />
+                            Platzplan öffnen
+                            <ExternalLink className="h-3 w-3 shrink-0" />
+                          </a>
+                        </Button>
+                        {campingplatz.platzplan_hinweis?.trim() ? (
+                          <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+                            {campingplatz.platzplan_hinweis}
+                          </p>
+                        ) : null}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">
+                        Noch kein Platzplan hinterlegt.
+                        {campingplatz.platzplan_hinweis?.trim()
+                          ? ` ${campingplatz.platzplan_hinweis}`
+                          : ''}
+                      </p>
                     )}
                   </section>
 

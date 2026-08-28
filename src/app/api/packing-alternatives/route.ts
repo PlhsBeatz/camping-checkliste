@@ -5,6 +5,7 @@ import {
   conflictIfAdding,
   conflictsForPackingList,
   createAlternativeGroup,
+  deleteAlternativeGroup,
   listAlternativeGroups,
   replacementAfterRemoving,
 } from '@/lib/packing-alternatives'
@@ -49,12 +50,40 @@ export async function POST(request: NextRequest) {
     if (adminErr) return adminErr
     const env = process.env as unknown as CloudflareEnv
     const db = await getDB(env)
-    const body = (await request.json()) as { gegenstandIds?: string[]; titel?: string }
-    const group = await createAlternativeGroup(db, body.gegenstandIds ?? [], body.titel ?? null)
+    const body = (await request.json()) as {
+      gegenstandIds?: string[]
+      options?: string[][]
+      titel?: string
+    }
+    const input = body.options && body.options.length >= 2 ? body.options : (body.gegenstandIds ?? [])
+    const group = await createAlternativeGroup(db, input, body.titel ?? null)
     if (!group) {
       return NextResponse.json({ success: false, error: 'Mindestens zwei Gegenstände' }, { status: 400 })
     }
     return NextResponse.json({ success: true, data: group })
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error)
+    return NextResponse.json({ success: false, error: message }, { status: 500 })
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const auth = await requireAuth(request)
+    if (auth instanceof NextResponse) return auth
+    const adminErr = requireAdmin(auth.userContext)
+    if (adminErr) return adminErr
+    const env = process.env as unknown as CloudflareEnv
+    const db = await getDB(env)
+    const body = (await request.json()) as { id?: string }
+    if (!body.id) {
+      return NextResponse.json({ success: false, error: 'id erforderlich' }, { status: 400 })
+    }
+    const ok = await deleteAlternativeGroup(db, body.id)
+    if (!ok) {
+      return NextResponse.json({ success: false, error: 'Gruppe nicht gefunden' }, { status: 404 })
+    }
+    return NextResponse.json({ success: true })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error)
     return NextResponse.json({ success: false, error: message }, { status: 500 })

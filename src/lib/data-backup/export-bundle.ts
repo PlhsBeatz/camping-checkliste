@@ -44,6 +44,58 @@ async function tableExists(db: D1Database, table: string): Promise<boolean> {
   return Boolean(row?.name)
 }
 
+/** Entweder-oder-Gruppen zu gegebenen Ausrüstungs-IDs (inkl. der anderen Seite). */
+async function loadXorGroupsForEquipmentIds(
+  db: D1Database,
+  equipmentIds: string[],
+  warnings: string[]
+): Promise<{
+  extraEquipmentIds: string[]
+  groups: Record<string, unknown>[]
+  items: Record<string, unknown>[]
+}> {
+  const empty = { extraEquipmentIds: [] as string[], groups: [] as Record<string, unknown>[], items: [] as Record<string, unknown>[] }
+  if (equipmentIds.length === 0) return empty
+  try {
+    if (!(await tableExists(db, 'ausruestung_alternativgruppe_items'))) return empty
+    const ig = placeholders(equipmentIds.length)
+    const seed = await db
+      .prepare(
+        `SELECT DISTINCT gruppe_id FROM ausruestung_alternativgruppe_items WHERE gegenstand_id IN (${ig})`
+      )
+      .bind(...equipmentIds)
+      .all<{ gruppe_id: string }>()
+    const groupIds = [...new Set((seed.results ?? []).map((r) => r.gruppe_id).filter(Boolean))]
+    if (groupIds.length === 0) return empty
+    const gg = placeholders(groupIds.length)
+    const groupsR = await db
+      .prepare(`SELECT * FROM ausruestung_alternativgruppen WHERE id IN (${gg})`)
+      .bind(...groupIds)
+      .all()
+    const itemsR = await db
+      .prepare(`SELECT * FROM ausruestung_alternativgruppe_items WHERE gruppe_id IN (${gg})`)
+      .bind(...groupIds)
+      .all()
+    const items = (itemsR.results ?? []) as Record<string, unknown>[]
+    const seedSet = new Set(equipmentIds)
+    const extraEquipmentIds = [
+      ...new Set(
+        items
+          .map((r) => String(r.gegenstand_id ?? ''))
+          .filter((id) => id && !seedSet.has(id))
+      ),
+    ]
+    return {
+      extraEquipmentIds,
+      groups: (groupsR.results ?? []) as Record<string, unknown>[],
+      items,
+    }
+  } catch (e) {
+    warnings.push(`xorGroups: ${e instanceof Error ? e.message : String(e)}`)
+    return empty
+  }
+}
+
 async function selectAllSafe(
   db: D1Database,
   table: string
@@ -165,6 +217,13 @@ async function vacationClosureExports(
     const gegenstandIds = [
       ...new Set(out.packlisten_eintraege.map((e) => String(e.gegenstand_id)).filter(Boolean)),
     ]
+
+    const xor = await loadXorGroupsForEquipmentIds(db, gegenstandIds, warnings)
+    if (xor.extraEquipmentIds.length > 0) {
+      gegenstandIds.push(...xor.extraEquipmentIds)
+    }
+    out.ausruestung_alternativgruppen = xor.groups
+    out.ausruestung_alternativgruppe_items = xor.items
 
     let mitreisendeRows: Record<string, unknown>[] = []
     let berechtigungRows: Record<string, unknown>[] = []
@@ -494,6 +553,14 @@ async function wartungReferencedExports(
   await tryIn('transportmittel', 'id', [...transportIds])
   await tryIn('urlaube', 'id', [...urlaubIds])
 
+  const xor = await loadXorGroupsForEquipmentIds(db, [...equipmentIds], warnings)
+  if (xor.groups.length > 0) {
+    out.ausruestung_alternativgruppen = xor.groups
+    out.ausruestung_alternativgruppe_items = xor.items
+    for (const id of xor.extraEquipmentIds) equipmentIds.add(id)
+    await tryIn('ausruestungsgegenstaende', 'id', [...equipmentIds])
+  }
+
   const fetchedEquip = out.ausruestungsgegenstaende ?? []
   const gegenstandIds = fetchedEquip.map((r) => String(r.id)).filter(Boolean)
   const kategorieIds = new Set<string>()
@@ -617,6 +684,11 @@ export async function buildBackupBundle(
         if (error) warnings.push(`${table}: ${error}`)
         data[table] = rows as BackupTableData
       }
+    }
+    for (const [k, rows] of Object.entries(closed)) {
+      if (data[k] !== undefined) continue
+      if (!rows?.length) continue
+      data[k] = rows as BackupTableData
     }
   } else {
     for (const table of tables) {

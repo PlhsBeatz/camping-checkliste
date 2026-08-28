@@ -68,6 +68,8 @@ const REFERENCE_CORE = new Set([
   'ausruestungsgegenstaende_links',
   'ausruestungsgegenstaende_standard_mitreisende',
   'ausruestungsgegenstaende_tags',
+  'ausruestung_alternativgruppen',
+  'ausruestung_alternativgruppe_items',
   'packlisten_vorlagen',
   'vorlagen_eintraege',
 ])
@@ -78,6 +80,8 @@ const EQUIPMENT_REF = new Set([
   'ausruestungsgegenstaende_links',
   'ausruestungsgegenstaende_standard_mitreisende',
   'ausruestungsgegenstaende_tags',
+  'ausruestung_alternativgruppen',
+  'ausruestung_alternativgruppe_items',
 ])
 
 /** Pack-/Organisations-Stamm ohne Ausrüstungs-Inventar */
@@ -125,8 +129,6 @@ const TOOLS = new Set([
   'attention_snooze',
   'smart_vorschlaege',
   'packing_pattern_snapshot',
-  'ausruestung_alternativgruppen',
-  'ausruestung_alternativgruppe_items',
 ])
 
 /** Wartung & Verbrauch (Fälligkeiten, Vorlagen, Historie, Messungen) */
