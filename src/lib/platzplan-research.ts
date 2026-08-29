@@ -423,11 +423,15 @@ async function attachMissingTitles(candidates: PlatzplanCandidate[]): Promise<vo
   }
 }
 
-export async function crawlPlatzplanCandidates(startUrl: string): Promise<{
+export async function crawlPlatzplanCandidates(
+  startUrl: string,
+  opts?: { maxPages?: number }
+): Promise<{
   candidates: PlatzplanCandidate[]
   pages: string[]
   navHints: Array<{ url: string; text: string }>
 }> {
+  const pageCap = Math.min(Math.max(opts?.maxPages ?? MAX_PAGES, 1), MAX_PAGES)
   const start = resolveUrl(startUrl, startUrl)
   if (!start) return { candidates: [], pages: [], navHints: [] }
 
@@ -469,7 +473,7 @@ export async function crawlPlatzplanCandidates(startUrl: string): Promise<{
     /* ignore */
   }
 
-  while ((queue.length > 0 || guessed.length > 0) && pages.length < MAX_PAGES) {
+  while ((queue.length > 0 || guessed.length > 0) && pages.length < pageCap) {
     const next = queue.shift() ?? guessed.shift()
     if (!next) break
     if (visited.has(next.url)) continue
@@ -784,9 +788,11 @@ export type PlatzplanFromWebsiteResult = {
 export async function researchPlatzplanFromWebsite(
   name: string,
   website: string,
-  opts: { apiKey?: string | null }
+  opts: { apiKey?: string | null; maxPages?: number }
 ): Promise<PlatzplanFromWebsiteResult> {
-  let { candidates, navHints } = await crawlPlatzplanCandidates(website)
+  let { candidates, navHints } = await crawlPlatzplanCandidates(website, {
+    maxPages: opts.maxPages,
+  })
   candidates = sortCandidates(candidates)
 
   if (opts.apiKey && candidates.length === 0) {
@@ -807,7 +813,7 @@ export async function researchPlatzplanFromWebsite(
         }
         continue
       }
-      const extra = await crawlPlatzplanCandidates(url)
+      const extra = await crawlPlatzplanCandidates(url, { maxPages: opts.maxPages })
       merged.push(...extra.candidates)
       navHints = [...navHints, ...extra.navHints]
       const pageScore = scoreCandidate(url, discovered.begruendung || filenameFromUrl(url))
@@ -859,7 +865,7 @@ export async function researchPlatzplanFromWebsite(
       begruendung = ai.begruendung || begruendung
       quelle = candidates.some((c) => c.url === ai.url) ? 'hybrid' : 'ki'
     } else if (!picked && ai.extraUrls[0] && !isRejectedPlatzplanUrl(ai.extraUrls[0])) {
-      const extra = await crawlPlatzplanCandidates(ai.extraUrls[0])
+      const extra = await crawlPlatzplanCandidates(ai.extraUrls[0], { maxPages: opts.maxPages })
       candidates = sortCandidates([...candidates, ...extra.candidates])
       const extraFile = bestDirectPlanFile(candidates)
       picked = extraFile?.url ?? extra.candidates[0]?.url ?? picked
@@ -898,7 +904,7 @@ export type ResearchDraftResult = {
 /** Recherche ohne gespeicherten Datensatz – füllt nur leere Felder. */
 export async function researchDraftGaps(
   input: ResearchDraftInput,
-  opts: { apiKey?: string | null }
+  opts: { apiKey?: string | null; maxPages?: number }
 ): Promise<ResearchDraftResult> {
   const out: ResearchDraftResult = {
     webseite: null,
@@ -917,7 +923,10 @@ export async function researchDraftGaps(
   }
 
   if (website && !input.platzplan_url?.trim() && !input.platzplan_url_vorlage?.trim()) {
-    const plan = await researchPlatzplanFromWebsite(input.name.trim() || website, website, opts)
+    const plan = await researchPlatzplanFromWebsite(input.name.trim() || website, website, {
+      apiKey: opts.apiKey,
+      maxPages: opts.maxPages ?? 8,
+    })
     out.candidates = plan.candidates
     out.platzplan_url = plan.pickedUrl
   }

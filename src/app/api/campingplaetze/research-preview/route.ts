@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
         platzplan_url: body.platzplan_url ?? null,
         platzplan_url_vorlage: body.platzplan_url_vorlage ?? null,
       },
-      { apiKey: process.env.OPENROUTER_API_KEY?.trim() ?? null }
+      { apiKey: process.env.OPENROUTER_API_KEY?.trim() ?? null, maxPages: 8 }
     )
 
     return NextResponse.json({ success: true, data: result })

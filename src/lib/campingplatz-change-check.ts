@@ -12,8 +12,11 @@ import { preparePlaceFieldChange } from '@/lib/place-value-normalize'
 import { researchPlatzplanFromWebsite } from '@/lib/platzplan-research'
 import { upsertSmartSuggestion } from '@/lib/smart-suggestions'
 
-const CHECK_LIMIT = 8
-const RECRAWL_LIMIT = 2
+/** Wenige Plätze pro Cron-Lauf – zusammen mit Platzplan-Suche sonst Error 1102. */
+const CHECK_LIMIT = 3
+const RECRAWL_LIMIT = 1
+/** Recrawl nur bei totem Platzplan-Link, und kürzer als die volle Suche. */
+const RECRAWL_MAX_PAGES = 6
 /** Cron: nur Plätze, die noch nie oder vor mehr als 6 Monaten geprüft wurden. */
 const STALE_AFTER_SQL = `datetime('now', '-6 months')`
 
@@ -43,12 +46,18 @@ function pushChange(
 
 async function probeUrlStatus(url: string): Promise<number | null> {
   const ctrl = new AbortController()
-  const t = setTimeout(() => ctrl.abort(), 8_000)
+  const t = setTimeout(() => ctrl.abort(), 6_000)
   try {
     const head = await fetch(url, { method: 'HEAD', redirect: 'follow', signal: ctrl.signal })
     if (head.status !== 405 && head.status !== 501) return head.status
-    const get = await fetch(url, { method: 'GET', redirect: 'follow', signal: ctrl.signal })
-    return get.status
+    /* Kein voller GET: große PDFs würden CPU/Memory sprengen (1102). */
+    const ranged = await fetch(url, {
+      method: 'GET',
+      redirect: 'follow',
+      signal: ctrl.signal,
+      headers: { Range: 'bytes=0-0' },
+    })
+    return ranged.status
   } catch {
     return null
   } finally {
@@ -143,19 +152,12 @@ export async function checkCampingplatzForUpdates(
       if (opts.allowRecrawl && cp.webseite?.trim()) {
         const found = await researchPlatzplanFromWebsite(cp.name, cp.webseite, {
           apiKey: opts.openRouterKey ?? null,
+          maxPages: RECRAWL_MAX_PAGES,
         })
         recrawled = true
         replacement = found.pickedUrl && found.pickedUrl !== planUrl ? found.pickedUrl : null
       }
       pushChange(changes, 'platzplan_url', planUrl, replacement ?? '')
-    } else if (opts.allowRecrawl && cp.webseite?.trim()) {
-      const found = await researchPlatzplanFromWebsite(cp.name, cp.webseite, {
-        apiKey: opts.openRouterKey ?? null,
-      })
-      recrawled = true
-      if (found.pickedUrl && found.pickedUrl !== planUrl) {
-        pushChange(changes, 'platzplan_url', planUrl, found.pickedUrl)
-      }
     }
   }
 
@@ -183,16 +185,21 @@ export async function checkCampingplatzForUpdates(
 
 export async function processCampingplatzDataChecks(
   db: D1Database,
-  opts: { googleApiKey?: string | null; openRouterKey?: string | null }
+  opts: {
+    googleApiKey?: string | null
+    openRouterKey?: string | null
+    allowRecrawl?: boolean
+  }
 ): Promise<{ checked: number; withChanges: number }> {
   const ids = await listCampingplaetzeForDataCheck(db, CHECK_LIMIT)
   let withChanges = 0
   let recrawlUsed = 0
+  const recrawlBudget = opts.allowRecrawl === false ? 0 : RECRAWL_LIMIT
   for (const id of ids) {
-    const allowRecrawl = recrawlUsed < RECRAWL_LIMIT
+    const allowRecrawl = recrawlUsed < recrawlBudget
     const result = await checkCampingplatzForUpdates(db, id, {
       googleApiKey: opts.googleApiKey ?? null,
-      openRouterKey: opts.openRouterKey ?? null,
+      openRouterKey: allowRecrawl ? (opts.openRouterKey ?? null) : null,
       allowRecrawl,
     })
     if (result.recrawled) recrawlUsed += 1

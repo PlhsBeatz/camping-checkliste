@@ -39,7 +39,8 @@ export async function GET(request: NextRequest) {
     })
     let platzplanJobs = 0
     try {
-      const missingIds = await listCampingplaetzeForPlatzplanResearch(db, 4)
+      /* 2 statt 4: Website-Crawls plus Datenprüfung sonst Error 1102. */
+      const missingIds = await listCampingplaetzeForPlatzplanResearch(db, 2)
       for (const id of missingIds) {
         await researchPlatzplanForCampingplatz(db, id, {
           apiKey: env.OPENROUTER_API_KEY?.trim() ?? null,
@@ -53,7 +54,9 @@ export async function GET(request: NextRequest) {
     try {
       placeUpdateJobs = await processCampingplatzDataChecks(db, {
         googleApiKey: env.GOOGLE_MAPS_API_KEY?.trim() ?? null,
-        openRouterKey: env.OPENROUTER_API_KEY?.trim() ?? null,
+        /* Recrawl/KI nur, wenn in diesem Lauf keine Platzplan-Suche lief. */
+        openRouterKey: platzplanJobs === 0 ? env.OPENROUTER_API_KEY?.trim() ?? null : null,
+        allowRecrawl: platzplanJobs === 0,
       })
     } catch (error) {
       console.error('Cron Campingplatz-Datenprüfung:', error)
