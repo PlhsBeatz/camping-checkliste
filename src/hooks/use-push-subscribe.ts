@@ -33,9 +33,24 @@ async function saveSubscriptionToServer(sub: PushSubscription): Promise<boolean>
   return true
 }
 
+async function readExistingPushSubscription(): Promise<PushSubscription | null> {
+  if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return null
+  try {
+    const regs = await navigator.serviceWorker.getRegistrations()
+    for (const reg of regs) {
+      const existing = await reg.pushManager.getSubscription()
+      if (existing) return existing
+    }
+  } catch {
+    /* ignore */
+  }
+  return null
+}
+
 export function usePushSubscribe() {
   const [supported, setSupported] = useState(false)
   const [subscribed, setSubscribed] = useState(false)
+  const [ready, setReady] = useState(false)
   const [publicKey, setPublicKey] = useState<string | null>(null)
   const [lastError, setLastError] = useState<string | null>(null)
   const pendingSubscribeRef = useRef(false)
@@ -47,7 +62,26 @@ export function usePushSubscribe() {
       'PushManager' in window &&
       'Notification' in window
     setSupported(ok)
-    if (!ok) return
+    if (!ok) {
+      setReady(true)
+      return
+    }
+
+    let cancelled = false
+    void (async () => {
+      try {
+        const existing = await readExistingPushSubscription()
+        if (cancelled) return
+        if (existing) {
+          setSubscribed(true)
+          void saveSubscriptionToServer(existing)
+        }
+      } catch {
+        /* ignore */
+      } finally {
+        if (!cancelled) setReady(true)
+      }
+    })()
 
     void (async () => {
       try {
@@ -76,6 +110,10 @@ export function usePushSubscribe() {
         setLastError('Push-Konfiguration konnte nicht geladen werden.')
       }
     })()
+
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   const subscribe = useCallback(async (): Promise<boolean> => {
@@ -128,18 +166,18 @@ export function usePushSubscribe() {
   }, [supported, publicKey])
 
   useEffect(() => {
-    if (!supported || !publicKey) return
+    if (!supported || !publicKey || !ready || subscribed) return
 
     void (async () => {
       const reg = await ensurePushServiceWorker()
       if (!reg) return
       const existing = await reg.pushManager.getSubscription()
       if (existing) {
-        const ok = await saveSubscriptionToServer(existing)
-        if (ok) setSubscribed(true)
+        setSubscribed(true)
+        void saveSubscriptionToServer(existing)
       }
     })()
-  }, [supported, publicKey])
+  }, [supported, publicKey, ready, subscribed])
 
   useEffect(() => {
     if (publicKey && pendingSubscribeRef.current) {
@@ -168,5 +206,5 @@ export function usePushSubscribe() {
     }
   }, [])
 
-  return { supported, subscribed, publicKey, lastError, subscribe, unsubscribe }
+  return { supported, subscribed, ready, publicKey, lastError, subscribe, unsubscribe }
 }

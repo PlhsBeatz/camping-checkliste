@@ -14,6 +14,8 @@ type PushDeviceActivatePromptProps = {
   /** Dieser Browser hat ein aktives Push-Abo */
   deviceSubscribed: boolean
   pushSupported: boolean
+  /** false, solange der Geräte-Abo-Status noch unbekannt ist */
+  statusReady?: boolean
   onActivate: () => Promise<boolean>
   activateError?: string | null
   /** Profil: ausführlich. banner: kompakt im Heute-Hub */
@@ -30,6 +32,7 @@ export function PushDeviceActivatePrompt({
   accountPushEnabled,
   deviceSubscribed,
   pushSupported,
+  statusReady = true,
   onActivate,
   activateError,
   variant = 'profile',
@@ -39,7 +42,7 @@ export function PushDeviceActivatePrompt({
   const [activating, setActivating] = useState(false)
   const [localError, setLocalError] = useState<string | null>(null)
 
-  if (!accountPushEnabled || !pushSupported || deviceSubscribed) {
+  if (!statusReady || !accountPushEnabled || !pushSupported || deviceSubscribed) {
     return null
   }
 

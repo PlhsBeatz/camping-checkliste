@@ -211,11 +211,12 @@ export function PushNotificationSettings() {
           </div>
         )}
 
-        {settings?.enabled && !pushSubscribe.subscribed && (
+        {settings?.enabled && pushSubscribe.ready && !pushSubscribe.subscribed && (
           <PushDeviceActivatePrompt
             accountPushEnabled={settings.enabled}
             deviceSubscribed={pushSubscribe.subscribed}
             pushSupported={pushSubscribe.supported}
+            statusReady={pushSubscribe.ready}
             onActivate={pushSubscribe.subscribe}
             activateError={pushSubscribe.lastError}
             variant="profile"

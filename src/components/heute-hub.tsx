@@ -304,6 +304,7 @@ function HeuteHubContent() {
             accountPushEnabled={pushSettings?.enabled ?? false}
             deviceSubscribed={pushSubscribe.subscribed}
             pushSupported={pushSubscribe.supported}
+            statusReady={pushSubscribe.ready}
             onActivate={pushSubscribe.subscribe}
             activateError={pushSubscribe.lastError}
             variant="banner"
