@@ -67,6 +67,14 @@ export async function GET(request: NextRequest) {
       const count = await countOpenSmartSuggestions(db)
       return NextResponse.json({ success: true, data: { count } })
     }
+    const id = searchParams.get('id')?.trim()
+    if (id) {
+      const one = await getSmartSuggestionById(db, id)
+      const visible =
+        one && (isAdminRole(auth.userContext.role) || !suggestionAdminOnly(one.kind)) ? [one] : []
+      await attachVacationTitles(db, visible)
+      return NextResponse.json({ success: true, data: visible })
+    }
     const kindRaw = searchParams.get('kind')
     const kind = kindRaw && isKind(kindRaw) ? kindRaw : undefined
     const kontextId = searchParams.get('kontextId') ?? undefined

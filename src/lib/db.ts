@@ -267,6 +267,8 @@ export interface Campingplatz {
   google_place_id?: string | null
   telefon?: string | null
   oeffnungszeiten?: string | null
+  /** Letzte Hintergrund- oder manuelle Datenprüfung (Google/Website) */
+  daten_geprueft_am?: string | null
   created_at: string
   updated_at?: string
   /** Aus JOIN campingplatz_fotos (is_cover = 1) */
@@ -601,6 +603,10 @@ function mapCampingplatzRow(row: Record<string, unknown>): Campingplatz {
     google_place_id: row.google_place_id != null ? String(row.google_place_id) : null,
     telefon: row.telefon != null ? String(row.telefon) : null,
     oeffnungszeiten: row.oeffnungszeiten != null ? String(row.oeffnungszeiten) : null,
+    daten_geprueft_am:
+      row.daten_geprueft_am != null && String(row.daten_geprueft_am).trim() !== ''
+        ? String(row.daten_geprueft_am)
+        : null,
     created_at: String(row.created_at || ''),
     updated_at: row.updated_at != null ? String(row.updated_at) : undefined,
     cover_foto_id:
@@ -5495,6 +5501,9 @@ export async function createCampingplatz(
     google_place_id?: string | null
     telefon?: string | null
     oeffnungszeiten?: string | null
+    platzplan_url?: string | null
+    platzplan_url_vorlage?: string | null
+    platzplan_hinweis?: string | null
   }
 ): Promise<Campingplatz | null> {
   try {
@@ -5504,8 +5513,8 @@ export async function createCampingplatz(
     await db
       .prepare(
         `INSERT INTO campingplaetze 
-         (id, name, land, bundesland, ort, webseite, video_link, platz_typ, pros, cons, adresse, lat, lng, photo_name, aufwunschliste, top_favorit, google_place_id, telefon, oeffnungszeiten) 
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+         (id, name, land, bundesland, ort, webseite, video_link, platz_typ, pros, cons, adresse, lat, lng, photo_name, aufwunschliste, top_favorit, google_place_id, telefon, oeffnungszeiten, platzplan_url, platzplan_url_vorlage, platzplan_hinweis, daten_geprueft_am) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`
       )
       .bind(
         id,
@@ -5526,7 +5535,10 @@ export async function createCampingplatz(
         top,
         data.google_place_id ?? null,
         data.telefon ?? null,
-        data.oeffnungszeiten ?? null
+        data.oeffnungszeiten ?? null,
+        data.platzplan_url ?? null,
+        data.platzplan_url_vorlage ?? null,
+        data.platzplan_hinweis ?? null
       )
       .run()
     return getCampingplatzById(db, id)

@@ -21,6 +21,7 @@ import {
 import { requireAuth, requireAdmin } from '@/lib/api-auth'
 import { runInBackground } from '@/lib/wait-until'
 import { researchPlatzplanForCampingplatz, shouldResearchPlatzplan } from '@/lib/platzplan-research'
+import { sanitizeStoredPlaceFields } from '@/lib/place-value-normalize'
 
 export async function GET(request: NextRequest) {
   try {
@@ -107,17 +108,24 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const campingplatz = await createCampingplatz(db, {
-      name: body.name,
+    const geo = sanitizeStoredPlaceFields({
       land: body.land,
       bundesland: body.bundesland ?? null,
+      adresse: body.adresse ?? null,
+      oeffnungszeiten: body.oeffnungszeiten ?? null,
+    })
+
+    const campingplatz = await createCampingplatz(db, {
+      name: body.name,
+      land: geo.land || body.land,
+      bundesland: geo.bundesland ?? null,
       ort: body.ort,
       webseite: body.webseite ?? null,
       video_link: body.video_link ?? null,
       platz_typ: body.platz_typ as CampingplatzTyp,
       pros: body.pros ?? [],
       cons: body.cons ?? [],
-      adresse: body.adresse ?? null,
+      adresse: geo.adresse ?? null,
       lat: body.lat ?? null,
       lng: body.lng ?? null,
       photo_name: body.photo_name ?? null,
@@ -125,7 +133,10 @@ export async function POST(request: NextRequest) {
       top_favorit: body.top_favorit,
       google_place_id: body.google_place_id ?? null,
       telefon: body.telefon ?? null,
-      oeffnungszeiten: body.oeffnungszeiten ?? null,
+      oeffnungszeiten: geo.oeffnungszeiten ?? null,
+      platzplan_url: body.platzplan_url ?? null,
+      platzplan_url_vorlage: body.platzplan_url_vorlage ?? null,
+      platzplan_hinweis: body.platzplan_hinweis ?? null,
     })
 
     if (!campingplatz) {
@@ -133,18 +144,6 @@ export async function POST(request: NextRequest) {
         { success: false, error: 'Failed to create campingplatz' },
         { status: 500 }
       )
-    }
-
-    if (
-      body.platzplan_url != null ||
-      body.platzplan_url_vorlage != null ||
-      body.platzplan_hinweis != null
-    ) {
-      await updateCampingplatz(db, campingplatz.id, {
-        platzplan_url: body.platzplan_url ?? null,
-        platzplan_url_vorlage: body.platzplan_url_vorlage ?? null,
-        platzplan_hinweis: body.platzplan_hinweis ?? null,
-      })
     }
 
     if (
@@ -218,30 +217,41 @@ export async function PUT(request: NextRequest) {
     }
 
     const before = await getCampingplatzById(db, body.id)
-    const updated = await updateCampingplatz(db, body.id, {
-      name: body.name,
+    const updates: Parameters<typeof updateCampingplatz>[2] = {}
+    const geo = sanitizeStoredPlaceFields({
       land: body.land,
-      bundesland: body.bundesland ?? null,
-      ort: body.ort,
-      webseite: body.webseite ?? null,
-      video_link: body.video_link ?? null,
-      platz_typ: body.platz_typ as CampingplatzTyp,
-      pros: body.pros,
-      cons: body.cons,
-      adresse: body.adresse ?? null,
-      lat: body.lat ?? null,
-      lng: body.lng ?? null,
-      photo_name: body.photo_name ?? null,
-      is_archived: body.is_archived,
-      aufwunschliste: body.aufwunschliste,
-      top_favorit: body.top_favorit,
-      platzplan_url: body.platzplan_url ?? null,
-      platzplan_url_vorlage: body.platzplan_url_vorlage ?? null,
-      platzplan_hinweis: body.platzplan_hinweis ?? null,
-      google_place_id: body.google_place_id,
-      telefon: body.telefon,
+      bundesland: body.bundesland,
+      adresse: body.adresse,
       oeffnungszeiten: body.oeffnungszeiten,
     })
+    if ('name' in body) updates.name = body.name
+    if ('land' in body) updates.land = geo.land || body.land
+    if ('bundesland' in body) updates.bundesland = geo.bundesland ?? null
+    if ('ort' in body) updates.ort = body.ort
+    if ('webseite' in body) updates.webseite = body.webseite ?? null
+    if ('video_link' in body) updates.video_link = body.video_link ?? null
+    if ('platz_typ' in body && body.platz_typ) {
+      updates.platz_typ = body.platz_typ as CampingplatzTyp
+    }
+    if ('pros' in body) updates.pros = body.pros
+    if ('cons' in body) updates.cons = body.cons
+    if ('adresse' in body) updates.adresse = geo.adresse ?? null
+    if ('lat' in body) updates.lat = body.lat ?? null
+    if ('lng' in body) updates.lng = body.lng ?? null
+    if ('photo_name' in body) updates.photo_name = body.photo_name ?? null
+    if ('is_archived' in body) updates.is_archived = body.is_archived
+    if ('aufwunschliste' in body) updates.aufwunschliste = body.aufwunschliste
+    if ('top_favorit' in body) updates.top_favorit = body.top_favorit
+    if ('platzplan_url' in body) updates.platzplan_url = body.platzplan_url ?? null
+    if ('platzplan_url_vorlage' in body) {
+      updates.platzplan_url_vorlage = body.platzplan_url_vorlage ?? null
+    }
+    if ('platzplan_hinweis' in body) updates.platzplan_hinweis = body.platzplan_hinweis ?? null
+    if ('google_place_id' in body) updates.google_place_id = body.google_place_id ?? null
+    if ('telefon' in body) updates.telefon = body.telefon ?? null
+    if ('oeffnungszeiten' in body) updates.oeffnungszeiten = geo.oeffnungszeiten ?? null
+
+    const updated = await updateCampingplatz(db, body.id, updates)
 
     if (!updated) {
       return NextResponse.json(

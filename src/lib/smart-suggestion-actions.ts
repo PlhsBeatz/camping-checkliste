@@ -94,6 +94,11 @@ export async function applySmartSuggestionAccept(
     return { ok: true }
   }
 
+  if (suggestion.kind === 'place_update') {
+    await setSmartSuggestionStatus(db, suggestion.id, 'accepted')
+    return { ok: true }
+  }
+
   if (suggestion.kind === 'platzplan') {
     const cpId = String(suggestion.payload.campingplatz_id ?? suggestion.kontext_id ?? '')
     const chosen = String(opts?.url ?? suggestion.payload.url ?? '').trim()

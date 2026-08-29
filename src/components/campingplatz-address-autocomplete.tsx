@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { dedupePlacePhotos } from '@/lib/google-place-photos-merge'
 import { importGoogleMapsLibrary, loadGoogleMapsScript } from '@/lib/google-maps-script'
+import { toGermanPlaceLabels } from '@/lib/place-value-normalize'
 
 type PlaceLocation = {
   lat?: number | (() => number)
@@ -216,7 +217,12 @@ export function CampingplatzAddressAutocomplete(props: CampingplatzAddressAutoco
         return
       }
 
-      const loaded = await loadGoogleMapsScript()
+      let loaded = await loadGoogleMapsScript()
+      if (!loaded && !cancelled) {
+        await new Promise((r) => setTimeout(r, 800))
+        if (cancelled) return
+        loaded = await loadGoogleMapsScript()
+      }
       if (cancelled) return
       if (!loaded) {
         setMapsLoadFailed(true)
@@ -264,7 +270,18 @@ export function CampingplatzAddressAutocomplete(props: CampingplatzAddressAutoco
         } else if (tier === 'secondary' && secondaryTypes?.length) {
           request.includedPrimaryTypes = secondaryTypes
         }
-        const result = await lib.AutocompleteSuggestion.fetchAutocompleteSuggestions(request)
+        let result: AutocompleteSuggestionsResult
+        try {
+          result = await lib.AutocompleteSuggestion.fetchAutocompleteSuggestions(request)
+        } catch (firstErr) {
+          await new Promise((r) => setTimeout(r, 500))
+          if (requestId !== lastRequestIdRef.current) return
+          try {
+            result = await lib.AutocompleteSuggestion.fetchAutocompleteSuggestions(request)
+          } catch {
+            throw firstErr
+          }
+        }
         if (requestId !== lastRequestIdRef.current) return
         setSuggestions(result.suggestions ?? [])
         setError(null)
@@ -417,8 +434,11 @@ export function CampingplatzAddressAutocomplete(props: CampingplatzAddressAutoco
         const lng =
           typeof loc?.lng === 'function' ? (loc.lng as () => number)() : typeof loc?.lng === 'number' ? loc.lng : null
         const comps = place.addressComponents
-        const land = pickComponent(comps, 'country')
-        const bundesland = pickComponent(comps, 'administrative_area_level_1')
+        const labels = toGermanPlaceLabels({
+          adresse: addr,
+          land: pickComponent(comps, 'country'),
+          bundesland: pickComponent(comps, 'administrative_area_level_1'),
+        })
         const ort = deriveOrt(comps)
         const mainText = prediction.mainText?.text ?? prediction.text?.text ?? ''
         const placeName = place.displayName?.text ?? (mainText || undefined)
@@ -426,19 +446,20 @@ export function CampingplatzAddressAutocomplete(props: CampingplatzAddressAutoco
         const displayValue = placeName ?? addr
 
         const website = pickPlaceWebsite(place)
+        const hours = place.regularOpeningHours?.weekdayDescriptions?.join('\n') || null
         onChange(displayValue)
         onResolve({
-          address: addr,
+          address: labels.adresse ?? addr,
           lat,
           lng,
           ort,
-          bundesland,
-          land,
+          bundesland: labels.bundesland,
+          land: labels.land,
           placeName,
           website,
           googlePlaceId: rawGooglePlaceIdFromPlace(place),
           telefon: place.nationalPhoneNumber?.trim() || null,
-          oeffnungszeiten: place.regularOpeningHours?.weekdayDescriptions?.join('\n') || null,
+          oeffnungszeiten: hours,
           googleTypes: place.types,
           primaryType: place.primaryType,
         })

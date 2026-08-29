@@ -24,11 +24,6 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from '@/components/ui/popover'
-import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
@@ -66,13 +61,11 @@ import {
 import { isExtraDepartureDayBooking } from '@/lib/booking-stay-dates'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
-import { ChevronDown, History, Loader2, Sparkles } from 'lucide-react'
+import { ChevronDown, Loader2, Sparkles } from 'lucide-react'
 import { Input as InputComponent } from '@/components/ui/input'
 import { Textarea as TextareaComponent } from '@/components/ui/textarea'
 import { SelectTrigger as SelectTriggerComponent } from '@/components/ui/select'
-
-const CHANGED_FIELD_RING =
-  'ring-2 ring-accent-orange border-accent-orange focus-visible:ring-accent-orange'
+import { CHANGED_FIELD_RING, PreviousValuePopover } from '@/components/changed-field'
 
 function applyChangedRing(node: ReactNode, changed: boolean): ReactNode {
   if (!changed || !isValidElement(node)) return node
@@ -177,50 +170,6 @@ function isBookingFieldVisible(
   if (value == null) return false
   if (typeof value === 'number') return Number.isFinite(value)
   return String(value).trim() !== ''
-}
-
-function PreviousValuePopover({
-  previousValue,
-  onKeepPrevious,
-}: {
-  previousValue: string
-  onKeepPrevious?: () => void
-}) {
-  const [open, setOpen] = useState(false)
-
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          className="shrink-0 rounded p-0.5 text-accent-orange hover:bg-accent-orange/10"
-          aria-label={`Vorheriger Wert: ${previousValue}`}
-          title={`Vorher: ${previousValue}`}
-        >
-          <History className="h-3.5 w-3.5" />
-        </button>
-      </PopoverTrigger>
-      <PopoverContent side="top" align="end" className="w-auto p-2.5">
-        <p className="text-xs text-muted-foreground">
-          Vorher: <span className="font-medium text-foreground">{previousValue}</span>
-        </p>
-        {onKeepPrevious && (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="mt-2 h-7 w-full text-xs"
-            onClick={() => {
-              onKeepPrevious()
-              setOpen(false)
-            }}
-          >
-            Alten Wert behalten
-          </Button>
-        )}
-      </PopoverContent>
-    </Popover>
-  )
 }
 
 function ImportField({

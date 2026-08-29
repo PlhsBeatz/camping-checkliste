@@ -6,6 +6,7 @@ import { chatJson } from '@/lib/ai/openrouter-client'
 import { todayInAppTimezone } from '@/lib/app-timezone'
 import { isRejectedPlatzplanUrl, isXmlPlatzplanUrl } from '@/lib/platzplan-url'
 import { filenameFromUrl } from '@/lib/smart-suggestion-copy'
+import { looksLikeOpeningHours } from '@/lib/place-value-normalize'
 import { upsertSmartSuggestion } from '@/lib/smart-suggestions'
 
 const MAX_PAGES = 12
@@ -717,6 +718,218 @@ export function shouldResearchPlatzplan(cp: {
   return !!cp.webseite?.trim() && !cp.platzplan_url?.trim() && !cp.platzplan_url_vorlage?.trim()
 }
 
+const BOOKING_PORTAL_HOST =
+  /(?:^|\.)(?:booking|pitchup|camping\.info|camping-info|adac|google|facebook|instagram|tripadvisor|airbnb|expedia)\./i
+
+function isLikelyOfficialWebsite(url: string): boolean {
+  try {
+    const u = new URL(url)
+    if (!/^https?:$/i.test(u.protocol)) return false
+    return !BOOKING_PORTAL_HOST.test(u.hostname)
+  } catch {
+    return false
+  }
+}
+
+async function discoverOfficialWebsiteWithAi(
+  apiKey: string,
+  campingplatzName: string,
+  adresse?: string | null
+): Promise<string | null> {
+  try {
+    const result = await chatJson({
+      apiKey,
+      system: `Du findest die offizielle Website eines Campingplatzes.
+JSON: {"url":"https://... oder null"}.
+Nur die Betreiber-Website. Keine Buchungsportale (booking.com, pitchup, camping.info, ADAC, Google, Facebook).`,
+      user: `Campingplatz: ${campingplatzName}${adresse ? `\nAdresse: ${adresse}` : ''}`,
+      temperature: 0.1,
+      trigger: 'auto',
+      title: 'Camping Packliste Website-Suche',
+      plugins: [{ id: 'web', max_results: 5 }],
+    })
+    const url = String(result.json.url ?? '').trim()
+    if (/^https?:\/\//i.test(url) && isLikelyOfficialWebsite(url)) return url
+  } catch (error) {
+    console.error('discoverOfficialWebsiteWithAi:', error)
+  }
+  return null
+}
+
+function extractOpeningHoursFromHtml(html: string): string | null {
+  const text = stripTags(html).replace(/\s+/g, ' ').trim()
+  const markers = [
+    /öffnungszeiten[:\s]+(.{20,500}?)(?:kontakt|adresse|anfahrt|impressum|$)/i,
+    /horaires[:\s]+(.{20,500}?)(?:contact|adresse|accès|mentions|$)/i,
+    /opening hours[:\s]+(.{20,500}?)(?:contact|address|directions|imprint|$)/i,
+    /orari[:\s]+(.{20,500}?)(?:contatti|indirizzo|come arrivare|$)/i,
+  ]
+  for (const re of markers) {
+    const m = text.match(re)
+    const snippet = m?.[1]?.trim()
+    if (snippet && looksLikeOpeningHours(snippet)) {
+      return snippet.replace(/\s+/g, ' ').slice(0, 500)
+    }
+  }
+  return null
+}
+
+export type PlatzplanFromWebsiteResult = {
+  candidates: PlatzplanCandidate[]
+  pickedUrl: string | null
+  begruendung: string
+  quelle: 'regel' | 'ki' | 'hybrid'
+}
+
+export async function researchPlatzplanFromWebsite(
+  name: string,
+  website: string,
+  opts: { apiKey?: string | null }
+): Promise<PlatzplanFromWebsiteResult> {
+  let { candidates, navHints } = await crawlPlatzplanCandidates(website)
+  candidates = sortCandidates(candidates)
+
+  if (opts.apiKey && candidates.length === 0) {
+    const discovered = await discoverPlatzplanWithAi(opts.apiKey, name, website)
+    const merged: PlatzplanCandidate[] = []
+    for (const url of discovered.urls) {
+      if (!aiUrlIsCrawlable(url, website)) continue
+      if (isDirectFileUrl(url)) {
+        const sc = scoreCandidate(url, filenameFromUrl(url))
+        if (sc >= 4) {
+          merged.push({
+            url,
+            anchor: filenameFromUrl(url),
+            found_on: website,
+            score: sc,
+            title: filenameFromUrl(url),
+          })
+        }
+        continue
+      }
+      const extra = await crawlPlatzplanCandidates(url)
+      merged.push(...extra.candidates)
+      navHints = [...navHints, ...extra.navHints]
+      const pageScore = scoreCandidate(url, discovered.begruendung || filenameFromUrl(url))
+      if (pageScore >= 4) {
+        merged.push({
+          url,
+          anchor: discovered.begruendung || 'KI-Hinweis',
+          found_on: website,
+          score: pageScore,
+          title: extra.candidates[0]?.title,
+        })
+      }
+    }
+    const uniq = new Map<string, PlatzplanCandidate>()
+    for (const c of [...candidates, ...merged]) {
+      const prev = uniq.get(c.url)
+      if (!prev || c.score > prev.score) uniq.set(c.url, c)
+    }
+    candidates = sortCandidates(
+      [...uniq.values()].filter((c) => !isRejectedPlatzplanCandidate(c.url, c.anchor))
+    )
+  }
+
+  let picked: string | null = bestDirectPlanFile(candidates)?.url ?? candidates[0]?.url ?? null
+  const pickedRow = candidates.find((c) => c.url === picked)
+  let begruendung = picked
+    ? isDirectFileUrl(picked)
+      ? `Direktlink zum Platzplan (${pickedRow?.anchor || filenameFromUrl(picked)}).`
+      : `Gefunden über Website-Suche (${pickedRow?.anchor || 'Link'}).`
+    : 'Kein eindeutiger Platzplan-Link gefunden.'
+  let quelle: 'regel' | 'ki' | 'hybrid' = 'regel'
+
+  if (opts.apiKey) {
+    const ai = await pickWithAi(opts.apiKey, name, candidates, navHints)
+    const directFile = bestDirectPlanFile(candidates)
+    const aiDirect = candidates.find(
+      (c) => c.url === ai.url && isDirectFileUrl(c.url) && looksLikePlan(c.url, c.anchor)
+    )
+    if (aiDirect) {
+      picked = aiDirect.url
+      begruendung = ai.begruendung || begruendung
+      quelle = 'hybrid'
+    } else if (directFile) {
+      picked = directFile.url
+      begruendung = `Direktlink zum Platzplan (${directFile.anchor || filenameFromUrl(directFile.url)}).`
+      quelle = ai.url ? 'hybrid' : 'regel'
+    } else if (ai.url) {
+      picked = ai.url
+      begruendung = ai.begruendung || begruendung
+      quelle = candidates.some((c) => c.url === ai.url) ? 'hybrid' : 'ki'
+    } else if (!picked && ai.extraUrls[0] && !isRejectedPlatzplanUrl(ai.extraUrls[0])) {
+      const extra = await crawlPlatzplanCandidates(ai.extraUrls[0])
+      candidates = sortCandidates([...candidates, ...extra.candidates])
+      const extraFile = bestDirectPlanFile(candidates)
+      picked = extraFile?.url ?? extra.candidates[0]?.url ?? picked
+      if (picked) {
+        begruendung = extraFile
+          ? `Direktlink zum Platzplan (${extraFile.anchor || filenameFromUrl(extraFile.url)}).`
+          : 'Nach gezielter Unterseite gefunden.'
+        quelle = 'hybrid'
+      }
+    }
+  }
+
+  if (picked && isRejectedPlatzplanUrl(picked)) {
+    picked = candidates.find((c) => !isRejectedPlatzplanUrl(c.url))?.url ?? null
+  }
+
+  return { candidates, pickedUrl: picked, begruendung, quelle }
+}
+
+export type ResearchDraftInput = {
+  name: string
+  webseite?: string | null
+  adresse?: string | null
+  oeffnungszeiten?: string | null
+  platzplan_url?: string | null
+  platzplan_url_vorlage?: string | null
+}
+
+export type ResearchDraftResult = {
+  webseite: string | null
+  platzplan_url: string | null
+  oeffnungszeiten: string | null
+  candidates: PlatzplanCandidate[]
+}
+
+/** Recherche ohne gespeicherten Datensatz – füllt nur leere Felder. */
+export async function researchDraftGaps(
+  input: ResearchDraftInput,
+  opts: { apiKey?: string | null }
+): Promise<ResearchDraftResult> {
+  const out: ResearchDraftResult = {
+    webseite: null,
+    platzplan_url: null,
+    oeffnungszeiten: null,
+    candidates: [],
+  }
+
+  let website = input.webseite?.trim() || ''
+  if (!website && opts.apiKey && input.name.trim()) {
+    const found = await discoverOfficialWebsiteWithAi(opts.apiKey, input.name.trim(), input.adresse)
+    if (found) {
+      website = found
+      out.webseite = found
+    }
+  }
+
+  if (website && !input.platzplan_url?.trim() && !input.platzplan_url_vorlage?.trim()) {
+    const plan = await researchPlatzplanFromWebsite(input.name.trim() || website, website, opts)
+    out.candidates = plan.candidates
+    out.platzplan_url = plan.pickedUrl
+  }
+
+  if (website && !input.oeffnungszeiten?.trim()) {
+    const html = await fetchHtml(website)
+    if (html) out.oeffnungszeiten = extractOpeningHoursFromHtml(html)
+  }
+
+  return out
+}
+
 async function recordPlatzplanResearchMiss(db: D1Database, campingplatzId: string): Promise<void> {
   const fingerprint = `place_gap:${campingplatzId}:platzplan`
   const existing = await db
@@ -833,95 +1046,11 @@ export async function researchPlatzplanForCampingplatz(
     return { suggestionId: null, candidates: [], pickedUrl: null }
   }
 
-  let { candidates, navHints } = await crawlPlatzplanCandidates(cp.webseite)
-  candidates = sortCandidates(candidates)
-
-  if (opts.apiKey && candidates.length === 0) {
-    const discovered = await discoverPlatzplanWithAi(opts.apiKey, cp.name, cp.webseite)
-    const merged: PlatzplanCandidate[] = []
-    for (const url of discovered.urls) {
-      if (!aiUrlIsCrawlable(url, cp.webseite)) continue
-      if (isDirectFileUrl(url)) {
-        const sc = scoreCandidate(url, filenameFromUrl(url))
-        if (sc >= 4) {
-          merged.push({
-            url,
-            anchor: filenameFromUrl(url),
-            found_on: cp.webseite,
-            score: sc,
-            title: filenameFromUrl(url),
-          })
-        }
-        continue
-      }
-      const extra = await crawlPlatzplanCandidates(url)
-      merged.push(...extra.candidates)
-      navHints = [...navHints, ...extra.navHints]
-      const pageScore = scoreCandidate(url, discovered.begruendung || filenameFromUrl(url))
-      if (pageScore >= 4) {
-        merged.push({
-          url,
-          anchor: discovered.begruendung || 'KI-Hinweis',
-          found_on: cp.webseite,
-          score: pageScore,
-          title: extra.candidates[0]?.title,
-        })
-      }
-    }
-    const uniq = new Map<string, PlatzplanCandidate>()
-    for (const c of [...candidates, ...merged]) {
-      const prev = uniq.get(c.url)
-      if (!prev || c.score > prev.score) uniq.set(c.url, c)
-    }
-    candidates = sortCandidates(
-      [...uniq.values()].filter((c) => !isRejectedPlatzplanCandidate(c.url, c.anchor))
-    )
-  }
-
-  let picked: string | null = bestDirectPlanFile(candidates)?.url ?? candidates[0]?.url ?? null
-  const pickedRow = candidates.find((c) => c.url === picked)
-  let begruendung = picked
-    ? isDirectFileUrl(picked)
-      ? `Direktlink zum Platzplan (${pickedRow?.anchor || filenameFromUrl(picked)}).`
-      : `Gefunden über Website-Suche (${pickedRow?.anchor || 'Link'}).`
-    : 'Kein eindeutiger Platzplan-Link gefunden.'
-  let quelle: 'regel' | 'ki' | 'hybrid' = 'regel'
-
-  if (opts.apiKey) {
-    const ai = await pickWithAi(opts.apiKey, cp.name, candidates, navHints)
-    const directFile = bestDirectPlanFile(candidates)
-    const aiDirect = candidates.find(
-      (c) => c.url === ai.url && isDirectFileUrl(c.url) && looksLikePlan(c.url, c.anchor)
-    )
-    if (aiDirect) {
-      picked = aiDirect.url
-      begruendung = ai.begruendung || begruendung
-      quelle = 'hybrid'
-    } else if (directFile) {
-      picked = directFile.url
-      begruendung = `Direktlink zum Platzplan (${directFile.anchor || filenameFromUrl(directFile.url)}).`
-      quelle = ai.url ? 'hybrid' : 'regel'
-    } else if (ai.url) {
-      picked = ai.url
-      begruendung = ai.begruendung || begruendung
-      quelle = candidates.some((c) => c.url === ai.url) ? 'hybrid' : 'ki'
-    } else if (!picked && ai.extraUrls[0] && !isRejectedPlatzplanUrl(ai.extraUrls[0])) {
-      const extra = await crawlPlatzplanCandidates(ai.extraUrls[0])
-      candidates = sortCandidates([...candidates, ...extra.candidates])
-      const extraFile = bestDirectPlanFile(candidates)
-      picked = extraFile?.url ?? extra.candidates[0]?.url ?? picked
-      if (picked) {
-        begruendung = extraFile
-          ? `Direktlink zum Platzplan (${extraFile.anchor || filenameFromUrl(extraFile.url)}).`
-          : 'Nach gezielter Unterseite gefunden.'
-        quelle = 'hybrid'
-      }
-    }
-  }
-
-  if (picked && isRejectedPlatzplanUrl(picked)) {
-    picked = candidates.find((c) => !isRejectedPlatzplanUrl(c.url))?.url ?? null
-  }
+  const { candidates, pickedUrl: picked, begruendung, quelle } = await researchPlatzplanFromWebsite(
+    cp.name,
+    cp.webseite,
+    opts
+  )
 
   if (!picked) {
     await recordPlatzplanResearchMiss(db, cp.id)

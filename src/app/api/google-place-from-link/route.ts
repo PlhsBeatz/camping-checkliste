@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth, requireAdmin } from '@/lib/api-auth'
 import { dedupePlacePhotos } from '@/lib/google-place-photos-merge'
+import { toGermanPlaceLabels } from '@/lib/place-value-normalize'
 
 type PlaceAddressComponentServer = {
   longText?: string
@@ -22,6 +23,8 @@ type PlaceServer = {
   websiteUri?: string
   types?: string[]
   primaryType?: string
+  nationalPhoneNumber?: string
+  regularOpeningHours?: { weekdayDescriptions?: string[] }
 }
 
 type PlacesSearchTextResponse = {
@@ -40,6 +43,8 @@ type CampingplatzAddressResolve = {
   googlePlaceId?: string | null
   googleTypes?: string[]
   primaryType?: string
+  telefon?: string | null
+  oeffnungszeiten?: string | null
 }
 
 type PlacePhotoForPicker = { name: string; authorAttributions?: string[] }
@@ -238,6 +243,8 @@ export async function POST(request: NextRequest) {
       'websiteUri',
       'types',
       'primaryType',
+      'nationalPhoneNumber',
+      'regularOpeningHours',
     ]
     const placeDetailsFieldMask = fieldMaskList.join(',')
     const searchTextFieldMask = fieldMaskList.map((f) => `places.${f}`).join(',')
@@ -247,12 +254,13 @@ export async function POST(request: NextRequest) {
 
     // 1) Wenn wir eine Place-ID haben: zuerst Place Details API (New), bei Fehler Legacy API (unterstützt 0x-Place-IDs)
     if (placeId) {
-      const detailsUrl = `https://places.googleapis.com/v1/places/${encodeURIComponent(placeId)}`
+      const detailsUrl = `https://places.googleapis.com/v1/places/${encodeURIComponent(placeId)}?languageCode=de`
       const detailsRes = await fetch(detailsUrl, {
         method: 'GET',
         headers: {
           'X-Goog-Api-Key': apiKey,
           'X-Goog-FieldMask': placeDetailsFieldMask,
+          'Accept-Language': 'de',
         },
       })
       if (detailsRes.ok) {
@@ -263,7 +271,10 @@ export async function POST(request: NextRequest) {
         const legacyUrl = new URL('https://maps.googleapis.com/maps/api/place/details/json')
         legacyUrl.searchParams.set('place_id', placeId)
         legacyUrl.searchParams.set('key', apiKey)
-        legacyUrl.searchParams.set('fields', 'name,formatted_address,geometry,address_components,website')
+        legacyUrl.searchParams.set(
+          'fields',
+          'name,formatted_address,geometry,address_components,website,formatted_phone_number,international_phone_number,opening_hours'
+        )
         legacyUrl.searchParams.set('language', 'de')
         const legacyRes = await fetch(legacyUrl.toString())
         if (legacyRes.ok) {
@@ -279,6 +290,9 @@ export async function POST(request: NextRequest) {
                 types?: string[]
               }>
               website?: string
+              formatted_phone_number?: string
+              international_phone_number?: string
+              opening_hours?: { weekday_text?: string[] }
             }
           }
           if (legacyJson.status === 'OK' && legacyJson.result) {
@@ -301,6 +315,11 @@ export async function POST(request: NextRequest) {
               addressComponents: comps.length ? comps : undefined,
               photos: [],
               websiteUri: r.website,
+              nationalPhoneNumber:
+                r.international_phone_number?.trim() || r.formatted_phone_number?.trim() || undefined,
+              regularOpeningHours: r.opening_hours?.weekday_text?.length
+                ? { weekdayDescriptions: r.opening_hours.weekday_text }
+                : undefined,
             }
           }
         }
@@ -399,24 +418,30 @@ export async function POST(request: NextRequest) {
     const addr = place.formattedAddress ?? resolvedUrl
     const lat = typeof place.location?.latitude === 'number' ? place.location.latitude : null
     const lng = typeof place.location?.longitude === 'number' ? place.location.longitude : null
-    const land = pickComponent(place.addressComponents, 'country')
-    const bundesland = pickComponent(place.addressComponents, 'administrative_area_level_1')
+    const labels = toGermanPlaceLabels({
+      adresse: addr,
+      land: pickComponent(place.addressComponents, 'country'),
+      bundesland: pickComponent(place.addressComponents, 'administrative_area_level_1'),
+    })
     const ort = deriveOrt(place.addressComponents)
     const placeName = place.displayName?.text ?? undefined
     const website = place.websiteUri ?? null
+    const hours = place.regularOpeningHours?.weekdayDescriptions?.join('\n') || null
 
     const resolveResult: CampingplatzAddressResolve = {
-      address: addr,
+      address: labels.adresse ?? addr,
       lat,
       lng,
       ort,
-      bundesland,
-      land,
+      bundesland: labels.bundesland,
+      land: labels.land,
       placeName,
       website,
       googlePlaceId: rawGooglePlaceIdFromPlaceResource(place.name) ?? placeId ?? null,
       googleTypes: place.types,
       primaryType: place.primaryType,
+      telefon: place.nationalPhoneNumber?.trim() || null,
+      oeffnungszeiten: hours,
     }
 
     const fromNew: PlacePhotoForPicker[] = (place.photos ?? [])

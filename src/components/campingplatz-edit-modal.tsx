@@ -1,11 +1,14 @@
 'use client'
 
 import { Button } from '@/components/ui/button'
-import { ChevronLeft, ChevronRight, Star, Trash2, Upload } from 'lucide-react'
+import { ChevronLeft, ChevronRight, RefreshCw, Star, Trash2, Upload } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { toast } from 'sonner'
 import { prepareCampingplatzUploadFile } from '@/lib/compress-upload-image'
 import type { ApiResponse } from '@/lib/api-types'
 import { Campingplatz, type CampingplatzFoto } from '@/lib/db'
+import { postSmartSuggestionAction } from '@/lib/smart-suggestion-client'
+import { notifySmartSuggestionsChanged } from '@/lib/smart-suggestions-events'
 import { ResponsiveModal } from '@/components/ui/responsive-modal'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -22,6 +25,14 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Checkbox } from '@/components/ui/checkbox'
+import { ChangedField, CHANGED_FIELD_RING } from '@/components/changed-field'
+import { cn } from '@/lib/utils'
+import type { SmartSuggestion } from '@/lib/smart-suggestions'
+import {
+  parsePlaceFieldChanges,
+  type PlaceChangeField,
+  type PlaceFieldChange,
+} from '@/lib/place-field-changes'
 
 interface CampingplatzFormState {
   id?: string
@@ -77,6 +88,42 @@ function createEmptyForm(): CampingplatzFormState {
   }
 }
 
+function formatDatenGeprueftAm(raw: string | null | undefined): string | null {
+  if (!raw?.trim()) return null
+  const d = new Date(raw.includes('T') ? raw : raw.replace(' ', 'T'))
+  if (Number.isNaN(d.getTime())) return null
+  return d.toLocaleDateString('de-DE', { day: 'numeric', month: 'long', year: 'numeric' })
+}
+
+function applyPlaceField(
+  prev: CampingplatzFormState,
+  field: PlaceChangeField,
+  value: string
+): CampingplatzFormState {
+  switch (field) {
+    case 'name':
+      return { ...prev, name: value }
+    case 'adresse':
+      return { ...prev, adresse: value }
+    case 'ort':
+      return { ...prev, ort: value }
+    case 'bundesland':
+      return { ...prev, bundesland: value }
+    case 'land':
+      return { ...prev, land: value || prev.land }
+    case 'webseite':
+      return { ...prev, webseite: value }
+    case 'telefon':
+      return { ...prev, telefon: value }
+    case 'oeffnungszeiten':
+      return { ...prev, oeffnungszeiten: value }
+    case 'platzplan_url':
+      return { ...prev, platzplan_url: value }
+    default:
+      return prev
+  }
+}
+
 export interface CampingplatzEditModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -85,6 +132,8 @@ export interface CampingplatzEditModalProps {
   onSaved: (saved: Campingplatz) => void
   /** Nach Foto-Aktionen: z. B. Listenzeile oder Detailansicht aktualisieren */
   onRefreshCampingplatz?: (id: string) => Promise<void>
+  /** Offener place_update-Vorschlag – Felder werden hervorgehoben */
+  pendingSuggestionId?: string | null
 }
 
 export function CampingplatzEditModal({
@@ -93,6 +142,7 @@ export function CampingplatzEditModal({
   initialCampingplatz,
   onSaved,
   onRefreshCampingplatz,
+  pendingSuggestionId = null,
 }: CampingplatzEditModalProps) {
   const [isSaving, setIsSaving] = useState(false)
   const [form, setForm] = useState<CampingplatzFormState>(createEmptyForm)
@@ -105,8 +155,50 @@ export function CampingplatzEditModal({
   const [pendingFiles, setPendingFiles] = useState<File[]>([])
   const [fotoBusy, setFotoBusy] = useState(false)
   const [researchBusy, setResearchBusy] = useState(false)
+  const [checkBusy, setCheckBusy] = useState(false)
+  const [reviewChanges, setReviewChanges] = useState<PlaceFieldChange[]>([])
+  const [acceptedSuggestionId, setAcceptedSuggestionId] = useState<string | null>(null)
   const adresseElementRef = useRef<HTMLElement | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const researchGenRef = useRef(0)
+
+  const runResearchPreview = useCallback(async (snapshot: {
+    name: string
+    webseite: string
+    adresse: string
+    oeffnungszeiten: string
+    platzplan_url: string
+    platzplan_url_vorlage: string
+  }) => {
+    const gen = ++researchGenRef.current
+    setResearchBusy(true)
+    try {
+      const res = await fetch('/api/campingplaetze/research-preview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(snapshot),
+      })
+      const data = (await res.json()) as ApiResponse<{
+        webseite?: string | null
+        platzplan_url?: string | null
+        oeffnungszeiten?: string | null
+      }>
+      if (gen !== researchGenRef.current) return
+      if (!data.success || !data.data) return
+      const found = data.data
+      setForm((prev) => ({
+        ...prev,
+        webseite: prev.webseite.trim() || found.webseite?.trim() || prev.webseite,
+        platzplan_url: prev.platzplan_url.trim() || found.platzplan_url?.trim() || prev.platzplan_url,
+        oeffnungszeiten:
+          prev.oeffnungszeiten.trim() || found.oeffnungszeiten?.trim() || prev.oeffnungszeiten,
+      }))
+    } catch {
+      /* Preview ist optional */
+    } finally {
+      if (gen === researchGenRef.current) setResearchBusy(false)
+    }
+  }, [])
 
   useEffect(() => {
     setGooglePickerPageStart(0)
@@ -116,6 +208,7 @@ export function CampingplatzEditModal({
 
   useEffect(() => {
     if (!open) return
+    setReviewChanges([])
     if (initialCampingplatz) {
       setEditId(initialCampingplatz.id)
       setForm({
@@ -151,9 +244,37 @@ export function CampingplatzEditModal({
     setPendingGoogle([])
     setPendingFiles([])
     setSavedFotos([])
+    setReviewChanges([])
+    setAcceptedSuggestionId(null)
+    if (!pendingSuggestionId) return
+    let cancelled = false
+    void (async () => {
+      try {
+        const res = await fetch(`/api/suggestions?id=${encodeURIComponent(pendingSuggestionId)}`)
+        const data = (await res.json()) as ApiResponse<SmartSuggestion[]>
+        if (cancelled || !data.success || !data.data?.[0]) return
+        const suggestion = data.data[0]
+        if (suggestion.kind !== 'place_update') return
+        const changes = parsePlaceFieldChanges(suggestion.payload)
+        if (changes.length === 0) return
+        setReviewChanges(changes)
+        setForm((prev) => {
+          let next = prev
+          for (const c of changes) {
+            next = applyPlaceField(next, c.field, c.proposed)
+          }
+          return next
+        })
+      } catch {
+        /* Vorschlag optional */
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
     // Nur bei Öffnen bzw. Wechsel des Datensatzes neu befüllen (nicht bei jedem Parent-Re-Render).
     // eslint-disable-next-line react-hooks/exhaustive-deps -- initialCampingplatz nur über initialKey
-  }, [open, initialKey])
+  }, [open, initialKey, pendingSuggestionId])
 
   const loadFotos = useCallback(async (campingplatzId: string) => {
     try {
@@ -179,14 +300,69 @@ export function CampingplatzEditModal({
   }
 
   const closeAndReset = useCallback(() => {
+    researchGenRef.current += 1
     setEditId(null)
     setForm(createEmptyForm())
     setPlacePhotos([])
     setSavedFotos([])
     setPendingGoogle([])
     setPendingFiles([])
+    setReviewChanges([])
+    setAcceptedSuggestionId(null)
+    setCheckBusy(false)
     onOpenChange(false)
   }, [onOpenChange])
+
+  const applyCheckChanges = (changes: PlaceFieldChange[], suggestionId: string | null) => {
+    if (suggestionId) setAcceptedSuggestionId(suggestionId)
+    setReviewChanges(changes)
+    setForm((prev) => {
+      let next = prev
+      for (const c of changes) {
+        next = applyPlaceField(next, c.field, c.proposed)
+      }
+      return next
+    })
+  }
+
+  const runDataCheck = async () => {
+    if (!editId || checkBusy) return
+    setCheckBusy(true)
+    try {
+      const res = await fetch(`/api/campingplaetze/${editId}/check-updates`, { method: 'POST' })
+      const data = (await res.json()) as ApiResponse<{
+        changes: PlaceFieldChange[]
+        suggestionId: string | null
+      }>
+      if (!data.success) {
+        toast.error(data.error ?? 'Prüfung fehlgeschlagen')
+        return
+      }
+      const changes = data.data?.changes ?? []
+      if (changes.length === 0) {
+        toast.success('Keine Änderungen gefunden.')
+        return
+      }
+      applyCheckChanges(changes, data.data?.suggestionId ?? null)
+      toast.success(
+        `${changes.length} mögliche Änderung${changes.length === 1 ? '' : 'en'} – bitte prüfen und speichern.`
+      )
+    } catch {
+      toast.error('Prüfung fehlgeschlagen')
+    } finally {
+      setCheckBusy(false)
+    }
+  }
+
+  const reviewFor = (field: PlaceChangeField): PlaceFieldChange | undefined =>
+    reviewChanges.find((c) => c.field === field)
+
+  const revertField = (field: PlaceChangeField) => {
+    const change = reviewFor(field)
+    if (!change) return
+    setForm((prev) => applyPlaceField(prev, field, change.previous))
+    setReviewChanges((prev) => prev.filter((c) => c.field !== field))
+  }
 
   const googlePickerAlreadyAdded = (name: string) =>
     savedFotos.some((f) => f.google_photo_name === name) ||
@@ -451,17 +627,6 @@ export function CampingplatzEditModal({
             break
           }
         }
-        const fotosRes = await fetch(`/api/campingplaetze/${newId}/fotos`)
-        const fotosJson = (await fotosRes.json()) as ApiResponse<CampingplatzFoto[]>
-        const syncName =
-          fotosJson.success && fotosJson.data
-            ? fotosJson.data.find((f) => f.is_cover)?.google_photo_name ?? null
-            : null
-        await fetch('/api/campingplaetze', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id: newId, photo_name: syncName }),
-        }).catch(() => undefined)
         const detail = await fetch(`/api/campingplaetze/${newId}`)
         const dj = (await detail.json()) as ApiResponse<{
           campingplatz: Campingplatz
@@ -470,6 +635,12 @@ export function CampingplatzEditModal({
         if (dj.success && dj.data?.campingplatz) saved = dj.data.campingplatz
       } else if (editId) {
         await refreshCampingplatzRemote(editId)
+      }
+
+      const suggestionToAccept = acceptedSuggestionId ?? pendingSuggestionId
+      if (suggestionToAccept) {
+        await postSmartSuggestionAction(suggestionToAccept, 'accept').catch(() => undefined)
+        notifySmartSuggestionsChanged()
       }
 
       onSaved(saved)
@@ -481,6 +652,8 @@ export function CampingplatzEditModal({
       setIsSaving(false)
     }
   }
+
+  const zuletztGeprueft = formatDatenGeprueftAm(initialCampingplatz?.daten_geprueft_am)
 
   return (
     <>
@@ -499,12 +672,40 @@ export function CampingplatzEditModal({
         noPadding
       >
         <div className="space-y-4 px-6 pt-4 pb-6">
-          <div>
-            <Label htmlFor="cp-name">Name *</Label>
-            <CampingplatzAddressAutocomplete
+          {editId && (
+            <div className="flex flex-col gap-1">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="w-fit"
+                disabled={checkBusy || isSaving}
+                onClick={() => void runDataCheck()}
+              >
+                <RefreshCw className={cn('mr-2 h-4 w-4', checkBusy && 'animate-spin')} />
+                {checkBusy ? 'Prüfe Daten…' : 'Daten prüfen'}
+              </Button>
+              <p className="text-xs text-muted-foreground">
+                Vergleicht die gespeicherten Daten mit Google und der Website. Änderungen werden
+                nicht automatisch übernommen.
+                {zuletztGeprueft ? ` Zuletzt geprüft: ${zuletztGeprueft}.` : ''}
+              </p>
+            </div>
+          )}
+          <ChangedField
+            label="Name *"
+            previousValue={reviewFor('name')?.previous}
+            onKeepPrevious={reviewFor('name') ? () => revertField('name') : undefined}
+          >
+            <div className={cn(reviewFor('name') && CHANGED_FIELD_RING, 'rounded-md')}>
+              <CampingplatzAddressAutocomplete
               value={form.name}
               onChange={(v) => setForm((prev) => ({ ...prev, name: v }))}
               onResolve={(r) => {
+                const nextName = r.placeName ?? form.name
+                const nextAdresse = r.address
+                const nextWebseite = r.website ?? form.webseite
+                const nextOeffnung = r.oeffnungszeiten ?? form.oeffnungszeiten
                 setForm((prev) => ({
                   ...prev,
                   name: r.placeName ?? prev.name,
@@ -519,6 +720,14 @@ export function CampingplatzEditModal({
                   telefon: r.telefon ?? prev.telefon,
                   oeffnungszeiten: r.oeffnungszeiten ?? prev.oeffnungszeiten,
                 }))
+                void runResearchPreview({
+                  name: nextName,
+                  webseite: nextWebseite,
+                  adresse: nextAdresse,
+                  oeffnungszeiten: nextOeffnung,
+                  platzplan_url: form.platzplan_url,
+                  platzplan_url_vorlage: form.platzplan_url_vorlage,
+                })
               }}
               onPlacePhotos={(photos) => setPlacePhotos(photos)}
               onElementReady={(el) => {
@@ -526,33 +735,45 @@ export function CampingplatzEditModal({
               }}
               placeholder="z.B. Campingplatz am See oder Name eingeben"
             />
-          </div>
-          <div>
-            <Label htmlFor="cp-adresse">Adresse</Label>
+            </div>
+          </ChangedField>
+          <ChangedField
+            label="Adresse"
+            previousValue={reviewFor('adresse')?.previous}
+            onKeepPrevious={reviewFor('adresse') ? () => revertField('adresse') : undefined}
+          >
             <Input
               id="cp-adresse"
               value={form.adresse}
               onChange={(e) => setForm((prev) => ({ ...prev, adresse: e.target.value }))}
               placeholder="Straße, Hausnummer, PLZ, Ort (wird bei Namenssuche automatisch gefüllt)"
+              className={cn(reviewFor('adresse') && CHANGED_FIELD_RING)}
             />
-          </div>
+          </ChangedField>
           <div>
             <Label className="text-muted-foreground text-sm">
               Tipp: Im Namensfeld tippen und einen Vorschlag wählen – dann werden Adresse, Ort, Land und Koordinaten automatisch gesetzt.
             </Label>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="cp-land">Land *</Label>
+            <ChangedField
+              label="Land *"
+              previousValue={reviewFor('land')?.previous}
+              onKeepPrevious={reviewFor('land') ? () => revertField('land') : undefined}
+            >
               <Input
                 id="cp-land"
                 value={form.land}
                 onChange={(e) => setForm((prev) => ({ ...prev, land: e.target.value }))}
                 placeholder="z.B. Deutschland"
+                className={cn(reviewFor('land') && CHANGED_FIELD_RING)}
               />
-            </div>
-            <div>
-              <Label htmlFor="cp-bundesland">Bundesland</Label>
+            </ChangedField>
+            <ChangedField
+              label="Bundesland"
+              previousValue={reviewFor('bundesland')?.previous}
+              onKeepPrevious={reviewFor('bundesland') ? () => revertField('bundesland') : undefined}
+            >
               <Input
                 id="cp-bundesland"
                 value={form.bundesland}
@@ -560,12 +781,16 @@ export function CampingplatzEditModal({
                   setForm((prev) => ({ ...prev, bundesland: e.target.value }))
                 }
                 placeholder="z.B. Baden-Württemberg"
+                className={cn(reviewFor('bundesland') && CHANGED_FIELD_RING)}
               />
-            </div>
+            </ChangedField>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="cp-webseite">Webseite</Label>
+            <ChangedField
+              label="Webseite"
+              previousValue={reviewFor('webseite')?.previous}
+              onKeepPrevious={reviewFor('webseite') ? () => revertField('webseite') : undefined}
+            >
               <Input
                 id="cp-webseite"
                 value={form.webseite}
@@ -573,8 +798,9 @@ export function CampingplatzEditModal({
                   setForm((prev) => ({ ...prev, webseite: e.target.value }))
                 }
                 placeholder="https://..."
+                className={cn(reviewFor('webseite') && CHANGED_FIELD_RING)}
               />
-            </div>
+            </ChangedField>
             <div>
               <Label htmlFor="cp-video">Video-Link</Label>
               <Input
@@ -588,17 +814,26 @@ export function CampingplatzEditModal({
             </div>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="cp-telefon">Telefon</Label>
+            <ChangedField
+              label="Telefon"
+              previousValue={reviewFor('telefon')?.previous}
+              onKeepPrevious={reviewFor('telefon') ? () => revertField('telefon') : undefined}
+            >
               <Input
                 id="cp-telefon"
                 value={form.telefon}
                 onChange={(e) => setForm((prev) => ({ ...prev, telefon: e.target.value }))}
                 placeholder="+33 …"
+                className={cn(reviewFor('telefon') && CHANGED_FIELD_RING)}
               />
-            </div>
-            <div>
-              <Label htmlFor="cp-oeffnung">Öffnungszeiten</Label>
+            </ChangedField>
+            <ChangedField
+              label="Öffnungszeiten"
+              previousValue={reviewFor('oeffnungszeiten')?.previous}
+              onKeepPrevious={
+                reviewFor('oeffnungszeiten') ? () => revertField('oeffnungszeiten') : undefined
+              }
+            >
               <Textarea
                 id="cp-oeffnung"
                 value={form.oeffnungszeiten}
@@ -607,13 +842,19 @@ export function CampingplatzEditModal({
                 }
                 placeholder="Falls Google sie kennt, automatisch"
                 rows={3}
+                className={cn(reviewFor('oeffnungszeiten') && CHANGED_FIELD_RING)}
               />
-            </div>
+            </ChangedField>
           </div>
           <div className="space-y-3 rounded-lg border border-dashed p-3">
             <p className="text-sm font-medium">Platzplan</p>
-            <div>
-              <Label htmlFor="cp-platzplan-url">Platzplan-URL</Label>
+            <ChangedField
+              label="Platzplan-URL"
+              previousValue={reviewFor('platzplan_url')?.previous}
+              onKeepPrevious={
+                reviewFor('platzplan_url') ? () => revertField('platzplan_url') : undefined
+              }
+            >
               <Input
                 id="cp-platzplan-url"
                 value={form.platzplan_url}
@@ -621,8 +862,9 @@ export function CampingplatzEditModal({
                   setForm((prev) => ({ ...prev, platzplan_url: e.target.value }))
                 }
                 placeholder="https://…/lageplan.pdf"
+                className={cn(reviewFor('platzplan_url') && CHANGED_FIELD_RING)}
               />
-            </div>
+            </ChangedField>
             <div>
               <Label htmlFor="cp-platzplan-vorlage">URL-Vorlage (optional)</Label>
               <Input
@@ -649,43 +891,32 @@ export function CampingplatzEditModal({
                 rows={2}
               />
             </div>
-            {editId && form.webseite.trim() && !form.platzplan_url.trim() && (
+            {form.webseite.trim() && !form.platzplan_url.trim() && (
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
                 disabled={researchBusy}
-                onClick={async () => {
-                  setResearchBusy(true)
-                  try {
-                    const res = await fetch(
-                      `/api/campingplaetze/${encodeURIComponent(editId)}/research-platzplan`,
-                      { method: 'POST' }
-                    )
-                    const data = (await res.json()) as ApiResponse<{
-                      candidates?: Array<{ url: string }>
-                      pickedUrl?: string | null
-                    }>
-                    if (!data.success) {
-                      alert(data.error ?? 'Suche fehlgeschlagen')
-                      return
-                    }
-                    const first = data.data?.pickedUrl || data.data?.candidates?.[0]?.url
-                    if (first && !form.platzplan_url) {
-                      setForm((prev) => ({ ...prev, platzplan_url: first }))
-                    }
-                    alert(
-                      first
-                        ? 'Platzplan-Kandidat eingetragen – bitte prüfen und speichern.'
-                        : 'Kein klarer Platzplan gefunden. Schau unter Vorschläge nach.'
-                    )
-                  } finally {
-                    setResearchBusy(false)
-                  }
+                onClick={() => {
+                  void runResearchPreview({
+                    name: form.name,
+                    webseite: form.webseite,
+                    adresse: form.adresse,
+                    oeffnungszeiten: form.oeffnungszeiten,
+                    platzplan_url: form.platzplan_url,
+                    platzplan_url_vorlage: form.platzplan_url_vorlage,
+                  }).then(() => {
+                    /* Hinweis nach manueller Suche */
+                  })
                 }}
               >
                 {researchBusy ? 'Suche…' : 'Platzplan auf der Website suchen'}
               </Button>
+            )}
+            {researchBusy && (
+              <p className="text-xs text-muted-foreground">
+                Ergänze fehlende Daten (Platzplan, ggf. Webseite und Öffnungszeiten)…
+              </p>
             )}
           </div>
           <div>

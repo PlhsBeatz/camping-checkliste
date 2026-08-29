@@ -13,6 +13,7 @@ export const SMART_SUGGESTION_KINDS = [
   'xor_candidate',
   'platzplan',
   'place_gap',
+  'place_update',
 ] as const
 
 export type SmartSuggestionKind = (typeof SMART_SUGGESTION_KINDS)[number]
@@ -285,6 +286,12 @@ export function suggestionHref(s: SmartSuggestion): string {
     const cpId = String(s.payload.campingplatz_id ?? s.kontext_id ?? '')
     return cpId ? `/campingplaetze/${encodeURIComponent(cpId)}` : '/campingplaetze'
   }
+  if (s.kind === 'place_update') {
+    const cpId = String(s.payload.campingplatz_id ?? s.kontext_id ?? '')
+    return cpId
+      ? `/campingplaetze/${encodeURIComponent(cpId)}?bearbeiten=1&vorschlag=${encodeURIComponent(s.id)}`
+      : '/campingplaetze'
+  }
   if (s.kind === 'temp_promote') return '/ausruestung'
   if (s.kontext_typ === 'vacation' && s.kontext_id) {
     return `/packliste?vacation=${encodeURIComponent(s.kontext_id)}`
@@ -293,5 +300,5 @@ export function suggestionHref(s: SmartSuggestion): string {
 }
 
 export function suggestionAdminOnly(kind: SmartSuggestionKind): boolean {
-  return kind === 'xor_candidate' || kind === 'platzplan' || kind === 'place_gap'
+  return kind === 'xor_candidate' || kind === 'platzplan' || kind === 'place_gap' || kind === 'place_update'
 }

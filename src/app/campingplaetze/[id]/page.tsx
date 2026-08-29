@@ -14,9 +14,11 @@ import {
   Globe2,
   PlayCircle,
   Pencil,
+  RefreshCw,
   Trash2,
   Star,
 } from 'lucide-react'
+import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import type { ApiResponse } from '@/lib/api-types'
 import { Campingplatz, type CampingplatzFoto } from '@/lib/db'
@@ -71,6 +73,7 @@ function CampingplatzDetailEditModalGate({
   const searchParams = useSearchParams()
   const router = useRouter()
   const open = searchParams.has('bearbeiten') && campingplatz != null
+  const pendingSuggestionId = searchParams.get('vorschlag')
   return (
     <CampingplatzEditModal
       open={open}
@@ -80,6 +83,7 @@ function CampingplatzDetailEditModalGate({
       initialCampingplatz={campingplatz}
       onSaved={onSaved}
       onRefreshCampingplatz={onRefreshCampingplatz}
+      pendingSuggestionId={pendingSuggestionId}
     />
   )
 }
@@ -103,6 +107,7 @@ export default function CampingplatzDetailPage() {
   const [homeCoords, setHomeCoords] = useState<{ lat: number; lng: number } | null>(null)
   const [homeCoordsLoaded, setHomeCoordsLoaded] = useState(false)
   const [lightboxFotoId, setLightboxFotoId] = useState<string | null>(null)
+  const [checkBusy, setCheckBusy] = useState(false)
 
   const load = useCallback(async () => {
     if (!id) return
@@ -168,6 +173,40 @@ export default function CampingplatzDetailPage() {
 
   // Bei Reconnect: Detaildaten erneut vom Server holen
   useReconnectRefetch(load)
+
+  const runDataCheck = async () => {
+    if (!id || checkBusy) return
+    setCheckBusy(true)
+    try {
+      const res = await fetch(`/api/campingplaetze/${id}/check-updates`, { method: 'POST' })
+      const data = (await res.json()) as ApiResponse<{
+        changes: unknown[]
+        suggestionId: string | null
+      }>
+      if (!data.success) {
+        toast.error(data.error ?? 'Prüfung fehlgeschlagen')
+        return
+      }
+      const changes = data.data?.changes ?? []
+      const suggestionId = data.data?.suggestionId
+      if (changes.length === 0) {
+        toast.success('Keine Änderungen gefunden.')
+        await load()
+        return
+      }
+      toast.success(
+        `${changes.length} mögliche Änderung${changes.length === 1 ? '' : 'en'} – bitte prüfen.`
+      )
+      const q = suggestionId
+        ? `bearbeiten=1&vorschlag=${encodeURIComponent(suggestionId)}`
+        : 'bearbeiten=1'
+      router.replace(`/campingplaetze/${encodeURIComponent(id)}?${q}`, { scroll: false })
+    } catch {
+      toast.error('Prüfung fehlgeschlagen')
+    } finally {
+      setCheckBusy(false)
+    }
+  }
 
   useEffect(() => {
     if (!campingplatz?.id || campingplatz.lat == null || campingplatz.lng == null) {
@@ -449,6 +488,14 @@ export default function CampingplatzDetailPage() {
                   >
                     <Pencil className="h-4 w-4" />
                     Bearbeiten
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    className="cursor-pointer gap-2"
+                    disabled={checkBusy}
+                    onClick={() => void runDataCheck()}
+                  >
+                    <RefreshCw className={cn('h-4 w-4', checkBusy && 'animate-spin')} />
+                    {checkBusy ? 'Prüfe Daten…' : 'Daten prüfen'}
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem

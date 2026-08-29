@@ -5,7 +5,7 @@ import { Check, ExternalLink } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
-import type { SmartSuggestion } from '@/lib/smart-suggestions'
+import { suggestionHref, type SmartSuggestion } from '@/lib/smart-suggestions'
 import { suggestionDomId } from '@/lib/smart-suggestion-focus'
 import {
   acceptButtonLabel,
@@ -23,6 +23,7 @@ const KIND_LABEL: Record<string, string> = {
   xor_candidate: 'Alternative',
   platzplan: 'Platzplan',
   place_gap: 'Campingplatz',
+  place_update: 'Campingplatz',
 }
 
 export function SmartSuggestionCard({
@@ -174,18 +175,24 @@ export function SmartSuggestionCard({
         </p>
 
         <div className="flex flex-wrap gap-2 items-center">
-          <Button
-            size="sm"
-            disabled={busy || (suggestion.kind === 'platzplan' && !chosenUrl)}
-            onClick={() =>
-              void onAct(
-                'accept',
-                suggestion.kind === 'platzplan' ? { url: chosenUrl } : undefined
-              )
-            }
-          >
-            {acceptButtonLabel(suggestion)}
-          </Button>
+          {suggestion.kind === 'place_update' ? (
+            <Button size="sm" asChild disabled={busy}>
+              <a href={suggestionHref(suggestion)}>{acceptButtonLabel(suggestion)}</a>
+            </Button>
+          ) : (
+            <Button
+              size="sm"
+              disabled={busy || (suggestion.kind === 'platzplan' && !chosenUrl)}
+              onClick={() =>
+                void onAct(
+                  'accept',
+                  suggestion.kind === 'platzplan' ? { url: chosenUrl } : undefined
+                )
+              }
+            >
+              {acceptButtonLabel(suggestion)}
+            </Button>
+          )}
           <Button
             size="sm"
             variant="outline"

@@ -32,6 +32,7 @@ export function packingTargetVacation(s: SmartSuggestion): string | null {
 export function acceptButtonLabel(s: SmartSuggestion): string {
   if (s.kind === 'packing_add' || s.kind === 'packing_copack') return 'Auf die Packliste'
   if (s.kind === 'platzplan') return 'Platzplan speichern'
+  if (s.kind === 'place_update') return 'Prüfen'
   if (s.kind === 'xor_candidate') return 'Als Alternative speichern'
   return 'Übernehmen'
 }
@@ -69,6 +70,9 @@ export function acceptConsequence(s: SmartSuggestion): string {
   }
   if (s.kind === 'platzplan') {
     return 'Speichert die gewählte URL als Platzplan am Campingplatz. Vorher kannst du den Link prüfen.'
+  }
+  if (s.kind === 'place_update') {
+    return 'Öffnet den Campingplatz zum Prüfen. Geänderte Felder sind hervorgehoben; der alte Wert steht hinter dem Verlauf-Symbol. Speichern übernimmt deine Auswahl, Verwerfen ändert nichts.'
   }
   return 'Übernehmen markiert den Vorschlag als erledigt.'
 }

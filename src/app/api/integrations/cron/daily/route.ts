@@ -11,6 +11,7 @@ import {
   listCampingplaetzeForPlatzplanResearch,
   researchPlatzplanForCampingplatz,
 } from '@/lib/platzplan-research'
+import { processCampingplatzDataChecks } from '@/lib/campingplatz-change-check'
 
 function verifyCronSecret(request: NextRequest): boolean {
   const expected = process.env.INTEGRATION_CRON_SECRET?.trim()
@@ -48,6 +49,15 @@ export async function GET(request: NextRequest) {
     } catch (error) {
       console.error('Cron Platzplan-Suche:', error)
     }
+    let placeUpdateJobs = { checked: 0, withChanges: 0 }
+    try {
+      placeUpdateJobs = await processCampingplatzDataChecks(db, {
+        googleApiKey: env.GOOGLE_MAPS_API_KEY?.trim() ?? null,
+        openRouterKey: env.OPENROUTER_API_KEY?.trim() ?? null,
+      })
+    } catch (error) {
+      console.error('Cron Campingplatz-Datenprüfung:', error)
+    }
     return NextResponse.json({
       success: true,
       data: {
@@ -57,6 +67,7 @@ export async function GET(request: NextRequest) {
         restzahlung_reminders: restzahlungPush,
         packing_patterns: packingPatterns,
         platzplan_jobs: platzplanJobs,
+        place_update: placeUpdateJobs,
       },
     })
   } catch (error: unknown) {
