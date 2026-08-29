@@ -16,7 +16,7 @@ type PushDeviceActivatePromptProps = {
   pushSupported: boolean
   onActivate: () => Promise<boolean>
   activateError?: string | null
-  /** Profil: ausführlich. banner: kompakt auf der Startseite */
+  /** Profil: ausführlich. banner: kompakt im Heute-Hub */
   variant?: 'profile' | 'banner'
   className?: string
   onActivated?: () => void

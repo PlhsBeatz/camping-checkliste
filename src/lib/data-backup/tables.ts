@@ -51,6 +51,7 @@ export const BACKUP_TABLE_ORDER: string[] = [
   'packing_pattern_snapshot',
   'ausruestung_alternativgruppen',
   'ausruestung_alternativgruppe_items',
+  'packliste_xor_ignoriert',
   'ai_call_cache',
 ]
 
@@ -111,6 +112,7 @@ const VACATIONS = new Set([
   'packlisten_eintrag_mitreisende_temporaer',
   'packlisten_eintrag_gruppen',
   'packlisten_eintrag_gruppen_temporaer',
+  'packliste_xor_ignoriert',
 ])
 
 const PLACES = new Set([
@@ -178,6 +180,7 @@ export const PK_PARTS: Record<string, string[]> = {
   packlisten_eintrag_mitreisende_temporaer: ['packlisten_eintrag_id', 'mitreisender_id'],
   packlisten_eintrag_gruppen: ['id'],
   packlisten_eintrag_gruppen_temporaer: ['id'],
+  packliste_xor_ignoriert: ['packliste_id', 'gruppe_id'],
   campingplatz_routen_cache: ['user_id', 'campingplatz_id'],
   campingplatz_segment_routen_cache: ['from_campingplatz_id', 'to_campingplatz_id'],
   checklisten: ['id'],

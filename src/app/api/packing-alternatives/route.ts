@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getDB, getPackingItems, type CloudflareEnv } from '@/lib/db'
+import { getDB, getMitreisendeForVacation, getPackingItems, getPacklisteId, type CloudflareEnv } from '@/lib/db'
 import { requireAuth, requireAdmin } from '@/lib/api-auth'
+import { canAccessVacation } from '@/lib/permissions'
 import {
   conflictIfAdding,
   conflictsForPackingList,
   createAlternativeGroup,
   deleteAlternativeGroup,
   listAlternativeGroups,
+  listXorIgnoredGroupIds,
   replacementAfterRemoving,
 } from '@/lib/packing-alternatives'
 
@@ -24,17 +26,31 @@ export async function GET(request: NextRequest) {
 
     const groups = await listAlternativeGroups(db)
     if (!vacationId) {
-      return NextResponse.json({ success: true, data: { groups, conflicts: [], addConflict: null, replacement: null } })
+      return NextResponse.json({
+        success: true,
+        data: { groups, conflicts: [], addConflict: null, replacement: null, ignoredGroupIds: [] },
+      })
     }
+
+    const mitreisende = await getMitreisendeForVacation(db, vacationId)
+    if (!canAccessVacation(auth.userContext, mitreisende.map((m) => m.id))) {
+      return NextResponse.json({ error: 'Keine Berechtigung' }, { status: 403 })
+    }
+
     const items = await getPackingItems(db, vacationId)
     const packedIds = items.map((i) => i.gegenstand_id).filter((id): id is string => !!id)
-    const conflicts = conflictsForPackingList(groups, packedIds)
+    const packlisteId = await getPacklisteId(db, vacationId)
+    const ignoredGroupIds = packlisteId ? await listXorIgnoredGroupIds(db, packlisteId) : []
+    const ignored = new Set(ignoredGroupIds)
+    const conflicts = conflictsForPackingList(groups, packedIds).filter(
+      (c) => !ignored.has(c.group_id)
+    )
     const addConflict = addingId ? conflictIfAdding(groups, packedIds, addingId) : null
     const replacement =
       removedId ? replacementAfterRemoving(groups, packedIds, removedId, removedWas) : null
     return NextResponse.json({
       success: true,
-      data: { groups, conflicts, addConflict, replacement },
+      data: { groups, conflicts, addConflict, replacement, ignoredGroupIds },
     })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error)

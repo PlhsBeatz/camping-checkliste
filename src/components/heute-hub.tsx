@@ -24,6 +24,9 @@ import { getCachedAttentionFeed, cacheAttentionFeed } from '@/lib/offline-db'
 import { notifyAttentionChanged } from '@/lib/attention-events'
 import { notifySmartSuggestionsChanged } from '@/lib/smart-suggestions-events'
 import { HeuteTravelNav } from '@/components/heute-travel-nav'
+import { PushDeviceActivatePrompt } from '@/components/push-device-activate'
+import { usePushSubscribe } from '@/hooks/use-push-subscribe'
+import { useUserPushSettings } from '@/hooks/use-user-push-settings'
 import {
   attentionCoordsQuery,
   getCachedAttentionPosition,
@@ -135,6 +138,8 @@ function OverviewTile({ href, children }: { href: string; children: ReactNode })
 
 function HeuteHubContent() {
   const router = useRouter()
+  const pushSubscribe = usePushSubscribe()
+  const { settings: pushSettings } = useUserPushSettings(pushSubscribe.subscribed)
   const [showNavSidebar, setShowNavSidebar] = useState(false)
   const [feed, setFeed] = useState<AttentionFeed | null>(null)
   const [loading, setLoading] = useState(true)
@@ -294,6 +299,16 @@ function HeuteHubContent() {
               </div>
             </div>
           </div>
+
+          <PushDeviceActivatePrompt
+            accountPushEnabled={pushSettings?.enabled ?? false}
+            deviceSubscribed={pushSubscribe.subscribed}
+            pushSupported={pushSubscribe.supported}
+            onActivate={pushSubscribe.subscribe}
+            activateError={pushSubscribe.lastError}
+            variant="banner"
+            className="mx-0 mb-0"
+          />
 
           {loading && !feed ? (
             <p className="text-sm text-muted-foreground py-8 text-center">Laden…</p>

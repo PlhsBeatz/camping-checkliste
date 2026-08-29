@@ -96,7 +96,6 @@ import {
 import { useUserReiseGpsSettings } from '@/hooks/use-user-reise-gps-settings'
 import { useUserPushSettings } from '@/hooks/use-user-push-settings'
 import { usePushSubscribe } from '@/hooks/use-push-subscribe'
-import { PushDeviceActivatePrompt } from '@/components/push-device-activate'
 import { Navigation } from 'lucide-react'
 import type { BulkPackingPatch } from '@/components/bulk-packing-edit-modal'
 import {
@@ -1483,7 +1482,7 @@ function HomeContent() {
     reisePolylines
   )
   const pushSubscribe = usePushSubscribe()
-  const { settings: pushSettings, canReceivePush } = useUserPushSettings(pushSubscribe.subscribed)
+  const { canReceivePush } = useUserPushSettings(pushSubscribe.subscribed)
   const { nearbyEmpfehlung, nearbyDistanceKm } = useRastNearbyAlert({
     enabled: reiseModus.featureActive,
     position: reiseModus.position,
@@ -1794,6 +1793,44 @@ function HomeContent() {
       }
     },
     [applyPackingItemsFromFetch]
+  )
+
+  const removeGegenstandIdsFromPackingList = useCallback(
+    async (gegenstandIds: string[]) => {
+      const vacationId = selectedVacationIdRef.current
+      if (!vacationId) {
+        throw new Error('Kein Urlaub gewählt')
+      }
+      const unique = [...new Set(gegenstandIds.filter(Boolean))]
+      const ids = packingItemsRef.current
+        .filter((item) => item.gegenstand_id && unique.includes(item.gegenstand_id))
+        .map((item) => item.id)
+      if (ids.length === 0) return
+
+      persistPackingItemsUpdate((prev) => prev.filter((item) => !ids.includes(item.id)))
+      pendingMutationsRef.current += 1
+      try {
+        const batchSize = 40
+        for (let offset = 0; offset < ids.length; offset += batchSize) {
+          const chunk = ids.slice(offset, offset + batchSize)
+          const res = await fetch('/api/packing-items/batch-delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ vacationId, itemIds: chunk }),
+          })
+          const data = (await res.json()) as ApiResponse<{ deleted?: number; failed?: number }>
+          if (!res.ok || data.success === false) {
+            throw new Error(data.error ?? 'Entfernen fehlgeschlagen')
+          }
+        }
+      } catch (error) {
+        await refetchPackingItemsFromServer()
+        throw error
+      } finally {
+        pendingMutationsRef.current -= 1
+      }
+    },
+    [persistPackingItemsUpdate, refetchPackingItemsFromServer]
   )
 
   const executeSetItemPacked = async (itemId: string, gepackt: boolean) => {
@@ -3608,17 +3645,6 @@ function HomeContent() {
                   )}
                 </div>
 
-                {reiseModus.featureActive && pushSettings?.enabled && (
-                  <PushDeviceActivatePrompt
-                    accountPushEnabled={pushSettings.enabled}
-                    deviceSubscribed={pushSubscribe.subscribed}
-                    pushSupported={pushSubscribe.supported}
-                    onActivate={pushSubscribe.subscribe}
-                    activateError={pushSubscribe.lastError}
-                    variant="banner"
-                  />
-                )}
-
                 {reiseModus.featureActive && reiseModus.gpsError && (
                   <div className="px-4 pb-2 border-b border-border/60">
                     <span className="text-xs text-destructive">{reiseModus.gpsError}</span>
@@ -3647,6 +3673,7 @@ function HomeContent() {
                   .filter((id): id is string => !!id)}
                 justRemoved={xorJustRemoved}
                 onAddEquipmentIds={addEquipmentIdsToPackingList}
+                onRemoveGegenstandIds={removeGegenstandIdsFromPackingList}
                 onDismissReplacement={() => setXorJustRemoved(null)}
               />
               <PackingList

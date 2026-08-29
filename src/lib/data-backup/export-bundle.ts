@@ -163,6 +163,7 @@ async function vacationClosureExports(
     out.packlisten_eintrag_mitreisende = []
     out.packlisten_eintraege_temporaer = []
     out.packlisten_eintrag_mitreisende_temporaer = []
+    out.packliste_xor_ignoriert = []
     return out
   }
 
@@ -199,6 +200,16 @@ async function vacationClosureExports(
         .all()
       out.packlisten_eintrag_mitreisende_temporaer = (pmtR.results ?? []) as Record<string, unknown>[]
     } else out.packlisten_eintrag_mitreisende_temporaer = []
+
+    try {
+      const xorR = await db
+        .prepare(`SELECT * FROM packliste_xor_ignoriert WHERE packliste_id IN (${ip})`)
+        .bind(...packlisteIds)
+        .all()
+      out.packliste_xor_ignoriert = (xorR.results ?? []) as Record<string, unknown>[]
+    } catch {
+      out.packliste_xor_ignoriert = []
+    }
 
     const mitreisendeIds = new Set<string>()
     for (const r of out.urlaub_mitreisende) {
@@ -455,6 +466,14 @@ async function filteredVacationTables(
     packlisteIds.length
       ? `SELECT * FROM packlisten_eintraege_temporaer WHERE packliste_id IN (${ip})`
       : `SELECT * FROM packlisten_eintraege_temporaer WHERE 0`,
+    packlisteIds
+  )
+
+  await tryQ(
+    'packliste_xor_ignoriert',
+    packlisteIds.length
+      ? `SELECT * FROM packliste_xor_ignoriert WHERE packliste_id IN (${ip})`
+      : `SELECT * FROM packliste_xor_ignoriert WHERE 0`,
     packlisteIds
   )
 

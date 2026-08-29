@@ -196,6 +196,11 @@ export async function createAlternativeGroup(
 
 export async function deleteAlternativeGroup(db: D1Database, groupId: string): Promise<boolean> {
   if (!groupId) return false
+  try {
+    await db.prepare('DELETE FROM packliste_xor_ignoriert WHERE gruppe_id = ?').bind(groupId).run()
+  } catch {
+    /* Tabelle existiert ggf. noch nicht */
+  }
   const [, groupRes] = await db.batch([
     db
       .prepare('DELETE FROM ausruestung_alternativgruppe_items WHERE gruppe_id = ?')
@@ -216,6 +221,8 @@ export type XorConflict = {
   group_id: string
   titel: string | null
   on_list: Array<{ gegenstand_id: string; was: string }>
+  /** Seiten, die aktuell auf der Packliste stehen (je eine Checkbox). */
+  options: AlternativeOption[]
   choice_label: string
 }
 
@@ -227,7 +234,41 @@ export type XorReplacement = {
 }
 
 function optionsOnList(g: AlternativeGroup, packed: Set<string>): AlternativeOption[] {
-  return g.options.filter((o) => o.items.some((i) => packed.has(i.gegenstand_id)))
+  return g.options
+    .map((o) => ({
+      option_index: o.option_index,
+      items: o.items.filter((i) => packed.has(i.gegenstand_id)),
+    }))
+    .filter((o) => o.items.length > 0)
+}
+
+function toXorConflict(g: AlternativeGroup, active: AlternativeOption[]): XorConflict {
+  return {
+    group_id: g.id,
+    titel: g.titel,
+    on_list: active.flatMap((o) => o.items),
+    options: active,
+    choice_label: g.titel?.trim() || formatXorChoice(g.options),
+  }
+}
+
+/** Gerade ergänzte Seite behalten, wenn die andere schon auf der Liste stand. */
+export function suggestedKeepOptionIndex(
+  conflict: XorConflict,
+  justAddedGegenstandIds: string[]
+): number | null {
+  const added = new Set(justAddedGegenstandIds)
+  if (added.size === 0) return null
+  const withNew = conflict.options.filter((o) =>
+    o.items.some((i) => added.has(i.gegenstand_id))
+  )
+  const withOld = conflict.options.filter((o) =>
+    o.items.some((i) => !added.has(i.gegenstand_id))
+  )
+  if (withNew.length === 1 && withOld.length >= 1) {
+    return withNew[0]?.option_index ?? null
+  }
+  return null
 }
 
 export function conflictsForPackingList(
@@ -240,13 +281,7 @@ export function conflictsForPackingList(
     if (!g.genau_eines) continue
     const active = optionsOnList(g, set)
     if (active.length < 2) continue
-    const on_list = active.flatMap((o) => o.items.filter((i) => set.has(i.gegenstand_id)))
-    out.push({
-      group_id: g.id,
-      titel: g.titel,
-      on_list,
-      choice_label: g.titel?.trim() || formatXorChoice(g.options),
-    })
+    out.push(toXorConflict(g, active))
   }
   return out
 }
@@ -265,13 +300,16 @@ export function conflictIfAdding(
         o.option_index !== own.option_index && o.items.some((i) => set.has(i.gegenstand_id))
     )
     if (others.length === 0) continue
-    const on_list = others.flatMap((o) => o.items.filter((i) => set.has(i.gegenstand_id)))
-    return {
-      group_id: g.id,
-      titel: g.titel,
-      on_list,
-      choice_label: g.titel?.trim() || formatXorChoice(g.options),
-    }
+    return toXorConflict(g, [
+      {
+        option_index: own.option_index,
+        items: own.items.filter((i) => i.gegenstand_id === addingId),
+      },
+      ...others.map((o) => ({
+        option_index: o.option_index,
+        items: o.items.filter((i) => set.has(i.gegenstand_id)),
+      })),
+    ])
   }
   return null
 }
@@ -306,4 +344,42 @@ export function replacementAfterRemoving(
     }
   }
   return null
+}
+
+export async function listXorIgnoredGroupIds(
+  db: D1Database,
+  packlisteId: string
+): Promise<string[]> {
+  if (!packlisteId) return []
+  try {
+    const res = await db
+      .prepare('SELECT gruppe_id FROM packliste_xor_ignoriert WHERE packliste_id = ?')
+      .bind(packlisteId)
+      .all<{ gruppe_id: string }>()
+    return (res.results ?? []).map((r) => r.gruppe_id).filter(Boolean)
+  } catch (error) {
+    console.error('listXorIgnoredGroupIds:', error)
+    return []
+  }
+}
+
+export async function ignoreXorGroupForPackliste(
+  db: D1Database,
+  packlisteId: string,
+  gruppeId: string
+): Promise<boolean> {
+  if (!packlisteId || !gruppeId) return false
+  try {
+    await db
+      .prepare(
+        `INSERT OR IGNORE INTO packliste_xor_ignoriert (packliste_id, gruppe_id)
+         VALUES (?, ?)`
+      )
+      .bind(packlisteId, gruppeId)
+      .run()
+    return true
+  } catch (error) {
+    console.error('ignoreXorGroupForPackliste:', error)
+    return false
+  }
 }
