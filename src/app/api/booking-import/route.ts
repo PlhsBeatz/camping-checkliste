@@ -10,6 +10,7 @@ import {
   listPendingBookingImports,
 } from '@/lib/booking-db'
 import { parseBookingEmail, mergeParsedFields } from '@/lib/booking-email-parser'
+import { enrichParsedBookingAmounts } from '@/lib/booking-amount-extract'
 import { suggestStayMatch } from '@/lib/booking-stay-matcher'
 import { extractBookingPdfTextsFromRaw } from '@/lib/booking-email-pdf'
 import { analyzeBookingWithOpenRouter, buildBookingAiStayContext } from '@/lib/booking-ai-analyze'
@@ -169,7 +170,10 @@ export async function POST(request: NextRequest) {
         pdfFiles: pdfExtract.included,
         stayContext,
       })
-      const parsed = mergeParsedFields(ruleParsed, aiParsed)
+      const parsed = enrichParsedBookingAmounts(mergeParsedFields(ruleParsed, aiParsed), {
+        subject: betreff,
+        text: emailText,
+      })
       const suggestion = await suggestStayMatch(db, parsed, {
         betreff,
         absender,

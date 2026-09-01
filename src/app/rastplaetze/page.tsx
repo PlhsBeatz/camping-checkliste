@@ -3,7 +3,13 @@
 import { useAuth } from '@/components/auth-provider'
 import { Button } from '@/components/ui/button'
 import { NavigationSidebar } from '@/components/navigation-sidebar'
-import { Plus, Menu, Download } from 'lucide-react'
+import { Plus, Menu, MoreVertical, Download } from 'lucide-react'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { useEffect, useMemo, useState } from 'react'
 import type { ApiResponse } from '@/lib/api-types'
 import { Rastplatz } from '@/lib/db'
@@ -175,31 +181,44 @@ export default function RastplaetzePage() {
 
       <div className={cn('flex-1 transition-all duration-300 min-w-0', 'lg:ml-[280px]')}>
         <div className="container mx-auto p-4 md:p-6 space-y-6 max-w-full">
-          <div className="sticky top-0 z-30 flex items-center justify-between bg-card shadow pb-4 -mx-4 px-4 -mt-4 pt-4 md:-mx-6 md:px-6 md:-mt-6 md:pt-6 md:pb-4">
-            <div className="flex items-center gap-4">
+          <div className="sticky top-0 z-30 flex items-center justify-between gap-3 bg-card shadow pb-4 -mx-4 px-4 -mt-4 pt-4 md:-mx-6 md:px-6 md:-mt-6 md:pt-6 md:pb-4">
+            <div className="flex items-center gap-4 min-w-0">
               <Button
                 variant="outline"
                 size="icon"
                 onClick={() => setShowNavSidebar(true)}
-                className="lg:hidden"
+                className="lg:hidden shrink-0"
               >
                 <Menu className="h-5 w-5" />
               </Button>
-              <div>
+              <div className="min-w-0">
                 <h1 className="text-lg sm:text-xl font-bold tracking-tight text-brand-heading">
                   Rastplätze
                 </h1>
               </div>
             </div>
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={handleExportGpx}
-              title="GPX exportieren (Empfehlungen)"
-              className="flex-shrink-0"
-            >
-              <Download className="h-5 w-5" />
-            </Button>
+            <DropdownMenu modal={false}>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-9 w-9 shrink-0 rounded-full border-0 bg-transparent text-foreground shadow-none hover:bg-neutral-100 focus-visible:ring-2 focus-visible:ring-[rgb(45,79,30)]/30"
+                  aria-label="Weitere Aktionen"
+                >
+                  <MoreVertical className="h-5 w-5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="z-40 min-w-[10rem]">
+                <DropdownMenuItem
+                  className="cursor-pointer gap-2"
+                  onSelect={handleExportGpx}
+                >
+                  <Download className="h-4 w-4 shrink-0" />
+                  GPX exportieren (Empfehlungen)
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
 
           {isLoading ? (

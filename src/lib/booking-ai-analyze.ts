@@ -1,5 +1,6 @@
 import type { ParsedBookingFields, Buchungsstatus, CampingStayEmailTyp } from './booking-types'
 import type { ExtractedBookingPdf } from './booking-email-pdf'
+import { enrichParsedBookingAmounts } from './booking-amount-extract'
 import { getVacations, getCampingStaysForVacations } from './db'
 import {
   chatJson,
@@ -120,12 +121,19 @@ function buildUserContent(input: BookingAiAnalyzeInput): OpenRouterContentPart[]
   return parts
 }
 
-const SYSTEM_PROMPT = `Du extrahierst strukturierte Buchungsdaten aus deutschen Camping-E-Mails und PDFs.
+const SYSTEM_PROMPT = `Du extrahierst strukturierte Buchungsdaten aus deutschen/englischen Camping-E-Mails und PDFs.
 Antworte ausschließlich mit einem JSON-Objekt (kein Markdown, kein Fließtext).
 Datumsformat: YYYY-MM-DD. Unbekannte Felder: null.
 email_typ: reservierungsbestaetigung | buchungsbestaetigung | zahlungsbestaetigung | vor_anreise | stornierung | sonstiges
 buchungsstatus: angefragt | gebucht | bezahlt | storniert | null
-Nutze den Betreff, den E-Mail-Text und alle beigefügten PDFs vollständig. Bei widersprüchlichen Angaben bevorzuge das Buchungs-PDF.`
+
+WICHTIG zu Beträgen:
+- preis_gesamt = Endsumme/Gesamtbetrag/Total der Buchung (z. B. „Endsumme: 352,80 €“).
+- anzahlung_betrag = Anzahlung, Online-Zahlung, Deposit oder bestätigter Zahlungseingang (z. B. Tabellenzeile „Online Zahlung … -88,20“ oder Zahlungsmail „Betrag: 88,20 EUR“).
+- Bei Zahlungsbestätigungen ohne Gesamtsumme: nur anzahlung_betrag setzen, preis_gesamt null lassen.
+- Den Betrag aus einer reinen Zahlungsinfo-Mail NIEMALS als preis_gesamt speichern.
+
+Nutze Betreff, E-Mail-Text und PDFs vollständig. Bei Widersprüchen bevorzuge das Buchungs-PDF für Gesamtsumme und Zeitraum.`
 
 export async function analyzeBookingWithOpenRouter(
   apiKey: string,
@@ -141,7 +149,10 @@ export async function analyzeBookingWithOpenRouter(
     trigger: 'explicit',
     title: 'Camping Packliste Buchungsimport',
   })
-  return normalizeAiParsed(result.json)
+  return enrichParsedBookingAmounts(normalizeAiParsed(result.json), {
+    subject: input.betreff,
+    text: input.emailText,
+  })
 }
 
 /** Kompakte Aufenthalts-Liste für den KI-Prompt. */

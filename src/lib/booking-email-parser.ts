@@ -1,5 +1,6 @@
 import type { ParsedBookingFields, CampingStayEmailTyp } from './booking-types'
 import { decodeMimeHeaderValue } from './booking-email-headers'
+import { enrichParsedBookingAmounts } from './booking-amount-extract'
 
 const FWD_PREFIX = /^(?:Fwd|FW|Wg|Aw):\s*/i
 
@@ -183,6 +184,16 @@ function parseZugangscode(text: string): string | null {
 function inferEmailTyp(subject: string, body: string): CampingStayEmailTyp {
   const combined = `${subject} ${body}`.toLowerCase()
   if (/storno|stornierung|cancel/i.test(combined)) return 'stornierung'
+  if (
+    /payment\s+information|zahlungsinformation|payment\s+received|zahlungseingang|zahlungsbestätigung|zahlungsbestaetigung/i.test(
+      combined
+    )
+  ) {
+    return 'zahlungsbestaetigung'
+  }
+  if (/keine\s+buchungsbestätigung|not\s+a\s+booking\s+confirmation/i.test(combined)) {
+    return 'zahlungsbestaetigung'
+  }
   if (/zahlung|bezahlt|payment|rechnung/i.test(combined)) return 'zahlungsbestaetigung'
   if (/anreise|check-?in|vor der anreise|torcode|zugang/i.test(combined))
     return 'vor_anreise'
@@ -278,16 +289,15 @@ export function parseBookingEmail(
       /^([A-ZÄÖÜ][^\n–-]{3,50}?)(?:\s*[-–|]\s*(?:Buchung|Reservierung|Booking))/i,
     ])
 
-  const preis_gesamt =
-    parseAmount(
-      firstMatch(text, [
-        /(?:Gesamt(?:preis|betrag)|Summe|Total)[:\s]*([^\n]+)/i,
-      ]) ?? ''
-    ) ?? parseAmount(text)
+  const preis_gesamt = parseAmount(
+    firstMatch(text, [
+      /(?:Gesamt(?:preis|betrag)|Summe|Total|Endsumme)[:\s]*([^\n]+)/i,
+    ]) ?? ''
+  )
 
   const anzahlung_betrag = parseAmount(
     firstMatch(text, [
-      /(?:Anzahlung)[:\s]*([^\n]+)/i,
+      /(?:Anzahlung|Deposit|Vorauszahlung|Online\s+Zahlung|Online\s+Payment)[:\s]*([^\n]+)/i,
     ]) ?? ''
   )
 
@@ -314,28 +324,31 @@ export function parseBookingEmail(
 
   let buchungsstatus: ParsedBookingFields['buchungsstatus'] = null
   if (/storniert|cancel/i.test(text)) buchungsstatus = 'storniert'
-  else if (/bezahlt|zahlung erhalten/i.test(text)) buchungsstatus = 'bezahlt'
+  else if (/bezahlt|vollständig\s+bezahlt|paid\s+in\s+full/i.test(text)) buchungsstatus = 'bezahlt'
   else if (/bestätigt|confirmed|gebucht/i.test(text)) buchungsstatus = 'gebucht'
   else if (/anfrage|angefragt/i.test(text)) buchungsstatus = 'angefragt'
 
-  return {
-    platznummer,
-    buchungsnummer,
-    buchungsstatus,
-    start_datum,
-    end_datum,
-    checkin_zeit,
-    checkout_zeit,
-    zugangscode,
-    unterkunftstyp,
-    preis_gesamt,
-    waehrung: 'EUR',
-    anzahlung_betrag,
-    restzahlung_faellig_am,
-    buchungsdatum,
-    stornierungsfrist,
-    kontakt_platz,
-    campingplatz_name,
-    email_typ,
-  }
+  return enrichParsedBookingAmounts(
+    {
+      platznummer,
+      buchungsnummer,
+      buchungsstatus,
+      start_datum,
+      end_datum,
+      checkin_zeit,
+      checkout_zeit,
+      zugangscode,
+      unterkunftstyp,
+      preis_gesamt,
+      waehrung: 'EUR',
+      anzahlung_betrag,
+      restzahlung_faellig_am,
+      buchungsdatum,
+      stornierungsfrist,
+      kontakt_platz,
+      campingplatz_name,
+      email_typ,
+    },
+    { subject: cleanSubj, text }
+  )
 }
