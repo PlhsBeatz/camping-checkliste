@@ -71,6 +71,23 @@ function futureVacations(
  * Nächster Saisonstart-Anker ab Bezugstag (inkl.):
  * erster Urlaub des Jahres bzw. 1. März, sobald dieser Anker >= Bezugstag.
  */
+/**
+ * Letzter Saisonstart-Anker, der am Stichtag bereits erreicht ist
+ * (erster Urlaub des Jahres bzw. 1. März).
+ */
+export function resolveCurrentSaisonstartAnchor(
+  vacations: Vacation[],
+  todayYmd: string
+): string {
+  const startYear = Number(todayYmd.slice(0, 4))
+  for (let y = startYear; y >= startYear - 6; y--) {
+    const first = vacationsInYear(vacations, y)[0]
+    const anchor = first?.abreise ?? `${y}-03-01`
+    if (anchor <= todayYmd) return anchor
+  }
+  return `${startYear}-03-01`
+}
+
 export function resolveNextSaisonstartAnchor(
   vacations: Vacation[],
   bezugYmd: string

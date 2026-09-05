@@ -2,6 +2,7 @@
 .next/
 out/
 build/
+tsconfig.tsbuildinfo
 
 # --- OpenNext (Cloudflare Adapter) ---
 .open-next/

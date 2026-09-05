@@ -75,7 +75,7 @@ const REFERENCE_CORE = new Set([
   'vorlagen_eintraege',
 ])
 
-/** Nur Ausrüstungs-Inventar und direkte Verknüpfungen */
+/** Nur Ausrüstungs-Inventar und direkte Verknüpfungen (Lebensdauer-Spalten via SELECT *) */
 const EQUIPMENT_REF = new Set([
   'ausruestungsgegenstaende',
   'ausruestungsgegenstaende_links',

@@ -6,6 +6,7 @@ import type { D1Database, R2Bucket } from '@cloudflare/workers-types'
 import type { BackupBundle, ImportResult, ImportMode } from './types'
 import { BACKUP_FORMAT_VERSION } from './types'
 import { BACKUP_TABLE_ORDER } from './tables'
+import { AUSRUESTUNG_LIFECYCLE_COLUMNS } from '@/lib/equipment-lifecycle'
 import { putR2CampingPhotosFromBackup, parseR2CampingPhotosFromRaw, putBinaryR2ObjectsToBucket, contentTypeFromKey, type R2BinaryFile } from './r2-camping-photos'
 
 function asRecord(v: unknown): Record<string, unknown> | null {
@@ -335,6 +336,18 @@ export async function importBackupBundle(
     if (!allowed || allowed.size === 0) {
       warnings.push(`Tabelle ${table}: existiert nicht oder PRAGMA fehlgeschlagen — übersprungen.`)
       continue
+    }
+
+    if (table === 'ausruestungsgegenstaende') {
+      const missingLifecycle = AUSRUESTUNG_LIFECYCLE_COLUMNS.filter((col) => {
+        if (allowed.has(col)) return false
+        return rows.some((row) => row[col] != null && row[col] !== '')
+      })
+      if (missingLifecycle.length > 0) {
+        warnings.push(
+          `ausruestungsgegenstaende: Backup enthält ${missingLifecycle.join(', ')}, die Zieldatenbank hat diese Spalten nicht — Werte werden übersprungen. Migration 0058 anwenden.`
+        )
+      }
     }
 
     let count = 0

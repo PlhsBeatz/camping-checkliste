@@ -135,11 +135,15 @@ CREATE TABLE IF NOT EXISTS ausruestungsgegenstaende (
     mitreisenden_typ TEXT NOT NULL DEFAULT 'pauschal' CHECK (mitreisenden_typ IN ('pauschal', 'alle', 'ausgewaehlte')), is_standard INTEGER DEFAULT 0,
     in_pauschale_inbegriffen INTEGER DEFAULT 0,
     mengenregel TEXT,
+    anschaffungsdatum TEXT,
+    ausgemustert_am TEXT,
+    ersetzt_durch_id TEXT,
     CHECK (einzelgewicht >= 0 OR einzelgewicht IS NULL),
     CHECK (standard_anzahl >= 0),
     CHECK (status IN ('Normal', 'Ausgemustert', 'Fest Installiert', 'Immer gepackt')),
     FOREIGN KEY (kategorie_id) REFERENCES kategorien(id) ON DELETE RESTRICT,
-    FOREIGN KEY (transport_id) REFERENCES transportmittel(id) ON DELETE SET NULL
+    FOREIGN KEY (transport_id) REFERENCES transportmittel(id) ON DELETE SET NULL,
+    FOREIGN KEY (ersetzt_durch_id) REFERENCES ausruestungsgegenstaende(id) ON DELETE SET NULL
 );
 
 -- 4. Tabellen mit Abhängigkeiten Ebene 3 (Verknüpfungen)
@@ -230,6 +234,9 @@ CREATE INDEX idx_tags_tag_kategorie_id ON tags(tag_kategorie_id);
 CREATE INDEX idx_ausruestungsgegenstaende_tags_gegenstand ON ausruestungsgegenstaende_tags(gegenstand_id);
 CREATE INDEX idx_ausruestungsgegenstaende_tags_tag ON ausruestungsgegenstaende_tags(tag_id);
 CREATE INDEX idx_ausruestungsgegenstaende_is_standard ON ausruestungsgegenstaende(is_standard);
+CREATE INDEX idx_ausruestungsgegenstaende_anschaffungsdatum ON ausruestungsgegenstaende(anschaffungsdatum);
+CREATE INDEX idx_ausruestungsgegenstaende_ausgemustert_am ON ausruestungsgegenstaende(ausgemustert_am);
+CREATE INDEX idx_ausruestungsgegenstaende_ersetzt_durch ON ausruestungsgegenstaende(ersetzt_durch_id);
 CREATE INDEX idx_transportmittel_festgewicht_manuell_transport_id ON transportmittel_festgewicht_manuell(transport_id);
 
 -- 6. Trigger

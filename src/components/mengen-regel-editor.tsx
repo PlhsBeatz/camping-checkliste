@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState, useEffect } from 'react'
+import { useMemo, useState, useEffect, type ReactNode } from 'react'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -43,6 +43,12 @@ interface MengenRegelEditorProps {
   kindOverrideDisabled?: boolean
   /** Wird angezeigt statt der Anzahl, wenn kein dynamisches Verhalten aktiv. */
   festesAnzahlPlaceholder?: string
+  /** card = eigener Kasten; inline = Link neben der Anzahl; compact = 2 Spalten, Regel darunter */
+  variant?: 'card' | 'inline' | 'compact'
+  /** Linke Spalte (inline/compact), z. B. Anzahl-Feld */
+  leading?: ReactNode
+  /** Rechte Spalte bei compact, z. B. Gewicht */
+  trailing?: ReactNode
 }
 
 /**
@@ -56,6 +62,9 @@ export function MengenRegelEditor({
   value,
   onChange,
   kindOverrideDisabled = false,
+  variant = 'card',
+  leading,
+  trailing,
 }: MengenRegelEditorProps) {
   const [showKind, setShowKind] = useState<boolean>(!!value?.kind)
   // Editor ist standardmäßig eingeklappt. Wird er bereits mit einer Regel
@@ -76,35 +85,16 @@ export function MengenRegelEditor({
   }
 
   const kurzLabel = regelKurzLabel(value)
+  const triggerLabel = value ? `Mengenregel · ${kurzLabel}` : 'Mengenregel · optional'
 
-  return (
-    <Collapsible
-      open={expanded}
-      onOpenChange={setExpanded}
-      className="rounded-md border border-border/60 bg-muted/20"
-    >
-      <CollapsibleTrigger asChild>
-        <button
-          type="button"
-          className="w-full flex items-center justify-between gap-2 px-3 py-2 text-left hover:bg-muted/30 rounded-md"
+  const fields = (
+        <div
+          className={
+            variant === 'inline' || variant === 'compact'
+              ? 'space-y-3 px-3 py-3'
+              : 'space-y-3 px-3 pb-3 pt-1'
+          }
         >
-          <span className="flex items-center gap-1.5 min-w-0">
-            {expanded ? (
-              <ChevronDown className="h-4 w-4 flex-shrink-0" />
-            ) : (
-              <ChevronRight className="h-4 w-4 flex-shrink-0" />
-            )}
-            <span className="text-sm font-medium">Mengenregel</span>
-            {value ? (
-              <span className="text-xs text-muted-foreground truncate">· {kurzLabel}</span>
-            ) : (
-              <span className="text-xs text-muted-foreground truncate">· optional</span>
-            )}
-          </span>
-        </button>
-      </CollapsibleTrigger>
-      <CollapsibleContent>
-        <div className="space-y-3 px-3 pb-3 pt-1">
           <p className="text-xs text-muted-foreground">
             Anzahl abhängig von Reisedauer und Kind/Erwachsener automatisch berechnen.
           </p>
@@ -199,7 +189,80 @@ export function MengenRegelEditor({
       {/* Live-Vorschau */}
       {value && <RegelVorschau regel={value} />}
         </div>
-      </CollapsibleContent>
+  )
+
+  if (variant === 'inline') {
+    return (
+      <Collapsible open={expanded} onOpenChange={setExpanded} className="space-y-2">
+        <div className="flex items-end gap-3">
+          {leading}
+          <CollapsibleTrigger asChild>
+            <button
+              type="button"
+              className="shrink-0 pb-2.5 text-xs text-muted-foreground hover:text-foreground"
+            >
+              {triggerLabel}
+            </button>
+          </CollapsibleTrigger>
+        </div>
+        <CollapsibleContent>
+          <div className="rounded-md border border-border/60 bg-muted/20">{fields}</div>
+        </CollapsibleContent>
+      </Collapsible>
+    )
+  }
+
+  if (variant === 'compact') {
+    return (
+      <Collapsible open={expanded} onOpenChange={setExpanded} className="space-y-2">
+        <div className="grid grid-cols-2 gap-4">
+          <div className="min-w-0 space-y-1">
+            {leading}
+            <CollapsibleTrigger asChild>
+              <button
+                type="button"
+                className="text-left text-xs text-muted-foreground hover:text-foreground"
+              >
+                {triggerLabel}
+              </button>
+            </CollapsibleTrigger>
+          </div>
+          <div className="min-w-0">{trailing}</div>
+        </div>
+        <CollapsibleContent>
+          <div className="rounded-md border border-border/60 bg-muted/20">{fields}</div>
+        </CollapsibleContent>
+      </Collapsible>
+    )
+  }
+
+  return (
+    <Collapsible
+      open={expanded}
+      onOpenChange={setExpanded}
+      className="rounded-md border border-border/60 bg-muted/20"
+    >
+      <CollapsibleTrigger asChild>
+        <button
+          type="button"
+          className="w-full flex items-center justify-between gap-2 px-3 py-2 text-left hover:bg-muted/30 rounded-md"
+        >
+          <span className="flex items-center gap-1.5 min-w-0">
+            {expanded ? (
+              <ChevronDown className="h-4 w-4 flex-shrink-0" />
+            ) : (
+              <ChevronRight className="h-4 w-4 flex-shrink-0" />
+            )}
+            <span className="text-sm font-medium">Mengenregel</span>
+            {value ? (
+              <span className="text-xs text-muted-foreground truncate">· {kurzLabel}</span>
+            ) : (
+              <span className="text-xs text-muted-foreground truncate">· optional</span>
+            )}
+          </span>
+        </button>
+      </CollapsibleTrigger>
+      <CollapsibleContent>{fields}</CollapsibleContent>
     </Collapsible>
   )
 }

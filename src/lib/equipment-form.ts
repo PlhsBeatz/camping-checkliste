@@ -1,4 +1,9 @@
 import type { Category, EquipmentItem, MainCategory, Mitreisender, Tag, TagKategorie } from '@/lib/db'
+import { todayInAppTimezone } from '@/lib/app-timezone'
+import {
+  shouldPrefillReplaceAcquisitionDate,
+  type AgeRelevanceNeighbor,
+} from '@/lib/equipment-age-relevance'
 import { regelToStandardAnzahl, type MengenRegel } from '@/lib/packing-quantity'
 import { parseWeightInput } from '@/lib/utils'
 
@@ -18,6 +23,8 @@ export interface EquipmentFormValues {
   links: { url: string }[]
   standard_mitreisende: string[]
   mengenregel: MengenRegel | null
+  anschaffungsdatum: string
+  ausgemustert_am: string
 }
 
 export const MITREISENDEN_TYP_TRIGGER_LABELS: Record<
@@ -120,6 +127,8 @@ export function createDefaultEquipmentFormValues(initialWas = ''): EquipmentForm
     links: [],
     standard_mitreisende: [],
     mengenregel: null,
+    anschaffungsdatum: '',
+    ausgemustert_am: '',
   }
 }
 
@@ -140,6 +149,31 @@ export function equipmentFormValuesFromItem(item: EquipmentItem): EquipmentFormV
     links: (item.links ?? []).map((l) => ({ url: l.url })),
     standard_mitreisende: item.standard_mitreisende || [],
     mengenregel: item.mengenregel ?? null,
+    anschaffungsdatum: item.anschaffungsdatum?.slice(0, 10) ?? '',
+    ausgemustert_am: item.ausgemustert_am?.slice(0, 10) ?? '',
+  }
+}
+
+/** Vorausfüllung beim Ersetzen: Stammdaten, aber keine Exemplar-Details/Gewicht. */
+export function equipmentFormValuesForReplace(
+  item: EquipmentItem,
+  neighbors: AgeRelevanceNeighbor[] = []
+): EquipmentFormValues {
+  const base = equipmentFormValuesFromItem(item)
+  const prefillToday = shouldPrefillReplaceAcquisitionDate({
+    name: item.was,
+    categoryTitle: item.kategorie_titel,
+    mainCategoryTitle: item.hauptkategorie_titel,
+    neighbors,
+  })
+  return {
+    ...base,
+    details: '',
+    einzelgewicht: '',
+    links: [],
+    status: 'Normal',
+    anschaffungsdatum: prefillToday ? todayInAppTimezone() : '',
+    ausgemustert_am: '',
   }
 }
 
@@ -183,12 +217,68 @@ export function buildTagGroupsForEquipment(
     .filter((g) => g.tags.length > 0)
 }
 
+export function equipmentItemFromFormValues(
+  form: EquipmentFormValues,
+  opts: {
+    id: string
+    createdAt?: string
+    tagCatalog?: Tag[]
+    ersetztDurchId?: string | null
+    kategorieTitel?: string
+    hauptkategorieTitel?: string
+    transportName?: string
+  }
+): EquipmentItem {
+  const payload = buildEquipmentApiPayload(form)
+  const tagById = new Map((opts.tagCatalog ?? []).map((t) => [t.id, t]))
+  const now = todayInAppTimezone()
+  return {
+    id: opts.id,
+    was: payload.was,
+    kategorie_id: payload.kategorie_id,
+    kategorie_titel: opts.kategorieTitel,
+    hauptkategorie_titel: opts.hauptkategorieTitel,
+    transport_id: payload.transport_id,
+    transport_name: opts.transportName,
+    einzelgewicht: payload.einzelgewicht || 0,
+    standard_anzahl: payload.standard_anzahl,
+    status: payload.status,
+    details: payload.details || '',
+    is_standard: payload.is_standard,
+    erst_abreisetag_gepackt: payload.erst_abreisetag_gepackt,
+    mitreisenden_typ: payload.mitreisenden_typ,
+    standard_mitreisende: payload.standard_mitreisende,
+    in_pauschale_inbegriffen: payload.in_pauschale_inbegriffen,
+    mengenregel: payload.mengenregel,
+    tags: payload.tags.map(
+      (id) =>
+        tagById.get(id) ?? {
+          id,
+          titel: id,
+          tag_kategorie_id: '',
+          reihenfolge: 0,
+          created_at: '',
+        }
+    ),
+    links: payload.links.map((url, i) => ({
+      id: `${opts.id}-link-${i}`,
+      gegenstand_id: opts.id,
+      url,
+      created_at: '',
+    })),
+    created_at: opts.createdAt ?? `${now}T00:00:00`,
+    anschaffungsdatum: payload.anschaffungsdatum,
+    ausgemustert_am: payload.ausgemustert_am,
+    ersetzt_durch_id: opts.ersetztDurchId ?? null,
+  }
+}
+
 export function buildEquipmentApiPayload(form: EquipmentFormValues) {
   return {
     was: form.was,
     kategorie_id: form.kategorie_id,
     transport_id: form.transport_id === 'none' ? null : form.transport_id || null,
-    einzelgewicht: parseWeightInput(form.einzelgewicht),
+    einzelgewicht: form.in_pauschale_inbegriffen ? 0 : parseWeightInput(form.einzelgewicht),
     standard_anzahl: parseInt(form.standard_anzahl) || 1,
     status: form.status,
     details: form.details || null,
@@ -200,6 +290,8 @@ export function buildEquipmentApiPayload(form: EquipmentFormValues) {
     tags: form.tags,
     links: form.links.filter((link) => link.url.trim() !== '').map((link) => link.url),
     mengenregel: form.mengenregel,
+    anschaffungsdatum: form.anschaffungsdatum || null,
+    ausgemustert_am: form.status === 'Ausgemustert' ? form.ausgemustert_am || null : null,
   }
 }
 

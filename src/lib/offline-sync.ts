@@ -740,6 +740,24 @@ function resolveRoute(e: SyncQueueEntry): ResolvedRoute | null {
         body: e.payload,
       }
     }
+    case 'equipment-items': {
+      if (e.action === 'post') {
+        return { method: 'POST', url: '/api/equipment-items', body: e.payload }
+      }
+      if (e.action === 'put' || e.action === 'patch') {
+        return { method: 'PUT', url: '/api/equipment-items', body: e.payload }
+      }
+      if (e.action === 'delete') {
+        return {
+          method: 'DELETE',
+          url: `/api/equipment-items?id=${encodeURIComponent(e.key)}`,
+        }
+      }
+      return null
+    }
+    case 'equipment-items-replace': {
+      return { method: 'POST', url: '/api/equipment-items/replace', body: e.payload }
+    }
     default:
       return null
   }

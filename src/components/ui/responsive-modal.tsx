@@ -41,6 +41,8 @@ export interface ResponsiveModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   title?: React.ReactNode
+  /** Kleiner Zusatz rechts neben dem Titel, z. B. „Angelegt 15.03.2026“ */
+  titleAside?: React.ReactNode
   description?: React.ReactNode
   children: React.ReactNode
   /** Zusätzliche Klassen für den Content-Container (Dialog/Drawer) */
@@ -63,6 +65,7 @@ export function ResponsiveModal({
   open,
   onOpenChange,
   title = '',
+  titleAside,
   description,
   children,
   contentClassName,
@@ -140,7 +143,10 @@ export function ResponsiveModal({
           )}
         >
           <DrawerHeader className="px-6 pt-6 pb-0 text-left">
-            <DrawerTitle className="text-left">{title}</DrawerTitle>
+            <DrawerTitle className="flex items-baseline justify-between gap-3 text-left pr-2">
+              <span>{title}</span>
+              {titleAside}
+            </DrawerTitle>
             {description && (
               <DrawerDescription className="text-left">{description}</DrawerDescription>
             )}
@@ -160,9 +166,12 @@ export function ResponsiveModal({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className={cn(contentClassName)}>
-        <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
+      <DialogContent className={cn(noPadding && 'p-0', contentClassName)}>
+        <DialogHeader className={noPadding ? 'px-6 pt-6' : undefined}>
+          <DialogTitle className="flex items-baseline justify-between gap-3 pr-8">
+            <span>{title}</span>
+            {titleAside}
+          </DialogTitle>
           {description && <DialogDescription>{description}</DialogDescription>}
         </DialogHeader>
         {children}

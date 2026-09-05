@@ -250,6 +250,25 @@ async function defaultSend(opts: MutationOptions): Promise<{ ok: boolean; status
         url = `/api/optimierungen/${encodeURIComponent(opts.key)}`
       }
       break
+    case 'equipment-items':
+      if (opts.action === 'post') {
+        method = 'POST'
+        url = '/api/equipment-items'
+        body = opts.payload
+      } else if (opts.action === 'put' || opts.action === 'patch') {
+        method = 'PUT'
+        url = '/api/equipment-items'
+        body = opts.payload
+      } else if (opts.action === 'delete') {
+        method = 'DELETE'
+        url = `/api/equipment-items?id=${encodeURIComponent(opts.key)}`
+      }
+      break
+    case 'equipment-items-replace':
+      method = 'POST'
+      url = '/api/equipment-items/replace'
+      body = opts.payload
+      break
     default:
       return { ok: false, status: 0 }
   }

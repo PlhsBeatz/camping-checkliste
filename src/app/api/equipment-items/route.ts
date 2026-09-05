@@ -8,6 +8,7 @@ import {
   deleteEquipmentItem,
   getTagsForEquipment,
   getAllTagsForEquipment,
+  applyEquipmentFaelligkeitDisposition,
   CloudflareEnv,
 } from '@/lib/db'
 import { requireAuth, requireAdmin } from '@/lib/api-auth'
@@ -29,11 +30,17 @@ interface EquipmentItemBody {
   mengenregel?: MengenRegel | null
   tags?: string[]
   links?: string[]
+  anschaffungsdatum?: string | null
+  ausgemustert_am?: string | null
+  ersetzt_durch_id?: string | null
+  wartung_disposition?: 'keep' | 'archive'
 }
 
 interface PostEquipmentBody extends EquipmentItemBody {
   was: string
   kategorie_id: string
+  /** Optional: Client-ID für Offline-Anlegen */
+  id?: string
 }
 
 interface PutEquipmentBody extends EquipmentItemBody {
@@ -93,6 +100,7 @@ export async function POST(request: NextRequest) {
     const body = (await request.json()) as PostEquipmentBody
 
     const {
+      id: clientId,
       was,
       kategorie_id,
       transport_id,
@@ -108,6 +116,8 @@ export async function POST(request: NextRequest) {
       mengenregel,
       tags,
       links,
+      anschaffungsdatum,
+      ausgemustert_am,
     } = body
 
     if (!was || !kategorie_id) {
@@ -117,6 +127,7 @@ export async function POST(request: NextRequest) {
     }
 
     const item = await createEquipmentItem(db, {
+      id: typeof clientId === 'string' && clientId.trim() ? clientId.trim() : undefined,
       was,
       kategorie_id,
       transport_id,
@@ -131,7 +142,9 @@ export async function POST(request: NextRequest) {
       in_pauschale_inbegriffen,
       mengenregel,
       tags,
-      links
+      links,
+      anschaffungsdatum,
+      ausgemustert_am,
     })
 
     if (!item) {
@@ -174,12 +187,16 @@ export async function PUT(request: NextRequest) {
       mengenregel,
       tags,
       links,
+      anschaffungsdatum,
+      ausgemustert_am,
+      wartung_disposition,
     } = body
 
     if (!id) {
       return NextResponse.json({ error: 'id is required' }, { status: 400 })
     }
 
+    const existing = await getEquipmentItem(db, id)
     const item = await updateEquipmentItem(db, id, {
       was,
       kategorie_id,
@@ -195,13 +212,30 @@ export async function PUT(request: NextRequest) {
       in_pauschale_inbegriffen,
       mengenregel,
       tags,
-      links
+      links,
+      anschaffungsdatum,
+      ausgemustert_am,
     })
 
     if (!item) {
       return NextResponse.json({ 
         error: 'Failed to update equipment item' 
       }, { status: 500 })
+    }
+
+    if (
+      existing &&
+      existing.status !== 'Ausgemustert' &&
+      item.status === 'Ausgemustert' &&
+      (wartung_disposition === 'keep' || wartung_disposition === 'archive')
+    ) {
+      const ok = await applyEquipmentFaelligkeitDisposition(db, id, wartung_disposition)
+      if (!ok) {
+        return NextResponse.json(
+          { error: 'Gegenstand gespeichert, Fälligkeiten konnten nicht angepasst werden' },
+          { status: 500 }
+        )
+      }
     }
 
     return NextResponse.json({ success: true, data: item })

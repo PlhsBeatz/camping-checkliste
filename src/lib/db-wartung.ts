@@ -635,6 +635,80 @@ export async function updateFaelligkeit(
   }
 }
 
+export type EquipmentFaelligkeitDisposition =
+  | 'keep'
+  | 'archive'
+  | 'transfer'
+  | 'archive_and_create'
+
+export async function applyEquipmentFaelligkeitDisposition(
+  db: D1Database,
+  sourceEquipmentId: string,
+  disposition: EquipmentFaelligkeitDisposition,
+  opts?: { successorId?: string; successorAnschaffungsdatum?: string | null }
+): Promise<boolean> {
+  if (disposition === 'keep') return true
+  const open = await getFaelligkeiten(db, { equipmentId: sourceEquipmentId })
+  if (open.length === 0) return true
+
+  try {
+    if (disposition === 'archive') {
+      for (const item of open) {
+        const updated = await updateFaelligkeit(db, item.id, { is_archived: true })
+        if (!updated) return false
+      }
+      return true
+    }
+
+    const successorId = opts?.successorId
+    if (!successorId) return false
+    const successorBezug = opts?.successorAnschaffungsdatum
+      ? normalizeCalendarDate(opts.successorAnschaffungsdatum)
+      : null
+
+    if (disposition === 'transfer') {
+      for (const item of open) {
+        const patch: Parameters<typeof updateFaelligkeit>[2] = { equipment_id: successorId }
+        if (item.typ === 'alter_anzeige' && successorBezug) {
+          patch.bezug_datum = successorBezug
+        }
+        const updated = await updateFaelligkeit(db, item.id, patch)
+        if (!updated) return false
+      }
+      return true
+    }
+
+    for (const item of open) {
+      const archived = await updateFaelligkeit(db, item.id, { is_archived: true })
+      if (!archived) return false
+      const created = await createFaelligkeit(db, {
+        name: item.name,
+        kategorie: item.kategorie,
+        typ: item.typ,
+        equipment_id: successorId,
+        transport_id: item.transport_id,
+        bezug_datum:
+          item.typ === 'alter_anzeige' ? successorBezug || item.bezug_datum : item.bezug_datum,
+        gueltig_bis: item.gueltig_bis,
+        letzte_erledigung_am:
+          item.typ === 'intervall' ? todayInAppTimezone() : item.letzte_erledigung_am,
+        intervall_einheit: item.intervall_einheit,
+        intervall_wert: item.intervall_wert,
+        intervall_rhythmus: item.intervall_rhythmus,
+        warnung_tage_vorher: item.warnung_tage_vorher,
+        sicherheitsrelevant: item.sicherheitsrelevant,
+        quittierung_erforderlich: item.quittierung_erforderlich,
+        notizen: item.notizen,
+      })
+      if (!created) return false
+    }
+    return true
+  } catch (error) {
+    console.error('Error applyEquipmentFaelligkeitDisposition:', error)
+    return false
+  }
+}
+
 export async function deleteFaelligkeit(db: D1Database, id: string): Promise<boolean> {
   try {
     const r = await db.prepare('DELETE FROM faelligkeiten WHERE id = ?').bind(id).run()

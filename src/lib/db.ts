@@ -14,6 +14,8 @@ import {
   normalizeHubAnlass,
   type ChecklisteHubAnlass,
 } from './checkliste-hub-anlass'
+import { normalizeCalendarDate, todayInAppTimezone } from './app-timezone'
+import { optionalCalendarYmd } from './equipment-lifecycle'
 
 export interface Vacation {
   id: string
@@ -156,6 +158,12 @@ export interface EquipmentItem {
    */
   mengenregel?: MengenRegel | null
   created_at: string
+  /** Optionales Anschaffungsdatum (YYYY-MM-DD), nur wenn das Alter zählt */
+  anschaffungsdatum?: string | null
+  /** Gesetztes Datum, sobald Status Ausgemustert ist */
+  ausgemustert_am?: string | null
+  /** Nachfolger nach Ersetzen */
+  ersetzt_durch_id?: string | null
 }
 
 export interface EquipmentLink {
@@ -1739,6 +1747,9 @@ export async function getEquipmentItems(db: D1Database): Promise<EquipmentItem[]
         tags: [],
         links,
         created_at: String(row.created_at || ''),
+        anschaffungsdatum: optionalCalendarYmd(row.anschaffungsdatum),
+        ausgemustert_am: optionalCalendarYmd(row.ausgemustert_am),
+        ersetzt_durch_id: row.ersetzt_durch_id ? String(row.ersetzt_durch_id) : null,
       })
     }
     return items
@@ -1783,7 +1794,14 @@ export async function getEquipmentItem(db: D1Database, id: string): Promise<Equi
       in_pauschale_inbegriffen: !!(item.in_pauschale_inbegriffen ?? 0),
       mengenregel: parseRegel(item.mengenregel as string | null | undefined),
       links: links.results || [],
-      standard_mitreisende: standardMitreisende.results?.map((m) => m.mitreisender_id) || []
+      standard_mitreisende: standardMitreisende.results?.map((m) => m.mitreisender_id) || [],
+      anschaffungsdatum: optionalCalendarYmd(
+        (item as EquipmentItem & { anschaffungsdatum?: unknown }).anschaffungsdatum
+      ),
+      ausgemustert_am: optionalCalendarYmd(
+        (item as EquipmentItem & { ausgemustert_am?: unknown }).ausgemustert_am
+      ),
+      ersetzt_durch_id: item.ersetzt_durch_id ? String(item.ersetzt_durch_id) : null,
     }
   } catch (error) {
     console.error('Error fetching equipment item:', error)
@@ -1812,15 +1830,30 @@ export async function createEquipmentItem(
     mengenregel?: MengenRegel | null
     tags?: string[]
     links?: string[]
+    anschaffungsdatum?: string | null
+    ausgemustert_am?: string | null
+    ersetzt_durch_id?: string | null
+    /** Optional: Client-ID für Offline-Anlegen (sonst Server-UUID) */
+    id?: string
   }
 ): Promise<EquipmentItem | null> {
   try {
-    const id = crypto.randomUUID()
+    const id = item.id?.trim() || crypto.randomUUID()
+    const status = item.status || 'Normal'
+    const anschaffungsdatum = item.anschaffungsdatum
+      ? normalizeCalendarDate(item.anschaffungsdatum)
+      : null
+    const ausgemustertAm =
+      status === 'Ausgemustert'
+        ? item.ausgemustert_am
+          ? normalizeCalendarDate(item.ausgemustert_am)
+          : todayInAppTimezone()
+        : null
     await db
       .prepare(
         `INSERT INTO ausruestungsgegenstaende 
-         (id, was, kategorie_id, transport_id, einzelgewicht, standard_anzahl, status, details, is_standard, erst_abreisetag_gepackt, mitreisenden_typ, in_pauschale_inbegriffen, mengenregel) 
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+         (id, was, kategorie_id, transport_id, einzelgewicht, standard_anzahl, status, details, is_standard, erst_abreisetag_gepackt, mitreisenden_typ, in_pauschale_inbegriffen, mengenregel, anschaffungsdatum, ausgemustert_am, ersetzt_durch_id) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .bind(
         id,
@@ -1829,13 +1862,16 @@ export async function createEquipmentItem(
         item.transport_id || null,
         item.einzelgewicht || 0,
         item.standard_anzahl || 1,
-        item.status || 'Normal',
+        status,
         item.details || '',
         item.is_standard ? 1 : 0,
         item.erst_abreisetag_gepackt ? 1 : 0,
         item.mitreisenden_typ || 'pauschal',
         item.in_pauschale_inbegriffen ? 1 : 0,
-        serializeRegel(item.mengenregel)
+        serializeRegel(item.mengenregel),
+        anschaffungsdatum,
+        ausgemustertAm,
+        item.ersetzt_durch_id || null
       )
       .run()
 
@@ -1892,9 +1928,13 @@ export async function updateEquipmentItem(
     mengenregel?: MengenRegel | null
     tags?: string[]
     links?: string[]
+    anschaffungsdatum?: string | null
+    ausgemustert_am?: string | null
+    ersetzt_durch_id?: string | null
   }
 ): Promise<EquipmentItem | null> {
   try {
+    const existing = await getEquipmentItem(db, id)
     const fields: string[] = []
     const values: (string | number | null)[] = []
 
@@ -1921,6 +1961,34 @@ export async function updateEquipmentItem(
     if (updates.status !== undefined) {
       fields.push('status = ?')
       values.push(updates.status)
+      if (updates.status === 'Ausgemustert') {
+        const nextDate =
+          updates.ausgemustert_am !== undefined && updates.ausgemustert_am
+            ? normalizeCalendarDate(updates.ausgemustert_am)
+            : existing?.status === 'Ausgemustert' && existing.ausgemustert_am
+              ? existing.ausgemustert_am
+              : todayInAppTimezone()
+        fields.push('ausgemustert_am = ?')
+        values.push(nextDate)
+      } else {
+        fields.push('ausgemustert_am = ?')
+        values.push(null)
+      }
+    } else if (updates.ausgemustert_am !== undefined) {
+      fields.push('ausgemustert_am = ?')
+      values.push(
+        updates.ausgemustert_am ? normalizeCalendarDate(updates.ausgemustert_am) : null
+      )
+    }
+    if (updates.anschaffungsdatum !== undefined) {
+      fields.push('anschaffungsdatum = ?')
+      values.push(
+        updates.anschaffungsdatum ? normalizeCalendarDate(updates.anschaffungsdatum) : null
+      )
+    }
+    if (updates.ersetzt_durch_id !== undefined) {
+      fields.push('ersetzt_durch_id = ?')
+      values.push(updates.ersetzt_durch_id)
     }
     if (updates.details !== undefined) {
       fields.push('details = ?')
@@ -1994,6 +2062,28 @@ export async function updateEquipmentItem(
     console.error('Error updating equipment item:', error)
     return null
   }
+}
+
+/** Packlisten-Vorlagen: alten Gegenstand durch Nachfolger ersetzen. */
+export async function replaceEquipmentInVorlagen(
+  db: D1Database,
+  sourceId: string,
+  successorId: string
+): Promise<void> {
+  const rows = await db
+    .prepare('SELECT vorlage_id FROM vorlagen_eintraege WHERE gegenstand_id = ?')
+    .bind(sourceId)
+    .all<{ vorlage_id: string }>()
+  for (const row of rows.results || []) {
+    await db
+      .prepare('DELETE FROM vorlagen_eintraege WHERE vorlage_id = ? AND gegenstand_id = ?')
+      .bind(row.vorlage_id, successorId)
+      .run()
+  }
+  await db
+    .prepare('UPDATE vorlagen_eintraege SET gegenstand_id = ? WHERE gegenstand_id = ?')
+    .bind(successorId, sourceId)
+    .run()
 }
 
 /**

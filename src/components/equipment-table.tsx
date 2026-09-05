@@ -19,7 +19,15 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Search, Filter, Star, MoreVertical, Pencil, Trash2, ExternalLink, Sigma, Wrench } from 'lucide-react'
+import { Search, Filter, Star, MoreVertical, Pencil, Trash2, ExternalLink, Sigma, Wrench, RefreshCw } from 'lucide-react'
+import {
+  anschaffungsjahr,
+  lifecycleYearsFromItems,
+  matchesLifecycleFilter,
+  type LifecycleFilterField,
+  type LifecycleFilterYear,
+} from '@/lib/equipment-lifecycle'
+import { todayInAppTimezone } from '@/lib/app-timezone'
 import { EquipmentItem, Category, MainCategory, TransportVehicle, Tag } from '@/lib/db'
 import type { FaelligkeitAmpelStatus } from '@/lib/faelligkeit-status'
 import { FaelligkeitAmpelBadge } from '@/components/wartung/faelligkeit-ampel-badge'
@@ -39,6 +47,7 @@ interface EquipmentTableProps {
   onDelete: (id: string) => void
   /** Wartung/Fälligkeit für Gegenstand anlegen (Admin) */
   onAddFaelligkeit?: (item: EquipmentItem) => void
+  onReplace?: (item: EquipmentItem) => void
   /** Sichtbare Haupt-/Unterkategorie (Sticky-Banner) für Dropdown-Scroll beim neuen Eintrag */
   onVisibleSectionChange?: (ctx: {
     mainTitle: string | null
@@ -57,7 +66,7 @@ interface EquipmentTableProps {
 const LONG_PRESS_MS = 500
 const LONG_PRESS_MOVE_THRESHOLD = 24
 const LONG_PRESS_MENU_WIDTH = 168
-const LONG_PRESS_MENU_HEIGHT = 80
+const LONG_PRESS_MENU_HEIGHT = 148
 const LONG_PRESS_MENU_PADDING = 8
 
 function clampLongPressMenuPosition(x: number, y: number) {
@@ -78,6 +87,7 @@ export const EquipmentTable = React.memo(({
   onEdit,
   onDelete,
   onAddFaelligkeit,
+  onReplace,
   onVisibleSectionChange,
   readOnly = false,
   dynamicHeight = false,
@@ -92,6 +102,12 @@ export const EquipmentTable = React.memo(({
   const [filterStatus, setFilterStatus] = useState<string[]>(['Normal', 'Immer gepackt'])
   const [filterTag, setFilterTag] = useState<string>('all')
   const [filterStandard, setFilterStandard] = useState<string>('all')
+  const [filterLifecycleYear, setFilterLifecycleYear] = useState<LifecycleFilterYear>('all')
+  const [filterLifecycleField, setFilterLifecycleField] = useState<LifecycleFilterField>('katalog')
+  const lifecycleYears = useMemo(() => {
+    const currentYear = Number(todayInAppTimezone().slice(0, 4))
+    return lifecycleYearsFromItems(equipmentItems, currentYear)
+  }, [equipmentItems])
   const [showFilters, setShowFilters] = useState(false)
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
   const [openLinksMenuId, setOpenLinksMenuId] = useState<string | null>(null)
@@ -204,6 +220,11 @@ export const EquipmentTable = React.memo(({
     }
   }, [filterMainCategory, filterCategory, categories])
 
+  useEffect(() => {
+    if (filterLifecycleYear === 'all' || filterLifecycleField !== 'ausgemustert') return
+    setFilterStatus((prev) => (prev.includes('Ausgemustert') ? prev : [...prev, 'Ausgemustert']))
+  }, [filterLifecycleYear, filterLifecycleField])
+
   // Get transport name by ID
   const getTransportName = (transportId: string | null) => {
     if (!transportId) return '-'
@@ -289,9 +310,13 @@ export const EquipmentTable = React.memo(({
         }
       }
 
+      if (!matchesLifecycleFilter(item, filterLifecycleYear, filterLifecycleField)) {
+        return false
+      }
+
       return true
     })
-  }, [equipmentItems, searchTerm, filterMainCategory, filterCategory, filterTransport, filterStatus, filterTag, filterStandard, getMainCategoryId])
+  }, [equipmentItems, searchTerm, filterMainCategory, filterCategory, filterTransport, filterStatus, filterTag, filterStandard, filterLifecycleYear, filterLifecycleField, getMainCategoryId])
 
   // Group by main category and then by category, sortiert nach reihenfolge (nicht alphabetisch)
   const groupedItems = useMemo(() => {
@@ -727,6 +752,46 @@ export const EquipmentTable = React.memo(({
               </Select>
             </div>
 
+            <div className="flex flex-col gap-2">
+              <Label className="h-5 flex items-center">Jahr</Label>
+              <Select
+                value={filterLifecycleYear === 'all' ? 'all' : String(filterLifecycleYear)}
+                onValueChange={(v) =>
+                  setFilterLifecycleYear(v === 'all' ? 'all' : Number(v))
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Alle Jahre" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Alle Jahre</SelectItem>
+                  {lifecycleYears.map((year) => (
+                    <SelectItem key={year} value={String(year)}>
+                      {year}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <Label className="h-5 flex items-center">Jahr bezieht sich auf</Label>
+              <Select
+                value={filterLifecycleField}
+                onValueChange={(v) => setFilterLifecycleField(v as LifecycleFilterField)}
+                disabled={filterLifecycleYear === 'all'}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="katalog">Angelegt</SelectItem>
+                  <SelectItem value="ausgemustert">Ausgemustert</SelectItem>
+                  <SelectItem value="angeschafft">Angeschafft</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
             <div className="md:col-span-3 flex flex-col gap-2">
               <Label className="h-5 flex items-center">Status (Mehrfachauswahl)</Label>
               <div className="flex flex-wrap gap-3">
@@ -761,7 +826,8 @@ export const EquipmentTable = React.memo(({
               filterTransport !== 'all' ||
               !isDefaultStatusFilter ||
               filterTag !== 'all' ||
-              filterStandard !== 'all') && (
+              filterStandard !== 'all' ||
+              filterLifecycleYear !== 'all') && (
               <Button
                 variant="link"
                 size="sm"
@@ -774,6 +840,8 @@ export const EquipmentTable = React.memo(({
                   setFilterStatus(['Normal', 'Immer gepackt'])
                   setFilterTag('all')
                   setFilterStandard('all')
+                  setFilterLifecycleYear('all')
+                  setFilterLifecycleField('katalog')
                 }}
               >
                 Filter zurücksetzen
@@ -927,6 +995,11 @@ export const EquipmentTable = React.memo(({
                             <span className="w-4" />
                           )}
                           <span>{item.was}</span>
+                          {anschaffungsjahr(item.anschaffungsdatum) ? (
+                            <span className="text-xs text-muted-foreground tabular-nums">
+                              {anschaffungsjahr(item.anschaffungsdatum)}
+                            </span>
+                          ) : null}
                           {(() => {
                             const ampel = faelligkeitAmpelByEquipmentId?.get(item.id)
                             if (!ampel || ampel === 'ok' || ampel === 'nur_info') return null
@@ -1051,6 +1124,17 @@ export const EquipmentTable = React.memo(({
                                     : 'Wartung anlegen'}
                                 </DropdownMenuItem>
                               )}
+                              {onReplace && item.status !== 'Ausgemustert' && (
+                                <DropdownMenuItem
+                                  onSelect={() => {
+                                    setOpenMenuId(null)
+                                    onReplace(item)
+                                  }}
+                                >
+                                  <RefreshCw className="h-4 w-4 mr-2" />
+                                  Ersetzen
+                                </DropdownMenuItem>
+                              )}
                               <DropdownMenuItem
                                 onSelect={() => {
                                   setOpenMenuId(null)
@@ -1126,6 +1210,20 @@ export const EquipmentTable = React.memo(({
                       {faelligkeitIdByEquipmentId?.has(longPressMenuItem.id)
                         ? 'Wartung bearbeiten'
                         : 'Wartung anlegen'}
+                    </button>
+                  )}
+                  {onReplace && longPressMenuItem.status !== 'Ausgemustert' && (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="relative flex w-full cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground"
+                      onClick={() => {
+                        setLongPressMenu(null)
+                        onReplace(longPressMenuItem)
+                      }}
+                    >
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      Ersetzen
                     </button>
                   )}
                   <button

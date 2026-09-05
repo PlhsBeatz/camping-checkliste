@@ -7,8 +7,12 @@ import { EquipmentItemFormFields } from '@/components/equipment/equipment-item-f
 import { Plus, Menu, MoreVertical, Trash2 } from 'lucide-react'
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
-import { EquipmentItem, Category, MainCategory, TransportVehicle, Tag, TagKategorie, Mitreisender } from '@/lib/db'
+import { EquipmentItem, Category, MainCategory, TransportVehicle, Tag, TagKategorie, Mitreisender, Faelligkeit } from '@/lib/db'
 import type { FaelligkeitAmpelStatus } from '@/lib/faelligkeit-status'
+import type { EquipmentFaelligkeitDisposition } from '@/lib/db-wartung'
+import { todayInAppTimezone } from '@/lib/app-timezone'
+import { confirmedAgeNeighbors, shouldShowAngelegtAm } from '@/lib/equipment-age-relevance'
+import { formatAngelegtAm, shouldCopyWeightOnReplace } from '@/lib/equipment-lifecycle'
 import type { ApiResponse } from '@/lib/api-types'
 import { ResponsiveModal } from '@/components/ui/responsive-modal'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
@@ -19,12 +23,14 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { type CategorySelectScrollTarget } from '@/components/category-select-grouped'
-import { cn } from '@/lib/utils'
+import { cn, formatWeightForDisplay } from '@/lib/utils'
 import {
   buildEquipmentApiPayload,
+  equipmentItemFromFormValues,
   buildTagGroupsForEquipment,
   createDefaultEquipmentFormValues,
   equipmentFormValuesFromItem,
+  equipmentFormValuesForReplace,
   mitreisendenZeileAusApi,
   type EquipmentFormValues,
   type MitreisendenZeile,
@@ -51,6 +57,8 @@ import {
   cacheAlternativeGroups,
 } from '@/lib/offline-db'
 import { useReconnectRefetch } from '@/hooks/use-reconnect-refetch'
+import { useOptimisticMutation } from '@/hooks/use-optimistic-mutation'
+import { showQueuedToast } from '@/lib/offline-toast'
 import { useCategorySuggestion } from '@/hooks/use-category-suggestion'
 import {
   formatXorChoice,
@@ -58,6 +66,9 @@ import {
   type AlternativeGroup,
 } from '@/lib/packing-alternatives'
 import { EquipmentAlternativeEditor, type EquipmentAlternativeEditorHandle } from '@/components/equipment-alternative-editor'
+import { EquipmentFaelligkeitDispositionDialog } from '@/components/equipment/equipment-faelligkeit-disposition-dialog'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Label } from '@/components/ui/label'
 
 interface CategoryWithMain extends Category {
   hauptkategorie_titel: string
@@ -68,6 +79,7 @@ export default function AusruestungPage() {
   const pathname = usePathname()
   const { canAccessConfig, canReadWartung, canWriteWartung } = useAuth()
   const canEditEquipment = canAccessConfig
+  const { mutate } = useOptimisticMutation()
   const [showNavSidebar, setShowNavSidebar] = useState(false)
   const [equipmentItems, setEquipmentItems] = useState<EquipmentItem[]>([])
   const [categories, setCategories] = useState<CategoryWithMain[]>([])
@@ -92,6 +104,15 @@ export default function AusruestungPage() {
   const [showAddDialog, setShowAddDialog] = useState(false)
   const [showEditDialog, setShowEditDialog] = useState(false)
   const [editingItem, setEditingItem] = useState<EquipmentItem | null>(null)
+  const [replacingItem, setReplacingItem] = useState<EquipmentItem | null>(null)
+  const [replaceInTemplates, setReplaceInTemplates] = useState(true)
+  const [showWeightCopyPrompt, setShowWeightCopyPrompt] = useState(false)
+  const weightCopyPromptSettledRef = useRef(false)
+  const [wartungDialog, setWartungDialog] = useState<{
+    mode: 'replace' | 'retire'
+    items: Faelligkeit[]
+    sourceName: string
+  } | null>(null)
   const [deleteEquipmentId, setDeleteEquipmentId] = useState<string | null>(null)
   const equipmentVisibleSectionRef = useRef<{ mainTitle: string | null; categoryId: string | null }>({
     mainTitle: null,
@@ -310,6 +331,33 @@ export default function AusruestungPage() {
     () => buildTagGroupsForEquipment(tagKategorien, tags),
     [tagKategorien, tags]
   )
+  const ageNeighbors = useMemo(() => {
+    const excludeId = editingItem?.id ?? replacingItem?.id
+    return confirmedAgeNeighbors(
+      equipmentItems
+        .filter((item) => item.id !== excludeId)
+        .map((item) => ({ was: item.was, anschaffungsdatum: item.anschaffungsdatum }))
+    )
+  }, [editingItem?.id, equipmentItems, replacingItem?.id])
+
+  const editAngelegtHint = useMemo(() => {
+    if (!editingItem) return null
+    const formatted = formatAngelegtAm(editingItem.created_at)
+    if (!formatted) return null
+    const cat = categories.find((c) => c.id === formData.kategorie_id)
+    if (
+      !shouldShowAngelegtAm({
+        name: formData.was,
+        categoryTitle: cat?.titel,
+        mainCategoryTitle: cat?.hauptkategorie_titel,
+        hasAcquisitionDate: Boolean(formData.anschaffungsdatum),
+        neighbors: ageNeighbors,
+      })
+    ) {
+      return null
+    }
+    return `Angelegt ${formatted}`
+  }, [ageNeighbors, categories, editingItem, formData.anschaffungsdatum, formData.kategorie_id, formData.was])
 
   // Fetch Mitreisende
   useEffect(() => {
@@ -342,12 +390,52 @@ export default function AusruestungPage() {
     if (brauchtWeitere) setIndividuelleMitreisendeExtraOffen(true)
   }, [showEditDialog, editingItem, mitreisende])
 
+  useEffect(() => {
+    if (!replacingItem || !showAddDialog) {
+      setShowWeightCopyPrompt(false)
+      return
+    }
+    if (weightCopyPromptSettledRef.current) return
+    if (formData.einzelgewicht.trim()) return
+    if (!replacingItem.einzelgewicht) return
+    if (!shouldCopyWeightOnReplace(replacingItem.details || '', formData.details)) return
+
+    const timer = window.setTimeout(() => {
+      if (weightCopyPromptSettledRef.current) return
+      setShowWeightCopyPrompt(true)
+    }, 500)
+    return () => window.clearTimeout(timer)
+  }, [formData.details, formData.einzelgewicht, replacingItem, showAddDialog])
+
   const resetForm = () => {
     setFormData(createDefaultEquipmentFormValues())
   }
 
+  const loadFaelligkeitenForItem = async (equipmentId: string): Promise<Faelligkeit[]> => {
+    if (!canReadWartung) return []
+    try {
+      const res = await fetch(`/api/faelligkeiten?equipmentId=${encodeURIComponent(equipmentId)}`)
+      const data = (await res.json()) as ApiResponse<Faelligkeit[]>
+      return data.success && data.data ? data.data : []
+    } catch {
+      return []
+    }
+  }
+
+  const refreshEquipmentList = async () => {
+    const itemsRes = await fetch(`/api/equipment-items?_=${Date.now()}`, { cache: 'no-store' })
+    const itemsData = (await itemsRes.json()) as ApiResponse<EquipmentItem[]>
+    if (itemsData.success && itemsData.data) {
+      await syncEquipmentSnapshot(itemsData.data)
+    }
+  }
+
   const handleAddEquipment = () => {
     resetForm()
+    setReplacingItem(null)
+    setReplaceInTemplates(true)
+    weightCopyPromptSettledRef.current = false
+    setShowWeightCopyPrompt(false)
     const { categoryId, mainTitle } = equipmentVisibleSectionRef.current
     let target: CategorySelectScrollTarget | null = null
     if (categoryId) target = { kind: 'categoryRow', categoryId }
@@ -358,10 +446,97 @@ export default function AusruestungPage() {
   }
 
   const handleEditEquipment = (item: EquipmentItem) => {
+    setReplacingItem(null)
     setEditingItem(item)
     setFormData(equipmentFormValuesFromItem(item))
     setShowEditDialog(true)
     void loadAlternativeGroups()
+  }
+
+  const handleReplaceEquipment = (item: EquipmentItem) => {
+    setEditingItem(null)
+    setReplacingItem(item)
+    setReplaceInTemplates(true)
+    weightCopyPromptSettledRef.current = false
+    setShowWeightCopyPrompt(false)
+    setFormData(
+      equipmentFormValuesForReplace(
+        item,
+        confirmedAgeNeighbors(
+          equipmentItems
+            .filter((row) => row.id !== item.id)
+            .map((row) => ({ was: row.was, anschaffungsdatum: row.anschaffungsdatum }))
+        )
+      )
+    )
+    setAddEquipmentCategoryScrollTarget({ kind: 'categoryRow', categoryId: item.kategorie_id })
+    setIndividuelleMitreisendeExtraOffen(false)
+    setShowAddDialog(true)
+  }
+
+  const openRelatedEquipment = (id: string) => {
+    const related = equipmentItems.find((e) => e.id === id)
+    if (!related) return
+    handleEditEquipment(related)
+  }
+
+  const submitReplace = async (disposition: EquipmentFaelligkeitDisposition) => {
+    if (!replacingItem) return
+    setIsSaving(true)
+    try {
+      const successorId = crypto.randomUUID()
+      const payload = {
+        source_id: replacingItem.id,
+        successor_id: successorId,
+        replace_in_templates: replaceInTemplates,
+        wartung_disposition:
+          disposition === 'archive' ? 'keep' : disposition,
+        ...buildEquipmentApiPayload(formData),
+      }
+      const result = await mutate({
+        table: 'equipment-items-replace',
+        action: 'post',
+        key: successorId,
+        payload,
+      })
+      if (!result.ok && !result.queued) {
+        alert('Fehler beim Ersetzen' + (result.error ? `: ${result.error}` : ''))
+        return
+      }
+      if (result.queued) {
+        const successor = equipmentItemFromFormValues(formData, {
+          id: successorId,
+          tagCatalog: tags,
+          kategorieTitel: replacingItem.kategorie_titel,
+          hauptkategorieTitel: replacingItem.hauptkategorie_titel,
+          transportName: replacingItem.transport_name,
+        })
+        const retired: EquipmentItem = {
+          ...replacingItem,
+          status: 'Ausgemustert',
+          ausgemustert_am: replacingItem.ausgemustert_am || todayInAppTimezone(),
+          ersetzt_durch_id: successorId,
+        }
+        await syncEquipmentSnapshot([
+          ...equipmentItems.map((item) => (item.id === retired.id ? retired : item)),
+          successor,
+        ])
+        showQueuedToast({
+          description: 'Ersetzen wird synchronisiert, sobald die Verbindung wieder steht.',
+        })
+      } else {
+        await refreshEquipmentList()
+      }
+      setShowAddDialog(false)
+      setReplacingItem(null)
+      setWartungDialog(null)
+      resetForm()
+    } catch (error) {
+      console.error('Failed to replace equipment:', error)
+      alert('Fehler beim Ersetzen')
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   const handleSaveEquipment = async () => {
@@ -370,33 +545,98 @@ export default function AusruestungPage() {
       return
     }
 
+    if (replacingItem) {
+      const openItems = await loadFaelligkeitenForItem(replacingItem.id)
+      if (openItems.length > 0) {
+        setWartungDialog({
+          mode: 'replace',
+          items: openItems,
+          sourceName: replacingItem.was,
+        })
+        return
+      }
+      await submitReplace('keep')
+      return
+    }
+
     setIsSaving(true)
     try {
-      const payload = buildEquipmentApiPayload(formData)
-
-      const res = await fetch('/api/equipment-items', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+      const clientId = crypto.randomUUID()
+      const result = await mutate({
+        table: 'equipment-items',
+        action: 'post',
+        key: clientId,
+        payload: { id: clientId, ...buildEquipmentApiPayload(formData) },
       })
-      const data = (await res.json()) as ApiResponse<EquipmentItem>
-      
-      if (data.success) {
-        setShowAddDialog(false)
-        resetForm()
-        const itemsRes = await fetch(`/api/equipment-items?_=${Date.now()}`, {
-          cache: 'no-store',
-        })
-        const itemsData = (await itemsRes.json()) as ApiResponse<EquipmentItem[]>
-        if (itemsData.success && itemsData.data) {
-          await syncEquipmentSnapshot(itemsData.data)
-        }
-      } else {
-        alert('Fehler beim Speichern: ' + (data.error ?? 'Unbekannt'))
+      if (!result.ok && !result.queued) {
+        alert('Fehler beim Speichern' + (result.error ? `: ${result.error}` : ''))
+        return
       }
+      if (result.queued) {
+        await syncEquipmentSnapshot([
+          ...equipmentItems,
+          equipmentItemFromFormValues(formData, { id: clientId, tagCatalog: tags }),
+        ])
+        showQueuedToast()
+      } else {
+        await refreshEquipmentList()
+      }
+      setShowAddDialog(false)
+      resetForm()
     } catch (error) {
       console.error('Failed to save equipment:', error)
       alert('Fehler beim Speichern')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const submitUpdateEquipment = async (wartungDisposition?: 'keep' | 'archive') => {
+    if (!editingItem) return
+    setIsSaving(true)
+    try {
+      const xorOk = await alternativeEditorRef.current?.savePending()
+      if (xorOk === false) return
+
+      const payload = {
+        id: editingItem.id,
+        ...buildEquipmentApiPayload(formData),
+        wartung_disposition: wartungDisposition,
+      }
+      const result = await mutate({
+        table: 'equipment-items',
+        action: 'put',
+        key: editingItem.id,
+        payload,
+      })
+      if (!result.ok && !result.queued) {
+        alert('Fehler beim Aktualisieren' + (result.error ? `: ${result.error}` : ''))
+        return
+      }
+      if (result.queued) {
+        const next = equipmentItemFromFormValues(formData, {
+          id: editingItem.id,
+          createdAt: editingItem.created_at,
+          tagCatalog: tags,
+          ersetztDurchId: editingItem.ersetzt_durch_id,
+          kategorieTitel: editingItem.kategorie_titel,
+          hauptkategorieTitel: editingItem.hauptkategorie_titel,
+          transportName: editingItem.transport_name,
+        })
+        await syncEquipmentSnapshot(
+          equipmentItems.map((item) => (item.id === next.id ? next : item))
+        )
+        showQueuedToast()
+      } else {
+        await refreshEquipmentList()
+      }
+      setShowEditDialog(false)
+      setEditingItem(null)
+      setWartungDialog(null)
+      resetForm()
+    } catch (error) {
+      console.error('Failed to update equipment:', error)
+      alert('Fehler beim Aktualisieren')
     } finally {
       setIsSaving(false)
     }
@@ -408,43 +648,19 @@ export default function AusruestungPage() {
       return
     }
 
-    setIsSaving(true)
-    try {
-      const xorOk = await alternativeEditorRef.current?.savePending()
-      if (xorOk === false) return
-
-      const payload = {
-        id: editingItem.id,
-        ...buildEquipmentApiPayload(formData),
-      }
-
-      const res = await fetch('/api/equipment-items', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      })
-      const data = (await res.json()) as ApiResponse<EquipmentItem>
-      
-      if (data.success) {
-        setShowEditDialog(false)
-        setEditingItem(null)
-        resetForm()
-        const itemsRes = await fetch(`/api/equipment-items?_=${Date.now()}`, {
-          cache: 'no-store',
+    if (editingItem.status !== 'Ausgemustert' && formData.status === 'Ausgemustert') {
+      const openItems = await loadFaelligkeitenForItem(editingItem.id)
+      if (openItems.length > 0) {
+        setWartungDialog({
+          mode: 'retire',
+          items: openItems,
+          sourceName: editingItem.was,
         })
-        const itemsData = (await itemsRes.json()) as ApiResponse<EquipmentItem[]>
-        if (itemsData.success && itemsData.data) {
-          await syncEquipmentSnapshot(itemsData.data)
-        }
-      } else {
-        alert('Fehler beim Aktualisieren: ' + (data.error ?? 'Unbekannt'))
+        return
       }
-    } catch (error) {
-      console.error('Failed to update equipment:', error)
-      alert('Fehler beim Aktualisieren')
-    } finally {
-      setIsSaving(false)
     }
+
+    await submitUpdateEquipment()
   }
 
   const handleDeleteEquipment = (equipmentId: string) => {
@@ -457,15 +673,17 @@ export default function AusruestungPage() {
 
     setIsLoading(true)
     try {
-      const res = await fetch(`/api/equipment-items?id=${equipmentId}`, {
-        method: 'DELETE',
+      const result = await mutate({
+        table: 'equipment-items',
+        action: 'delete',
+        key: equipmentId,
       })
-      const data = (await res.json()) as ApiResponse<boolean>
-      if (data.success) {
-        await syncEquipmentSnapshot(equipmentItems.filter((item) => item.id !== equipmentId))
-      } else {
-        alert('Fehler beim Löschen des Gegenstands: ' + (data.error ?? 'Unbekannt'))
+      if (!result.ok && !result.queued) {
+        alert('Fehler beim Löschen des Gegenstands' + (result.error ? `: ${result.error}` : ''))
+        return
       }
+      await syncEquipmentSnapshot(equipmentItems.filter((item) => item.id !== equipmentId))
+      if (result.queued) showQueuedToast()
     } catch (error) {
       console.error('Failed to delete equipment:', error)
       alert('Fehler beim Löschen des Gegenstands')
@@ -580,6 +798,7 @@ export default function AusruestungPage() {
                   tags={tags}
                   onEdit={handleEditEquipment}
                   onDelete={handleDeleteEquipment}
+                  onReplace={canEditEquipment ? handleReplaceEquipment : undefined}
                   onAddFaelligkeit={
                     canWriteWartung
                       ? (item) => {
@@ -628,10 +847,17 @@ export default function AusruestungPage() {
           if (!open) {
             setAddEquipmentCategoryScrollTarget(null)
             setIndividuelleMitreisendeExtraOffen(false)
+            setReplacingItem(null)
+            setShowWeightCopyPrompt(false)
+            weightCopyPromptSettledRef.current = false
           }
         }}
-        title="Neuen Gegenstand hinzufügen"
-        description="Fügen Sie einen neuen Ausrüstungsgegenstand hinzu"
+        title={replacingItem ? `Ersetzen: ${replacingItem.was}` : 'Neuen Gegenstand hinzufügen'}
+        description={
+          replacingItem
+            ? 'Der alte Eintrag wird ausgemustert und mit dem neuen verknüpft. Details und Gewicht bitte neu eintragen.'
+            : 'Fügen Sie einen neuen Ausrüstungsgegenstand hinzu'
+        }
         contentClassName="max-w-2xl max-h-[90vh] overflow-y-auto"
         noPadding
       >
@@ -648,7 +874,22 @@ export default function AusruestungPage() {
             categorySelectScrollTarget={addEquipmentCategoryScrollTarget}
             individuelleMitreisendeExtraOpen={individuelleMitreisendeExtraOffen}
             onIndividuelleMitreisendeExtraOpenChange={setIndividuelleMitreisendeExtraOffen}
+            ageNeighbors={ageNeighbors}
+            lifecycleSessionKey={replacingItem ? `replace:${replacingItem.id}` : 'create'}
           />
+          {replacingItem && (
+            <div className="flex items-start gap-2 rounded-md border px-3 py-2">
+              <Checkbox
+                id="replace-in-templates"
+                checked={replaceInTemplates}
+                onCheckedChange={(c) => setReplaceInTemplates(!!c)}
+                className="mt-0.5"
+              />
+              <Label htmlFor="replace-in-templates" className="cursor-pointer text-sm font-normal">
+                In Packlisten-Vorlagen durch den Nachfolger ersetzen
+              </Label>
+            </div>
+          )}
           {addCategoryLoading && (
             <p className="text-xs text-muted-foreground">Kategorie wird vorgeschlagen…</p>
           )}
@@ -663,7 +904,7 @@ export default function AusruestungPage() {
 
           <div className="flex gap-2 pt-4">
             <Button onClick={handleSaveEquipment} disabled={isSaving} className="flex-1">
-              {isSaving ? 'Speichert...' : 'Speichern'}
+              {isSaving ? 'Speichert...' : replacingItem ? 'Ersetzen' : 'Speichern'}
             </Button>
             <Button variant="outline" onClick={() => setShowAddDialog(false)} disabled={isSaving}>
               Abbrechen
@@ -734,6 +975,11 @@ export default function AusruestungPage() {
           if (!open) setIndividuelleMitreisendeExtraOffen(false)
         }}
         title="Gegenstand bearbeiten"
+        titleAside={
+          editAngelegtHint ? (
+            <span className="text-[11px] font-normal text-muted-foreground">{editAngelegtHint}</span>
+          ) : undefined
+        }
         description="Bearbeiten Sie die Details des Ausrüstungsgegenstands"
         contentClassName="max-w-2xl max-h-[90vh] overflow-y-auto"
         noPadding
@@ -751,25 +997,46 @@ export default function AusruestungPage() {
             individuelleMitreisendeExtraOpen={individuelleMitreisendeExtraOffen}
             onIndividuelleMitreisendeExtraOpenChange={setIndividuelleMitreisendeExtraOffen}
             categorySelectMode="grouped"
+            ersetztDurch={
+              editingItem?.ersetzt_durch_id
+                ? (() => {
+                    const next = equipmentItems.find((e) => e.id === editingItem.ersetzt_durch_id)
+                    return next ? { id: next.id, was: next.was } : null
+                  })()
+                : null
+            }
+            vorgaenger={
+              editingItem
+                ? (() => {
+                    const prev = equipmentItems.find((e) => e.ersetzt_durch_id === editingItem.id)
+                    return prev ? { id: prev.id, was: prev.was } : null
+                  })()
+                : null
+            }
+            onOpenRelatedItem={openRelatedEquipment}
+            ageNeighbors={ageNeighbors}
+            lifecycleSessionKey={editingItem ? `edit:${editingItem.id}` : 'edit'}
+            notesExtra={
+              editingItem ? (
+                <EquipmentAlternativeEditor
+                  ref={alternativeEditorRef}
+                  key={editingItem.id}
+                  currentItem={editingItem}
+                  equipmentItems={equipmentItems}
+                  groups={editingAltGroups}
+                  canEdit={canEditEquipment}
+                  onGroupsChange={(next) => {
+                    setAlternativeGroups((prev) => {
+                      const replaceIds = new Set(editingAltGroups.map((g) => g.id))
+                      const merged = [...prev.filter((g) => !replaceIds.has(g.id)), ...next]
+                      void cacheAlternativeGroups(merged)
+                      return merged
+                    })
+                  }}
+                />
+              ) : null
+            }
           />
-          {editingItem && (
-            <EquipmentAlternativeEditor
-              ref={alternativeEditorRef}
-              key={editingItem.id}
-              currentItem={editingItem}
-              equipmentItems={equipmentItems}
-              groups={editingAltGroups}
-              canEdit={canEditEquipment}
-              onGroupsChange={(next) => {
-                setAlternativeGroups((prev) => {
-                  const replaceIds = new Set(editingAltGroups.map((g) => g.id))
-                  const merged = [...prev.filter((g) => !replaceIds.has(g.id)), ...next]
-                  void cacheAlternativeGroups(merged)
-                  return merged
-                })
-              }}
-            />
-          )}
 
           <div className="flex gap-2 pt-4">
             <Button onClick={handleUpdateEquipment} disabled={isSaving} className="flex-1">
@@ -781,6 +1048,52 @@ export default function AusruestungPage() {
           </div>
         </div>
       </ResponsiveModal>
+
+      <ConfirmDialog
+        open={showWeightCopyPrompt}
+        onOpenChange={(open) => {
+          setShowWeightCopyPrompt(open)
+          if (!open) weightCopyPromptSettledRef.current = true
+        }}
+        title="Gewicht übernehmen?"
+        description={
+          replacingItem?.einzelgewicht
+            ? `Die Details ähneln dem bisherigen Eintrag. Soll das alte Gewicht (${formatWeightForDisplay(replacingItem.einzelgewicht)} kg) übernommen werden?`
+            : 'Die Details ähneln dem bisherigen Eintrag. Soll das alte Gewicht übernommen werden?'
+        }
+        confirmLabel="Übernehmen"
+        cancelLabel="Nicht übernehmen"
+        loadingLabel="Übernimmt…"
+        variant="default"
+        onConfirm={() => {
+          if (!replacingItem?.einzelgewicht) return
+          setFormData((prev) => ({
+            ...prev,
+            einzelgewicht: formatWeightForDisplay(replacingItem.einzelgewicht),
+          }))
+          weightCopyPromptSettledRef.current = true
+        }}
+      />
+
+      <EquipmentFaelligkeitDispositionDialog
+        open={!!wartungDialog}
+        onOpenChange={(open) => {
+          if (!open) setWartungDialog(null)
+        }}
+        mode={wartungDialog?.mode ?? 'retire'}
+        items={wartungDialog?.items ?? []}
+        sourceName={wartungDialog?.sourceName ?? ''}
+        isLoading={isSaving}
+        onConfirm={(disposition) => {
+          if (wartungDialog?.mode === 'replace') {
+            void submitReplace(disposition)
+            return
+          }
+          if (disposition === 'keep' || disposition === 'archive') {
+            void submitUpdateEquipment(disposition)
+          }
+        }}
+      />
     </div>
   )
 }
