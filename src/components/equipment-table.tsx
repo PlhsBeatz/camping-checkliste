@@ -589,11 +589,11 @@ export const EquipmentTable = React.memo(({
     })
   }, [stickyState.main?.name, stickyState.category?.categoryId, onVisibleSectionChange])
 
-  // Feste Spaltenbreiten: was, transport, gewicht, anzahl, status, abreise, gepacktFuer, details, tags, links, actions
+  // Feste Spaltenbreiten: was, transport, gewicht, anzahl, status, abreise, gepacktFuer, details, tags, links, jahr, actions
   // Auf dem Smartphone etwas breitere Tags-Spalte und genügend Platz für Links
   const gridCols = isMobile
-    ? '220px 110px 90px 48px 135px 48px 130px 260px 220px 56px 48px'
-    : '220px 120px 90px 48px 135px 48px 130px 260px 220px 48px 44px'
+    ? '220px 110px 90px 48px 135px 48px 130px 260px 220px 56px 52px 48px'
+    : '220px 120px 90px 48px 135px 48px 130px 260px 220px 48px 52px 44px'
 
   // Spalten-Ausrichtung für saubere vertikale Linien (Header und Body identisch)
   const colAlign = {
@@ -607,6 +607,7 @@ export const EquipmentTable = React.memo(({
     details: 'text-left',
     tags: 'text-left',
     links: 'text-left',
+    jahr: 'text-center',
     actions: 'text-left',
   }
 
@@ -856,8 +857,8 @@ export const EquipmentTable = React.memo(({
         "border rounded-lg min-w-0 bg-card overflow-x-auto overflow-y-hidden",
         dynamicHeight && "flex-1 min-h-0 flex flex-col"
       )}>
-        <div className="flex-1 min-h-0 min-w-0 flex flex-col min-w-[1400px]">
-          <div className="min-w-[1400px] flex flex-col flex-1 min-h-0">
+        <div className="flex-1 min-h-0 min-w-0 flex flex-col min-w-[1450px]">
+          <div className="min-w-[1450px] flex flex-col flex-1 min-h-0">
             {/* Scrollbarer Bereich für Datenzeilen */}
             <div
               ref={parentRef}
@@ -883,6 +884,7 @@ export const EquipmentTable = React.memo(({
                 <div className={`px-4 py-3 font-medium text-sm ${colAlign.details}`}>Details</div>
                 <div className={`px-4 py-3 font-medium text-sm ${colAlign.tags}`}>Tags</div>
                 <div className={`px-4 py-3 font-medium text-sm ${colAlign.links}`}>Links</div>
+                <div className={`px-2 py-3 font-medium text-sm ${colAlign.jahr}`}>Jahr</div>
                 <div className={`px-1 py-3 font-medium text-sm sticky right-0 z-25 bg-muted ${colAlign.actions}`}></div>
               </div>
               {flatRows.length === 0 ? (
@@ -995,11 +997,6 @@ export const EquipmentTable = React.memo(({
                             <span className="w-4" />
                           )}
                           <span>{item.was}</span>
-                          {anschaffungsjahr(item.anschaffungsdatum) ? (
-                            <span className="text-xs text-muted-foreground tabular-nums">
-                              {anschaffungsjahr(item.anschaffungsdatum)}
-                            </span>
-                          ) : null}
                           {(() => {
                             const ampel = faelligkeitAmpelByEquipmentId?.get(item.id)
                             if (!ampel || ampel === 'ok' || ampel === 'nur_info') return null
@@ -1089,6 +1086,9 @@ export const EquipmentTable = React.memo(({
                               </DropdownMenuContent>
                             </DropdownMenu>
                           ) : null}
+                        </div>
+                        <div className={`px-2 py-2 text-sm text-muted-foreground tabular-nums flex items-center justify-center ${colAlign.jahr}`}>
+                          {anschaffungsjahr(item.anschaffungsdatum) ?? ''}
                         </div>
                         <div
                           className={`px-1 py-2 sticky right-0 z-25 flex items-center justify-center bg-card ${colAlign.actions}`}
