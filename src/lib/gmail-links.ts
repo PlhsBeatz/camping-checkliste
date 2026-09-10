@@ -44,12 +44,56 @@ export function isMobileGmailUserAgent(
   return /Android|iPhone|iPad|iPod/i.test(userAgent)
 }
 
+export function isAndroidUserAgent(
+  userAgent = typeof navigator !== 'undefined' ? navigator.userAgent : ''
+): boolean {
+  return /Android/i.test(userAgent)
+}
+
+export function isAppleMobileUserAgent(
+  userAgent = typeof navigator !== 'undefined' ? navigator.userAgent : ''
+): boolean {
+  return /iPhone|iPad|iPod/i.test(userAgent)
+}
+
 /**
- * Auf Smartphones Gmail-App bevorzugt öffnen (Android Intent / iOS URL-Scheme).
- * Auf Desktop bleibt der normale Web-Link unverändert.
+ * Android: Gmail-App über Custom-Scheme (BROWSABLE), inkl. Suchquery.
  *
- * Wichtig Android: Kein `#search/…` vor `#Intent` — das erste `#` startet die
- * Intent-Parameter, die Suchquery ginge sonst verloren (Inbox ohne Filter).
+ * Nicht android.intent.action.SEARCH verwenden – die Activity ist aus Chrome/PWA
+ * nicht BROWSABLE. Chrome fällt dann immer auf S.browser_fallback_url zurück
+ * (= interner Browser), und die #search-Fragmente gehen bei Redirects verloren.
+ */
+export function buildAndroidGmailAppHref(query: string): string {
+  const encodedQuery = encodeURIComponent(query)
+  // Inbox als Fallback (nicht #search-Web-URL – Fragment geht mobil oft verloren)
+  const fallback = encodeURIComponent('https://mail.google.com/mail/u/0/')
+  return (
+    `intent://search?q=${encodedQuery}#Intent;` +
+    `scheme=googlegmail;` +
+    `package=com.google.android.gm;` +
+    `S.browser_fallback_url=${fallback};` +
+    `end`
+  )
+}
+
+/** Android: Gmail-App ohne Suche öffnen (wenn /search nicht verstanden wird). */
+export function buildAndroidGmailLaunchHref(): string {
+  const fallback = encodeURIComponent('https://mail.google.com/mail/u/0/')
+  return (
+    `intent://#Intent;` +
+    `scheme=googlegmail;` +
+    `package=com.google.android.gm;` +
+    `S.browser_fallback_url=${fallback};` +
+    `end`
+  )
+}
+
+export function buildIosGmailAppHref(query: string): string {
+  return `googlegmail:///search?q=${encodeURIComponent(query)}`
+}
+
+/**
+ * Href für den <a>-Tag: Desktop = Web-Link, iOS/Android = App-Deep-Link.
  */
 export function buildGmailMobileHref(
   webUrl: string,
@@ -58,25 +102,38 @@ export function buildGmailMobileHref(
   const query = extractGmailSearchQuery(webUrl)
   if (!query) return webUrl
 
-  const encodedQuery = encodeURIComponent(query)
-  const fallback = encodeURIComponent(webUrl)
-
-  if (/Android/i.test(userAgent)) {
-    // SEARCH + S.query öffnet die App mit der Suche; Fallback = voller Web-Link.
-    return (
-      `intent:#Intent;` +
-      `action=android.intent.action.SEARCH;` +
-      `package=com.google.android.gm;` +
-      `S.query=${encodedQuery};` +
-      `S.browser_fallback_url=${fallback};` +
-      `end`
-    )
+  if (isAndroidUserAgent(userAgent)) {
+    return buildAndroidGmailAppHref(query)
   }
 
-  if (/iPhone|iPad|iPod/i.test(userAgent)) {
-    // Parameter heißt in der Gmail-iOS-App `q`, nicht `query`.
-    return `googlegmail:///search?q=${encodedQuery}`
+  if (isAppleMobileUserAgent(userAgent)) {
+    return buildIosGmailAppHref(query)
   }
 
   return webUrl
+}
+
+export async function copyGmailSearchQuery(query: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(query)
+      return true
+    }
+  } catch {
+    // Fallback unten
+  }
+  try {
+    const ta = document.createElement('textarea')
+    ta.value = query
+    ta.setAttribute('readonly', '')
+    ta.style.position = 'fixed'
+    ta.style.left = '-9999px'
+    document.body.appendChild(ta)
+    ta.select()
+    const ok = document.execCommand('copy')
+    document.body.removeChild(ta)
+    return ok
+  } catch {
+    return false
+  }
 }
