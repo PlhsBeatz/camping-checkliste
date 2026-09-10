@@ -972,7 +972,7 @@ export const EquipmentTable = React.memo(({
 
                     const rowInner = (
                       <div
-                        className="absolute left-0 right-0 grid gap-px bg-card hover:bg-muted/30 border-b border-border/50 isolate select-none touch-manipulation [touch-callout:none]"
+                        className="group absolute left-0 right-0 grid gap-px bg-card hover:bg-muted/30 border-b border-border/50 isolate select-none touch-manipulation [touch-callout:none]"
                         style={{
                           height: size,
                           top: 0,
@@ -1091,7 +1091,7 @@ export const EquipmentTable = React.memo(({
                           {anschaffungsjahr(item.anschaffungsdatum) ?? ''}
                         </div>
                         <div
-                          className={`px-1 py-2 sticky right-0 z-25 flex items-center justify-center bg-card ${colAlign.actions}`}
+                          className={`px-1 py-2 sticky right-0 z-25 flex items-center justify-center bg-card group-hover:[background-color:color-mix(in_srgb,hsl(var(--muted))_30%,hsl(var(--card)))] ${colAlign.actions}`}
                           onPointerDown={(e) => e.stopPropagation()}
                         >
                           {!readOnly && (

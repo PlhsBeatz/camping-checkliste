@@ -19,6 +19,8 @@ import {
 interface PackingSettingsSidebarProps {
   isOpen: boolean
   onClose: () => void
+  /** Am Desktop (lg+) dauerhaft sichtbar – wie die linke Navigation */
+  pinnedOnDesktop?: boolean
   /** Alle Mitreisenden am Urlaub (für Gruppierung) */
   vacationMitreisende: Mitreisender[]
   ownGruppeId: string | null
@@ -116,6 +118,7 @@ function primaryHideReason(hit: PacklistSearchHit): PacklistHideReason | null {
 export function PackingSettingsSidebar({
   isOpen,
   onClose,
+  pinnedOnDesktop = false,
   vacationMitreisende,
   ownGruppeId,
   selectedProfile,
@@ -163,17 +166,22 @@ export function PackingSettingsSidebar({
 
   return (
     <>
+      {/* Overlay nur mobil – am PC ist die Sidebar dauerhaft sichtbar */}
       {isOpen && (
         <div
-          className="fixed inset-0 bg-black/50 z-40"
+          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
           onClick={onClose}
         />
       )}
 
-      <div
+      <aside
         className={cn(
-          'fixed right-0 top-0 h-full w-80 bg-card shadow-xl z-50 transform transition-transform duration-300 ease-in-out flex flex-col',
-          isOpen ? 'translate-x-0' : 'translate-x-full'
+          'fixed right-0 top-0 h-screen w-80 bg-card z-50 transform transition-transform duration-300 ease-in-out flex flex-col shadow-xl lg:shadow-none lg:border-l lg:border-border',
+          isOpen
+            ? 'translate-x-0'
+            : pinnedOnDesktop
+              ? 'translate-x-full lg:translate-x-0'
+              : 'translate-x-full'
         )}
       >
         <div className="p-6 bg-[rgb(45,79,30)] text-white flex-shrink-0">
@@ -183,7 +191,11 @@ export function PackingSettingsSidebar({
               variant="ghost"
               size="icon"
               onClick={onClose}
-              className="text-white hover:bg-white/20 -mr-2"
+              className={cn(
+                'text-white hover:bg-white/20 -mr-2',
+                pinnedOnDesktop && 'lg:hidden'
+              )}
+              aria-label="Schließen"
             >
               <X className="h-5 w-5" />
             </Button>
@@ -418,7 +430,7 @@ export function PackingSettingsSidebar({
             </div>
           </div>
         </ScrollArea>
-      </div>
+      </aside>
 
       <link
         href="https://fonts.googleapis.com/icon?family=Material+Icons"

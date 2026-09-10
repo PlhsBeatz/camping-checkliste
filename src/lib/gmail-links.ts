@@ -10,10 +10,11 @@ export function buildGmailSearchLink(opts: {
   if (opts.messageId) {
     const id = opts.messageId.replace(/^<|>$/g, '').trim()
     if (id) {
-      return `${base}${encodeURIComponent(`rfc822msgid:${id}`)}`
+      // in:anywhere: auch Spam/Papierkorb (wichtig nach Auto-Weiterleitung)
+      return `${base}${encodeURIComponent(`rfc822msgid:${id} in:anywhere`)}`
     }
   }
-  const parts: string[] = []
+  const parts: string[] = ['in:anywhere']
   if (opts.betreff) {
     const subj = opts.betreff.replace(/^(?:Fwd|FW|Wg|Aw):\s*/i, '').trim()
     if (subj) parts.push(`subject:(${subj.slice(0, 80)})`)
@@ -22,23 +23,33 @@ export function buildGmailSearchLink(opts: {
     const from = opts.absender.match(/<([^>]+)>/)?.[1] ?? opts.absender
     if (from.includes('@')) parts.push(`from:(${from})`)
   }
-  if (parts.length === 0) return null
+  if (parts.length <= 1) return null
   return `${base}${encodeURIComponent(parts.join(' '))}`
 }
 
-function extractGmailSearchQuery(webUrl: string): string | null {
-  const match = webUrl.match(/#search\/(.+)$/)
-  if (!match?.[1]) return null
+/** Suchquery aus einem Desktop-Gmail-#search/-Link extrahieren. */
+export function extractGmailSearchQuery(webUrl: string): string | null {
+  const hashMatch = webUrl.match(/#search\/(.+)$/)
+  if (!hashMatch?.[1]) return null
   try {
-    return decodeURIComponent(match[1])
+    return decodeURIComponent(hashMatch[1])
   } catch {
-    return match[1]
+    return hashMatch[1]
   }
+}
+
+export function isMobileGmailUserAgent(
+  userAgent = typeof navigator !== 'undefined' ? navigator.userAgent : ''
+): boolean {
+  return /Android|iPhone|iPad|iPod/i.test(userAgent)
 }
 
 /**
  * Auf Smartphones Gmail-App bevorzugt öffnen (Android Intent / iOS URL-Scheme).
  * Auf Desktop bleibt der normale Web-Link unverändert.
+ *
+ * Wichtig Android: Kein `#search/…` vor `#Intent` — das erste `#` startet die
+ * Intent-Parameter, die Suchquery ginge sonst verloren (Inbox ohne Filter).
  */
 export function buildGmailMobileHref(
   webUrl: string,
@@ -47,13 +58,24 @@ export function buildGmailMobileHref(
   const query = extractGmailSearchQuery(webUrl)
   if (!query) return webUrl
 
+  const encodedQuery = encodeURIComponent(query)
+  const fallback = encodeURIComponent(webUrl)
+
   if (/Android/i.test(userAgent)) {
-    const fallback = encodeURIComponent(webUrl)
-    return `intent://mail.google.com/mail/u/0/#search/${encodeURIComponent(query)}#Intent;scheme=https;action=android.intent.action.VIEW;package=com.google.android.gm;S.browser_fallback_url=${fallback};end`
+    // SEARCH + S.query öffnet die App mit der Suche; Fallback = voller Web-Link.
+    return (
+      `intent:#Intent;` +
+      `action=android.intent.action.SEARCH;` +
+      `package=com.google.android.gm;` +
+      `S.query=${encodedQuery};` +
+      `S.browser_fallback_url=${fallback};` +
+      `end`
+    )
   }
 
   if (/iPhone|iPad|iPod/i.test(userAgent)) {
-    return `googlegmail:///search?query=${encodeURIComponent(query)}`
+    // Parameter heißt in der Gmail-iOS-App `q`, nicht `query`.
+    return `googlegmail:///search?q=${encodedQuery}`
   }
 
   return webUrl

@@ -391,9 +391,11 @@ function HomeContent() {
     addDialogScrollContextRef.current = ctx
   }, [])
 
-  // Sidebar offen: Body-Scroll sperren, damit beim Wischen/Scrollen in der Sidebar die Seite nicht mitscrollt
+  // Sidebar-Overlay mobil: Body-Scroll sperren (am PC sind Nav/Packprofil dauerhaft sichtbar)
   useEffect(() => {
-    const sidebarOpen = showNavSidebar || showPackSettings
+    const isNarrow = () => window.matchMedia('(max-width: 1023px)').matches
+    const sidebarOpen =
+      showNavSidebar || (showPackSettings && isNarrow())
     if (sidebarOpen) {
       document.body.style.overflow = 'hidden'
       document.documentElement.style.overflow = 'hidden'
@@ -3551,7 +3553,13 @@ function HomeContent() {
           isOpen={showNavSidebar}
           onClose={() => setShowNavSidebar(false)}
         />
-        <div className={cn('flex-1 transition-all duration-300 min-w-0', 'lg:ml-[280px]')}>
+        <div
+          className={cn(
+            'flex-1 transition-all duration-300 min-w-0',
+            'lg:ml-[280px]',
+            currentVacation && 'lg:mr-80'
+          )}
+        >
           <div className="min-w-0 h-full">
             <Card>
               <CardContent className="pt-6">
@@ -3572,10 +3580,11 @@ function HomeContent() {
         onClose={() => setShowNavSidebar(false)}
       />
 
-      {/* Main Content Area */}
+      {/* Main Content Area – am PC Platz für linke Nav und (bei Urlaub) rechte Packprofil-Sidebar */}
       <div className={cn(
         "flex-1 transition-all duration-300 min-w-0",
-        "lg:ml-[280px]"
+        "lg:ml-[280px]",
+        currentVacation && "lg:mr-80"
       )}>
         <div className={cn("min-w-0 bg-scroll-pattern", currentVacation ? "h-dvh overflow-hidden flex flex-col" : "h-full")}>
           {/* Vacation Selected */}
@@ -4032,10 +4041,11 @@ function HomeContent() {
         </div>
       </div>
 
-      {/* Pack Settings Sidebar (Rechts) – Kind/Gast nur eigenes Profil */}
+      {/* Pack Settings Sidebar (Rechts) – Kind/Gast nur eigenes Profil; am PC bei Urlaub dauerhaft sichtbar */}
       <PackingSettingsSidebar
         isOpen={showPackSettings}
         onClose={() => setShowPackSettings(false)}
+        pinnedOnDesktop={!!currentVacation}
         vacationMitreisende={sidebarVacationMitreisende}
         ownGruppeId={ownGruppeId}
         selectedProfile={selectedPackProfile}
@@ -4061,7 +4071,7 @@ function HomeContent() {
 
       {/* FAB: Gegenstände hinzufügen – Admin/Erwachsene (Kinder: nur abhaken, nicht Struktur ändern) */}
       {currentVacation && canSelectOtherProfiles && !bulkSelectionActive && (
-        <div className="fixed bottom-6 right-6 z-30">
+        <div className="fixed bottom-6 right-6 z-30 lg:right-[calc(20rem+1.5rem)]">
           <Button
             size="icon"
             onClick={() => setShowAddItemDialog(true)}
