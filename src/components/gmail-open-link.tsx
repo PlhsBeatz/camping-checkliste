@@ -4,6 +4,7 @@ import { useEffect, useState, type MouseEventHandler, type ReactNode } from 'rea
 import { useToast } from '@/hooks/use-toast'
 import {
   buildAndroidGmailLaunchHref,
+  buildAndroidGmailMailtoForceHref,
   buildGmailMobileHref,
   buildIosGmailAppHref,
   copyGmailSearchQuery,
@@ -11,6 +12,7 @@ import {
   isAndroidUserAgent,
   isAppleMobileUserAgent,
   isMobileGmailUserAgent,
+  navigateToIntentUrl,
 } from '@/lib/gmail-links'
 import { cn } from '@/lib/utils'
 
@@ -23,10 +25,11 @@ type Props = {
 
 /**
  * Gmail-Link – auf dem Smartphone die native Gmail-App öffnen (nicht den
- * PWA-internen Browser / Custom Tab), mit korrekter Suchquery.
+ * PWA-internen Browser / Custom Tab).
  *
- * Android: Custom-Scheme-Intent + Suchbegriff in die Zwischenablage
- * (Web-#search fällt in Custom Tabs oft ohne Query auf die Inbox zurück).
+ * Android: https-App-Link Intent auf mail.google.com (ohne Web-Fallback) +
+ * Suchbegriff in die Zwischenablage. Der Intent kommt vom echten <a>-Klick
+ * (Chrome verlangt User-Gesture + BROWSABLE).
  */
 export function GmailOpenLink({ webHref, className, children, onClick }: Props) {
   const { toast } = useToast()
@@ -46,24 +49,30 @@ export function GmailOpenLink({ webHref, className, children, onClick }: Props) 
     const query = extractGmailSearchQuery(webHref)
 
     if (isAndroidUserAgent(ua)) {
-      // Kein preventDefault: Chrome muss den Intent aus dem echten <a>-Klick starten.
+      // Kein preventDefault: Chrome startet den Intent nur zuverlässig aus dem
+      // echten <a href="intent:…">-Klick (href ist bereits der App-Link).
       if (query) {
         void copyGmailSearchQuery(query).then((copied) => {
           if (!copied) return
           toast({
             title: 'Suchbegriff kopiert',
             description:
-              'Gmail öffnet sich. Suche dort ggf. einfügen (langer Druck → Einfügen).',
+              'In Gmail: Suche öffnen und einfügen (langer Druck → Einfügen).',
           })
         })
       }
 
       const started = Date.now()
       window.setTimeout(() => {
-        if (document.hidden || Date.now() - started > 2000) return
-        // /search evtl. nicht verstanden → App ohne Suche starten
-        window.location.href = buildAndroidGmailLaunchHref()
-      }, 900)
+        if (document.hidden || Date.now() - started > 2500) return
+        navigateToIntentUrl(buildAndroidGmailLaunchHref())
+      }, 800)
+
+      window.setTimeout(() => {
+        if (document.hidden || Date.now() - started > 3500) return
+        // App-Links deaktiviert → mailto öffnet Gmail trotzdem nativ
+        navigateToIntentUrl(buildAndroidGmailMailtoForceHref())
+      }, 1600)
       return
     }
 

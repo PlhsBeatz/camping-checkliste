@@ -57,34 +57,43 @@ export function isAppleMobileUserAgent(
 }
 
 /**
- * Android: Gmail-App über Custom-Scheme (BROWSABLE), inkl. Suchquery.
+ * Android: Gmail-App über verifizierte App Links.
  *
- * Nicht android.intent.action.SEARCH verwenden – die Activity ist aus Chrome/PWA
- * nicht BROWSABLE. Chrome fällt dann immer auf S.browser_fallback_url zurück
- * (= interner Browser), und die #search-Fragmente gehen bei Redirects verloren.
+ * mail.google.com → com.google.android.gm (assetlinks.json).
+ *
+ * - `#search/…` steht absichtlich VOR `#Intent;` (parseUri sucht nur `#Intent;`).
+ * - Kein `S.browser_fallback_url` auf mail.google.com: sonst öffnet Chrome bei
+ *   jedem Fehlschlag den internen Browser statt die App.
+ * - `googlegmail://` ist auf Android meist nicht BROWSABLE → wirkungslos.
  */
 export function buildAndroidGmailAppHref(query: string): string {
   const encodedQuery = encodeURIComponent(query)
-  // Inbox als Fallback (nicht #search-Web-URL – Fragment geht mobil oft verloren)
-  const fallback = encodeURIComponent('https://mail.google.com/mail/u/0/')
   return (
-    `intent://search?q=${encodedQuery}#Intent;` +
-    `scheme=googlegmail;` +
-    `package=com.google.android.gm;` +
-    `S.browser_fallback_url=${fallback};` +
-    `end`
+    `intent://mail.google.com/mail/u/0/#search/${encodedQuery}` +
+    `#Intent;scheme=https;action=android.intent.action.VIEW;` +
+    `category=android.intent.category.BROWSABLE;` +
+    `package=com.google.android.gm;end`
   )
 }
 
-/** Android: Gmail-App ohne Suche öffnen (wenn /search nicht verstanden wird). */
+/** Android: Gmail-Inbox in der App (ohne Suche). */
 export function buildAndroidGmailLaunchHref(): string {
-  const fallback = encodeURIComponent('https://mail.google.com/mail/u/0/')
   return (
-    `intent://#Intent;` +
-    `scheme=googlegmail;` +
-    `package=com.google.android.gm;` +
-    `S.browser_fallback_url=${fallback};` +
-    `end`
+    `intent://mail.google.com/mail/u/0/` +
+    `#Intent;scheme=https;action=android.intent.action.VIEW;` +
+    `category=android.intent.category.BROWSABLE;` +
+    `package=com.google.android.gm;end`
+  )
+}
+
+/**
+ * Harter Fallback: mailto ist bei Gmail zuverlässig BROWSABLE und öffnet die
+ * native App (Compose). Nutzer kann zurück zur Inbox und Suche einfügen.
+ */
+export function buildAndroidGmailMailtoForceHref(): string {
+  return (
+    `intent:#Intent;action=android.intent.action.SENDTO;` +
+    `scheme=mailto;package=com.google.android.gm;end`
   )
 }
 
@@ -111,6 +120,17 @@ export function buildGmailMobileHref(
   }
 
   return webUrl
+}
+
+/** Intent-URL synchron navigieren (User-Gesture bleibt erhalten). */
+export function navigateToIntentUrl(intentUrl: string): void {
+  const a = document.createElement('a')
+  a.href = intentUrl
+  a.rel = 'noopener'
+  // Kein target=_blank – sonst Custom Tab / interner Browser
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
 }
 
 export async function copyGmailSearchQuery(query: string): Promise<boolean> {
