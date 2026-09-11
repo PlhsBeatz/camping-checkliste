@@ -163,9 +163,6 @@ export default function ProfilPage() {
               <CardTitle>Darstellung</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-sm text-muted-foreground mb-3">
-                Wähle Hell, Dunkel oder die Einstellung deines Systems.
-              </p>
               <ThemeToggle className="max-w-xs" />
             </CardContent>
           </Card>
@@ -202,7 +199,7 @@ export default function ProfilPage() {
             </CardHeader>
             <CardContent className="space-y-4 min-w-0">
               <p className="text-sm text-gray-600">
-                Die Heimatadresse wird zur Berechnung von Entfernungen und Fahrzeiten zu Campingplätzen verwendet.
+                Für Entfernung &amp; Fahrzeit.
               </p>
               <div className="space-y-2 min-w-0">
                 <label className="text-sm font-medium text-gray-700" htmlFor="heimat_adresse">
@@ -224,9 +221,6 @@ export default function ProfilPage() {
                   placeholder="z.B. Musterstraße 1, 12345 Musterstadt"
                 />
                 </div>
-                <p className="text-xs text-gray-500">
-                  Wenn Google Places verfügbar ist, werden Koordinaten automatisch ermittelt. Andernfalls wird nur die Adresse gespeichert.
-                </p>
               </div>
               {homeError && (
                 <p className="text-sm text-red-600">

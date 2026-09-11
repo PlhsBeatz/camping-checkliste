@@ -571,11 +571,6 @@ export function VacationEditModal({
           onOpenChange(true)
         }}
         title={isEditing ? 'Urlaub bearbeiten' : 'Neuen Urlaub erstellen'}
-        description={
-          isEditing
-            ? 'Bearbeiten Sie die Details des Urlaubs'
-            : 'Geben Sie die Details für Ihren neuen Urlaub ein'
-        }
         contentClassName="max-w-2xl max-h-[90vh] overflow-y-auto"
       >
         <div className="space-y-4">
@@ -949,11 +944,6 @@ export function VacationEditModal({
                   </PopoverContent>
                 </Popover>
               )}
-              {!newVacationForm.abfahrtdatum && (
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Ohne Angabe gilt das Startdatum als Reisebeginn.
-                </p>
-              )}
             </div>
           </div>
 
@@ -1051,10 +1041,6 @@ export function VacationEditModal({
                     </Command>
                   </DialogContent>
                 </Dialog>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Der erste Campingplatz übernimmt den Reisezeitraum, weitere schließen mit
-                  einer Nacht an. Ein Platz kann mehrfach zugeordnet werden.
-                </p>
               </div>
             </div>
           </div>
@@ -1078,17 +1064,13 @@ export function VacationEditModal({
         open={showVacationSettingsModal}
         onOpenChange={setShowVacationSettingsModal}
         title="Urlaub-Einstellungen"
-        description="Optionale Einstellungen für diesen Urlaub"
         contentClassName="max-w-sm"
       >
         <div className="space-y-4">
           <div>
-            <Label className="text-sm text-muted-foreground">
-              Standardansicht der Packliste
+            <Label className="text-sm text-muted-foreground mb-2 block">
+              Packliste: Dauerausstattung
             </Label>
-            <p className="text-xs text-muted-foreground mt-0.5 mb-2">
-              Ob Dauerausstattung („Immer gepackt“) beim Öffnen der Packliste standardmäßig mit angezeigt wird.
-            </p>
             <div className="segment-toggle-track">
               <button
                 type="button"

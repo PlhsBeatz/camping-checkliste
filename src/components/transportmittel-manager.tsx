@@ -419,10 +419,6 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
   return (
     <div className="space-y-6">
       <div className="space-y-2">
-        <p className="text-sm text-muted-foreground">
-          Verwalten Sie Ihre Transportmittel (z.B. Wohnwagen, Auto). Die Gewichtsangaben werden für
-          die Packlisten-Berechnung verwendet.
-        </p>
         {vehicles.length === 0 ? (
           <p className="text-sm text-muted-foreground text-center py-8 border rounded-lg">
             Noch keine Transportmittel angelegt
@@ -458,11 +454,6 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
         open={showDialog}
         onOpenChange={setShowDialog}
         title={editingVehicle ? 'Transportmittel bearbeiten' : 'Neues Transportmittel'}
-        description={
-          editingVehicle
-            ? 'Ändern Sie die Details des Transportmittels'
-            : 'Erstellen Sie ein neues Transportmittel'
-        }
         contentClassName="max-w-2xl max-h-[90vh] overflow-y-auto"
         noPadding
       >

@@ -684,11 +684,6 @@ export function TagManager({ tagKategorien, tags, onRefresh }: TagManagerProps) 
         open={showDialog}
         onOpenChange={setShowDialog}
         title={editingTag ? 'Label bearbeiten' : 'Neues Label'}
-        description={
-          editingTag
-            ? 'Ändern Sie die Details des Labels'
-            : 'Erstellen Sie ein neues Label für die Packlisten-Generierung'
-        }
       >
         <div className="space-y-4">
           <div>
@@ -754,7 +749,6 @@ export function TagManager({ tagKategorien, tags, onRefresh }: TagManagerProps) 
               placeholder="z.B. 🏖️, 🔥, ⛰️"
               maxLength={2}
             />
-            <p className="text-xs text-muted-foreground mt-1">Ein einzelnes Emoji zur visuellen Darstellung</p>
           </div>
 
           <div>
@@ -784,11 +778,6 @@ export function TagManager({ tagKategorien, tags, onRefresh }: TagManagerProps) 
           }
         }}
         title={editingKategorie ? 'Label-Kategorie bearbeiten' : 'Neue Label-Kategorie'}
-        description={
-          editingKategorie
-            ? 'Ändern Sie den Namen der Kategorie'
-            : 'Gruppieren Sie Labels z. B. nach Zeit, Aktivität oder Reiseziel'
-        }
       >
         <div className="space-y-4">
           <div>

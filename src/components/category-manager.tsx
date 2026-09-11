@@ -668,7 +668,6 @@ export function CategoryManager({
         open={showMainCategoryDialog}
         onOpenChange={setShowMainCategoryDialog}
         title={editingMainCategory ? 'Hauptkategorie bearbeiten' : 'Neue Hauptkategorie'}
-        description={editingMainCategory ? 'Ändern Sie die Hauptkategorie-Details' : 'Erstellen Sie eine neue Hauptkategorie'}
       >
         <div className="space-y-4">
             <div>
@@ -752,7 +751,6 @@ export function CategoryManager({
         open={showCategoryDialog}
         onOpenChange={setShowCategoryDialog}
         title={editingCategory ? 'Kategorie bearbeiten' : 'Neue Kategorie'}
-        description={editingCategory ? 'Ändern Sie die Kategorie-Details' : 'Erstellen Sie eine neue Kategorie'}
       >
         <div className="space-y-4">
             <div>

@@ -622,17 +622,13 @@ function MissingWeightEntryRow({
               <div className="flex items-start gap-2">
                 <RadioGroupItem value="packlist" id={`scope-packlist-${entry.id}`} className="mt-0.5" />
                 <Label htmlFor={`scope-packlist-${entry.id}`} className="font-normal cursor-pointer">
-                  <span className="font-medium block">Nur für diesen Urlaub</span>
-                  <span className="text-xs text-muted-foreground">
-                    Z. B. wenn die Menge diesmal anders ist
-                  </span>
+                  Nur für diesen Urlaub
                 </Label>
               </div>
               <div className="flex items-start gap-2">
                 <RadioGroupItem value="equipment" id={`scope-equipment-${entry.id}`} className="mt-0.5" />
                 <Label htmlFor={`scope-equipment-${entry.id}`} className="font-normal cursor-pointer">
-                  <span className="font-medium block">In Ausrüstung speichern</span>
-                  <span className="text-xs text-muted-foreground">Gilt für alle Urlaube</span>
+                  In Ausrüstung speichern
                 </Label>
               </div>
             </RadioGroup>

@@ -663,11 +663,6 @@ export function CampingplatzEditModal({
           if (!next) closeAndReset()
         }}
         title={editId ? 'Campingplatz bearbeiten' : 'Neuen Campingplatz anlegen'}
-        description={
-          editId
-            ? 'Bearbeiten Sie die Details des Campingplatzes.'
-            : 'Geben Sie die Details für Ihren neuen Campingplatz ein.'
-        }
         contentClassName="max-w-2xl max-h-[90vh] overflow-y-auto"
         noPadding
       >
@@ -746,15 +741,13 @@ export function CampingplatzEditModal({
               id="cp-adresse"
               value={form.adresse}
               onChange={(e) => setForm((prev) => ({ ...prev, adresse: e.target.value }))}
-              placeholder="Straße, Hausnummer, PLZ, Ort (wird bei Namenssuche automatisch gefüllt)"
+              placeholder="Straße, Hausnummer, PLZ, Ort"
               className={cn(reviewFor('adresse') && CHANGED_FIELD_RING)}
             />
           </ChangedField>
-          <div>
-            <Label className="text-muted-foreground text-sm">
-              Tipp: Im Namensfeld tippen und einen Vorschlag wählen – dann werden Adresse, Ort, Land und Koordinaten automatisch gesetzt.
-            </Label>
-          </div>
+          <p className="text-xs text-muted-foreground">
+            Name suchen – Adresse wird übernommen.
+          </p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <ChangedField
               label="Land *"
@@ -876,7 +869,7 @@ export function CampingplatzEditModal({
                 placeholder="https://…?platz={platznummer}"
               />
               <p className="text-xs text-muted-foreground mt-1">
-                Platzhalter <code>{'{platznummer}'}</code> wird durch die Buchungs-Platznummer ersetzt.
+                <code>{'{platznummer}'}</code> = Buchungsplatz.
               </p>
             </div>
             <div>
@@ -951,10 +944,6 @@ export function CampingplatzEditModal({
                 <Label htmlFor="cp-wunsch" className="cursor-pointer font-medium">
                   Auf Wunschliste
                 </Label>
-                <p className="text-xs text-muted-foreground">
-                  Ausgeschlossene Plätze bleiben aktiv (z. B. für die Historie), erscheinen aber nicht
-                  mehr als geplantes Wunschziel.
-                </p>
               </div>
             </div>
             <div className="flex items-start gap-3">
@@ -970,9 +959,6 @@ export function CampingplatzEditModal({
                   <Star className="h-3.5 w-3.5 fill-amber-500 text-amber-500" />
                   Top-Favorit
                 </Label>
-                <p className="text-xs text-muted-foreground">
-                  Besonders empfehlenswerte Plätze – in der Liste hervorgehoben.
-                </p>
               </div>
             </div>
           </div>

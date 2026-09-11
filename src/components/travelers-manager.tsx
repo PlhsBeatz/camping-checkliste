@@ -773,9 +773,6 @@ export function TravelersManager({
         open={showDialog}
         onOpenChange={setShowDialog}
         title={editingTraveler ? 'Mitreisenden bearbeiten' : 'Neuer Mitreisender'}
-        description={editingTraveler 
-          ? 'Ändern Sie die Details des Mitreisenden' 
-          : 'Erstellen Sie einen neuen Mitreisenden'}
         contentClassName="max-w-2xl max-h-[90vh] overflow-y-auto"
         noPadding
       >
@@ -792,9 +789,6 @@ export function TravelersManager({
             {showAssignMeOption && (
               <div className="space-y-2 pt-4">
                 <Label>Benutzer zuordnen</Label>
-                <p className="text-xs text-muted-foreground">
-                  Ordnen Sie Ihr Benutzerkonto diesem Mitreisenden zu, um Ihr Profil mit der Packliste zu verknüpfen.
-                </p>
                 <Button
                   variant="outline"
                   onClick={() => setAssignMeConfirmOpen(true)}
@@ -807,9 +801,6 @@ export function TravelersManager({
             {editingTraveler?.user_id && (
               <div className="space-y-2 pt-4">
                 <Label>Benutzer-Rolle</Label>
-                <p className="text-xs text-muted-foreground">
-                  Die Rolle des zugeordneten Benutzers. Wird beim Speichern übernommen.
-                </p>
                 <Select
                   value={formUserRole}
                   onValueChange={(v) => {
@@ -846,9 +837,6 @@ export function TravelersManager({
                   ))}
                 </SelectContent>
               </Select>
-              <p className="text-xs text-muted-foreground mt-1">
-                Gilt für alle Personen — auch ohne Benutzerkonto oder Einladung.
-              </p>
             </div>
             <div>
               <Label>Personentyp</Label>
@@ -870,9 +858,6 @@ export function TravelersManager({
                   <SelectItem value="kind">Kind</SelectItem>
                 </SelectContent>
               </Select>
-              <p className="text-xs text-muted-foreground mt-1">
-                Steuert Pack-Verhalten (eigenes vs. Haushalts-Profil), unabhängig vom Login.
-              </p>
             </div>
             <div>
               <Label htmlFor="traveler-farbe">Farbe</Label>
@@ -895,11 +880,6 @@ export function TravelersManager({
               (editingTraveler?.user_id && formUserRole === 'standard')) && (
               <div className="space-y-3 pt-4">
                 <Label>Berechtigungen</Label>
-                <p className="text-xs text-muted-foreground">
-                  {form.personentyp === 'kind'
-                    ? 'Einstellungen für Kinder (mit oder ohne eigenes Login).'
-                    : 'Optionale Rechte für Standard-Nutzer.'}
-                </p>
                 <div className="space-y-2">
                   {(form.personentyp === 'kind'
                     ? KIND_BERECHTIGUNG_OPTIONS
@@ -930,11 +910,7 @@ export function TravelersManager({
                       className="mt-0.5 h-4 w-4 shrink-0 text-amber-700 dark:text-amber-300"
                       aria-hidden
                     />
-                    <p>
-                      Diese Person gehört nicht zur Standard-Reisegruppe (nicht bei neuen Urlauben
-                      vorausgewählt). Wartungs- und Optimierungs-Berechtigungen sind für Personen
-                      außerhalb der Kerngruppe unüblich – bitte bewusst setzen.
-                    </p>
+                    <p>Wartung/Optimierung nur bewusst vergeben.</p>
                   </div>
                 )}
               </div>
@@ -971,16 +947,10 @@ export function TravelersManager({
                     <SelectItem value="admin">Admin (Haushalt)</SelectItem>
                   </SelectContent>
                 </Select>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Personentyp „{personentypLabel(inviteTraveler?.personentyp)}“ am Mitreisenden steuert das Pack-Verhalten.
-                </p>
               </div>
               {(inviteTraveler?.personentyp === 'kind' || inviteRole === 'standard') && (
                 <div className="space-y-3 pt-4">
                   <Label>Berechtigungen</Label>
-                  <p className="text-xs text-muted-foreground">
-                    Gelten nach Annahme der Einladung.
-                  </p>
                   <div className="space-y-2">
                     {(inviteTraveler?.personentyp === 'kind'
                       ? KIND_BERECHTIGUNG_OPTIONS
@@ -1008,10 +978,7 @@ export function TravelersManager({
                         className="mt-0.5 h-4 w-4 shrink-0 text-amber-700 dark:text-amber-300"
                         aria-hidden
                       />
-                      <p>
-                        Diese Person gehört nicht zur Standard-Reisegruppe. Wartungs- und
-                        Optimierungs-Berechtigungen bitte nur bewusst vergeben.
-                      </p>
+                      <p>Wartung/Optimierung nur bewusst vergeben.</p>
                     </div>
                   )}
                 </div>
@@ -1044,11 +1011,6 @@ export function TravelersManager({
         open={showGroupDialog}
         onOpenChange={setShowGroupDialog}
         title={editingGroup ? 'Haushalt bearbeiten' : 'Neuer Haushalt'}
-        description={
-          editingGroup
-            ? 'Name und Urlaubs-Vorauswahl des Haushalts ändern'
-            : 'Legen Sie einen weiteren Haushalt für Personen an'
-        }
         contentClassName="max-w-lg"
       >
         <div className="space-y-4 px-6 pt-4 pb-6">
@@ -1073,9 +1035,6 @@ export function TravelersManager({
               <label htmlFor="group-urlaub-default" className="text-sm font-medium cursor-pointer">
                 Bei neuen Urlauben vorauswählen
               </label>
-              <p className="text-xs text-muted-foreground">
-                Personen dieses Haushalts werden standardmäßig neuen Urlauben zugeordnet (Stern-Symbol).
-              </p>
             </div>
           </div>
           <Button onClick={handleSaveGroup} disabled={isLoading} className="w-full">

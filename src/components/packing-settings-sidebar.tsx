@@ -200,9 +200,6 @@ export function PackingSettingsSidebar({
               <X className="h-5 w-5" />
             </Button>
           </div>
-          <p className="text-sm text-white/80 leading-relaxed">
-            Gewähltes Profil steuert das Abhaken der persönlichen Gegenstände.
-          </p>
         </div>
 
         <ScrollArea type="scroll" className="flex-1 min-h-0 bg-card pack-settings-sidebar-scroll">
@@ -396,11 +393,11 @@ export function PackingSettingsSidebar({
                     },
                   ]}
                 />
-                <p className="text-xs text-muted-foreground mt-1.5 min-h-[2.5rem] leading-tight">
-                  {listDisplayMode === 'alles'
-                    ? 'Wohnwagen-Dauerausstattung („Immer gepackt“) mit anzeigen'
-                    : 'Dauerausstattung ausblenden – Abreise-Einträge erscheinen automatisch am Abreisetag'}
-                </p>
+                {listDisplayMode === 'packliste' && (
+                  <p className="text-xs text-muted-foreground mt-1.5 leading-tight">
+                    Abreise-Einträge erscheinen am Abreisetag.
+                  </p>
+                )}
               </div>
 
               <div>
@@ -421,11 +418,6 @@ export function PackingSettingsSidebar({
                     },
                   ]}
                 />
-                <p className="text-xs text-muted-foreground mt-1.5 min-h-[2.5rem] leading-tight">
-                  {hidePackedItems
-                    ? 'Bereits abgehakte Einträge werden ausgeblendet'
-                    : 'Alle Einträge sichtbar, auch bereits abgehakte'}
-                </p>
               </div>
             </div>
           </div>

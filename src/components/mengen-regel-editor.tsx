@@ -95,11 +95,7 @@ export function MengenRegelEditor({
               : 'space-y-3 px-3 pb-3 pt-1'
           }
         >
-          <p className="text-xs text-muted-foreground">
-            Anzahl abhängig von Reisedauer und Kind/Erwachsener automatisch berechnen.
-          </p>
-
-      {/* Preset-Chips */}
+          {/* Preset-Chips */}
       <div className="flex flex-wrap gap-1.5">
         {PRESETS.map((p) => (
           <button

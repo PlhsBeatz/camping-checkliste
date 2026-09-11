@@ -344,7 +344,6 @@ export function AddSingleItemDialog({
       open={open}
       onOpenChange={onOpenChange}
       title="Gegenstand hinzufügen"
-      description="Neuen Eintrag anlegen und zur Packliste hinzufügen"
       contentClassName="max-w-2xl max-h-[90vh] overflow-y-auto"
       noPadding
     >

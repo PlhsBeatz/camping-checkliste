@@ -3807,16 +3807,6 @@ function HomeContent() {
                   ? 'Anzahl für Mitreisenden anpassen'
                   : 'Packlisten-Eintrag bearbeiten'
             }
-            description={
-              editingForMitreisenderId &&
-              packingItems.find((p) => p.id === editingPackingItemId)?.is_temporaer
-                ? 'Bezeichnung, Kategorie sowie für diesen Mitreisenden Anzahl und Transport'
-                : editingForMitreisenderId
-                  ? 'Änderung gilt nur für diesen Mitreisenden'
-                  : packingItems.find((p) => p.id === editingPackingItemId)?.is_temporaer
-                    ? 'Bezeichnung, Kategorie, Anzahl, Gewicht und Bemerkung anpassen'
-                    : 'Anzahl, Gewicht (nur dieser Urlaub), Bemerkung und Transport anpassen'
-            }
           >
             <div className="space-y-4">
               {(() => {
@@ -3862,7 +3852,7 @@ function HomeContent() {
                   if (!eq?.mengenregel) return null
                   return (
                     <p className="text-[11px] text-muted-foreground mt-1">
-                      Ursprünglich berechnet aus Regel: {regelKurzLabel(eq.mengenregel)}
+                      Aus Regel: {regelKurzLabel(eq.mengenregel)}
                     </p>
                   )
                 })()}
@@ -3914,29 +3904,14 @@ function HomeContent() {
                         }
                         className="max-w-[180px]"
                       />
-                      {isProfileEdit ? (
-                        <p className="text-xs text-muted-foreground mt-1.5">
-                          {editItem.is_temporaer
-                            ? 'Ohne eigenen Wert gilt das Gewicht der Packliste.'
-                            : inheritedWeight != null && inheritedWeight > 0
-                              ? `Ohne eigenen Wert gilt ${editItem.einzelgewicht_override != null && editItem.einzelgewicht_override > 0 ? 'der Urlaubswert' : 'der Ausrüstungswert'} (${formatWeight(inheritedWeight, 1)}).`
-                              : 'Gilt nur für diese Person.'}
-                        </p>
-                      ) : (
-                        <>
-                          {!editItem.is_temporaer && equipWeight != null && equipWeight > 0 && (
-                            <p className="text-xs text-muted-foreground mt-1.5">
-                              Ausrüstung: {formatWeight(equipWeight, 1)} — wird vorgeschlagen, wenn kein
-                              Urlaubswert gesetzt ist.
-                            </p>
-                          )}
-                          {editItem.is_temporaer && (
-                            <p className="text-xs text-muted-foreground mt-1.5">
-                              Gilt nur für diese Packliste.
-                            </p>
-                          )}
-                        </>
-                      )}
+                      {!isProfileEdit &&
+                        !editItem.is_temporaer &&
+                        equipWeight != null &&
+                        equipWeight > 0 && (
+                          <p className="text-xs text-muted-foreground mt-1.5">
+                            Ausrüstung: {formatWeight(equipWeight, 1)}
+                          </p>
+                        )}
                     </div>
                     {hasOverride && (
                       <div className="rounded-lg border border-amber-200 bg-amber-50/80 dark:bg-amber-950/20 px-3 py-2 space-y-2">
@@ -3998,11 +3973,6 @@ function HomeContent() {
                     ))}
                   </SelectContent>
                 </Select>
-                {editingForMitreisenderId && (
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Gilt nur für diese Person.
-                  </p>
-                )}
               </div>
               <Button onClick={handleUpdatePackingItem} disabled={isLoading} className="w-full">
                 {isLoading ? 'Wird aktualisiert...' : 'Aktualisieren'}

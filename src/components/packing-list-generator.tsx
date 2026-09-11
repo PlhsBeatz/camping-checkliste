@@ -213,7 +213,6 @@ export function PackingListGenerator({
           Packliste automatisch generieren
         </span>
       }
-      description="Wählen Sie Tags aus, um passende Ausrüstungsgegenstände zur Packliste hinzuzufügen"
       contentClassName="max-w-3xl max-h-[90vh] overflow-y-auto"
     >
       <div className="space-y-6">
@@ -237,9 +236,6 @@ export function PackingListGenerator({
                   <span>Standard-Gegenstände immer einschließen</span>
                 </Label>
               </div>
-              <p className="text-xs text-muted-foreground mt-2">
-                Gegenstände, die als Standard markiert sind, werden immer vorgeschlagen
-              </p>
             </CardContent>
           </Card>
 

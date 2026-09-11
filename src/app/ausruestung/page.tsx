@@ -856,7 +856,7 @@ export default function AusruestungPage() {
         description={
           replacingItem
             ? 'Der alte Eintrag wird ausgemustert und mit dem neuen verknüpft. Details und Gewicht bitte neu eintragen.'
-            : 'Fügen Sie einen neuen Ausrüstungsgegenstand hinzu'
+            : undefined
         }
         contentClassName="max-w-2xl max-h-[90vh] overflow-y-auto"
         noPadding
@@ -917,7 +917,7 @@ export default function AusruestungPage() {
         open={showAlternativeGroupsDialog}
         onOpenChange={setShowAlternativeGroupsDialog}
         title="Entweder-oder-Gruppen"
-        description="Beim Packen erscheint ein Hinweis, wenn Gegenstände aus beiden Seiten auf der Liste stehen. Eine Seite kann mehrere Teile sein, die zusammen gehören (z. B. Relaxsessel oder Luftsofa und Hocker)."
+        description="Beim Packen: nur eine Seite wählen."
         contentClassName="max-w-lg"
       >
         {alternativeGroupsLoading ? (
@@ -980,7 +980,6 @@ export default function AusruestungPage() {
             <span className="text-[11px] font-normal text-muted-foreground">{editAngelegtHint}</span>
           ) : undefined
         }
-        description="Bearbeiten Sie die Details des Ausrüstungsgegenstands"
         contentClassName="max-w-2xl max-h-[90vh] overflow-y-auto"
         noPadding
       >
