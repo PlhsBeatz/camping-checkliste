@@ -8,6 +8,8 @@ import { AddSingleItemDialog } from '@/components/add-single-item-dialog'
 import { PackingXorBanner } from '@/components/packing-xor-banner'
 import { NavigationSidebar } from '@/components/navigation-sidebar'
 import { PackingSettingsSidebar } from '@/components/packing-settings-sidebar'
+import { BrandEmptyState } from '@/components/brand-empty-state'
+import { PacklistEmptyIllustration, EMPTY_ILLUSTRATION_CLASS } from '@/components/brand-empty-illustrations'
 import { Plus, Sparkles, Menu, Search, Users } from 'lucide-react'
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { Vacation, PackingItem, TransportVehicle, Mitreisender, EquipmentItem, Category, MainCategory, Rastplatz, VacationCampingStay } from '@/lib/db'
@@ -3675,6 +3677,32 @@ function HomeContent() {
               </div>
 
               {/* Packing List: Progress + Tabs fix oben, Inhalt scrollt */}
+              {packingItems.length === 0 && !packingHadContentRef.current ? (
+                <BrandEmptyState
+                  className="min-h-0"
+                  illustration={
+                    <PacklistEmptyIllustration className={EMPTY_ILLUSTRATION_CLASS} />
+                  }
+                  title="Packliste noch leer"
+                  description={
+                    canSelectOtherProfiles
+                      ? 'Startet mit automatischen Vorschlägen oder fügt Gegenstände manuell hinzu – dann könnt ihr entspannt abhaken.'
+                      : 'Sobald die Liste befüllt ist, erscheinen hier eure Gegenstände zum Abhaken.'
+                  }
+                >
+                  {canSelectOtherProfiles && (
+                    <Button
+                      onClick={() => setShowGeneratorDialog(true)}
+                      size="lg"
+                      className="bg-[rgb(45,79,30)] hover:bg-[rgb(45,79,30)]/90"
+                    >
+                      <Sparkles className="h-4 w-4 mr-2" />
+                      Automatisch generieren
+                    </Button>
+                  )}
+                </BrandEmptyState>
+              ) : (
+                <>
               <PackingXorBanner
                 vacationId={selectedVacationId}
                 packedGegenstandIds={packingItems
@@ -3712,6 +3740,7 @@ function HomeContent() {
                   packProfileScopeMitreisende={packProfileScopeMitreisende}
                   abreiseDatum={abreiseDatumForPacklist}
                   searchQuery={packlistSearchQuery}
+                  onSearchQueryChange={setPacklistSearchQuery}
                   focusItemId={packlistFocusItemId}
                   onFocusItemHandled={handlePacklistFocusItemHandled}
                   onScrollContextChange={handleScrollContextChange}
@@ -3743,6 +3772,8 @@ function HomeContent() {
                   isAdmin={!!user && isAdminRole(user.role)}
                   showUndoToastRef={packListUndoRef}
               />
+                </>
+              )}
 
               <AdminFremdeGruppeWarningDialog
                 open={!!adminForeignWarn}
@@ -3753,27 +3784,6 @@ function HomeContent() {
                 onConfirm={() => adminForeignWarn?.proceed()}
                 onCancel={() => setAdminForeignWarn(null)}
               />
-
-              {/* Auto-generate button - Only when list is empty (Admin/Erwachsene) */}
-              {packingItems.length === 0 && !packingHadContentRef.current && (
-                <div className="p-6 text-center bg-card">
-                  <p className="text-muted-foreground mb-4">
-                    {canSelectOtherProfiles
-                      ? 'Ihre Packliste ist leer. Generieren Sie automatisch Vorschläge oder fügen Sie manuell Gegenstände hinzu.'
-                      : 'Ihre Packliste ist leer.'}
-                  </p>
-                  {canSelectOtherProfiles && (
-                  <Button 
-                    onClick={() => setShowGeneratorDialog(true)}
-                    size="lg"
-                    className="bg-[rgb(45,79,30)] hover:bg-[rgb(45,79,30)]/90"
-                  >
-                    <Sparkles className="h-4 w-4 mr-2" />
-                    Automatisch generieren
-                  </Button>
-                  )}
-                </div>
-              )}
             </div>
           )}
 

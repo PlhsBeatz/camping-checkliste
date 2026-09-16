@@ -5,6 +5,12 @@ import { Button } from '@/components/ui/button'
 import { NavigationSidebar } from '@/components/navigation-sidebar'
 import { VacationEditModal } from '@/components/vacation-edit-modal'
 import { BookingImportDialog } from '@/components/booking-import-dialog'
+import { BrandEmptyState } from '@/components/brand-empty-state'
+import {
+  EMPTY_ILLUSTRATION_CLASS,
+  SearchEmptyIllustration,
+  VacationEmptyIllustration,
+} from '@/components/brand-empty-illustrations'
 import {
   Archive,
   Plus,
@@ -575,17 +581,28 @@ function UrlaubePageContent() {
                 </CardContent>
               </Card>
             ) : displayedVacations.length === 0 ? (
-              <Card>
-                <CardContent className="pt-6">
-                  <p className="text-center text-muted-foreground">
-                    {filterCampingplatzId
-                      ? 'Keine Urlaube mit diesem Campingplatz.'
-                      : canAccessConfig
-                        ? 'Keine Urlaube vorhanden. Erstellen Sie einen neuen Urlaub!'
-                        : 'Keine Urlaube vorhanden.'}
-                  </p>
-                </CardContent>
-              </Card>
+              <BrandEmptyState
+                className="min-h-[40vh]"
+                illustration={
+                  filterCampingplatzId ? (
+                    <SearchEmptyIllustration className={EMPTY_ILLUSTRATION_CLASS} />
+                  ) : (
+                    <VacationEmptyIllustration className={EMPTY_ILLUSTRATION_CLASS} />
+                  )
+                }
+                title={
+                  filterCampingplatzId
+                    ? 'Keine Treffer'
+                    : 'Noch keine Urlaube'
+                }
+                description={
+                  filterCampingplatzId
+                    ? 'Zu diesem Campingplatz gibt es in der aktuellen Ansicht keinen Urlaub.'
+                    : canAccessConfig
+                      ? 'Legt den ersten Trip an – danach könnt ihr Packlisten, Plätze und Mitreisende verknüpfen.'
+                      : 'Sobald Urlaube angelegt sind, erscheinen sie hier.'
+                }
+              />
             ) : (
               displayedVacations.map((vacation) => (
                 <Card

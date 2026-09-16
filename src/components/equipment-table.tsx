@@ -20,6 +20,12 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Search, Filter, Star, MoreVertical, Pencil, Trash2, ExternalLink, Sigma, Wrench, RefreshCw } from 'lucide-react'
+import { BrandEmptyState } from '@/components/brand-empty-state'
+import {
+  EMPTY_ILLUSTRATION_CLASS,
+  GearEmptyIllustration,
+  SearchEmptyIllustration,
+} from '@/components/brand-empty-illustrations'
 import {
   anschaffungsjahr,
   lifecycleYearsFromItems,
@@ -888,9 +894,26 @@ export const EquipmentTable = React.memo(({
                 <div className={`px-1 py-3 font-medium text-sm sticky right-0 z-25 bg-muted ${colAlign.actions}`}></div>
               </div>
               {flatRows.length === 0 ? (
-                <div className="py-16 text-center text-muted-foreground">
-                  Keine Ausrüstungsgegenstände gefunden
-                </div>
+                <BrandEmptyState
+                  className="min-h-[40vh]"
+                  illustration={
+                    equipmentItems.length === 0 ? (
+                      <GearEmptyIllustration className={EMPTY_ILLUSTRATION_CLASS} />
+                    ) : (
+                      <SearchEmptyIllustration className={EMPTY_ILLUSTRATION_CLASS} />
+                    )
+                  }
+                  title={
+                    equipmentItems.length === 0
+                      ? 'Noch keine Ausrüstung'
+                      : 'Keine Treffer'
+                  }
+                  description={
+                    equipmentItems.length === 0
+                      ? 'Legt Gegenstände an – sie bilden die Basis für Packlisten und Wartung.'
+                      : 'Mit den aktuellen Filtern oder der Suche passt kein Gegenstand.'
+                  }
+                />
               ) : (
                 <>
                   {/* Sticky-Bänder Hauptkategorie + Kategorie als native CSS-Sticky.

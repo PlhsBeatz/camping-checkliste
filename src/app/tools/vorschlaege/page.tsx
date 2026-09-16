@@ -3,6 +3,11 @@
 import { Suspense, useCallback, useEffect, useState } from 'react'
 import { NavigationSidebar } from '@/components/navigation-sidebar'
 import { SmartSuggestionCard } from '@/components/smart-suggestion-card'
+import { BrandEmptyState } from '@/components/brand-empty-state'
+import {
+  EMPTY_ILLUSTRATION_CLASS,
+  SuggestionsEmptyIllustration,
+} from '@/components/brand-empty-illustrations'
 import { Button } from '@/components/ui/button'
 import { Menu } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -42,7 +47,7 @@ function VorschlaegePageContent() {
     <div className="min-h-screen flex max-w-full overflow-x-clip">
       <NavigationSidebar isOpen={showNav} onClose={() => setShowNav(false)} />
       <div className={cn('flex-1 min-w-0 transition-all duration-300', 'lg:ml-[280px]')}>
-        <div className="container mx-auto p-4 md:p-6 max-w-full flex flex-col gap-0">
+        <div className="container mx-auto p-4 md:p-6 max-w-full flex flex-col min-h-screen gap-0">
           <div className="sticky top-0 z-30 bg-card shadow pb-4 -mx-4 px-4 -mt-4 pt-4 md:-mx-6 md:px-6 md:-mt-6 md:pt-6 mb-6">
             <div className="flex items-center gap-4 min-w-0">
               <Button
@@ -66,7 +71,13 @@ function VorschlaegePageContent() {
           </div>
 
           {items.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Keine offenen Vorschläge.</p>
+            <BrandEmptyState
+              illustration={
+                <SuggestionsEmptyIllustration className={EMPTY_ILLUSTRATION_CLASS} />
+              }
+              title="Alles im Lot"
+              description="Gerade gibt es nichts zu prüfen. Sobald sich Muster aus euren Packlisten oder Campingplätzen ergeben, erscheinen die Hinweise hier."
+            />
           ) : (
             <div className="grid gap-4 xl:grid-cols-2 min-w-0">
               {items.map((s) => (

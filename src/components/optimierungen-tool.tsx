@@ -27,6 +27,12 @@ import { isOffline, showOfflineToast, showQueuedToast } from '@/lib/offline-toas
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import { BrandEmptyState } from '@/components/brand-empty-state'
+import {
+  EMPTY_ILLUSTRATION_CLASS,
+  IdeaEmptyIllustration,
+  SearchEmptyIllustration,
+} from '@/components/brand-empty-illustrations'
 import { UndoToast } from '@/components/undo-toast'
 import {
   Select,
@@ -401,9 +407,22 @@ export function OptimierungenTool({ headerTrailingRef, canWrite = true }: Optimi
       {loading ? (
         <p className="text-muted-foreground text-sm py-8 text-center">Wird geladen…</p>
       ) : grouped.length === 0 ? (
-        <p className="text-muted-foreground text-sm py-8 text-center">
-          Noch keine Einträge. Mit dem Plus-Button unten rechts eine Idee erfassen.
-        </p>
+        <BrandEmptyState
+          className="min-h-[40vh]"
+          illustration={
+            items.length === 0 ? (
+              <IdeaEmptyIllustration className={EMPTY_ILLUSTRATION_CLASS} />
+            ) : (
+              <SearchEmptyIllustration className={EMPTY_ILLUSTRATION_CLASS} />
+            )
+          }
+          title={items.length === 0 ? 'Noch keine Ideen' : 'Keine Treffer'}
+          description={
+            items.length === 0
+              ? 'Mit dem Plus-Button unten rechts eine Optimierung erfassen – fürs Fahrzeug, Zubehör oder die Reise.'
+              : 'Mit den aktuellen Filtern ist gerade nichts sichtbar. Priorität oder „nur offene“ anpassen hilft.'
+          }
+        />
       ) : (
         <div className="flex flex-col gap-6">
           {grouped.map(({ status, items: groupItems }) => (

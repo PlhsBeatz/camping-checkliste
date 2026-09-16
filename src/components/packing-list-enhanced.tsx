@@ -15,11 +15,18 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { MoreVertical, Edit2, Trash2, RotateCcw, CheckCheck, Check, Clock, ChevronRight } from "lucide-react";
+import { MoreVertical, Edit2, Trash2, RotateCcw, CheckCheck, Check, Clock, ChevronRight, Search, X } from "lucide-react";
 import { useMemo, useState, useEffect, useLayoutEffect, useRef, useCallback, type MutableRefObject } from "react";
 import { PackingItem as DBPackingItem, type Mitreisender, type TransportVehicle } from "@/lib/db";
 import { MarkAllConfirmationDialog, type TravelerForMarkAll } from "./mark-all-confirmation-dialog";
 import { UndoToast } from "./undo-toast";
+import { BrandEmptyState } from "@/components/brand-empty-state";
+import {
+  EMPTY_ILLUSTRATION_CLASS,
+  PacklistSearchEmptyIllustration,
+  SuccessEmptyIllustration,
+} from "@/components/brand-empty-illustrations";
+import { Input } from "@/components/ui/input";
 import { cn, getInitials } from "@/lib/utils";
 import { TransportIcon } from "@/lib/transport-icons";
 import {
@@ -1517,6 +1524,8 @@ interface PackingListProps {
   abreiseDatum?: string | null;
   /** Sidebar-Suche: sichtbare Liste auf Treffer einengen */
   searchQuery?: string;
+  /** Suche ändern/leeren (z. B. Empty State, wenn Sidebar zugeklappt) */
+  onSearchQueryChange?: (query: string) => void;
   /** Nach Sidebar-Treffer: Eintrag kurz hervorheben und hinscrollen */
   focusItemId?: string | null;
   onFocusItemHandled?: () => void;
@@ -1575,6 +1584,7 @@ export function PackingList({
   selectedProfileColor = null,
   abreiseDatum,
   searchQuery = '',
+  onSearchQueryChange,
   focusItemId = null,
   onFocusItemHandled,
   onScrollContextChange,
@@ -2626,35 +2636,77 @@ export function PackingList({
             </Card>
           </div>
         ) : showAllPackedCelebration ? (
-          <div className="flex flex-col items-center justify-center min-h-[50vh] py-12">
-            <Card className="max-w-md w-full border-[rgb(45,79,30)]/20 shadow-lg bg-card/95">
-              <CardContent className="pt-8 pb-8 px-8 text-center">
-                <div className="mx-auto w-16 h-16 rounded-full bg-[rgb(45,79,30)]/10 flex items-center justify-center mb-6">
-                  <CheckCheck className="h-9 w-9 text-brand-heading" />
-                </div>
-                <h2 className="text-xl font-semibold text-brand-heading mb-2">
-                  Alles gepackt!
-                </h2>
-                <p className="text-muted-foreground mb-6">
-                  {canSelectOtherProfiles
-                    ? 'Alle Mitreisenden haben ihre Einträge abgehakt.'
-                    : 'Aus Ihrer aktuellen Sicht sind alle Einträge abgehakt.'}
-                </p>
-                <p className="text-lg font-medium text-brand-heading">
+          <BrandEmptyState
+            className="min-h-[50vh]"
+            illustration={
+              <SuccessEmptyIllustration className={EMPTY_ILLUSTRATION_CLASS} />
+            }
+            title="Alles gepackt!"
+            description={
+              <>
+                {canSelectOtherProfiles
+                  ? 'Alle Mitreisenden haben ihre Einträge abgehakt.'
+                  : 'Aus Ihrer aktuellen Sicht sind alle Einträge abgehakt.'}
+                <span className="mt-3 block text-lg font-medium text-brand-heading">
                   Schönen Urlaub!
-                </p>
-              </CardContent>
-            </Card>
-          </div>
+                </span>
+              </>
+            }
+          />
         ) : showNoSearchResults ? (
-          <div className="flex flex-col items-center justify-center min-h-[40vh] py-12 px-4 text-center">
-            <p className="text-sm text-muted-foreground">
-              Keine Treffer für „{searchQueryTrimmed}“
+          <BrandEmptyState
+            className="min-h-[50vh]"
+            illustration={
+              <PacklistSearchEmptyIllustration className={EMPTY_ILLUSTRATION_CLASS} />
+            }
+            title="Keine Treffer"
+            description={
+              <>
+                Zu „{searchQueryTrimmed}“ ist in der aktuellen Ansicht nichts zu sehen.
+                <span className="mt-1 block text-xs sm:text-sm">
+                  Ausgeblendete Einträge und Filtergründe finden Sie in der Seitenleiste.
+                </span>
+              </>
+            }
+          >
+            {/* Mobil / zugeklappte Sidebar: Suche hier anpassen oder schließen */}
+            {onSearchQueryChange && (
+              <div className="w-full space-y-3 lg:hidden">
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    value={searchQuery}
+                    onChange={(e) => onSearchQueryChange(e.target.value)}
+                    placeholder="Gegenstand suchen…"
+                    className="h-10 bg-card pl-8 pr-8 text-left"
+                    autoComplete="off"
+                    aria-label="Suchbegriff ändern"
+                  />
+                  {searchQuery.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => onSearchQueryChange('')}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                      aria-label="Suche leeren"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => onSearchQueryChange('')}
+                >
+                  Suche schließen
+                </Button>
+              </div>
+            )}
+            <p className="hidden text-xs text-muted-foreground lg:block">
+              Den Suchbegriff können Sie rechts in der Seitenleiste ändern oder leeren.
             </p>
-            <p className="text-xs text-muted-foreground mt-2 max-w-sm">
-              In der Sidebar sehen Sie ggf. ausgeblendete Einträge und den Filtergrund.
-            </p>
-          </div>
+          </BrandEmptyState>
         ) : (
         <>
         {tabsForSwipe.map(mainCat => (

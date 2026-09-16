@@ -4,6 +4,12 @@ import { useState } from 'react'
 import type { Rastplatz } from '@/lib/db'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { BrandEmptyState } from '@/components/brand-empty-state'
+import {
+  EMPTY_ILLUSTRATION_CLASS,
+  PlaceEmptyIllustration,
+  SearchEmptyIllustration,
+} from '@/components/brand-empty-illustrations'
 import {
   Select,
   SelectContent,
@@ -181,13 +187,34 @@ export function RastplaetzeTable({
           </div>
         ))}
         {items.length === 0 && (
-          <p className="text-center text-muted-foreground py-8">
-            {filterBewertung === 'empfehlung'
-              ? 'Keine Empfehlungen gefunden.'
-              : filterBewertung === 'no_go'
-                ? 'Keine No-Gos gefunden.'
-                : 'Keine Rastplätze gefunden.'}
-          </p>
+          <BrandEmptyState
+            className="min-h-[40vh]"
+            illustration={
+              search || filterBewertung !== 'all' || filterKategorie !== 'all' ? (
+                <SearchEmptyIllustration className={EMPTY_ILLUSTRATION_CLASS} />
+              ) : (
+                <PlaceEmptyIllustration className={EMPTY_ILLUSTRATION_CLASS} />
+              )
+            }
+            title={
+              filterBewertung === 'empfehlung'
+                ? 'Keine Empfehlungen'
+                : filterBewertung === 'no_go'
+                  ? 'Keine No-Gos'
+                  : search || filterKategorie !== 'all'
+                    ? 'Keine Treffer'
+                    : 'Noch keine Rastplätze'
+            }
+            description={
+              filterBewertung === 'empfehlung'
+                ? 'Unter diesem Filter gibt es gerade keine Empfehlungen.'
+                : filterBewertung === 'no_go'
+                  ? 'Unter diesem Filter gibt es gerade keine No-Gos.'
+                  : search || filterKategorie !== 'all'
+                    ? 'Mit Suche oder Kategorie-Filter passt aktuell kein Eintrag.'
+                    : 'Sammelt empfehlenswerte Stopps und No-Gos für die nächste Tour.'
+            }
+          />
         )}
       </div>
     </div>

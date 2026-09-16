@@ -26,6 +26,12 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { BrandEmptyState } from '@/components/brand-empty-state'
+import {
+  ChecklistEmptyIllustration,
+  EMPTY_ILLUSTRATION_CLASS,
+  SuccessEmptyIllustration,
+} from '@/components/brand-empty-illustrations'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { ResponsiveModal } from '@/components/ui/responsive-modal'
 import { Label } from '@/components/ui/label'
@@ -45,7 +51,6 @@ import {
 } from '@/components/ui/dropdown-menu'
 import {
   ArrowLeft,
-  CheckCheck,
   Eye,
   EyeOff,
   GripVertical,
@@ -1208,19 +1213,14 @@ export function ChecklistenTool({ onHeaderContextChange, headerTrailingRef }: Ch
             </div>
             <div className="space-y-6">
               {allRunnerErledigt && hideErledigteEinträge ? (
-                <div className="flex flex-col items-center justify-center min-h-[50vh] py-12">
-                  <Card className="max-w-md w-full border-[rgb(45,79,30)]/20 shadow-lg bg-card/95">
-                    <CardContent className="pt-8 pb-8 px-8 text-center">
-                      <div className="mx-auto w-16 h-16 rounded-full bg-[rgb(45,79,30)]/10 flex items-center justify-center mb-6">
-                        <CheckCheck className="h-9 w-9 text-brand-heading" />
-                      </div>
-                      <h2 className="text-xl font-semibold text-brand-heading mb-2">Alles erledigt!</h2>
-                      <p className="text-muted-foreground">
-                        Alle Einträge dieser Checkliste sind abgehakt.
-                      </p>
-                    </CardContent>
-                  </Card>
-                </div>
+                <BrandEmptyState
+                  className="min-h-[50vh]"
+                  illustration={
+                    <SuccessEmptyIllustration className={EMPTY_ILLUSTRATION_CLASS} />
+                  }
+                  title="Alles erledigt!"
+                  description="Alle Einträge dieser Checkliste sind abgehakt."
+                />
               ) : (
                 catsSorted.map(kat => {
                   if (hideErledigteEinträge && !kat.eintraege.some(e => !e.erledigt)) {
@@ -1386,7 +1386,14 @@ export function ChecklistenTool({ onHeaderContextChange, headerTrailingRef }: Ch
       )}
 
       {sortedLists.length === 0 && (
-        <p className="text-sm text-muted-foreground py-8 text-center">Keine Checklisten vorhanden.</p>
+        <BrandEmptyState
+          className="min-h-[40vh]"
+          illustration={
+            <ChecklistEmptyIllustration className={EMPTY_ILLUSTRATION_CLASS} />
+          }
+          title="Noch keine Checklisten"
+          description="Legt Listen für Abfahrt, Ankunft oder Routine an – und nutzt sie unterwegs zum Abhaken."
+        />
       )}
 
       <ResponsiveModal open={newListOpen} onOpenChange={setNewListOpen} title="Neue Checkliste">

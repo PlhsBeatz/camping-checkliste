@@ -51,6 +51,11 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { FabMenuM3 } from '@/components/fab-menu-m3'
+import { BrandEmptyState } from '@/components/brand-empty-state'
+import {
+  EMPTY_ILLUSTRATION_CLASS,
+  TemplateEmptyIllustration,
+} from '@/components/brand-empty-illustrations'
 import { GripVertical, MoreVertical, Pencil, Plus, Trash2, Wrench } from 'lucide-react'
 
 const COMPACT_NUMBER_INPUT =
@@ -550,9 +555,14 @@ export function FaelligkeitVorlagenManager({
       </p>
 
       {items.length === 0 ? (
-        <p className="text-sm text-muted-foreground py-8 text-center">
-          Noch keine Vorlagen vorhanden.
-        </p>
+        <BrandEmptyState
+          className="min-h-[40vh]"
+          illustration={
+            <TemplateEmptyIllustration className={EMPTY_ILLUSTRATION_CLASS} />
+          }
+          title="Noch keine Vorlagen"
+          description="Vorlagen beschleunigen neue Fälligkeiten – einmal anlegen, immer wieder nutzen."
+        />
       ) : (
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <SortableContext items={itemIds} strategy={verticalListSortingStrategy}>

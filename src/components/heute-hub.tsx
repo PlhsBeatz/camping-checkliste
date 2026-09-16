@@ -7,6 +7,11 @@ import { AlertTriangle, Clock, Menu } from 'lucide-react'
 import { NavigationSidebar } from '@/components/navigation-sidebar'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { BrandEmptyState } from '@/components/brand-empty-state'
+import {
+  EMPTY_ILLUSTRATION_CLASS,
+  SuccessEmptyIllustration,
+} from '@/components/brand-empty-illustrations'
 import { Progress } from '@/components/ui/progress'
 import { cn } from '@/lib/utils'
 import type { ApiResponse } from '@/lib/api-types'
@@ -537,21 +542,25 @@ function HeuteHubContent() {
                   ) : null}
                 </section>
               ) : (
-                <Card>
-                  <CardContent className="pt-6 text-center space-y-1">
-                    <p className="font-medium text-brand-heading">Alles aktuell</p>
-                    <p className="text-sm text-muted-foreground">
+                <BrandEmptyState
+                  className="py-10"
+                  illustration={
+                    <SuccessEmptyIllustration className={EMPTY_ILLUSTRATION_CLASS} />
+                  }
+                  title="Alles aktuell"
+                  description={
+                    <>
                       {feed.vacationTile
                         ? `Nächster Urlaub: ${feed.vacationTile.titel}`
                         : 'Keine offenen Aufgaben im Hub.'}
-                    </p>
-                    {feed.snoozedCount > 0 ? (
-                      <p className="text-xs text-muted-foreground">
-                        {feed.snoozedCount} zurückgestellt
-                      </p>
-                    ) : null}
-                  </CardContent>
-                </Card>
+                      {feed.snoozedCount > 0 ? (
+                        <span className="mt-1 block text-xs sm:text-sm">
+                          {feed.snoozedCount} zurückgestellt
+                        </span>
+                      ) : null}
+                    </>
+                  }
+                />
               )}
 
               <nav className="flex flex-wrap gap-2 pb-8">

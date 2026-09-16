@@ -175,23 +175,33 @@ export function SegmentedButtons<T extends string>({
 }
 
 export function PrioritaetIcon({ prio }: { prio: OptimierungPrioritaet }) {
+  const label = `Priorität ${PRIO_LABEL[prio]}`
+  const base =
+    'inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full ring-1'
+
   if (prio === 'hoch') {
     return (
       <span
-        className="inline-flex h-5 shrink-0 items-center justify-center rounded-full bg-red-100 px-1.5 text-red-700 ring-1 ring-red-300/80"
-        title="Priorität hoch"
-        aria-label="Priorität hoch"
+        className={cn(
+          base,
+          'bg-[rgb(230,126,34)]/15 text-[rgb(230,126,34)] ring-[rgb(230,126,34)]/40'
+        )}
+        title={label}
+        aria-label={label}
       >
-        <ChevronsUp className="h-3.5 w-3.5" strokeWidth={2.75} />
+        <ChevronsUp className="h-3 w-3" strokeWidth={2.75} />
       </span>
     )
   }
   if (prio === 'mittel') {
     return (
       <span
-        className="inline-flex h-5 shrink-0 items-center justify-center rounded-full bg-amber-100 px-1.5 text-amber-800"
-        title="Priorität mittel"
-        aria-label="Priorität mittel"
+        className={cn(
+          base,
+          'bg-[rgb(45,79,30)]/10 text-brand-heading ring-[rgb(45,79,30)]/30'
+        )}
+        title={label}
+        aria-label={label}
       >
         <ChevronUp className="h-3 w-3" strokeWidth={2.5} />
       </span>
@@ -199,9 +209,12 @@ export function PrioritaetIcon({ prio }: { prio: OptimierungPrioritaet }) {
   }
   return (
     <span
-      className="inline-flex h-5 shrink-0 items-center justify-center rounded-full bg-slate-100 px-1.5 text-slate-600"
-      title="Priorität niedrig"
-      aria-label="Priorität niedrig"
+      className={cn(
+        base,
+        'bg-muted/80 text-muted-foreground ring-[rgb(45,79,30)]/20'
+      )}
+      title={label}
+      aria-label={label}
     >
       <ChevronDown className="h-3 w-3" strokeWidth={2.5} />
     </span>

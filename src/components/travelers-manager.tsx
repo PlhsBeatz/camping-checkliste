@@ -26,6 +26,11 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Trash2, Star, MoreVertical, Pencil, Mail, Copy, KeyRound, Share2, AlertTriangle } from 'lucide-react'
+import { BrandEmptyState } from '@/components/brand-empty-state'
+import {
+  EMPTY_ILLUSTRATION_CLASS,
+  PeopleEmptyIllustration,
+} from '@/components/brand-empty-illustrations'
 import { Mitreisender, MitreisendenGruppe, Personentyp } from '@/lib/db'
 import type { UserRole } from '@/lib/user-roles'
 import { userRoleLabel, personentypLabel } from '@/lib/user-role-labels'
@@ -763,9 +768,14 @@ export function TravelersManager({
       })}
 
       {travelers.length === 0 && sortedGruppen.length === 0 && (
-        <p className="text-sm text-muted-foreground text-center py-8 border rounded-lg">
-          Noch keine Mitreisenden angelegt
-        </p>
+        <BrandEmptyState
+          className="min-h-[36vh] py-10"
+          illustration={
+            <PeopleEmptyIllustration className={EMPTY_ILLUSTRATION_CLASS} />
+          }
+          title="Noch keine Mitreisenden"
+          description="Legt Personen und Haushalte an – sie steuern Packprofile und Berechtigungen."
+        />
       )}
 
       {/* Create/Edit Dialog – Padding wie Packliste/Ausrüstung (px-6) */}

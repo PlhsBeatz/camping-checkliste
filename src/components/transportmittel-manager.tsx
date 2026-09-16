@@ -20,6 +20,11 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Trash2, Plus, MoreVertical, Pencil, ChevronDown, ChevronRight, Wrench } from 'lucide-react'
+import { BrandEmptyState } from '@/components/brand-empty-state'
+import {
+  EMPTY_ILLUSTRATION_CLASS,
+  TransportEmptyIllustration,
+} from '@/components/brand-empty-illustrations'
 import {
   TransportVehicle,
   TransportVehicleFestgewichtManuell,
@@ -420,9 +425,14 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
     <div className="space-y-6">
       <div className="space-y-2">
         {vehicles.length === 0 ? (
-          <p className="text-sm text-muted-foreground text-center py-8 border rounded-lg">
-            Noch keine Transportmittel angelegt
-          </p>
+          <BrandEmptyState
+            className="min-h-[36vh] py-10"
+            illustration={
+              <TransportEmptyIllustration className={EMPTY_ILLUSTRATION_CLASS} />
+            }
+            title="Noch keine Transportmittel"
+            description="Legt Fahrzeuge oder Anhänger an – für Gewichte, Packstatus und Wartung."
+          />
         ) : (
           <div className="space-y-2">
             {vehicles.map((vehicle) => (

@@ -18,6 +18,12 @@ import {
   type FaelligkeitTimeBlock,
 } from '@/lib/faelligkeit-time-groups'
 import { CheckCircle2, History, MoreVertical, Pencil, Trash2 } from 'lucide-react'
+import { BrandEmptyState } from '@/components/brand-empty-state'
+import {
+  EMPTY_ILLUSTRATION_CLASS,
+  MaintenanceEmptyIllustration,
+  SearchEmptyIllustration,
+} from '@/components/brand-empty-illustrations'
 
 function TimeBlockHeading({ block, count }: { block: FaelligkeitTimeBlock; count: number }) {
   return (
@@ -186,14 +192,26 @@ export function FaelligkeitDashboardView({
   const groups = groupFaelligkeitenByDuePeriod(all)
 
   if (all.length === 0) {
+    const filtered = Boolean(filterTransportId || filterEquipmentId)
     return (
-      <p className="text-sm text-muted-foreground py-8 text-center">
-        {filterTransportId || filterEquipmentId
-          ? 'Keine Fälligkeiten für diese Zuordnung.'
-          : 'Noch keine Fälligkeiten erfasst.'}
-        {!filterTransportId && !filterEquipmentId && canAdmin &&
-          ' Legen Sie einen Eintrag an oder wählen Sie eine Vorlage.'}
-      </p>
+      <BrandEmptyState
+        className="min-h-[40vh]"
+        illustration={
+          filtered ? (
+            <SearchEmptyIllustration className={EMPTY_ILLUSTRATION_CLASS} />
+          ) : (
+            <MaintenanceEmptyIllustration className={EMPTY_ILLUSTRATION_CLASS} />
+          )
+        }
+        title={filtered ? 'Keine Treffer' : 'Noch keine Fälligkeiten'}
+        description={
+          filtered
+            ? 'Für diese Zuordnung gibt es gerade keine Fälligkeiten.'
+            : canAdmin
+              ? 'Legt einen Eintrag an oder wählt eine Vorlage – dann behaltet ihr Wartung und Verbrauch im Blick.'
+              : 'Sobald Fälligkeiten erfasst sind, erscheinen sie hier.'
+        }
+      />
     )
   }
 

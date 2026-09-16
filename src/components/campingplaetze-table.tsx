@@ -5,6 +5,12 @@ import { Campingplatz } from '@/lib/db'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { BrandEmptyState } from '@/components/brand-empty-state'
+import {
+  EMPTY_ILLUSTRATION_CLASS,
+  PlaceEmptyIllustration,
+  SearchEmptyIllustration,
+} from '@/components/brand-empty-illustrations'
 import {
   Select,
   SelectContent,
@@ -785,9 +791,22 @@ export function CampingplaetzeTable({
 
       <div>
         {filtered.length === 0 ? (
-          <div className="py-12 text-center text-muted-foreground">
-            Keine Campingplätze gefunden.
-          </div>
+          <BrandEmptyState
+            className="min-h-[40vh]"
+            illustration={
+              items.length === 0 ? (
+                <PlaceEmptyIllustration className={EMPTY_ILLUSTRATION_CLASS} />
+              ) : (
+                <SearchEmptyIllustration className={EMPTY_ILLUSTRATION_CLASS} />
+              )
+            }
+            title={items.length === 0 ? 'Noch keine Campingplätze' : 'Keine Treffer'}
+            description={
+              items.length === 0
+                ? 'Legt eure Lieblingsplätze an – mit Region, Typ und Notizen für die nächste Reise.'
+                : 'Mit den aktuellen Filtern oder der Suche passt kein Campingplatz. Filter zurücksetzen hilft oft.'
+            }
+          />
         ) : sortMode === 'region' ? (
           <div className="space-y-4">
             {groupedByRegion.map((group) => (
