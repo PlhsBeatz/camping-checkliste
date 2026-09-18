@@ -1,3 +1,4 @@
+import { todayInAppTimezone } from '@/lib/app-timezone'
 import type { PackingItem, Mitreisender } from '@/lib/db'
 import {
   resolveActiveGruppeIdForPacking,
@@ -42,6 +43,18 @@ export function formatPacklistDateDe(ymd: string): string {
 
 export function isImmerGepacktStatus(item: Pick<PackingItem, 'status'>): boolean {
   return String(item.status || '').trim() === 'Immer gepackt'
+}
+
+export function isAusgemustertStatus(item: Pick<PackingItem, 'status'>): boolean {
+  return String(item.status || '').trim() === 'Ausgemustert'
+}
+
+/** Urlaub hat noch nicht begonnen (inklusive Start-/Abreisetag). */
+export function isUpcomingPackingVacation(abreiseDatum?: string | null): boolean {
+  if (!abreiseDatum) return false
+  const ymd = toPacklistYYYYMMDD(abreiseDatum)
+  if (!ymd) return false
+  return ymd >= todayInAppTimezone()
 }
 
 export function getTodayLocalYmd(): string {

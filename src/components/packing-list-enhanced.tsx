@@ -15,7 +15,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { MoreVertical, Edit2, Trash2, RotateCcw, CheckCheck, Check, Clock, ChevronRight, Search, X } from "lucide-react";
+import { MoreVertical, Edit2, Trash2, RotateCcw, CheckCheck, Check, Clock, ChevronRight, Search, X, AlertTriangle } from "lucide-react";
 import { useMemo, useState, useEffect, useLayoutEffect, useRef, useCallback, type MutableRefObject } from "react";
 import { PackingItem as DBPackingItem, type Mitreisender, type TransportVehicle } from "@/lib/db";
 import { MarkAllConfirmationDialog, type TravelerForMarkAll } from "./mark-all-confirmation-dialog";
@@ -76,6 +76,8 @@ import {
   passesProfileScopeFilters,
   isItemFullyPackedForProfile,
   matchesPacklistSearchQuery,
+  isAusgemustertStatus,
+  isUpcomingPackingVacation,
   type ProfileScopeFilterOpts,
 } from '@/lib/packlist-visibility';
 
@@ -164,6 +166,8 @@ interface PackingItemProps {
   packListTabKey?: string;
   /** Kurz hervorheben nach Sidebar-Suchtreffer */
   searchFocusHighlight?: boolean;
+  /** Ausgemusterte Einträge in zukünftigen Urlauben stärker hervorheben */
+  highlightAusgemustert?: boolean;
 }
 
 const PackingItem: React.FC<PackingItemProps> = ({
@@ -213,6 +217,7 @@ const PackingItem: React.FC<PackingItemProps> = ({
   onBulkSelectionStart,
   packListTabKey,
   searchFocusHighlight = false,
+  highlightAusgemustert = false,
 }) => {
   const [showMarkAllDialog, setShowMarkAllDialog] = useState(false);
   const [personListPopoverOpen, setPersonListPopoverOpen] = useState(false);
@@ -1063,10 +1068,14 @@ const PackingItem: React.FC<PackingItemProps> = ({
     return null;
   }
 
+  const isAusgemustert = isAusgemustertStatus(fullItem);
+  const showAusgemustertHighlight = isAusgemustert && highlightAusgemustert;
+
   return (
     <>
       <div
         data-packing-item-id={id}
+        data-ausgemustert={isAusgemustert ? 'true' : undefined}
         className={cn(
           "relative p-4 mb-3 bg-card rounded-xl border shadow-sm transition-colors duration-200 overflow-hidden box-border",
           isExiting && "animate-pack-item-out",
@@ -1074,6 +1083,8 @@ const PackingItem: React.FC<PackingItemProps> = ({
           !isExiting && searchFocusHighlight && "ring-2 ring-[rgb(230,126,34)] border-[rgb(230,126,34)]/50",
           !isExiting && isPackedForOpacity && "opacity-60",
           !bulkSelected && "border-subtle dark:border-white/10",
+          showAusgemustertHighlight && !bulkSelected &&
+            "border-red-400/80 bg-red-50 dark:border-red-500/60 dark:bg-red-950/35",
           bulkSelectionMode && bulkSelectable && !bulkSelected && "border-dashed border-[rgb(45,79,30)]/30",
           bulkSelected &&
             "border-[rgb(45,79,30)]/40 bg-[rgb(237,242,233)] dark:bg-[rgb(38,48,34)] hover:bg-[rgb(229,236,224)] dark:hover:bg-[rgb(42,52,38)]",
@@ -1093,6 +1104,12 @@ const PackingItem: React.FC<PackingItemProps> = ({
         {bulkSelected && (
           <span
             className="pointer-events-none absolute inset-y-0 left-0 w-1 rounded-l-[10px] bg-[rgb(45,79,30)]"
+            aria-hidden
+          />
+        )}
+        {showAusgemustertHighlight && !bulkSelected && (
+          <span
+            className="pointer-events-none absolute inset-y-0 left-0 w-1 rounded-l-[10px] bg-red-500"
             aria-hidden
           />
         )}
@@ -1216,6 +1233,24 @@ const PackingItem: React.FC<PackingItemProps> = ({
                   aria-label="Nur für diese Packliste"
                 >
                   <Clock className="h-3.5 w-3.5" aria-hidden />
+                </span>
+              )}
+              {isAusgemustert && (
+                <span
+                  className={cn(
+                    'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold shrink-0',
+                    showAusgemustertHighlight
+                      ? 'bg-red-600 text-white dark:bg-red-500'
+                      : 'bg-red-100 text-red-800 dark:bg-red-950/70 dark:text-red-200'
+                  )}
+                  title={
+                    showAusgemustertHighlight
+                      ? 'Ausgemustert – für diesen Urlaub noch auf der Packliste'
+                      : 'In der Ausrüstung ausgemustert'
+                  }
+                >
+                  <AlertTriangle className="h-3 w-3" aria-hidden />
+                  Ausgemustert
                 </span>
               )}
               {multiGroupActive &&
@@ -1862,6 +1897,7 @@ export function PackingList({
   }, [selectedProfile, pauschalGruppenFilter, exitBulkSelection]);
 
   const ownGroupMitreisende = profileGroups.ownGroup;
+  const highlightAusgemustert = isUpcomingPackingVacation(abreiseDatum);
 
   /** Inline-Haken vs. „x/y Personen“-Popup: Schwellwert nach eigener Gruppe (Modus „Alle“) */
   const showPersonStatusAsPopover = ownGroupMitreisende.length > 4;
@@ -2788,6 +2824,7 @@ export function PackingList({
                               }
                               packListTabKey={`${activeMainCategory}|${selectedProfile ?? 'alle'}|${pauschalGruppenFilter}`}
                               searchFocusHighlight={highlightedItemId === item.id}
+                              highlightAusgemustert={highlightAusgemustert}
                             />
                           ))}
                       </CardContent>
@@ -2802,12 +2839,14 @@ export function PackingList({
         </div>
       </div>
       {undoToast && (
+        /* Am PC links von der Packprofil-Sidebar (w-80 + right-6) */
         <UndoToast
           isVisible={undoToast.visible}
           itemName={undoToast.itemName}
           message={undoToast.message}
           onUndo={undoToast.action}
           onDismiss={() => setUndoToast(null)}
+          className="lg:right-[calc(20rem+1.5rem)]"
         />
       )}
       {assignmentItem && onSetPauschalGruppen && (

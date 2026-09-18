@@ -18,6 +18,8 @@ export interface UndoToastProps {
   onUndo?: () => void
   onDismiss: () => void
   duration?: number
+  /** Zusätzliche Positionierung (z. B. Abstand zur Packprofil-Sidebar am PC). */
+  className?: string
 }
 
 export function UndoToast({
@@ -26,7 +28,8 @@ export function UndoToast({
   message,
   onUndo,
   onDismiss,
-  duration = 5000
+  duration = 5000,
+  className,
 }: UndoToastProps) {
   const [dragX, setDragX] = useState(0)
   const [isDragging, setIsDragging] = useState(false)
@@ -130,7 +133,10 @@ export function UndoToast({
   return (
     <div
       data-undo-toast
-      className="fixed bottom-6 left-4 right-4 z-50 animate-in slide-in-from-bottom-5 md:left-auto md:right-6 md:max-w-md"
+      className={cn(
+        'fixed bottom-6 left-4 right-4 z-50 animate-in slide-in-from-bottom-5 md:left-auto md:right-6 md:max-w-md',
+        className
+      )}
       onTouchStart={stopTouchPropagation}
       onTouchMove={stopTouchPropagation}
       onTouchEnd={stopTouchPropagation}

@@ -1099,6 +1099,8 @@ export async function getPackingItems(db: D1Database, vacationId: string): Promi
      * LEFT JOIN auf Ausrüstung/Kategorien: fehlende `ausruestungsgegenstaende`-Zeilen (z. B. nach
      * Teilimport) würden mit INNER JOIN die gesamte Packliste „leer“ machen, obwohl
      * `packlisten_eintraege` Daten hat.
+     * Ausgemusterte Gegenstände, die bereits auf der Liste stehen, bleiben sichtbar.
+     * Nur „Fest Installiert“ wird ausgeblendet (fest verbaut, immer dabei).
      */
     const query = `
       SELECT 
@@ -1130,7 +1132,7 @@ export async function getPackingItems(db: D1Database, vacationId: string): Promi
       WHERE p.urlaub_id = ?
         AND (
           ag.id IS NULL
-          OR TRIM(COALESCE(ag.status, 'Normal')) NOT IN ('Ausgemustert', 'Fest Installiert')
+          OR TRIM(COALESCE(ag.status, 'Normal')) != 'Fest Installiert'
         )
       ORDER BY COALESCE(hk.reihenfolge, 9999), COALESCE(k.reihenfolge, 9999), was
     `
@@ -1408,7 +1410,7 @@ export async function getPackingItemsForHub(
       WHERE p.urlaub_id = ?
         AND (
           ag.id IS NULL
-          OR TRIM(COALESCE(ag.status, 'Normal')) NOT IN ('Ausgemustert', 'Fest Installiert')
+          OR TRIM(COALESCE(ag.status, 'Normal')) != 'Fest Installiert'
         )
     `
     const result = await db.prepare(query).bind(vacationId).all<Record<string, unknown>>()
@@ -2749,7 +2751,7 @@ export async function getPackStatus(db: D1Database, vacationId: string): Promise
         JOIN kategorien k ON ag.kategorie_id = k.id
         JOIN hauptkategorien hk ON k.hauptkategorie_id = hk.id
         LEFT JOIN transportmittel t ON pe.transport_id = t.id
-        WHERE pe.packliste_id = ? AND ag.status NOT IN ('Ausgemustert', 'Fest Installiert')
+        WHERE pe.packliste_id = ? AND ag.status != 'Fest Installiert'
           AND COALESCE(ag.in_pauschale_inbegriffen, 0) = 0
           AND (
             (COALESCE(ag.mitreisenden_typ, 'pauschal') = 'pauschal'
@@ -2857,7 +2859,7 @@ export async function getPackStatus(db: D1Database, vacationId: string): Promise
       JOIN kategorien k ON ag.kategorie_id = k.id
       JOIN hauptkategorien hk ON k.hauptkategorie_id = hk.id
       LEFT JOIN packlisten_eintrag_mitreisende pem ON pem.packlisten_eintrag_id = pe.id
-      WHERE pe.packliste_id = ? AND ag.status NOT IN ('Ausgemustert', 'Fest Installiert')
+      WHERE pe.packliste_id = ? AND ag.status != 'Fest Installiert'
       GROUP BY hk.id, hk.titel, hk.reihenfolge
       ORDER BY hk.reihenfolge
     `
