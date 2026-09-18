@@ -127,6 +127,38 @@ export function shouldCopyWeightOnReplace(oldDetails: string, newDetails: string
   return looksLikeSameModel(oldDetails, newDetails)
 }
 
+/** Urlaub ist beendet: Packliste darf beim Ersetzen nicht geändert werden. */
+export function isVacationInPastForEquipmentReplace(
+  vacation: { enddatum?: string | null; startdatum?: string | null },
+  todayYmd = todayInAppTimezone()
+): boolean {
+  const end =
+    normalizeCalendarDate(vacation.enddatum || '') ||
+    normalizeCalendarDate(vacation.startdatum || '')
+  if (!end) return true
+  return end < todayYmd
+}
+
+/**
+ * Packliste eines zukünftigen Urlaubs (Start-/Abreisetag inklusive).
+ * Beendete Urlaube sind immer ausgeschlossen.
+ */
+export function isFutureVacationForEquipmentReplace(
+  vacation: {
+    startdatum?: string | null
+    abfahrtdatum?: string | null
+    enddatum?: string | null
+  },
+  todayYmd = todayInAppTimezone()
+): boolean {
+  if (isVacationInPastForEquipmentReplace(vacation, todayYmd)) return false
+  const start =
+    normalizeCalendarDate(vacation.abfahrtdatum || '') ||
+    normalizeCalendarDate(vacation.startdatum || '')
+  if (!start) return false
+  return start >= todayYmd
+}
+
 export function defaultAnschaffungsdatumOnCreate(): string {
   return todayInAppTimezone()
 }

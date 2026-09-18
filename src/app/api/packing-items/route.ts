@@ -156,11 +156,13 @@ export async function PUT(request: NextRequest) {
       anzahl?: number
       bemerkung?: string | null
       transport_id?: string | null
+      /** Ausgemusterten Gegenstand durch Nachfolger ersetzen */
+      gegenstandId?: string
       /** Umbenennen nur bei temporären Packlisteneinträgen */
       was?: string
       kategorieId?: string
     }
-    const { id, gepackt, anzahl, bemerkung, transport_id, was, kategorieId } = body
+    const { id, gepackt, anzahl, bemerkung, transport_id, gegenstandId, was, kategorieId } = body
 
     if (!id) {
       return NextResponse.json({ error: 'id is required' }, { status: 400 })
@@ -181,12 +183,53 @@ export async function PUT(request: NextRequest) {
       anzahl?: number
       bemerkung?: string | null
       transport_id?: string | null
+      gegenstand_id?: string
       was?: string | null
       kategorie_id?: string | null
     } = {}
     if (anzahl !== undefined) updates.anzahl = anzahl
     if (bemerkung !== undefined) updates.bemerkung = bemerkung
     if (transport_id !== undefined) updates.transport_id = transport_id
+
+    if (gegenstandId !== undefined) {
+      const isTempReplace = await isTemporaryPackingEintrag(db, id)
+      if (isTempReplace) {
+        return NextResponse.json(
+          { error: 'Ersatz nur für Einträge aus der Ausrüstung möglich' },
+          { status: 400 }
+        )
+      }
+      const nextId = typeof gegenstandId === 'string' ? gegenstandId.trim() : ''
+      if (!nextId) {
+        return NextResponse.json({ error: 'gegenstandId ist erforderlich' }, { status: 400 })
+      }
+      const eqRow = await db
+        .prepare('SELECT id FROM ausruestungsgegenstaende WHERE id = ? LIMIT 1')
+        .bind(nextId)
+        .first()
+      if (!eqRow) {
+        return NextResponse.json({ error: 'Ersatz wurde in der Ausrüstung nicht gefunden' }, { status: 404 })
+      }
+      const packRow = await db
+        .prepare('SELECT packliste_id FROM packlisten_eintraege WHERE id = ? LIMIT 1')
+        .bind(id)
+        .first<{ packliste_id: string }>()
+      if (packRow?.packliste_id) {
+        const duplicate = await db
+          .prepare(
+            'SELECT id FROM packlisten_eintraege WHERE packliste_id = ? AND gegenstand_id = ? AND id != ? LIMIT 1'
+          )
+          .bind(packRow.packliste_id, nextId, id)
+          .first()
+        if (duplicate) {
+          return NextResponse.json(
+            { error: 'Ersatz ist bereits auf der Packliste. Diesen Eintrag entfernen.' },
+            { status: 409 }
+          )
+        }
+      }
+      updates.gegenstand_id = nextId
+    }
 
     if (kategorieId !== undefined) {
       const isTempKat = await isTemporaryPackingEintrag(db, id)
@@ -243,6 +286,13 @@ export async function PUT(request: NextRequest) {
       }
     }
     const success = await updatePackingItem(db, id, updates)
+
+    if (!success && gegenstandId !== undefined) {
+      return NextResponse.json(
+        { error: 'Ersatz konnte nicht übernommen werden' },
+        { status: 400 }
+      )
+    }
 
     if (success && vacationId) {
       const cfEnv = (await getCloudflareContext({ async: true })).env as unknown as CloudflareEnv

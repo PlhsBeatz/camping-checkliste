@@ -1,4 +1,3 @@
-import { todayInAppTimezone } from '@/lib/app-timezone'
 import type { PackingItem, Mitreisender } from '@/lib/db'
 import {
   resolveActiveGruppeIdForPacking,
@@ -49,12 +48,86 @@ export function isAusgemustertStatus(item: Pick<PackingItem, 'status'>): boolean
   return String(item.status || '').trim() === 'Ausgemustert'
 }
 
-/** Urlaub hat noch nicht begonnen (inklusive Start-/Abreisetag). */
-export function isUpcomingPackingVacation(abreiseDatum?: string | null): boolean {
-  if (!abreiseDatum) return false
-  const ymd = toPacklistYYYYMMDD(abreiseDatum)
-  if (!ymd) return false
-  return ymd >= todayInAppTimezone()
+const PACKABLE_SUCCESSOR_STATUSES = new Set(['Normal', 'Immer gepackt'])
+
+type EquipmentSuccessorSource = {
+  id: string
+  was: string
+  status?: string | null
+  ersetzt_durch_id?: string | null
+}
+
+function resolvePackableSuccessor(
+  gegenstandId: string,
+  equipmentById: Map<string, EquipmentSuccessorSource>
+): { id: string; was: string } | null {
+  const start = equipmentById.get(gegenstandId)
+  if (!start?.ersetzt_durch_id) return null
+  const seen = new Set<string>([gegenstandId])
+  let nextId: string | null = start.ersetzt_durch_id
+  while (nextId && !seen.has(nextId)) {
+    seen.add(nextId)
+    const next = equipmentById.get(nextId)
+    if (!next) return null
+    const status = String(next.status || '').trim()
+    if (PACKABLE_SUCCESSOR_STATUSES.has(status)) {
+      return { id: next.id, was: next.was }
+    }
+    nextId = next.ersetzt_durch_id ?? null
+  }
+  return null
+}
+
+/** Status und optionalen Nachfolger aus der Ausrüstung auf Packlisten-Einträge legen. */
+export function applyEquipmentStatusToPackingItems(
+  items: PackingItem[],
+  equipment: EquipmentSuccessorSource[]
+): PackingItem[] {
+  if (items.length === 0) return items
+  if (equipment.length === 0) return items
+  const equipmentById = new Map(equipment.map((item) => [item.id, item]))
+  let changed = false
+  const next = items.map((item) => {
+    if (item.is_temporaer || !item.gegenstand_id) return item
+    const eq = equipmentById.get(item.gegenstand_id)
+    const eqStatus = eq ? String(eq.status || '').trim() : ''
+    const successor =
+      eqStatus === 'Ausgemustert' || String(item.status || '').trim() === 'Ausgemustert'
+        ? resolvePackableSuccessor(item.gegenstand_id, equipmentById)
+        : null
+    const nextStatus = eqStatus || String(item.status || '').trim()
+    const nextSuccessorId = successor?.id ?? null
+    const nextSuccessorWas = successor?.was ?? null
+    if (
+      nextStatus === String(item.status || '').trim() &&
+      nextSuccessorId === (item.ersetzt_durch_id ?? null) &&
+      nextSuccessorWas === (item.ersetzt_durch_was ?? null)
+    ) {
+      return item
+    }
+    changed = true
+    return {
+      ...item,
+      status: nextStatus || item.status,
+      ersetzt_durch_id: nextSuccessorId,
+      ersetzt_durch_was: nextSuccessorWas,
+    }
+  })
+  return changed ? next : items
+}
+
+export function formatAusgemustertHint(
+  successorWas: string | null | undefined,
+  successorAlreadyOnList = false
+): string {
+  const name = successorWas?.trim()
+  if (name && successorAlreadyOnList) {
+    return `Ausgemustert – Ersatz „${name}“ ist bereits auf der Liste. Diesen Eintrag von der Packliste entfernen.`
+  }
+  if (name) {
+    return `Ausgemustert – Ersatz in der Ausrüstung: „${name}“.`
+  }
+  return 'Ausgemustert – von der Packliste entfernen.'
 }
 
 export function getTodayLocalYmd(): string {

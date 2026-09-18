@@ -31,7 +31,8 @@ export function packingItemsEqual(a: PackingItem[], b: PackingItem[]): boolean {
         const gewicht = i.einzelgewicht ?? ''
         const gewichtOverride = i.einzelgewicht_override ?? ''
         const ausruestungGewicht = i.ausruestung_einzelgewicht ?? ''
-        return `${i.id}\t${i.gepackt ? 1 : 0}\t${i.gepackt_vorgemerkt ? 1 : 0}\t${i.anzahl}\t${modus}\t${verantwortliche}\t${bemerkung}\t${transportId}\t${was}\t${kategorieId}\t${gewicht}\t${gewichtOverride}\t${ausruestungGewicht}\t${grup}\t${mit}`
+        const status = i.status ?? ''
+        return `${i.id}\t${i.gepackt ? 1 : 0}\t${i.gepackt_vorgemerkt ? 1 : 0}\t${i.anzahl}\t${modus}\t${verantwortliche}\t${bemerkung}\t${transportId}\t${was}\t${kategorieId}\t${gewicht}\t${gewichtOverride}\t${ausruestungGewicht}\t${status}\t${grup}\t${mit}`
       })
       .sort()
       .join('\n')

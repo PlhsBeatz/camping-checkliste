@@ -15,7 +15,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { MoreVertical, Edit2, Trash2, RotateCcw, CheckCheck, Check, Clock, ChevronRight, Search, X, AlertTriangle } from "lucide-react";
+import { MoreVertical, Edit2, Trash2, RotateCcw, CheckCheck, Check, Clock, ChevronRight, Search, X, AlertTriangle, ArrowRightLeft } from "lucide-react";
 import { useMemo, useState, useEffect, useLayoutEffect, useRef, useCallback, type MutableRefObject } from "react";
 import { PackingItem as DBPackingItem, type Mitreisender, type TransportVehicle } from "@/lib/db";
 import { MarkAllConfirmationDialog, type TravelerForMarkAll } from "./mark-all-confirmation-dialog";
@@ -77,7 +77,7 @@ import {
   isItemFullyPackedForProfile,
   matchesPacklistSearchQuery,
   isAusgemustertStatus,
-  isUpcomingPackingVacation,
+  formatAusgemustertHint,
   type ProfileScopeFilterOpts,
 } from '@/lib/packlist-visibility';
 
@@ -128,6 +128,9 @@ interface PackingItemProps {
   onEdit: (item: DBPackingItem) => void;
   /** id + optional forMitreisenderId (nur diesen Mitreisenden entfernen) */
   onDelete: (id: string, forMitreisenderId?: string | null) => void;
+  /** Ausgemusterten Eintrag durch Nachfolger aus der Ausrüstung ersetzen */
+  onReplaceWithSuccessor?: (item: DBPackingItem) => void;
+  successorAlreadyOnList?: boolean;
   /** Admin: vorgemerkte Einträge bestätigen (Checkbox-Klick) */
   onConfirmVorgemerkt?: (packingItemId: string, mitreisenderId?: string) => void;
   /** Admin: Vormerkung entfernen (Drei-Punkte-Menü) */
@@ -166,7 +169,7 @@ interface PackingItemProps {
   packListTabKey?: string;
   /** Kurz hervorheben nach Sidebar-Suchtreffer */
   searchFocusHighlight?: boolean;
-  /** Ausgemusterte Einträge in zukünftigen Urlauben stärker hervorheben */
+  /** Ausgemusterte Einträge hervorheben (Standard: ja, sobald Status gesetzt ist) */
   highlightAusgemustert?: boolean;
 }
 
@@ -186,6 +189,8 @@ const PackingItem: React.FC<PackingItemProps> = ({
   onToggleMitreisender,
   onEdit,
   onDelete,
+  onReplaceWithSuccessor,
+  successorAlreadyOnList = false,
   onConfirmVorgemerkt,
   onRemoveVorgemerkt,
   canConfirmVorgemerkt,
@@ -217,7 +222,7 @@ const PackingItem: React.FC<PackingItemProps> = ({
   onBulkSelectionStart,
   packListTabKey,
   searchFocusHighlight = false,
-  highlightAusgemustert = false,
+  highlightAusgemustert = true,
 }) => {
   const [showMarkAllDialog, setShowMarkAllDialog] = useState(false);
   const [personListPopoverOpen, setPersonListPopoverOpen] = useState(false);
@@ -1081,7 +1086,7 @@ const PackingItem: React.FC<PackingItemProps> = ({
           isExiting && "animate-pack-item-out",
           !isExiting && justUpdated && "animate-pack-item-update",
           !isExiting && searchFocusHighlight && "ring-2 ring-[rgb(230,126,34)] border-[rgb(230,126,34)]/50",
-          !isExiting && isPackedForOpacity && "opacity-60",
+          !isExiting && isPackedForOpacity && !isAusgemustert && "opacity-60",
           !bulkSelected && "border-subtle dark:border-white/10",
           showAusgemustertHighlight && !bulkSelected &&
             "border-red-400/80 bg-red-50 dark:border-red-500/60 dark:bg-red-950/35",
@@ -1271,7 +1276,17 @@ const PackingItem: React.FC<PackingItemProps> = ({
               )}
             </div>
             
-            {details && <p className="text-xs text-muted-foreground mt-1.5">{details}</p>}
+            {(isAusgemustert || details) && (
+              <p className="text-xs text-muted-foreground mt-1.5">
+                {isAusgemustert && (
+                  <span className="font-medium text-red-700 dark:text-red-300">
+                    {formatAusgemustertHint(fullItem.ersetzt_durch_was, successorAlreadyOnList)}
+                  </span>
+                )}
+                {isAusgemustert && details ? ' ' : null}
+                {details}
+              </p>
+            )}
             {bemerkung && <p className="text-xs text-accent mt-1.5">📝 {bemerkung}</p>}
 
             {showGruppenChipsRow && assignedGroupsForChipsRow.length > 0 && (
@@ -1491,6 +1506,21 @@ const PackingItem: React.FC<PackingItemProps> = ({
                   )
                 })()}
               </DropdownMenuItem>
+              {isAusgemustert &&
+                fullItem.ersetzt_durch_id &&
+                fullItem.ersetzt_durch_was &&
+                !successorAlreadyOnList &&
+                onReplaceWithSuccessor && (
+                <DropdownMenuItem
+                  onSelect={() => {
+                    setMenuOpen(false)
+                    onReplaceWithSuccessor(fullItem)
+                  }}
+                >
+                  <ArrowRightLeft className="h-4 w-4 mr-2 shrink-0" />
+                  Durch „{fullItem.ersetzt_durch_was}“ ersetzen
+                </DropdownMenuItem>
+              )}
               {!(selectedProfile && mitreisenden_typ === 'pauschal' && !isTemporaer && !canEditPauschalEntries) && (
                 <DropdownMenuItem 
                   onSelect={() => {
@@ -1536,6 +1566,7 @@ interface PackingListProps {
   onEdit: (item: DBPackingItem) => void;
   /** id + optional mitreisenderId: bei Profil-Ansicht nur diesen Mitreisenden entfernen */
   onDelete: (id: string, forMitreisenderId?: string | null) => void;
+  onReplaceWithSuccessor?: (item: DBPackingItem) => void;
   onConfirmVorgemerkt?: (packingItemId: string, mitreisenderId?: string) => void;
   onRemoveVorgemerkt?: (packingItemId: string, mitreisenderId?: string) => void;
   canConfirmVorgemerkt?: boolean;
@@ -1602,6 +1633,7 @@ export function PackingList({
   onToggleMultipleMitreisende,
   onEdit,
   onDelete,
+  onReplaceWithSuccessor,
   onConfirmVorgemerkt,
   onRemoveVorgemerkt,
   canConfirmVorgemerkt,
@@ -1897,7 +1929,13 @@ export function PackingList({
   }, [selectedProfile, pauschalGruppenFilter, exitBulkSelection]);
 
   const ownGroupMitreisende = profileGroups.ownGroup;
-  const highlightAusgemustert = isUpcomingPackingVacation(abreiseDatum);
+  const packedGegenstandIds = useMemo(() => {
+    const ids = new Set<string>()
+    for (const item of items) {
+      if (item.gegenstand_id) ids.add(item.gegenstand_id)
+    }
+    return ids
+  }, [items])
 
   /** Inline-Haken vs. „x/y Personen“-Popup: Schwellwert nach eigener Gruppe (Modus „Alle“) */
   const showPersonStatusAsPopover = ownGroupMitreisende.length > 4;
@@ -2786,6 +2824,10 @@ export function PackingList({
                               onToggleMitreisender={onToggleMitreisender}
                               onEdit={onEdit}
                               onDelete={onDelete}
+                              onReplaceWithSuccessor={onReplaceWithSuccessor}
+                              successorAlreadyOnList={
+                                !!item.ersetzt_durch_id && packedGegenstandIds.has(item.ersetzt_durch_id)
+                              }
                               onConfirmVorgemerkt={onConfirmVorgemerkt}
                               onRemoveVorgemerkt={onRemoveVorgemerkt}
                               canConfirmVorgemerkt={canConfirmVorgemerkt}
@@ -2824,7 +2866,6 @@ export function PackingList({
                               }
                               packListTabKey={`${activeMainCategory}|${selectedProfile ?? 'alle'}|${pauschalGruppenFilter}`}
                               searchFocusHighlight={highlightedItemId === item.id}
-                              highlightAusgemustert={highlightAusgemustert}
                             />
                           ))}
                       </CardContent>

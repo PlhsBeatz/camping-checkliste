@@ -106,6 +106,7 @@ export default function AusruestungPage() {
   const [editingItem, setEditingItem] = useState<EquipmentItem | null>(null)
   const [replacingItem, setReplacingItem] = useState<EquipmentItem | null>(null)
   const [replaceInTemplates, setReplaceInTemplates] = useState(true)
+  const [replaceInFuturePacklists, setReplaceInFuturePacklists] = useState(true)
   const [showWeightCopyPrompt, setShowWeightCopyPrompt] = useState(false)
   const weightCopyPromptSettledRef = useRef(false)
   const [wartungDialog, setWartungDialog] = useState<{
@@ -434,6 +435,7 @@ export default function AusruestungPage() {
     resetForm()
     setReplacingItem(null)
     setReplaceInTemplates(true)
+    setReplaceInFuturePacklists(true)
     weightCopyPromptSettledRef.current = false
     setShowWeightCopyPrompt(false)
     const { categoryId, mainTitle } = equipmentVisibleSectionRef.current
@@ -457,6 +459,7 @@ export default function AusruestungPage() {
     setEditingItem(null)
     setReplacingItem(item)
     setReplaceInTemplates(true)
+    setReplaceInFuturePacklists(true)
     weightCopyPromptSettledRef.current = false
     setShowWeightCopyPrompt(false)
     setFormData(
@@ -489,6 +492,7 @@ export default function AusruestungPage() {
         source_id: replacingItem.id,
         successor_id: successorId,
         replace_in_templates: replaceInTemplates,
+        replace_in_future_packlists: replaceInFuturePacklists,
         wartung_disposition:
           disposition === 'archive' ? 'keep' : disposition,
         ...buildEquipmentApiPayload(formData),
@@ -878,16 +882,38 @@ export default function AusruestungPage() {
             lifecycleSessionKey={replacingItem ? `replace:${replacingItem.id}` : 'create'}
           />
           {replacingItem && (
-            <div className="flex items-start gap-2 rounded-md border px-3 py-2">
-              <Checkbox
-                id="replace-in-templates"
-                checked={replaceInTemplates}
-                onCheckedChange={(c) => setReplaceInTemplates(!!c)}
-                className="mt-0.5"
-              />
-              <Label htmlFor="replace-in-templates" className="cursor-pointer text-sm font-normal">
-                In Packlisten-Vorlagen durch den Nachfolger ersetzen
-              </Label>
+            <div className="space-y-2">
+              <div className="flex items-start gap-2 rounded-md border px-3 py-2">
+                <Checkbox
+                  id="replace-in-templates"
+                  checked={replaceInTemplates}
+                  onCheckedChange={(c) => setReplaceInTemplates(!!c)}
+                  className="mt-0.5"
+                />
+                <Label htmlFor="replace-in-templates" className="cursor-pointer text-sm font-normal">
+                  In Packlisten-Vorlagen durch den Nachfolger ersetzen
+                </Label>
+              </div>
+              <div className="flex items-start gap-2 rounded-md border px-3 py-2">
+                <Checkbox
+                  id="replace-in-future-packlists"
+                  checked={replaceInFuturePacklists}
+                  onCheckedChange={(c) => setReplaceInFuturePacklists(!!c)}
+                  className="mt-0.5"
+                />
+                <div className="space-y-0.5">
+                  <Label
+                    htmlFor="replace-in-future-packlists"
+                    className="cursor-pointer text-sm font-normal"
+                  >
+                    Auf zukünftigen Packlisten durch den Nachfolger ersetzen
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Nur Urlaube, die noch nicht begonnen haben. Vergangene Packlisten bleiben
+                    unverändert.
+                  </p>
+                </div>
+              </div>
             </div>
           )}
           {addCategoryLoading && (

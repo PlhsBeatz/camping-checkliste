@@ -1,22 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getCloudflareContext } from '@opennextjs/cloudflare'
 import {
   getDB,
   getEquipmentItem,
   createEquipmentItem,
   updateEquipmentItem,
   replaceEquipmentInVorlagen,
+  replaceEquipmentInFuturePacklisten,
   applyEquipmentFaelligkeitDisposition,
   type CloudflareEnv,
 } from '@/lib/db'
 import { requireAuth, requireAdmin } from '@/lib/api-auth'
 import type { MengenRegel } from '@/lib/packing-quantity'
 import type { EquipmentFaelligkeitDisposition } from '@/lib/db-wartung'
+import { notifyPackingSyncChange } from '@/lib/packing-sync'
 
 interface ReplaceBody {
   source_id?: string
   /** Optional: Client-ID des Nachfolgers für Offline-Ersetzen */
   successor_id?: string
   replace_in_templates?: boolean
+  replace_in_future_packlists?: boolean
   wartung_disposition?: Extract<
     EquipmentFaelligkeitDisposition,
     'keep' | 'transfer' | 'archive_and_create'
@@ -111,6 +115,18 @@ export async function POST(request: NextRequest) {
 
     if (body.replace_in_templates !== false) {
       await replaceEquipmentInVorlagen(db, source.id, created.id)
+    }
+
+    if (body.replace_in_future_packlists !== false) {
+      const vacationIds = await replaceEquipmentInFuturePacklisten(db, source.id, created.id)
+      try {
+        const cfEnv = (await getCloudflareContext({ async: true })).env as unknown as CloudflareEnv
+        for (const vacationId of vacationIds) {
+          await notifyPackingSyncChange(cfEnv, vacationId)
+        }
+      } catch {
+        /* ohne Worker-Kontext */
+      }
     }
 
     const successor = await getEquipmentItem(db, created.id)

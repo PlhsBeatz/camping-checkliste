@@ -79,6 +79,7 @@ import {
 } from '@/lib/pauschal-gruppen'
 import {
   buildPacklistSearchHits,
+  applyEquipmentStatusToPackingItems,
   type PacklistSearchHit,
 } from '@/lib/packlist-visibility'
 import { AdminFremdeGruppeWarningDialog } from '@/components/admin-fremde-gruppe-warning-dialog'
@@ -1238,6 +1239,11 @@ function HomeContent() {
     [packingItems]
   )
 
+  const packingItemsForDisplay = useMemo(
+    () => applyEquipmentStatusToPackingItems(packingItems, equipmentItems),
+    [packingItems, equipmentItems]
+  )
+
   useEffect(() => {
     packingUiDefaultsAppliedRef.current = null
     prevUnassignedPauschalCountRef.current = null
@@ -1313,7 +1319,7 @@ function HomeContent() {
       selectedPackProfile === null
         ? (packProfileScopeMitreisende.length > 0 ? packProfileScopeMitreisende : vacationMitreisende)
         : vacationMitreisende
-    return buildPacklistSearchHits(packingItems, packlistSearchQuery, {
+    return buildPacklistSearchHits(packingItemsForDisplay, packlistSearchQuery, {
       selectedProfile: selectedPackProfile,
       listDisplayMode,
       abreiseDatum: abreiseDatumForPacklist,
@@ -1330,7 +1336,7 @@ function HomeContent() {
       },
     })
   }, [
-    packingItems,
+    packingItemsForDisplay,
     packlistSearchQuery,
     selectedPackProfile,
     listDisplayMode,
@@ -3124,6 +3130,62 @@ function HomeContent() {
     }
   }
 
+  const handleReplaceWithSuccessor = async (item: PackingItem) => {
+    const successorId = item.ersetzt_durch_id
+    if (!successorId || item.is_temporaer) return
+    const alreadyOnList = packingItemsRef.current.some(
+      (entry) => entry.gegenstand_id === successorId && entry.id !== item.id
+    )
+    if (alreadyOnList) return
+
+    const successor = equipmentItemsRef.current.find((entry) => entry.id === successorId)
+    persistPackingItemsUpdate((prev) =>
+      prev.map((entry) =>
+        entry.id !== item.id
+          ? entry
+          : {
+              ...entry,
+              gegenstand_id: successorId,
+              was: successor?.was ?? item.ersetzt_durch_was ?? entry.was,
+              status: successor?.status ?? 'Normal',
+              details: successor?.details ?? entry.details,
+              erst_abreisetag_gepackt: successor?.erst_abreisetag_gepackt,
+              einzelgewicht:
+                successor?.einzelgewicht != null && successor.einzelgewicht > 0
+                  ? successor.einzelgewicht
+                  : entry.einzelgewicht,
+              ausruestung_einzelgewicht: successor?.einzelgewicht ?? entry.ausruestung_einzelgewicht,
+              kategorie: successor?.kategorie_titel ?? entry.kategorie,
+              hauptkategorie: successor?.hauptkategorie_titel ?? entry.hauptkategorie,
+              ersetzt_durch_id: null,
+              ersetzt_durch_was: null,
+            }
+      )
+    )
+
+    pendingMutationsRef.current += 1
+    try {
+      const res = await fetch('/api/packing-items', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: item.id, gegenstandId: successorId }),
+      })
+      const data = (await res.json()) as ApiResponse<boolean>
+      if (!res.ok || !data.success || data.data === false) {
+        alert(data.error ?? 'Ersatz konnte nicht übernommen werden')
+        await refetchPackingItemsFromServer()
+        return
+      }
+      await refetchPackingItemsFromServer()
+    } catch (error) {
+      console.error('Failed to replace packing item with successor:', error)
+      alert('Ersatz konnte nicht übernommen werden')
+      await refetchPackingItemsFromServer()
+    } finally {
+      pendingMutationsRef.current -= 1
+    }
+  }
+
   const handleDeletePackingItem = (id: string, forMitreisenderId?: string | null) => {
     const item = packingItems.find((p) => p.id === id)
     if (!item) {
@@ -3714,7 +3776,7 @@ function HomeContent() {
                 onDismissReplacement={() => setXorJustRemoved(null)}
               />
               <PackingList
-                  items={packingItems}
+                  items={packingItemsForDisplay}
                   onToggle={handleTogglePacked}
                   onSetPacked={handleSetPacked}
                   onSetMitreisenderPacked={handleSetMitreisenderPacked}
@@ -3723,6 +3785,7 @@ function HomeContent() {
                   onToggleMultipleMitreisende={handleToggleMultipleMitreisende}
                   onEdit={handleEditPackingItem}
                   onDelete={handleDeletePackingItem}
+                  onReplaceWithSuccessor={handleReplaceWithSuccessor}
                   onConfirmVorgemerkt={handleConfirmVorgemerkt}
                   onRemoveVorgemerkt={handleRemoveVorgemerkt}
                   canConfirmVorgemerkt={canSelectOtherProfiles}

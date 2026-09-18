@@ -15,7 +15,10 @@ import {
   type ChecklisteHubAnlass,
 } from './checkliste-hub-anlass'
 import { normalizeCalendarDate, todayInAppTimezone } from './app-timezone'
-import { optionalCalendarYmd } from './equipment-lifecycle'
+import {
+  isFutureVacationForEquipmentReplace,
+  optionalCalendarYmd,
+} from './equipment-lifecycle'
 
 export interface Vacation {
   id: string
@@ -56,6 +59,9 @@ export interface PackingItem {
   ausruestung_einzelgewicht?: number | null
   /** Status des Ausrüstungsgegenstands (z.B. "Normal", "Immer gepackt") */
   status?: string
+  /** Nachfolger in der Ausrüstung, falls dieser Eintrag ausgemustert wurde */
+  ersetzt_durch_id?: string | null
+  ersetzt_durch_was?: string | null
   /** Erst am Abreisetag zu packen – im Packliste-Modus nur an diesem Tag anzeigen */
   erst_abreisetag_gepackt?: boolean
   created_at: string
@@ -1114,7 +1120,9 @@ export async function getPackingItems(db: D1Database, vacationId: string): Promi
         pe.einzelgewicht_override AS einzelgewicht_override,
         ag.einzelgewicht AS ausruestung_einzelgewicht, ag.details AS details,
         COALESCE(ag.mitreisenden_typ, 'pauschal') AS mitreisenden_typ,
-        CASE WHEN ag.id IS NULL THEN 'Normal' ELSE ag.status END AS status,
+        TRIM(COALESCE(ag.status, 'Normal')) AS ausruestung_status,
+        ag.ersetzt_durch_id AS ersetzt_durch_id,
+        succ.was AS ersetzt_durch_was,
         ag.erst_abreisetag_gepackt AS erst_abreisetag_gepackt,
         COALESCE(k.titel, '—') AS kategorie,
         COALESCE(hk.titel, '—') AS hauptkategorie,
@@ -1125,6 +1133,9 @@ export async function getPackingItems(db: D1Database, vacationId: string): Promi
       FROM packlisten_eintraege pe
       JOIN packlisten p ON pe.packliste_id = p.id
       LEFT JOIN ausruestungsgegenstaende ag ON pe.gegenstand_id = ag.id
+      LEFT JOIN ausruestungsgegenstaende succ
+        ON succ.id = ag.ersetzt_durch_id
+       AND TRIM(COALESCE(succ.status, 'Normal')) IN ('Normal', 'Immer gepackt')
       LEFT JOIN kategorien k ON ag.kategorie_id = k.id
       LEFT JOIN hauptkategorien hk ON k.hauptkategorie_id = hk.id
       LEFT JOIN transportmittel t ON pe.transport_id = t.id
@@ -1225,10 +1236,18 @@ export async function getPackingItems(db: D1Database, vacationId: string): Promi
             ? Number((item as Record<string, unknown>).ausruestung_einzelgewicht)
             : null,
         status: (() => {
-          const raw = (item as Record<string, unknown>).status ?? (item as Record<string, unknown>)['ag.status']
+          const raw =
+            (item as Record<string, unknown>).ausruestung_status ??
+            (item as Record<string, unknown>).status ??
+            (item as Record<string, unknown>)['ag.status']
           const s = raw != null ? String(raw).trim() : ''
-          return s === 'Immer gepackt' ? 'Immer gepackt' : (s || 'Normal')
+          return s || 'Normal'
         })(),
+        ersetzt_durch_id:
+          item.ersetzt_durch_id && item.ersetzt_durch_was
+            ? String(item.ersetzt_durch_id)
+            : null,
+        ersetzt_durch_was: item.ersetzt_durch_was ? String(item.ersetzt_durch_was) : null,
         erst_abreisetag_gepackt: !!((item as Record<string, unknown>).erst_abreisetag_gepackt ?? (item as Record<string, unknown>)['ag.erst_abreisetag_gepackt']),
         created_at: String(item.created_at || ''),
         orderHk: item.hk_reihenfolge != null ? Number(item.hk_reihenfolge) : undefined,
@@ -1399,7 +1418,7 @@ export async function getPackingItemsForHub(
           THEN '(Gegenstand fehlt in Ausrüstung — Zeile ' || pe.id || ', Ausrüstung ' || pe.gegenstand_id || ')'
           ELSE ag.was END AS was,
         COALESCE(ag.mitreisenden_typ, 'pauschal') AS mitreisenden_typ,
-        CASE WHEN ag.id IS NULL THEN 'Normal' ELSE ag.status END AS status,
+        TRIM(COALESCE(ag.status, 'Normal')) AS ausruestung_status,
         ag.erst_abreisetag_gepackt AS erst_abreisetag_gepackt,
         COALESCE(hk.titel, '—') AS hauptkategorie
       FROM packlisten_eintraege pe
@@ -1465,8 +1484,11 @@ export async function getPackingItemsForHub(
         kategorie: '',
         hauptkategorie: String(item.hauptkategorie),
         status: (() => {
-          const s = item.status != null ? String(item.status).trim() : ''
-          return s === 'Immer gepackt' ? 'Immer gepackt' : s || 'Normal'
+          const raw =
+            (item as Record<string, unknown>).ausruestung_status ??
+            (item as Record<string, unknown>).status
+          const s = raw != null ? String(raw).trim() : ''
+          return s || 'Normal'
         })(),
         erst_abreisetag_gepackt: !!item.erst_abreisetag_gepackt,
         created_at: '',
@@ -1588,6 +1610,8 @@ export async function updatePackingItem(
     anzahl?: number
     bemerkung?: string | null
     transport_id?: string | null
+    /** Gegenstand durch Nachfolger ersetzen (normale Packlisten-Einträge). */
+    gegenstand_id?: string
     /** Nur für `packlisten_eintraege_temporaer` (Freitext-Bezeichnung). */
     was?: string | null
     /** Nur für temporäre Einträge. */
@@ -1621,6 +1645,10 @@ export async function updatePackingItem(
     if (updates.transport_id !== undefined) {
       fields.push('transport_id = ?')
       values.push(updates.transport_id || null)
+    }
+    if (updates.gegenstand_id !== undefined) {
+      fields.push('gegenstand_id = ?')
+      values.push(updates.gegenstand_id)
     }
 
     if (fields.length > 0) {
@@ -2086,6 +2114,54 @@ export async function replaceEquipmentInVorlagen(
     .prepare('UPDATE vorlagen_eintraege SET gegenstand_id = ? WHERE gegenstand_id = ?')
     .bind(successorId, sourceId)
     .run()
+}
+
+/**
+ * Packlisten zukünftiger Urlaube: alten Gegenstand durch Nachfolger ersetzen.
+ * Beendete Urlaube bleiben unverändert. Gibt die betroffenen Urlaub-IDs zurück.
+ */
+export async function replaceEquipmentInFuturePacklisten(
+  db: D1Database,
+  sourceId: string,
+  successorId: string
+): Promise<string[]> {
+  if (!sourceId || !successorId || sourceId === successorId) return []
+  const todayYmd = todayInAppTimezone()
+  const rows = await db
+    .prepare(
+      `SELECT pe.id AS eintrag_id, pe.packliste_id, p.urlaub_id,
+              u.startdatum, u.abfahrtdatum, u.enddatum
+       FROM packlisten_eintraege pe
+       INNER JOIN packlisten p ON p.id = pe.packliste_id
+       INNER JOIN urlaube u ON u.id = p.urlaub_id
+       WHERE pe.gegenstand_id = ?`
+    )
+    .bind(sourceId)
+    .all<{
+      eintrag_id: string
+      packliste_id: string
+      urlaub_id: string
+      startdatum: string
+      abfahrtdatum: string | null
+      enddatum: string | null
+    }>()
+
+  const affectedVacationIds: string[] = []
+  for (const row of rows.results || []) {
+    if (!isFutureVacationForEquipmentReplace(row, todayYmd)) continue
+    await db
+      .prepare('DELETE FROM packlisten_eintraege WHERE packliste_id = ? AND gegenstand_id = ?')
+      .bind(row.packliste_id, successorId)
+      .run()
+    await db
+      .prepare(
+        `UPDATE packlisten_eintraege SET gegenstand_id = ?, updated_at = datetime('now') WHERE id = ?`
+      )
+      .bind(successorId, row.eintrag_id)
+      .run()
+    affectedVacationIds.push(row.urlaub_id)
+  }
+  return affectedVacationIds
 }
 
 /**
