@@ -22,6 +22,7 @@ import {
   buildTagGroupsForEquipment,
   createDefaultEquipmentFormValues,
   equipmentMitreisendenFromPacklistAssignment,
+  getEquipmentFormValidationError,
   mitreisendenZeileAusApi,
   type EquipmentFormValues,
   type MitreisendenZeile,
@@ -241,6 +242,14 @@ export function AddSingleItemDialog({
       ...equipmentForm,
       was,
       kategorie_id: packForm.kategorie_id,
+    }
+
+    if (packForm.saveToEquipment && canEditEquipment) {
+      const validationError = getEquipmentFormValidationError(equipmentPayloadSource)
+      if (validationError) {
+        alert(validationError)
+        return
+      }
     }
 
     setIsSaving(true)

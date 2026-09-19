@@ -31,10 +31,12 @@ import { IndividuelleMitreisendeAuswahl } from '@/components/equipment/individue
 import { EquipmentTagsBlock } from '@/components/equipment/equipment-tags-block'
 import {
   applyMengenRegelChange,
+  applyEquipmentStatusChange,
   addEquipmentLinkField,
   removeEquipmentLinkField,
   updateEquipmentLinkField,
   hasPauschaleForCategory,
+  getEquipmentStatusFieldLocks,
   MITREISENDEN_TYP_TRIGGER_LABELS,
   MITREISENDEN_TYP_OPTIONS,
   type EquipmentFormValues,
@@ -42,6 +44,7 @@ import {
   type TagGroupForEquipment,
 } from '@/lib/equipment-form'
 import type { Category, MainCategory } from '@/lib/db'
+import { cn } from '@/lib/utils'
 
 /** shadcn-Checkbox, dunkelgrün, Zeilen wie „Als Standard markieren“ (h-4 w-4) */
 const EQUIPMENT_DIALOG_ROW_CHECKBOX_CLASS =
@@ -118,6 +121,9 @@ export function EquipmentItemFormFields({
   const setField = <K extends keyof EquipmentFormValues>(key: K, fieldValue: EquipmentFormValues[K]) => {
     onChange({ ...value, [key]: fieldValue })
   }
+
+  const statusLocks = getEquipmentStatusFieldLocks(value.status)
+  const standardChecked = statusLocks.standardForcedChecked || value.is_standard
 
   const showCore = variant === 'full'
   const [dateFieldRevealed, setDateFieldRevealed] = useState(false)
@@ -259,7 +265,9 @@ export function EquipmentItemFormFields({
       <FormSection title="Mitnahme">
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <Label htmlFor={`${idPrefix}-transport`}>Transport</Label>
+            <Label htmlFor={`${idPrefix}-transport`}>
+              Transport{statusLocks.transportRequired ? ' *' : ''}
+            </Label>
             <Select value={value.transport_id} onValueChange={(v) => setField('transport_id', v)}>
               <SelectTrigger id={`${idPrefix}-transport`}>
                 <SelectValue placeholder="Kein Transport" />
@@ -279,17 +287,7 @@ export function EquipmentItemFormFields({
             <Label htmlFor={`${idPrefix}-status`}>Status</Label>
             <Select
               value={value.status}
-              onValueChange={(v) => {
-                if (v === 'Ausgemustert') {
-                  onChange({
-                    ...value,
-                    status: v,
-                    ausgemustert_am: value.ausgemustert_am || todayInAppTimezone(),
-                  })
-                  return
-                }
-                onChange({ ...value, status: v, ausgemustert_am: '' })
-              }}
+              onValueChange={(v) => onChange(applyEquipmentStatusChange(value, v))}
             >
               <SelectTrigger id={`${idPrefix}-status`}>
                 <SelectValue />
@@ -409,12 +407,18 @@ export function EquipmentItemFormFields({
       </FormSection>
 
       <FormSection title="Packen">
+        {statusLocks.transportRequired && (
+          <p className="text-xs text-muted-foreground">
+            Fest installiert zählt zum Fahrzeuggewicht, nicht zur Packliste.
+          </p>
+        )}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-4">
             <div>
               <Label htmlFor={`${idPrefix}-mitreisenden-typ`}>Gepackt für</Label>
               <Select
                 value={value.mitreisenden_typ}
+                disabled={statusLocks.gepacktFuerLocked}
                 onValueChange={(v: 'pauschal' | 'alle' | 'ausgewaehlte') =>
                   setField('mitreisenden_typ', v)
                 }
@@ -444,6 +448,7 @@ export function EquipmentItemFormFields({
                 onStandardMitreisendeChange={(next) => setField('standard_mitreisende', next)}
                 extraOpen={individuelleMitreisendeExtraOpen}
                 onExtraOpenChange={onIndividuelleMitreisendeExtraOpenChange}
+                disabled={statusLocks.gepacktFuerLocked}
               />
             )}
           </div>
@@ -452,7 +457,9 @@ export function EquipmentItemFormFields({
             <EquipmentTagsBlock
               groups={tagGroups}
               selectedTagIds={value.tags}
+              disabled={statusLocks.tagsLocked}
               onToggleTag={(tagId, checked) => {
+                if (statusLocks.tagsLocked) return
                 onChange({
                   ...value,
                   tags: checked
@@ -466,14 +473,29 @@ export function EquipmentItemFormFields({
         </div>
 
         <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
-          <div className="flex items-center gap-2">
+          <div
+            className={cn(
+              'flex items-center gap-2',
+              statusLocks.standardLocked && 'opacity-60'
+            )}
+          >
             <Checkbox
               id={`${idPrefix}-is-standard`}
-              checked={value.is_standard}
-              onCheckedChange={(c) => setField('is_standard', !!c)}
+              checked={standardChecked}
+              disabled={statusLocks.standardLocked}
+              onCheckedChange={(c) => {
+                if (statusLocks.standardLocked) return
+                setField('is_standard', !!c)
+              }}
               className={EQUIPMENT_DIALOG_ROW_CHECKBOX_CLASS}
             />
-            <Label htmlFor={`${idPrefix}-is-standard`} className="cursor-pointer flex items-center gap-2">
+            <Label
+              htmlFor={`${idPrefix}-is-standard`}
+              className={cn(
+                'flex items-center gap-2',
+                statusLocks.standardLocked ? 'cursor-not-allowed' : 'cursor-pointer'
+              )}
+            >
               <Star
                 className="h-4 w-4"
                 style={{ color: 'rgb(230,126,34)', fill: 'rgb(230,126,34)' }}
@@ -481,14 +503,28 @@ export function EquipmentItemFormFields({
               <span>Als Standard</span>
             </Label>
           </div>
-          <div className="flex items-center gap-2">
+          <div
+            className={cn(
+              'flex items-center gap-2',
+              statusLocks.erstAbreisetagLocked && 'opacity-60'
+            )}
+          >
             <Checkbox
               id={`${idPrefix}-erst-abreisetag`}
               checked={value.erst_abreisetag_gepackt}
-              onCheckedChange={(c) => setField('erst_abreisetag_gepackt', !!c)}
+              disabled={statusLocks.erstAbreisetagLocked}
+              onCheckedChange={(c) => {
+                if (statusLocks.erstAbreisetagLocked) return
+                setField('erst_abreisetag_gepackt', !!c)
+              }}
               className={EQUIPMENT_DIALOG_ROW_CHECKBOX_CLASS}
             />
-            <Label htmlFor={`${idPrefix}-erst-abreisetag`} className="cursor-pointer">
+            <Label
+              htmlFor={`${idPrefix}-erst-abreisetag`}
+              className={
+                statusLocks.erstAbreisetagLocked ? 'cursor-not-allowed' : 'cursor-pointer'
+              }
+            >
               Erst am Abreisetag packen
             </Label>
           </div>

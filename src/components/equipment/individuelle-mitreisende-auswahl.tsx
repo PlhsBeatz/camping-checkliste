@@ -19,6 +19,7 @@ interface IndividuelleMitreisendeAuswahlProps {
   onStandardMitreisendeChange: (next: string[]) => void
   extraOpen: boolean
   onExtraOpenChange: (open: boolean) => void
+  disabled?: boolean
 }
 
 export function IndividuelleMitreisendeAuswahl({
@@ -27,6 +28,7 @@ export function IndividuelleMitreisendeAuswahl({
   onStandardMitreisendeChange,
   extraOpen,
   onExtraOpenChange,
+  disabled = false,
 }: IndividuelleMitreisendeAuswahlProps) {
   const standardMit = useMemo(
     () =>
@@ -41,6 +43,7 @@ export function IndividuelleMitreisendeAuswahl({
   const kannEinklappen = standardMit.length > 0 && weitereMit.length > 0
 
   const toggleOne = (id: string, checked: boolean) => {
+    if (disabled) return
     if (checked) {
       if (!standardMitreisendeIds.includes(id))
         onStandardMitreisendeChange([...standardMitreisendeIds, id])
@@ -50,14 +53,18 @@ export function IndividuelleMitreisendeAuswahl({
   }
 
   const renderChips = (rows: MitreisendenZeile[]) => (
-    <div className="flex flex-wrap gap-2 mt-2">
+    <div className={cn('flex flex-wrap gap-2 mt-2', disabled && 'opacity-60')}>
       {rows.map((m) => (
         <label
           key={m.id}
-          className="flex items-center gap-1.5 text-xs bg-muted px-2 py-1 rounded cursor-pointer hover:bg-muted/80"
+          className={cn(
+            'flex items-center gap-1.5 text-xs bg-muted px-2 py-1 rounded',
+            disabled ? 'cursor-not-allowed' : 'cursor-pointer hover:bg-muted/80'
+          )}
         >
           <Checkbox
             checked={standardMitreisendeIds.includes(m.id)}
+            disabled={disabled}
             onCheckedChange={(c) => toggleOne(m.id, !!c)}
             className={EQUIPMENT_CHIP_CHECKBOX_CLASS}
           />

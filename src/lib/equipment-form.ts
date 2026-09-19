@@ -110,6 +110,88 @@ export function mitreisendenZeileAusApi(m: Mitreisender): MitreisendenZeile {
   }
 }
 
+export const EQUIPMENT_STATUS_FEST_INSTALLIERT = 'Fest Installiert'
+export const EQUIPMENT_STATUS_AUSGEMUSTERT = 'Ausgemustert'
+
+export function isFestInstalliertStatus(status: string): boolean {
+  return String(status || '').trim() === EQUIPMENT_STATUS_FEST_INSTALLIERT
+}
+
+export function isAusgemustertStatus(status: string): boolean {
+  return String(status || '').trim() === EQUIPMENT_STATUS_AUSGEMUSTERT
+}
+
+/** UI/Payload: Felder, die bei diesem Status nicht bearbeitbar bzw. erzwungen sind. */
+export function getEquipmentStatusFieldLocks(status: string): {
+  standardLocked: boolean
+  tagsLocked: boolean
+  erstAbreisetagLocked: boolean
+  gepacktFuerLocked: boolean
+  standardForcedChecked: boolean
+  transportRequired: boolean
+} {
+  const fest = isFestInstalliertStatus(status)
+  const aus = isAusgemustertStatus(status)
+  return {
+    standardLocked: fest || aus,
+    tagsLocked: fest || aus,
+    erstAbreisetagLocked: fest,
+    gepacktFuerLocked: fest || aus,
+    standardForcedChecked: fest,
+    transportRequired: fest,
+  }
+}
+
+/**
+ * Erzwingt konsistente Werte für den aktuellen Status (Anzeige + Speichern).
+ * Bei Ausgemustert bleibt erst_abreisetag_gepackt unverändert.
+ */
+export function normalizeEquipmentFormForStatus(form: EquipmentFormValues): EquipmentFormValues {
+  if (isFestInstalliertStatus(form.status)) {
+    return {
+      ...form,
+      is_standard: true,
+      tags: [],
+      erst_abreisetag_gepackt: false,
+      mitreisenden_typ: 'pauschal',
+      standard_mitreisende: [],
+    }
+  }
+  if (isAusgemustertStatus(form.status)) {
+    return {
+      ...form,
+      is_standard: false,
+      tags: [],
+    }
+  }
+  return form
+}
+
+/** Statuswechsel inkl. Zurücksetzen inkonsistenter Packlisten-Felder. */
+export function applyEquipmentStatusChange(
+  prev: EquipmentFormValues,
+  nextStatus: string
+): EquipmentFormValues {
+  const next: EquipmentFormValues = {
+    ...prev,
+    status: nextStatus,
+    ausgemustert_am: isAusgemustertStatus(nextStatus)
+      ? prev.ausgemustert_am || todayInAppTimezone()
+      : '',
+  }
+  return normalizeEquipmentFormForStatus(next)
+}
+
+export function getEquipmentFormValidationError(form: EquipmentFormValues): string | null {
+  if (!form.was.trim() || !form.kategorie_id) {
+    return 'Bitte füllen Sie alle Pflichtfelder aus'
+  }
+  if (isFestInstalliertStatus(form.status) && (!form.transport_id || form.transport_id === 'none')) {
+    return 'Bei Status „Fest Installiert“ muss ein Transportmittel gewählt werden'
+  }
+  return null
+}
+
 export function createDefaultEquipmentFormValues(initialWas = ''): EquipmentFormValues {
   return {
     was: initialWas,
@@ -133,7 +215,7 @@ export function createDefaultEquipmentFormValues(initialWas = ''): EquipmentForm
 }
 
 export function equipmentFormValuesFromItem(item: EquipmentItem): EquipmentFormValues {
-  return {
+  return normalizeEquipmentFormForStatus({
     was: item.was,
     kategorie_id: item.kategorie_id,
     transport_id: item.transport_id || 'none',
@@ -151,7 +233,7 @@ export function equipmentFormValuesFromItem(item: EquipmentItem): EquipmentFormV
     mengenregel: item.mengenregel ?? null,
     anschaffungsdatum: item.anschaffungsdatum?.slice(0, 10) ?? '',
     ausgemustert_am: item.ausgemustert_am?.slice(0, 10) ?? '',
-  }
+  })
 }
 
 /** Vorausfüllung beim Ersetzen: Stammdaten, aber keine Exemplar-Details/Gewicht. */
@@ -274,24 +356,29 @@ export function equipmentItemFromFormValues(
 }
 
 export function buildEquipmentApiPayload(form: EquipmentFormValues) {
+  const normalized = normalizeEquipmentFormForStatus(form)
   return {
-    was: form.was,
-    kategorie_id: form.kategorie_id,
-    transport_id: form.transport_id === 'none' ? null : form.transport_id || null,
-    einzelgewicht: form.in_pauschale_inbegriffen ? 0 : parseWeightInput(form.einzelgewicht),
-    standard_anzahl: parseInt(form.standard_anzahl) || 1,
-    status: form.status,
-    details: form.details || null,
-    is_standard: form.is_standard,
-    erst_abreisetag_gepackt: form.erst_abreisetag_gepackt,
-    mitreisenden_typ: form.mitreisenden_typ,
-    in_pauschale_inbegriffen: form.in_pauschale_inbegriffen,
-    standard_mitreisende: form.standard_mitreisende,
-    tags: form.tags,
-    links: form.links.filter((link) => link.url.trim() !== '').map((link) => link.url),
-    mengenregel: form.mengenregel,
-    anschaffungsdatum: form.anschaffungsdatum || null,
-    ausgemustert_am: form.status === 'Ausgemustert' ? form.ausgemustert_am || null : null,
+    was: normalized.was,
+    kategorie_id: normalized.kategorie_id,
+    transport_id: normalized.transport_id === 'none' ? null : normalized.transport_id || null,
+    einzelgewicht: normalized.in_pauschale_inbegriffen
+      ? 0
+      : parseWeightInput(normalized.einzelgewicht),
+    standard_anzahl: parseInt(normalized.standard_anzahl) || 1,
+    status: normalized.status,
+    details: normalized.details || null,
+    is_standard: normalized.is_standard,
+    erst_abreisetag_gepackt: normalized.erst_abreisetag_gepackt,
+    mitreisenden_typ: normalized.mitreisenden_typ,
+    in_pauschale_inbegriffen: normalized.in_pauschale_inbegriffen,
+    standard_mitreisende: normalized.standard_mitreisende,
+    tags: normalized.tags,
+    links: normalized.links.filter((link) => link.url.trim() !== '').map((link) => link.url),
+    mengenregel: normalized.mengenregel,
+    anschaffungsdatum: normalized.anschaffungsdatum || null,
+    ausgemustert_am: isAusgemustertStatus(normalized.status)
+      ? normalized.ausgemustert_am || null
+      : null,
   }
 }
 

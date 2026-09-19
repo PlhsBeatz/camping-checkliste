@@ -31,6 +31,7 @@ import {
   createDefaultEquipmentFormValues,
   equipmentFormValuesFromItem,
   equipmentFormValuesForReplace,
+  getEquipmentFormValidationError,
   mitreisendenZeileAusApi,
   type EquipmentFormValues,
   type MitreisendenZeile,
@@ -544,8 +545,9 @@ export default function AusruestungPage() {
   }
 
   const handleSaveEquipment = async () => {
-    if (!formData.was || !formData.kategorie_id) {
-      alert('Bitte füllen Sie alle Pflichtfelder aus')
+    const validationError = getEquipmentFormValidationError(formData)
+    if (validationError) {
+      alert(validationError)
       return
     }
 
@@ -647,8 +649,10 @@ export default function AusruestungPage() {
   }
 
   const handleUpdateEquipment = async () => {
-    if (!editingItem || !formData.was || !formData.kategorie_id) {
-      alert('Bitte füllen Sie alle Pflichtfelder aus')
+    if (!editingItem) return
+    const validationError = getEquipmentFormValidationError(formData)
+    if (validationError) {
+      alert(validationError)
       return
     }
 
