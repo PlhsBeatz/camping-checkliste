@@ -6,12 +6,12 @@ import { useRouter } from 'next/navigation'
 import { useAuth } from '@/components/auth-provider'
 import { NavigationSidebar } from '@/components/navigation-sidebar'
 import { Button } from '@/components/ui/button'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Menu } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { ApiResponse } from '@/lib/api-types'
 import type { VerbrauchMedium, VerbrauchMessung, Vacation } from '@/lib/db'
 import { VerbrauchMessungSection } from '@/components/verbrauch/verbrauch-messung-section'
+import { VerbrauchUebersichtKarten } from '@/components/verbrauch/verbrauch-uebersicht-karten'
 import { useReconnectRefetch } from '@/hooks/use-reconnect-refetch'
 import {
   getCachedVerbrauchMessungen,
@@ -24,9 +24,6 @@ import {
   cacheVacations,
 } from '@/lib/offline-db'
 
-const TAB_TRIGGER_CLASS =
-  "flex-shrink-0 uppercase text-xs font-semibold tracking-wide px-6 py-3 rounded-none border-b-4 border-transparent data-[state=active]:border-[#e67e22] data-[state=active]:text-brand-heading data-[state=inactive]:text-[rgb(168,162,158)] dark:data-[state=inactive]:text-muted-foreground hover:text-gray-900 dark:hover:text-foreground transition-colors relative data-[state=active]:bg-transparent data-[state=inactive]:bg-transparent data-[state=active]:after:content-[''] data-[state=active]:after:absolute data-[state=active]:after:bottom-0 data-[state=active]:after:left-1/2 data-[state=active]:after:-translate-x-1/2 data-[state=active]:after:w-[50px] data-[state=active]:after:h-1 data-[state=active]:after:bg-[#e67e22] data-[state=active]:after:rounded-full data-[state=active]:border-b-transparent data-[state=active]:shadow-none"
-
 function VerbrauchPageContent() {
   const router = useRouter()
   const { canReadWartung, canWriteWartung, canAccessConfig, loading: authLoading } = useAuth()
@@ -35,12 +32,15 @@ function VerbrauchPageContent() {
   const [messungen, setMessungen] = useState<VerbrauchMessung[]>([])
   const [vacations, setVacations] = useState<Vacation[]>([])
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<string>('')
-  const [tabsScrollbarVisible, setTabsScrollbarVisible] = useState(false)
-  const tabsScrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [activeMediumKey, setActiveMediumKey] = useState<string>('')
   const loadSeqRef = useRef(0)
 
   const activeMedien = useMemo(() => medien.filter((m) => m.ist_aktiv), [medien])
+
+  const activeMedium = useMemo(
+    () => activeMedien.find((m) => m.schluessel === activeMediumKey) ?? null,
+    [activeMedien, activeMediumKey]
+  )
 
   const fetchNoStore = useCallback((url: string) => {
     const sep = url.includes('?') ? '&' : '?'
@@ -136,21 +136,15 @@ function VerbrauchPageContent() {
 
   useEffect(() => {
     if (activeMedien.length === 0) {
-      setActiveTab('')
+      setActiveMediumKey('')
       return
     }
     const first = activeMedien[0]
     if (!first) return
-    if (!activeTab || !activeMedien.some((m) => m.schluessel === activeTab)) {
-      setActiveTab(first.schluessel)
+    if (!activeMediumKey || !activeMedien.some((m) => m.schluessel === activeMediumKey)) {
+      setActiveMediumKey(first.schluessel)
     }
-  }, [activeMedien, activeTab])
-
-  useEffect(() => {
-    return () => {
-      if (tabsScrollTimeoutRef.current) clearTimeout(tabsScrollTimeoutRef.current)
-    }
-  }, [])
+  }, [activeMedien, activeMediumKey])
 
   if (authLoading || !canReadWartung) {
     return (
@@ -166,109 +160,59 @@ function VerbrauchPageContent() {
 
       <div className={cn('flex-1 transition-all duration-300 min-w-0', 'lg:ml-[280px]')}>
         <div className="container mx-auto p-4 md:p-6 space-y-4 max-w-full">
-          {loading ? (
-            <>
-              <div className="sticky top-0 z-30 flex items-center gap-4 bg-card shadow pb-4 -mx-4 px-4 -mt-4 pt-4 md:-mx-6 md:px-6 md:-mt-6 md:pt-6">
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => setShowNavSidebar(true)}
-                  className="lg:hidden"
-                >
-                  <Menu className="h-5 w-5" />
-                </Button>
-                <h1 className="text-lg sm:text-xl font-bold tracking-tight text-brand-heading">
-                  Verbrauch
-                </h1>
-              </div>
-              <div className="flex flex-col items-center justify-center py-20 gap-4">
-                <div className="animate-spin rounded-full h-12 w-12 border-4 border-[rgb(45,79,30)] border-t-transparent" />
-                <p className="text-muted-foreground animate-pulse">Wird geladen…</p>
-              </div>
-            </>
-          ) : activeMedien.length === 0 ? (
-            <>
-              <div className="sticky top-0 z-30 flex items-center gap-4 bg-card shadow pb-4 -mx-4 px-4 -mt-4 pt-4 md:-mx-6 md:px-6 md:-mt-6 md:pt-6">
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => setShowNavSidebar(true)}
-                  className="lg:hidden"
-                >
-                  <Menu className="h-5 w-5" />
-                </Button>
-                <h1 className="text-lg sm:text-xl font-bold tracking-tight text-brand-heading">
-                  Verbrauch
-                </h1>
-              </div>
-              <div className="rounded-lg border border-dashed p-8 text-center space-y-3">
-                <p className="text-muted-foreground">
-                  Noch keine Verbrauch-Medien aktiv. Aktiviere sie unter Konfiguration →
-                  Verbrauch-Medien.
-                </p>
-                {canAccessConfig && (
-                  <Button asChild variant="outline">
-                    <Link href="/verbrauch-medien">Zu Verbrauch-Medien</Link>
-                  </Button>
-                )}
-              </div>
-            </>
-          ) : (
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-              <div className="sticky top-0 z-30 bg-card shadow -mx-4 px-4 -mt-4 pt-4 md:-mx-6 md:px-6 md:-mt-6 md:pt-6">
-                <div className="flex items-center gap-4 pb-3">
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={() => setShowNavSidebar(true)}
-                    className="lg:hidden"
-                  >
-                    <Menu className="h-5 w-5" />
-                  </Button>
-                  <h1 className="text-lg sm:text-xl font-bold tracking-tight text-brand-heading">
-                    Verbrauch
-                  </h1>
-                </div>
-                <div
-                  className={cn(
-                    'tabs-scrollbar-auto bg-card overflow-x-auto overflow-y-hidden -mx-4 sm:-mx-6 pl-4 pr-4 sm:pl-6 sm:pr-6 pb-2',
-                    tabsScrollbarVisible && 'tabs-scrollbar-visible'
-                  )}
-                  style={{ WebkitOverflowScrolling: 'touch' }}
-                  onScroll={() => {
-                    setTabsScrollbarVisible(true)
-                    if (tabsScrollTimeoutRef.current) clearTimeout(tabsScrollTimeoutRef.current)
-                    tabsScrollTimeoutRef.current = setTimeout(() => {
-                      setTabsScrollbarVisible(false)
-                      tabsScrollTimeoutRef.current = null
-                    }, 800)
-                  }}
-                >
-                  <TabsList className="inline-flex w-max justify-start bg-transparent p-0 h-auto rounded-none">
-                    {activeMedien.map((m) => (
-                      <TabsTrigger key={m.id} value={m.schluessel} className={TAB_TRIGGER_CLASS}>
-                        {m.name}
-                      </TabsTrigger>
-                    ))}
-                  </TabsList>
-                </div>
-              </div>
+          <div className="sticky top-0 z-30 flex items-center gap-4 bg-card shadow pb-4 -mx-4 px-4 -mt-4 pt-4 md:-mx-6 md:px-6 md:-mt-6 md:pt-6">
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => setShowNavSidebar(true)}
+              className="lg:hidden"
+            >
+              <Menu className="h-5 w-5" />
+            </Button>
+            <h1 className="text-lg sm:text-xl font-bold tracking-tight text-brand-heading">
+              Verbrauch
+            </h1>
+          </div>
 
-              {activeMedien.map((m) => (
-                <TabsContent key={m.id} value={m.schluessel} className="mt-0">
-                  <VerbrauchMessungSection
-                    medium={m}
-                    messungen={messungen}
-                    vacations={vacations}
-                    canAdmin={canWriteWartung}
-                    onMessungCreated={upsertMessung}
-                    onMessungUpdated={upsertMessung}
-                    onMessungDeleted={removeMessung}
-                    onRefresh={() => void load()}
-                  />
-                </TabsContent>
-              ))}
-            </Tabs>
+          {loading ? (
+            <div className="flex flex-col items-center justify-center py-20 gap-4">
+              <div className="animate-spin rounded-full h-12 w-12 border-4 border-[rgb(45,79,30)] border-t-transparent" />
+              <p className="text-muted-foreground animate-pulse">Wird geladen…</p>
+            </div>
+          ) : activeMedien.length === 0 ? (
+            <div className="rounded-lg border border-dashed p-8 text-center space-y-3">
+              <p className="text-muted-foreground">
+                Noch keine Verbrauch-Medien aktiv. Aktiviere sie unter Konfiguration →
+                Verbrauch-Medien.
+              </p>
+              {canAccessConfig && (
+                <Button asChild variant="outline">
+                  <Link href="/verbrauch-medien">Zu Verbrauch-Medien</Link>
+                </Button>
+              )}
+            </div>
+          ) : (
+            <>
+              <VerbrauchUebersichtKarten
+                medien={activeMedien}
+                messungen={messungen}
+                activeSchluessel={activeMediumKey}
+                onSelect={setActiveMediumKey}
+              />
+
+              {activeMedium && (
+                <VerbrauchMessungSection
+                  medium={activeMedium}
+                  messungen={messungen}
+                  vacations={vacations}
+                  canAdmin={canWriteWartung}
+                  onMessungCreated={upsertMessung}
+                  onMessungUpdated={upsertMessung}
+                  onMessungDeleted={removeMessung}
+                  onRefresh={() => void load()}
+                />
+              )}
+            </>
           )}
         </div>
       </div>

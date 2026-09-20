@@ -35,6 +35,7 @@ import type {
 import type { ApiResponse } from '@/lib/api-types'
 import { formatVerbrauch, verbrauchDifferenz } from '@/lib/verbrauch-format'
 import { supportsGewichtZuLiter } from '@/lib/verbrauch-medien-katalog'
+import { normalizeCalendarDate, todayInAppTimezone } from '@/lib/app-timezone'
 import {
   ChevronDown,
   Fuel,
@@ -57,6 +58,33 @@ function formatDate(d: string | null | undefined): string {
 
 function isComplete(m: VerbrauchMessung): boolean {
   return m.wert_start != null && m.wert_ende != null
+}
+
+/** Vergangene/laufende Urlaube + höchstens der nächste zukünftige (jeweils ohne Messung). */
+function vacationsForAnfangsstand(
+  vacations: Vacation[],
+  usedUrlaubIds: Set<string>
+): { selectable: Vacation[]; nextFuture: Vacation | null } {
+  const today = todayInAppTimezone()
+  const unused = vacations
+    .filter((v) => !usedUrlaubIds.has(v.id))
+    .slice()
+    .sort((a, b) =>
+      normalizeCalendarDate(a.startdatum).localeCompare(normalizeCalendarDate(b.startdatum))
+    )
+
+  const pastOrCurrent: Vacation[] = []
+  const future: Vacation[] = []
+  for (const v of unused) {
+    if (normalizeCalendarDate(v.startdatum) <= today) pastOrCurrent.push(v)
+    else future.push(v)
+  }
+
+  const nextFuture = future[0] ?? null
+  return {
+    selectable: nextFuture ? [...pastOrCurrent, nextFuture] : pastOrCurrent,
+    nextFuture,
+  }
 }
 
 type DialogMode =
@@ -129,8 +157,8 @@ export function VerbrauchMessungSection({
     [filtered]
   )
 
-  const availableVacations = useMemo(
-    () => vacations.filter((v) => !usedUrlaubIds.has(v.id)),
+  const { selectable: availableVacations, nextFuture: nextFutureVacation } = useMemo(
+    () => vacationsForAnfangsstand(vacations, usedUrlaubIds),
     [vacations, usedUrlaubIds]
   )
 
@@ -144,6 +172,9 @@ export function VerbrauchMessungSection({
 
     if (mode.kind === 'start') {
       setWert(suggestedStart != null ? String(suggestedStart) : '')
+      if (nextFutureVacation && !usedUrlaubIds.has(nextFutureVacation.id)) {
+        setUrlaubId(nextFutureVacation.id)
+      }
     } else if (mode.kind === 'ende') {
       setWert('')
       setNotizen(mode.messung.notizen ?? '')
@@ -320,21 +351,16 @@ export function VerbrauchMessungSection({
             : ''
 
   return (
-    <div className="space-y-4">
-      <VerbrauchChart medium={medium} messungen={messungen} />
-
-      <div className="flex items-center justify-between gap-2">
+    <div className="space-y-4 pb-20">
+      <div className="flex items-baseline justify-between gap-2">
+        <h2 className="text-base font-semibold text-brand-heading">{medium.name}</h2>
         <p className="text-sm text-muted-foreground">
-          Timeline pro Urlaub
+          Timeline
           {supportsAuffuellung ? ' · inkl. Zwischenkäufe' : ''}
         </p>
-        {canAdmin && availableVacations.length > 0 && (
-          <Button size="sm" onClick={() => openDialog({ kind: 'start' })}>
-            <Plus className="mr-1 h-4 w-4" />
-            Anfangsstand erfassen
-          </Button>
-        )}
       </div>
+
+      <VerbrauchChart medium={medium} messungen={messungen} />
 
       {filtered.length === 0 ? (
         <div className="rounded-lg border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">
@@ -754,6 +780,19 @@ export function VerbrauchMessungSection({
         description="Der Verbrauch wird neu berechnet."
         onConfirm={() => void handleDeleteEreignis()}
       />
+
+      {canAdmin && availableVacations.length > 0 && (
+        <div className="fixed bottom-6 right-6 z-30">
+          <Button
+            size="icon"
+            onClick={() => openDialog({ kind: 'start' })}
+            className="h-14 w-14 rounded-full shadow-lg hover:shadow-xl transition-shadow bg-[rgb(45,79,30)] hover:bg-[rgb(45,79,30)]/90 text-white aspect-square p-0"
+            aria-label="Anfangsstand erfassen"
+          >
+            <Plus className="h-6 w-6" strokeWidth={2.5} />
+          </Button>
+        </div>
+      )}
     </div>
   )
 }
