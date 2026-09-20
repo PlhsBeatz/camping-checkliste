@@ -550,7 +550,7 @@ export function FaelligkeitVorlagenManager({
   return (
     <>
       <p className="text-sm text-muted-foreground max-w-2xl mb-4">
-        Vorlagen erscheinen beim Anlegen neuer Fälligkeiten unter Wartung & Verbrauch. Die
+        Vorlagen erscheinen beim Anlegen neuer Fälligkeiten unter Wartung. Die
         Reihenfolge legen Sie per Ziehen am Griff-Symbol fest.
       </p>
 

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { differenceInCalendarDays, format } from 'date-fns'
 import { de } from 'date-fns/locale'
 import type { DateRange } from 'react-day-picker'
@@ -19,18 +19,7 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover'
 import { cn } from '@/lib/utils'
-
-function useIsSmallViewport() {
-  const [isSmall, setIsSmall] = useState(false)
-  useEffect(() => {
-    const mql = window.matchMedia('(max-width: 768px)')
-    const set = () => setIsSmall(mql.matches)
-    set()
-    mql.addEventListener('change', set)
-    return () => mql.removeEventListener('change', set)
-  }, [])
-  return isSmall
-}
+import { useIsSmallViewport } from '@/hooks/use-is-small-viewport'
 
 function nightsBetween(start: string, end: string): number {
   if (!start || !end) return 0

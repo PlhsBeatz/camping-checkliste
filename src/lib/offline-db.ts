@@ -30,6 +30,7 @@ import type {
   Optimierung,
   Faelligkeit,
   VerbrauchMessung,
+  VerbrauchMedium,
   FaelligkeitVorlage,
 } from './db'
 import type { AttentionFeed } from './attention-feed'
@@ -119,6 +120,11 @@ export interface CachedFaelligkeit extends Faelligkeit {
 }
 
 export interface CachedVerbrauchMessung extends VerbrauchMessung {
+  _cachedAt: number
+  _updatedAt: number
+}
+
+export interface CachedVerbrauchMedium extends VerbrauchMedium {
   _cachedAt: number
   _updatedAt: number
 }
@@ -244,6 +250,7 @@ export class OfflineDB extends Dexie {
   optimierungen!: EntityTable<CachedOptimierung, 'id'>
   faelligkeiten!: EntityTable<CachedFaelligkeit, 'id'>
   verbrauchMessungen!: EntityTable<CachedVerbrauchMessung, 'id'>
+  verbrauchMedien!: EntityTable<CachedVerbrauchMedium, 'id'>
   faelligkeitVorlagen!: EntityTable<CachedFaelligkeitVorlage, 'id'>
   lastPosition!: EntityTable<CachedLastPosition, 'id'>
   packStatus!: EntityTable<CachedPackStatus, 'id'>
@@ -469,6 +476,10 @@ export class OfflineDB extends Dexie {
     this.version(11).stores({
       alternativeGroups: 'id, _cachedAt, _updatedAt',
     })
+    // Version 12: Verbrauch-Medien-Konfiguration
+    this.version(12).stores({
+      verbrauchMedien: 'id, schluessel, ist_aktiv, sort_order, _cachedAt, _updatedAt',
+    })
   }
 }
 
@@ -643,6 +654,11 @@ export async function removeCachedFaelligkeit(id: string): Promise<void> {
 export async function cacheVerbrauchMessungen(items: VerbrauchMessung[]): Promise<void> {
   const withMetaItems = items.map((v) => withMeta(v)) as CachedVerbrauchMessung[]
   await snapshotReplace(offlineDb.verbrauchMessungen, withMetaItems)
+}
+
+export async function cacheVerbrauchMedien(items: VerbrauchMedium[]): Promise<void> {
+  const withMetaItems = items.map((v) => withMeta(v)) as CachedVerbrauchMedium[]
+  await snapshotReplace(offlineDb.verbrauchMedien, withMetaItems)
 }
 
 export async function cacheFaelligkeitVorlagen(items: FaelligkeitVorlage[]): Promise<void> {

@@ -394,10 +394,26 @@ CREATE TABLE IF NOT EXISTS faelligkeiten_historie (
     FOREIGN KEY (faelligkeit_id) REFERENCES faelligkeiten(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS verbrauch_medien (
+    id TEXT PRIMARY KEY,
+    schluessel TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL,
+    einheit TEXT NOT NULL DEFAULT 'kg',
+    messmodus TEXT NOT NULL DEFAULT 'abnahme'
+        CHECK (messmodus IN ('abnahme', 'zunahme')),
+    label_wert_start TEXT NOT NULL DEFAULT 'Anfang',
+    label_wert_ende TEXT NOT NULL DEFAULT 'Ende',
+    dichte_kg_pro_l REAL,
+    leergewicht_kg REAL,
+    ist_aktiv INTEGER NOT NULL DEFAULT 1,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS verbrauch_messungen (
     id TEXT PRIMARY KEY,
-    typ TEXT NOT NULL DEFAULT 'gas'
-        CHECK (typ IN ('gas', 'wasser', 'strom', 'adblue', 'sonstiges')),
+    typ TEXT NOT NULL DEFAULT 'gas',
     urlaub_id TEXT,
     equipment_id TEXT,
     transport_id TEXT,
@@ -443,6 +459,28 @@ CREATE INDEX IF NOT EXISTS idx_faelligkeiten_archived ON faelligkeiten(is_archiv
 CREATE INDEX IF NOT EXISTS idx_faelligkeiten_historie_faelligkeit ON faelligkeiten_historie(faelligkeit_id, datum);
 CREATE INDEX IF NOT EXISTS idx_verbrauch_urlaub ON verbrauch_messungen(urlaub_id);
 CREATE INDEX IF NOT EXISTS idx_verbrauch_typ ON verbrauch_messungen(typ);
+CREATE INDEX IF NOT EXISTS idx_verbrauch_medien_aktiv_sort ON verbrauch_medien(ist_aktiv, sort_order, name);
+
+CREATE TABLE IF NOT EXISTS verbrauch_ereignisse (
+    id TEXT PRIMARY KEY,
+    messung_id TEXT NOT NULL,
+    typ TEXT NOT NULL DEFAULT 'auffuellung'
+        CHECK (typ IN ('auffuellung')),
+    datum TEXT,
+    menge REAL NOT NULL,
+    notizen TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (messung_id) REFERENCES verbrauch_messungen(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_verbrauch_ereignisse_messung
+    ON verbrauch_ereignisse(messung_id, datum, created_at);
+
+CREATE TRIGGER IF NOT EXISTS update_verbrauch_medien_timestamp
+AFTER UPDATE ON verbrauch_medien
+BEGIN
+  UPDATE verbrauch_medien SET updated_at = datetime('now') WHERE id = NEW.id;
+END;
 CREATE INDEX IF NOT EXISTS idx_faelligkeit_vorlagen_sort ON faelligkeit_vorlagen(sort_order, name);
 
 CREATE TRIGGER IF NOT EXISTS update_faelligkeiten_timestamp

@@ -1,5 +1,5 @@
 /**
- * D1 CRUD für Wartung: Fälligkeiten, Historie, Verbrauchsmessungen.
+ * D1 CRUD für Wartung: Fälligkeiten und Historie.
  */
 import type { D1Database } from '@cloudflare/workers-types'
 import {
@@ -14,8 +14,7 @@ import {
   normalizeFaelligkeitTyp,
   normalizeIntervallRhythmus,
 } from '@/lib/faelligkeit-status'
-import { differenceCalendarDays, normalizeCalendarDate, todayInAppTimezone } from '@/lib/app-timezone'
-import { roundDecimals, verbrauchGesamtKg } from '@/lib/verbrauch-format'
+import { normalizeCalendarDate, todayInAppTimezone } from '@/lib/app-timezone'
 import { faelligkeitToHistorieInitial } from '@/lib/faelligkeit-historie-utils'
 
 export type {
@@ -26,8 +25,6 @@ export type {
   FaelligkeitKategorie,
   FaelligkeitTyp,
 } from '@/lib/faelligkeit-status'
-
-export type VerbrauchMessungTyp = 'gas' | 'wasser' | 'strom' | 'adblue' | 'sonstiges'
 
 export interface Faelligkeit {
   id: string
@@ -91,24 +88,6 @@ export interface FaelligkeitDashboard {
   bald_faellig: Faelligkeit[]
   ok: Faelligkeit[]
   nur_info: Faelligkeit[]
-}
-
-export interface VerbrauchMessung {
-  id: string
-  typ: VerbrauchMessungTyp
-  urlaub_id: string | null
-  equipment_id: string | null
-  transport_id: string | null
-  messdatum_start: string | null
-  messdatum_ende: string | null
-  wert_start: number | null
-  wert_ende: number | null
-  einheit: string
-  verbrauch_gesamt: number | null
-  verbrauch_pro_tag: number | null
-  notizen: string | null
-  created_at: string
-  urlaub_titel?: string | null
 }
 
 const FAELLIGKEIT_SELECT = `
@@ -185,48 +164,6 @@ function mapHistorieRow(row: Record<string, unknown>): FaelligkeitHistorie {
     notiz: row.notiz != null ? String(row.notiz) : null,
     created_at: String(row.created_at || ''),
     user_name: row.user_name != null ? String(row.user_name) : null,
-  }
-}
-
-function mapVerbrauchRow(row: Record<string, unknown>): VerbrauchMessung {
-  return {
-    id: String(row.id),
-    typ: String(row.typ) as VerbrauchMessungTyp,
-    urlaub_id: row.urlaub_id != null ? String(row.urlaub_id) : null,
-    equipment_id: row.equipment_id != null ? String(row.equipment_id) : null,
-    transport_id: row.transport_id != null ? String(row.transport_id) : null,
-    messdatum_start: row.messdatum_start != null ? String(row.messdatum_start) : null,
-    messdatum_ende: row.messdatum_ende != null ? String(row.messdatum_ende) : null,
-    wert_start: row.wert_start != null ? Number(row.wert_start) : null,
-    wert_ende: row.wert_ende != null ? Number(row.wert_ende) : null,
-    einheit: String(row.einheit || 'kg'),
-    verbrauch_gesamt: row.verbrauch_gesamt != null ? Number(row.verbrauch_gesamt) : null,
-    verbrauch_pro_tag: row.verbrauch_pro_tag != null ? Number(row.verbrauch_pro_tag) : null,
-    notizen: row.notizen != null ? String(row.notizen) : null,
-    created_at: String(row.created_at || ''),
-    urlaub_titel: row.urlaub_titel != null ? String(row.urlaub_titel) : null,
-  }
-}
-
-function computeVerbrauchValues(
-  wertStart: number | null | undefined,
-  wertEnde: number | null | undefined,
-  messdatumStart: string | null | undefined,
-  messdatumEnde: string | null | undefined
-): { verbrauch_gesamt: number | null; verbrauch_pro_tag: number | null } {
-  if (wertStart == null || wertEnde == null) {
-    return { verbrauch_gesamt: null, verbrauch_pro_tag: null }
-  }
-  const gesamt = verbrauchGesamtKg(wertStart, wertEnde)
-  if (!messdatumStart || !messdatumEnde) {
-    return { verbrauch_gesamt: gesamt, verbrauch_pro_tag: null }
-  }
-  const start = normalizeCalendarDate(messdatumStart)
-  const end = normalizeCalendarDate(messdatumEnde)
-  const days = Math.max(1, differenceCalendarDays(end, start) + 1)
-  return {
-    verbrauch_gesamt: gesamt,
-    verbrauch_pro_tag: roundDecimals(gesamt / days, 2),
   }
 }
 
@@ -960,209 +897,6 @@ export async function getWartungStatusForIntegration(db: D1Database): Promise<{
       ampel_status: i.ampel_status ?? 'ok',
       naechste_faelligkeit: i.naechste_faelligkeit,
     })),
-  }
-}
-
-// --- Verbrauchsmessungen ---
-
-export async function getVerbrauchMessungen(
-  db: D1Database,
-  options?: { typ?: VerbrauchMessungTyp; urlaubId?: string }
-): Promise<VerbrauchMessung[]> {
-  try {
-    const conditions: string[] = []
-    const binds: (string | number)[] = []
-    if (options?.typ) {
-      conditions.push('v.typ = ?')
-      binds.push(options.typ)
-    }
-    if (options?.urlaubId) {
-      conditions.push('v.urlaub_id = ?')
-      binds.push(options.urlaubId)
-    }
-    const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''
-    const res = await db
-      .prepare(
-        `SELECT v.id, v.typ, v.urlaub_id, v.equipment_id, v.transport_id,
-                v.messdatum_start, v.messdatum_ende, v.wert_start, v.wert_ende,
-                v.einheit, v.verbrauch_gesamt, v.verbrauch_pro_tag, v.notizen, v.created_at,
-                u.titel AS urlaub_titel
-         FROM verbrauch_messungen v
-         LEFT JOIN urlaube u ON u.id = v.urlaub_id
-         ${where}
-         ORDER BY v.messdatum_ende DESC, v.created_at DESC`
-      )
-      .bind(...binds)
-      .all<Record<string, unknown>>()
-    return (res.results || []).map(mapVerbrauchRow)
-  } catch (error) {
-    console.error('Error getVerbrauchMessungen:', error)
-    return []
-  }
-}
-
-export async function getVerbrauchMessung(
-  db: D1Database,
-  id: string
-): Promise<VerbrauchMessung | null> {
-  try {
-    const row = await db
-      .prepare(
-        `SELECT v.id, v.typ, v.urlaub_id, v.equipment_id, v.transport_id,
-                v.messdatum_start, v.messdatum_ende, v.wert_start, v.wert_ende,
-                v.einheit, v.verbrauch_gesamt, v.verbrauch_pro_tag, v.notizen, v.created_at,
-                u.titel AS urlaub_titel
-         FROM verbrauch_messungen v
-         LEFT JOIN urlaube u ON u.id = v.urlaub_id
-         WHERE v.id = ?`
-      )
-      .bind(id)
-      .first<Record<string, unknown>>()
-    return row ? mapVerbrauchRow(row) : null
-  } catch (error) {
-    console.error('Error getVerbrauchMessung:', error)
-    return null
-  }
-}
-
-export async function createVerbrauchMessung(
-  db: D1Database,
-  data: {
-    typ?: VerbrauchMessungTyp
-    urlaub_id?: string | null
-    equipment_id?: string | null
-    transport_id?: string | null
-    messdatum_start?: string | null
-    messdatum_ende?: string | null
-    wert_start?: number | null
-    wert_ende?: number | null
-    einheit?: string
-    notizen?: string | null
-  }
-): Promise<VerbrauchMessung | null> {
-  try {
-    const id = crypto.randomUUID()
-    const { verbrauch_gesamt, verbrauch_pro_tag } = computeVerbrauchValues(
-      data.wert_start,
-      data.wert_ende,
-      data.messdatum_start,
-      data.messdatum_ende
-    )
-    await db
-      .prepare(
-        `INSERT INTO verbrauch_messungen (
-          id, typ, urlaub_id, equipment_id, transport_id,
-          messdatum_start, messdatum_ende, wert_start, wert_ende, einheit,
-          verbrauch_gesamt, verbrauch_pro_tag, notizen
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-      )
-      .bind(
-        id,
-        data.typ ?? 'gas',
-        data.urlaub_id ?? null,
-        data.equipment_id ?? null,
-        data.transport_id ?? null,
-        data.messdatum_start ? normalizeCalendarDate(data.messdatum_start) : null,
-        data.messdatum_ende ? normalizeCalendarDate(data.messdatum_ende) : null,
-        data.wert_start ?? null,
-        data.wert_ende ?? null,
-        data.einheit ?? 'kg',
-        verbrauch_gesamt,
-        verbrauch_pro_tag,
-        data.notizen ?? null
-      )
-      .run()
-    return getVerbrauchMessung(db, id)
-  } catch (error) {
-    console.error('Error createVerbrauchMessung:', error)
-    return null
-  }
-}
-
-export async function updateVerbrauchMessung(
-  db: D1Database,
-  id: string,
-  updates: Partial<{
-    typ: VerbrauchMessungTyp
-    urlaub_id: string | null
-    equipment_id: string | null
-    transport_id: string | null
-    messdatum_start: string | null
-    messdatum_ende: string | null
-    wert_start: number | null
-    wert_ende: number | null
-    einheit: string
-    notizen: string | null
-  }>
-): Promise<VerbrauchMessung | null> {
-  try {
-    const existing = await getVerbrauchMessung(db, id)
-    if (!existing) return null
-
-    const merged = {
-      wert_start: updates.wert_start !== undefined ? updates.wert_start : existing.wert_start,
-      wert_ende: updates.wert_ende !== undefined ? updates.wert_ende : existing.wert_ende,
-      messdatum_start:
-        updates.messdatum_start !== undefined ? updates.messdatum_start : existing.messdatum_start,
-      messdatum_ende:
-        updates.messdatum_ende !== undefined ? updates.messdatum_ende : existing.messdatum_ende,
-    }
-    const { verbrauch_gesamt, verbrauch_pro_tag } = computeVerbrauchValues(
-      merged.wert_start,
-      merged.wert_ende,
-      merged.messdatum_start,
-      merged.messdatum_ende
-    )
-
-    const fields: string[] = []
-    const values: (string | number | null)[] = []
-    const set = (col: string, val: string | number | null) => {
-      fields.push(`${col} = ?`)
-      values.push(val)
-    }
-
-    if (updates.typ !== undefined) set('typ', updates.typ)
-    if (updates.urlaub_id !== undefined) set('urlaub_id', updates.urlaub_id)
-    if (updates.equipment_id !== undefined) set('equipment_id', updates.equipment_id)
-    if (updates.transport_id !== undefined) set('transport_id', updates.transport_id)
-    if (updates.messdatum_start !== undefined) {
-      set('messdatum_start', updates.messdatum_start ? normalizeCalendarDate(updates.messdatum_start) : null)
-    }
-    if (updates.messdatum_ende !== undefined) {
-      set('messdatum_ende', updates.messdatum_ende ? normalizeCalendarDate(updates.messdatum_ende) : null)
-    }
-    if (updates.wert_start !== undefined) set('wert_start', updates.wert_start)
-    if (updates.wert_ende !== undefined) set('wert_ende', updates.wert_ende)
-    if (updates.einheit !== undefined) set('einheit', updates.einheit)
-    if (updates.notizen !== undefined) set('notizen', updates.notizen)
-
-    if (
-      updates.wert_start !== undefined ||
-      updates.wert_ende !== undefined ||
-      updates.messdatum_start !== undefined ||
-      updates.messdatum_ende !== undefined
-    ) {
-      set('verbrauch_gesamt', verbrauch_gesamt)
-      set('verbrauch_pro_tag', verbrauch_pro_tag)
-    }
-
-    if (fields.length === 0) return existing
-    values.push(id)
-    await db.prepare(`UPDATE verbrauch_messungen SET ${fields.join(', ')} WHERE id = ?`).bind(...values).run()
-    return getVerbrauchMessung(db, id)
-  } catch (error) {
-    console.error('Error updateVerbrauchMessung:', error)
-    return null
-  }
-}
-
-export async function deleteVerbrauchMessung(db: D1Database, id: string): Promise<boolean> {
-  try {
-    const r = await db.prepare('DELETE FROM verbrauch_messungen WHERE id = ?').bind(id).run()
-    return r.success && (r.meta?.changes ?? 0) > 0
-  } catch (error) {
-    console.error('Error deleteVerbrauchMessung:', error)
-    return false
   }
 }
 

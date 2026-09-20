@@ -53,6 +53,7 @@ import type {
   Optimierung,
   Faelligkeit,
   VerbrauchMessung,
+  VerbrauchMedium,
   FaelligkeitVorlage,
 } from './db'
 import type { AlternativeGroup } from './packing-alternatives'
@@ -331,6 +332,13 @@ export async function getCachedFaelligkeiten(): Promise<Faelligkeit[]> {
 export async function getCachedVerbrauchMessungen(): Promise<VerbrauchMessung[]> {
   const rows = await offlineDb.verbrauchMessungen.toArray()
   return rows.map(stripMeta) as VerbrauchMessung[]
+}
+
+export async function getCachedVerbrauchMedien(): Promise<VerbrauchMedium[]> {
+  const rows = await offlineDb.verbrauchMedien.toArray()
+  return (rows.map(stripMeta) as VerbrauchMedium[]).sort(
+    (a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name, 'de')
+  )
 }
 
 export async function getCachedFaelligkeitVorlagen(): Promise<FaelligkeitVorlage[]> {

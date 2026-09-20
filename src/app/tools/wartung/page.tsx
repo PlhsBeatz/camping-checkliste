@@ -5,7 +5,6 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuth } from '@/components/auth-provider'
 import { NavigationSidebar } from '@/components/navigation-sidebar'
 import { Button } from '@/components/ui/button'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Menu, Plus, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { ApiResponse } from '@/lib/api-types'
@@ -14,8 +13,6 @@ import type {
   FaelligkeitDashboard,
   EquipmentItem,
   TransportVehicle,
-  VerbrauchMessung,
-  Vacation,
   Category,
   MainCategory,
 } from '@/lib/db'
@@ -23,27 +20,22 @@ import { FaelligkeitDashboardView } from '@/components/wartung/faelligkeit-dashb
 import { FaelligkeitFormDialog } from '@/components/wartung/faelligkeit-form-dialog'
 import { FaelligkeitQuittierungDialog } from '@/components/wartung/faelligkeit-quittierung-dialog'
 import { FaelligkeitHistorieList } from '@/components/wartung/faelligkeit-historie-list'
-import { VerbrauchSection } from '@/components/wartung/verbrauch-section'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { useReconnectRefetch } from '@/hooks/use-reconnect-refetch'
 import { flattenFaelligkeitDashboard } from '@/lib/faelligkeit-time-groups'
 import {
   getCachedFaelligkeiten,
-  getCachedVerbrauchMessungen,
   getCachedEquipment,
   getCachedCategories,
   getCachedMainCategories,
   getCachedTransportVehicles,
-  getCachedVacations,
 } from '@/lib/offline-sync'
 import {
   cacheFaelligkeiten,
-  cacheVerbrauchMessungen,
   cacheEquipment,
   cacheCategories,
   cacheMainCategories,
   cacheTransportVehicles,
-  cacheVacations,
 } from '@/lib/offline-db'
 
 function WartungPageContent() {
@@ -52,12 +44,10 @@ function WartungPageContent() {
   const { canReadWartung, canWriteWartung, loading: authLoading } = useAuth()
   const [showNavSidebar, setShowNavSidebar] = useState(false)
   const [dashboard, setDashboard] = useState<FaelligkeitDashboard | null>(null)
-  const [messungen, setMessungen] = useState<VerbrauchMessung[]>([])
   const [equipment, setEquipment] = useState<EquipmentItem[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [mainCategories, setMainCategories] = useState<MainCategory[]>([])
   const [transports, setTransports] = useState<TransportVehicle[]>([])
-  const [vacations, setVacations] = useState<Vacation[]>([])
   const [loading, setLoading] = useState(true)
 
   const [formOpen, setFormOpen] = useState(false)
@@ -96,41 +86,21 @@ function WartungPageContent() {
     }
   }, [showNavSidebar])
 
-  const upsertMessung = useCallback((item: VerbrauchMessung) => {
-    setMessungen((prev) => {
-      const next = [item, ...prev.filter((m) => m.id !== item.id)]
-      void cacheVerbrauchMessungen(next)
-      return next
-    })
-  }, [])
-
-  const removeMessung = useCallback((id: string) => {
-    setMessungen((prev) => {
-      const next = prev.filter((m) => m.id !== id)
-      void cacheVerbrauchMessungen(next)
-      return next
-    })
-  }, [])
-
   const load = useCallback(async () => {
     const seq = ++loadSeqRef.current
     try {
-      const [dashRes, verbrRes, eqRes, catRes, mainCatRes, trRes, vacRes] = await Promise.all([
+      const [dashRes, eqRes, catRes, mainCatRes, trRes] = await Promise.all([
         fetchNoStore('/api/faelligkeiten/dashboard'),
-        fetchNoStore('/api/verbrauch-messungen?typ=gas'),
         fetchNoStore('/api/equipment-items'),
         fetchNoStore('/api/categories'),
         fetchNoStore('/api/main-categories'),
         fetchNoStore('/api/transport-vehicles'),
-        fetchNoStore('/api/vacations'),
       ])
       const dashData = (await dashRes.json()) as ApiResponse<FaelligkeitDashboard>
-      const verbrData = (await verbrRes.json()) as ApiResponse<VerbrauchMessung[]>
       const eqData = (await eqRes.json()) as ApiResponse<EquipmentItem[]>
       const catData = (await catRes.json()) as ApiResponse<Category[]>
       const mainCatData = (await mainCatRes.json()) as ApiResponse<MainCategory[]>
       const trData = (await trRes.json()) as ApiResponse<TransportVehicle[]>
-      const vacData = (await vacRes.json()) as ApiResponse<Vacation[]>
 
       if (seq !== loadSeqRef.current) return
 
@@ -143,10 +113,6 @@ function WartungPageContent() {
           ...dashData.data.nur_info,
         ]
         await cacheFaelligkeiten(all)
-      }
-      if (verbrData.success && verbrData.data) {
-        setMessungen(verbrData.data)
-        await cacheVerbrauchMessungen(verbrData.data)
       }
       if (eqData.success && eqData.data) {
         setEquipment(eqData.data)
@@ -163,10 +129,6 @@ function WartungPageContent() {
       if (trData.success && trData.data) {
         setTransports(trData.data)
         await cacheTransportVehicles(trData.data)
-      }
-      if (vacData.success && vacData.data) {
-        setVacations(vacData.data)
-        await cacheVacations(vacData.data)
       }
     } catch (error) {
       console.error('Wartung load failed:', error)
@@ -186,8 +148,6 @@ function WartungPageContent() {
           }
           setDashboard(d)
         }
-        const cachedV = await getCachedVerbrauchMessungen()
-        if (cachedV.length > 0) setMessungen(cachedV)
         const cachedEq = await getCachedEquipment()
         if (cachedEq.length > 0) setEquipment(cachedEq)
         const cachedCat = await getCachedCategories()
@@ -196,8 +156,6 @@ function WartungPageContent() {
         if (cachedMain.length > 0) setMainCategories(cachedMain)
         const cachedTr = await getCachedTransportVehicles()
         if (cachedTr.length > 0) setTransports(cachedTr)
-        const cachedVac = await getCachedVacations()
-        if (cachedVac.length > 0) setVacations(cachedVac)
       }
     } finally {
       if (seq === loadSeqRef.current) {
@@ -353,70 +311,50 @@ function WartungPageContent() {
               </Button>
               <div>
                 <h1 className="text-lg sm:text-xl font-bold tracking-tight text-brand-heading">
-                  Wartung & Verbrauch
+                  Wartung
                 </h1>
               </div>
             </div>
           </div>
 
-          <Tabs defaultValue="faelligkeiten" className="space-y-4">
-            <TabsList>
-              <TabsTrigger value="faelligkeiten">Fälligkeiten</TabsTrigger>
-              <TabsTrigger value="verbrauch">Verbrauch</TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="faelligkeiten" className="mt-0">
-              {loading ? (
-                <div className="flex flex-col items-center justify-center py-20 gap-4">
-                  <div className="animate-spin rounded-full h-12 w-12 border-4 border-[rgb(45,79,30)] border-t-transparent" />
-                  <p className="text-muted-foreground animate-pulse">Wird geladen…</p>
+          {loading ? (
+            <div className="flex flex-col items-center justify-center py-20 gap-4">
+              <div className="animate-spin rounded-full h-12 w-12 border-4 border-[rgb(45,79,30)] border-t-transparent" />
+              <p className="text-muted-foreground animate-pulse">Wird geladen…</p>
+            </div>
+          ) : dashboard ? (
+            <>
+              {filterTransportId && (
+                <div className="mb-4 flex items-center justify-between gap-2 rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm">
+                  <span>
+                    Gefiltert:{' '}
+                    <span className="font-medium">
+                      {filterTransportName ?? 'Transportmittel'}
+                    </span>
+                  </span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 px-2"
+                    onClick={() => router.replace('/tools/wartung', { scroll: false })}
+                  >
+                    <X className="h-4 w-4 mr-1" />
+                    Filter entfernen
+                  </Button>
                 </div>
-              ) : dashboard ? (
-                <>
-                  {filterTransportId && (
-                    <div className="mb-4 flex items-center justify-between gap-2 rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm">
-                      <span>
-                        Gefiltert:{' '}
-                        <span className="font-medium">
-                          {filterTransportName ?? 'Transportmittel'}
-                        </span>
-                      </span>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="h-8 px-2"
-                        onClick={() => router.replace('/tools/wartung', { scroll: false })}
-                      >
-                        <X className="h-4 w-4 mr-1" />
-                        Filter entfernen
-                      </Button>
-                    </div>
-                  )}
-                  <FaelligkeitDashboardView
-                    dashboard={dashboard}
-                    filterTransportId={filterTransportId}
-                    canAdmin={canWriteWartung}
-                    onQuittieren={setQuittItem}
-                    onHistorie={setHistorieItem}
-                    onEdit={handleEdit}
-                    onDelete={setDeleteItem}
-                  />
-                </>
-              ) : null}
-            </TabsContent>
-
-            <TabsContent value="verbrauch" className="mt-0">
-              <VerbrauchSection
-                messungen={messungen}
-                vacations={vacations}
+              )}
+              <FaelligkeitDashboardView
+                dashboard={dashboard}
+                filterTransportId={filterTransportId}
                 canAdmin={canWriteWartung}
-                onMessungCreated={upsertMessung}
-                onMessungDeleted={removeMessung}
-                onRefresh={() => void load()}
+                onQuittieren={setQuittItem}
+                onHistorie={setHistorieItem}
+                onEdit={handleEdit}
+                onDelete={setDeleteItem}
               />
-            </TabsContent>
-          </Tabs>
+            </>
+          ) : null}
 
           {canWriteWartung && (
             <div className="fixed bottom-6 right-6 z-30">

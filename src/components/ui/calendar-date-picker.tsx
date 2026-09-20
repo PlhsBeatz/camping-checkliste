@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { format } from 'date-fns'
 import { de } from 'date-fns/locale'
 import { Calendar as CalendarIcon } from 'lucide-react'
@@ -14,18 +14,7 @@ import {
 } from '@/components/ui/dialog'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { cn } from '@/lib/utils'
-
-function useIsSmallViewport() {
-  const [isSmall, setIsSmall] = useState(false)
-  useEffect(() => {
-    const mql = window.matchMedia('(max-width: 768px)')
-    const set = () => setIsSmall(mql.matches)
-    set()
-    mql.addEventListener('change', set)
-    return () => mql.removeEventListener('change', set)
-  }, [])
-  return isSmall
-}
+import { useIsSmallViewport } from '@/hooks/use-is-small-viewport'
 
 export interface CalendarDatePickerProps {
   value: string
@@ -36,7 +25,7 @@ export interface CalendarDatePickerProps {
   dialogTitle?: string
 }
 
-/** Einzeldatum – Popover (Desktop) / Dialog (Mobile), wie bei Urlauben. */
+/** Einzeldatum – Popover (Desktop) / Dialog (Mobile), gemeinsame Kalender-Caption. */
 export function CalendarDatePicker({
   value,
   onChange,

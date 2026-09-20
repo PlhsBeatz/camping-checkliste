@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
     const readErr = requireReadWartung(auth.userContext)
     if (readErr) return readErr
     const { searchParams } = new URL(request.url)
-    const typ = searchParams.get('typ') as VerbrauchMessungTyp | null
+    const typ = searchParams.get('typ')
     const urlaubId = searchParams.get('urlaubId')
 
     const env = process.env as unknown as CloudflareEnv
@@ -52,11 +52,18 @@ export async function POST(request: NextRequest) {
     if (adminErr) return adminErr
 
     const body = (await request.json()) as VerbrauchBody
+    if (!body.typ) {
+      return NextResponse.json({ error: 'typ ist erforderlich' }, { status: 400 })
+    }
+
     const env = process.env as unknown as CloudflareEnv
     const db = await getDB(env)
     const item = await createVerbrauchMessung(db, body)
     if (!item) {
-      return NextResponse.json({ error: 'Messung konnte nicht gespeichert werden' }, { status: 500 })
+      return NextResponse.json(
+        { error: 'Messung konnte nicht gespeichert werden (Medium aktiv?)' },
+        { status: 400 }
+      )
     }
     return NextResponse.json({ success: true, data: item })
   } catch (error: unknown) {

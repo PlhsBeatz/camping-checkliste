@@ -45,7 +45,9 @@ export const BACKUP_TABLE_ORDER: string[] = [
   'faelligkeit_vorlagen',
   'faelligkeiten',
   'faelligkeiten_historie',
+  'verbrauch_medien',
   'verbrauch_messungen',
+  'verbrauch_ereignisse',
   'attention_snooze',
   'smart_vorschlaege',
   'packing_pattern_snapshot',
@@ -133,12 +135,14 @@ const TOOLS = new Set([
   'packing_pattern_snapshot',
 ])
 
-/** Wartung & Verbrauch (Fälligkeiten, Vorlagen, Historie, Messungen) */
+/** Wartung & Verbrauch (Fälligkeiten, Vorlagen, Historie, Medien, Messungen) */
 export const WARTUNG_TABLES = new Set([
   'faelligkeit_vorlagen',
   'faelligkeiten',
   'faelligkeiten_historie',
+  'verbrauch_medien',
   'verbrauch_messungen',
+  'verbrauch_ereignisse',
 ])
 export const AUTH_TABLES = new Set([
   'users',
@@ -192,7 +196,9 @@ export const PK_PARTS: Record<string, string[]> = {
   faelligkeit_vorlagen: ['id'],
   faelligkeiten: ['id'],
   faelligkeiten_historie: ['id'],
+  verbrauch_medien: ['id'],
   verbrauch_messungen: ['id'],
+  verbrauch_ereignisse: ['id'],
   attention_snooze: ['item_key'],
   smart_vorschlaege: ['id'],
   packing_pattern_snapshot: ['id'],

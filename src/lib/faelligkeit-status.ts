@@ -1,5 +1,5 @@
 /**
- * Fälligkeits-Status und Datumsberechnung für Wartung & Verbrauch.
+ * Fälligkeits-Status und Datumsberechnung für Wartung.
  * Ampel-Logik wird beim Speichern angewendet; GET liefert persistierte Werte.
  */
 import {

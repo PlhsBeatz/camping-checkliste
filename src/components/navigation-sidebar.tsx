@@ -85,6 +85,7 @@ export function NavigationSidebar({ isOpen, onClose }: NavigationSidebarProps) {
     { label: 'SONNEN-AUSRICHTUNG', href: '/tools/sonnen-ausrichtung' },
     { label: 'CHECKLISTEN', href: '/tools/checklisten' },
     { label: 'WARTUNG', href: '/tools/wartung', requiresRead: 'wartung' },
+    { label: 'VERBRAUCH', href: '/tools/verbrauch', requiresRead: 'wartung' },
     { label: 'OPTIMIERUNGEN', href: '/tools/optimierungen', requiresRead: 'optimierung' },
     { label: 'VORSCHLÄGE', href: '/tools/vorschlaege', badge: suggestionsCount },
   ]

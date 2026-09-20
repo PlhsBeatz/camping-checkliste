@@ -52,9 +52,9 @@ const PRESET_META: { id: UiPresetKey; label: string; hint: string }[] = [
   },
   {
     id: 'wartung',
-    label: 'Wartung & Verbrauch',
+    label: 'Wartung / Verbrauch',
     hint:
-      'Fälligkeiten inkl. Historie, Wartungs-Vorlagen und Verbrauchsmessungen. Ohne „Ausrüstung“ ergänzt Auto-Closure die zugeordneten Gegenstände und Transportmittel.',
+      'Fälligkeiten inkl. Historie, Wartungs-Vorlagen, Verbrauch-Medien und Verbrauchsmessungen. Ohne „Ausrüstung“ ergänzt Auto-Closure die zugeordneten Gegenstände und Transportmittel.',
   },
 ]
 
