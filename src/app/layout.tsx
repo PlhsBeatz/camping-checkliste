@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
+import { ChunkLoadRecovery } from '@/components/chunk-load-recovery'
 import { PwaUpdatePrompt } from '@/components/pwa-update-prompt'
 import { ThemeProvider } from '@/components/theme-provider'
 import { AuthProvider } from '@/components/auth-provider'
@@ -72,6 +73,7 @@ export default function RootLayout({
               </div>
             </MustChangePasswordGuard>
             <PushNavigateListener />
+            <ChunkLoadRecovery />
             <PwaUpdatePrompt />
             <Toaster richColors closeButton position="top-center" />
             </BookingImportBadgeProvider>

@@ -59,12 +59,41 @@ export function PwaUpdatePrompt() {
             }
           })
         })
+
+        // Nach Deploys früh erkennen: beim Zurückkehren in den Tab prüfen.
+        const checkForUpdate = () => {
+          if (document.visibilityState === 'visible') {
+            void reg.update().catch(() => {})
+          }
+        }
+        document.addEventListener('visibilitychange', checkForUpdate)
+        // Auch periodisch (Tab oft lange offen)
+        const intervalId = window.setInterval(() => {
+          void reg.update().catch(() => {})
+        }, 60 * 60 * 1000)
+
+        return () => {
+          document.removeEventListener('visibilitychange', checkForUpdate)
+          window.clearInterval(intervalId)
+        }
       } catch (err) {
         console.warn('Service Worker registration failed:', err)
       }
     }
 
-    void registerSw()
+    let cancelled = false
+    let cleanup: (() => void) | undefined
+    void registerSw().then((fn) => {
+      if (cancelled) {
+        fn?.()
+        return
+      }
+      cleanup = fn
+    })
+    return () => {
+      cancelled = true
+      cleanup?.()
+    }
   }, [])
 
   const doReload = useCallback(() => {
