@@ -923,7 +923,7 @@ export default function AusruestungPage() {
           {addCategoryLoading && (
             <p className="text-xs text-muted-foreground">Kategorie wird vorgeschlagen…</p>
           )}
-          {addCategorySuggestion?.duplicate && (
+          {!replacingItem && addCategorySuggestion?.duplicate && (
             <p className="text-xs text-amber-800 dark:text-amber-200">
               Ähnlich zu vorhandener Ausrüstung „{addCategorySuggestion.duplicate.was}“.
             </p>
