@@ -85,33 +85,37 @@ function UebersichtKarte({
         </div>
       )}
 
-      <div className="relative z-10 flex flex-col gap-1 px-4 py-3.5 min-h-[7.5rem]">
-        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+      <div className="relative z-10 flex flex-col gap-1 px-3 py-3 sm:px-4 sm:py-3.5 min-h-[6.5rem] sm:min-h-[7.5rem]">
+        <p className="text-[0.65rem] sm:text-xs font-semibold uppercase tracking-wide text-muted-foreground truncate">
           {medium.name}
         </p>
         <div className="mt-auto">
           {durchschnittProTag != null ? (
             <>
-              <p className="text-3xl font-bold tracking-tight tabular-nums text-brand-heading leading-none">
+              <p className="text-xl sm:text-3xl font-bold tracking-tight tabular-nums text-brand-heading leading-none">
                 {formatVerbrauch(durchschnittProTag, 2)}
-              </p>
-              <p className="mt-1 text-sm text-muted-foreground">
-                {medium.einheit}/Tag
-                <span className="text-muted-foreground/70">
-                  {' '}
-                  · {tripCount} {tripCount === 1 ? 'Reise' : 'Reisen'}
-                  {punkte.length > 0
-                    ? ` · ${VERBRAUCH_UEBERSICHT_JAHRE} J.`
-                    : ''}
+                <span className="ml-1 text-sm sm:text-base font-semibold text-muted-foreground">
+                  {medium.einheit}/Tag
                 </span>
+              </p>
+              <p className="mt-1 text-xs sm:text-sm text-muted-foreground">
+                {tripCount} {tripCount === 1 ? 'Reise' : 'Reisen'}
+                {punkte.length > 0 ? (
+                  <span className="text-muted-foreground/70">
+                    {' '}
+                    · {VERBRAUCH_UEBERSICHT_JAHRE} J.
+                  </span>
+                ) : null}
               </p>
             </>
           ) : (
             <>
-              <p className="text-3xl font-bold tracking-tight text-muted-foreground/40 leading-none">
+              <p className="text-xl sm:text-3xl font-bold tracking-tight text-muted-foreground/40 leading-none">
                 —
               </p>
-              <p className="mt-1 text-sm text-muted-foreground">Noch keine abgeschlossenen Messungen</p>
+              <p className="mt-1 text-xs sm:text-sm text-muted-foreground">
+                Noch keine abgeschlossenen Messungen
+              </p>
             </>
           )}
         </div>
@@ -139,7 +143,7 @@ export function VerbrauchUebersichtKarten({
   if (medien.length === 0) return null
 
   return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+    <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-3">
       {stats.map((s) => (
         <UebersichtKarte
           key={s.medium.id}

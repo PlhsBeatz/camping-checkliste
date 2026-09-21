@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -11,13 +11,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import type { VerbrauchMedium } from '@/lib/db'
+import type { EquipmentItem, VerbrauchMedium } from '@/lib/db'
 import type { ApiResponse } from '@/lib/api-types'
+import type { VerbrauchMediumAusruestungLink } from '@/lib/db-verbrauch'
 import {
   VERBRAUCH_MEDIEN_KATALOG,
   type VerbrauchMessmodus,
 } from '@/lib/verbrauch-medien-katalog'
-import { Plus, Power, PowerOff, Trash2 } from 'lucide-react'
+import { Plus, Power, PowerOff, Trash2, X } from 'lucide-react'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 
 function parseOptionalNumber(raw: string): number | null {
@@ -43,6 +44,11 @@ export function VerbrauchMedienManager({
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [editDichte, setEditDichte] = useState<Record<string, string>>({})
   const [editLeer, setEditLeer] = useState<Record<string, string>>({})
+  const [equipment, setEquipment] = useState<EquipmentItem[]>([])
+  const [linksByMedium, setLinksByMedium] = useState<
+    Record<string, VerbrauchMediumAusruestungLink[]>
+  >({})
+  const [addEquipmentId, setAddEquipmentId] = useState<Record<string, string>>({})
 
   const configuredKeys = useMemo(
     () => new Set(medien.map((m) => m.schluessel)),
@@ -52,6 +58,46 @@ export function VerbrauchMedienManager({
   const availablePresets = VERBRAUCH_MEDIEN_KATALOG.filter(
     (k) => !configuredKeys.has(k.schluessel)
   )
+
+  const mediumIdsKey = medien.map((m) => m.id).join(',')
+
+  useEffect(() => {
+    if (medien.length === 0) {
+      setLinksByMedium({})
+      return
+    }
+
+    let cancelled = false
+    ;(async () => {
+      try {
+        const [eqRes, ...linkResults] = await Promise.all([
+          fetch('/api/equipment-items'),
+          ...medien.map((m) =>
+            fetch(`/api/verbrauch-medien/${m.id}/ausruestung`).then(async (r) => ({
+              id: m.id,
+              data: (await r.json()) as ApiResponse<VerbrauchMediumAusruestungLink[]>,
+            }))
+          ),
+        ])
+        if (cancelled) return
+        const eqData = (await eqRes.json()) as ApiResponse<EquipmentItem[]>
+        if (eqData.success && eqData.data) setEquipment(eqData.data)
+
+        const next: Record<string, VerbrauchMediumAusruestungLink[]> = {}
+        for (const row of linkResults) {
+          if (row.data.success && row.data.data) next[row.id] = row.data.data
+          else next[row.id] = []
+        }
+        setLinksByMedium(next)
+      } catch (e) {
+        console.error('Failed to load Ausrüstung-Links:', e)
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [mediumIdsKey, medien])
 
   const activatePreset = async (schluessel: string) => {
     setSaving(true)
@@ -84,8 +130,10 @@ export function VerbrauchMedienManager({
   const saveDichte = async (m: VerbrauchMedium) => {
     setSaving(true)
     try {
-      const dichteRaw = editDichte[m.id] ?? (m.dichte_kg_pro_l != null ? String(m.dichte_kg_pro_l) : '')
-      const leerRaw = editLeer[m.id] ?? (m.leergewicht_kg != null ? String(m.leergewicht_kg) : '')
+      const dichteRaw =
+        editDichte[m.id] ?? (m.dichte_kg_pro_l != null ? String(m.dichte_kg_pro_l) : '')
+      const leerRaw =
+        editLeer[m.id] ?? (m.leergewicht_kg != null ? String(m.leergewicht_kg) : '')
       const res = await fetch(`/api/verbrauch-medien/${m.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -100,6 +148,40 @@ export function VerbrauchMedienManager({
     }
   }
 
+  const saveAusruestung = async (mediumId: string, equipmentIds: string[]) => {
+    setSaving(true)
+    try {
+      const res = await fetch(`/api/verbrauch-medien/${mediumId}/ausruestung`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ equipment_ids: equipmentIds }),
+      })
+      const data = (await res.json()) as ApiResponse<VerbrauchMediumAusruestungLink[]>
+      if (data.success && data.data) {
+        setLinksByMedium((prev) => ({ ...prev, [mediumId]: data.data! }))
+      }
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const addLink = async (mediumId: string) => {
+    const eqId = addEquipmentId[mediumId]
+    if (!eqId) return
+    const current = linksByMedium[mediumId] ?? []
+    if (current.some((l) => l.equipment_id === eqId)) return
+    await saveAusruestung(mediumId, [...current.map((l) => l.equipment_id), eqId])
+    setAddEquipmentId((prev) => ({ ...prev, [mediumId]: '' }))
+  }
+
+  const removeLink = async (mediumId: string, equipmentId: string) => {
+    const current = linksByMedium[mediumId] ?? []
+    await saveAusruestung(
+      mediumId,
+      current.filter((l) => l.equipment_id !== equipmentId).map((l) => l.equipment_id)
+    )
+  }
+
   const createCustom = async () => {
     if (!customName.trim()) return
     setSaving(true)
@@ -109,14 +191,13 @@ export function VerbrauchMedienManager({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: customName.trim(),
-          einheit: customEinheit.trim() || 'kg',
+          einheit: customEinheit.trim() || 'l',
           messmodus: customModus,
           dichte_kg_pro_l: parseOptionalNumber(customDichte),
           leergewicht_kg: parseOptionalNumber(customLeer),
         }),
       })
-      const data = (await res.json()) as ApiResponse<VerbrauchMedium>
-      if (res.ok && data.success) {
+      if (res.ok) {
         setCustomName('')
         setCustomEinheit('l')
         setCustomModus('abnahme')
@@ -131,12 +212,13 @@ export function VerbrauchMedienManager({
 
   const handleDelete = async () => {
     if (!deleteId) return
-    const id = deleteId
-    setDeleteId(null)
     setSaving(true)
     try {
-      const res = await fetch(`/api/verbrauch-medien/${id}`, { method: 'DELETE' })
-      if (res.ok) onRefresh()
+      const res = await fetch(`/api/verbrauch-medien/${deleteId}`, { method: 'DELETE' })
+      if (res.ok) {
+        setDeleteId(null)
+        onRefresh()
+      }
     } finally {
       setSaving(false)
     }
@@ -146,11 +228,18 @@ export function VerbrauchMedienManager({
   const inactive = medien.filter((m) => !m.ist_aktiv)
   const showCustomDichte = customEinheit.trim().toLowerCase() === 'l'
 
+  const equipmentOptionsFor = (mediumId: string) => {
+    const linked = new Set((linksByMedium[mediumId] ?? []).map((l) => l.equipment_id))
+    return equipment.filter((e) => !linked.has(e.id))
+  }
+
   return (
     <div className="space-y-8 max-w-2xl">
       <p className="text-sm text-muted-foreground">
         Typische Medien schnell aktivieren. Nur aktive Medien erscheinen unter Tools → Verbrauch.
         Bei Einheit „l“ kannst du Dichte und Leergewicht für die Umrechnung Gewicht → Liter setzen.
+        Ausrüstungs-Zuordnung entscheidet, ob das Medium für einen Urlaub relevant ist (Packliste /
+        fest installiert).
       </p>
 
       {availablePresets.length > 0 && (
@@ -186,6 +275,8 @@ export function VerbrauchMedienManager({
                 editDichte[m.id] ?? (m.dichte_kg_pro_l != null ? String(m.dichte_kg_pro_l) : '')
               const leerVal =
                 editLeer[m.id] ?? (m.leergewicht_kg != null ? String(m.leergewicht_kg) : '')
+              const links = linksByMedium[m.id] ?? []
+              const options = equipmentOptionsFor(m.id)
               return (
                 <li key={m.id} className="rounded-md border px-3 py-2 text-sm bg-card space-y-2">
                   <div className="flex items-center justify-between gap-2">
@@ -259,6 +350,69 @@ export function VerbrauchMedienManager({
                       </Button>
                     </div>
                   )}
+                  <div className="space-y-2 border-t pt-2">
+                    <Label className="text-xs">Ausrüstung (Relevanz für Urlaub)</Label>
+                    {links.length > 0 && (
+                      <ul className="flex flex-wrap gap-1.5">
+                        {links.map((l) => (
+                          <li
+                            key={l.equipment_id}
+                            className="inline-flex items-center gap-1 rounded-md border bg-muted/40 px-2 py-0.5 text-xs"
+                          >
+                            <span>
+                              {l.was}
+                              {l.status === 'Fest Installiert' ? ' · fest' : ''}
+                            </span>
+                            <button
+                              type="button"
+                              className="text-muted-foreground hover:text-destructive"
+                              disabled={saving}
+                              aria-label="Entfernen"
+                              onClick={() => void removeLink(m.id, l.equipment_id)}
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    {options.length > 0 && (
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                        <Select
+                          value={addEquipmentId[m.id] || undefined}
+                          onValueChange={(v) =>
+                            setAddEquipmentId((prev) => ({ ...prev, [m.id]: v }))
+                          }
+                        >
+                          <SelectTrigger className="h-8 text-xs">
+                            <SelectValue placeholder="Gegenstand zuordnen…" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {options.map((e) => (
+                              <SelectItem key={e.id} value={e.id}>
+                                {e.was}
+                                {e.status === 'Fest Installiert' ? ' (fest)' : ''}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="secondary"
+                          disabled={saving || !addEquipmentId[m.id]}
+                          onClick={() => void addLink(m.id)}
+                        >
+                          Hinzufügen
+                        </Button>
+                      </div>
+                    )}
+                    {links.length === 0 && options.length === 0 && (
+                      <p className="text-xs text-muted-foreground">
+                        Keine Ausrüstung vorhanden.
+                      </p>
+                    )}
+                  </div>
                 </li>
               )
             })}

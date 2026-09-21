@@ -64,6 +64,7 @@ export type AttentionKind =
   | 'vacation_next'
   | 'sonnen_ausrichtung'
   | 'vorschlag'
+  | 'verbrauch_reichweite'
 
 export type AttentionItem = {
   key: string
@@ -81,6 +82,8 @@ export type AttentionItem = {
   suggestionId?: string
   suggestionKind?: string
   vacationTitel?: string | null
+  /** Nur bei `kind: 'verbrauch_reichweite'`. */
+  verbrauchAmpel?: 'eng' | 'kritisch'
 }
 
 export type PackingWeightTone = 'low' | 'over'
@@ -175,6 +178,16 @@ export type AttentionFeedInput = {
     href: string
     adminOnly: boolean
     vacationTitel?: string | null
+  }>
+  /** Vorberechnete Reichweiten-Hinweise (nur eng/kritisch). */
+  verbrauchReichweiteItems?: Array<{
+    key: string
+    title: string
+    reason: string
+    risk: string | null
+    href: string
+    score: number
+    ampel: 'eng' | 'kritisch'
   }>
 }
 
@@ -890,6 +903,23 @@ export function buildAttentionFeed(input: AttentionFeedInput): AttentionFeed {
       sicherheitsrelevant: false,
       snoozeAllowed: true,
       adminOnly: false,
+    })
+  }
+
+  for (const vr of input.verbrauchReichweiteItems ?? []) {
+    raw.push({
+      key: vr.key,
+      kind: 'verbrauch_reichweite',
+      title: vr.title,
+      reason: vr.reason,
+      risk: vr.risk,
+      href: vr.href,
+      score: vr.score,
+      dueYmd: relevant ? normalizeCalendarDate(getDepartureDate(relevant)) : null,
+      sicherheitsrelevant: false,
+      snoozeAllowed: true,
+      adminOnly: false,
+      verbrauchAmpel: vr.ampel,
     })
   }
 

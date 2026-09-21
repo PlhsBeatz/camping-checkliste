@@ -52,6 +52,7 @@ const KIND_META: Record<AttentionKind, { label: string; icon: string }> = {
   vacation_next: { label: 'Urlaub', icon: 'event' },
   sonnen_ausrichtung: { label: 'Sonne', icon: 'wb_sunny' },
   vorschlag: { label: 'Vorschlag', icon: 'lightbulb' },
+  verbrauch_reichweite: { label: 'Verbrauch', icon: 'local_gas_station' },
 }
 
 function formatHubDateRange(start: string, end: string): string {
@@ -437,7 +438,10 @@ function HeuteHubContent() {
                   <ul className="space-y-2">
                     {items.map((item) => {
                       const meta = KIND_META[item.kind] ?? { label: 'Hinweis', icon: 'info' }
-                      const danger = item.kind === 'wartung_sicherheit' || item.kind === 'packing_weight'
+                      const danger =
+                        item.kind === 'wartung_sicherheit' ||
+                        item.kind === 'packing_weight' ||
+                        item.verbrauchAmpel === 'kritisch'
                       const canAddToPacklist =
                         item.suggestionKind === 'packing_add' && Boolean(item.suggestionId)
                       const itemBusy = snoozingKey === item.key || acceptingKey === item.key

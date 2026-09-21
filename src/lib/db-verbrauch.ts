@@ -787,3 +787,73 @@ export async function deleteVerbrauchEreignis(db: D1Database, id: string): Promi
     return false
   }
 }
+
+// --- Medium ↔ Ausrüstung (Relevanz) ---
+
+export type VerbrauchMediumAusruestungLink = {
+  medium_id: string
+  equipment_id: string
+  was: string
+  status: string
+}
+
+export async function getVerbrauchMedienAusruestungLinks(
+  db: D1Database,
+  mediumId?: string
+): Promise<VerbrauchMediumAusruestungLink[]> {
+  try {
+    const where = mediumId ? 'WHERE vma.medium_id = ?' : ''
+    const binds = mediumId ? [mediumId] : []
+    const res = await db
+      .prepare(
+        `SELECT vma.medium_id, vma.equipment_id, ag.was, ag.status
+         FROM verbrauch_medien_ausruestung vma
+         JOIN ausruestungsgegenstaende ag ON ag.id = vma.equipment_id
+         ${where}
+         ORDER BY ag.was COLLATE NOCASE ASC`
+      )
+      .bind(...binds)
+      .all<Record<string, unknown>>()
+    return (res.results || []).map((row) => ({
+      medium_id: String(row.medium_id),
+      equipment_id: String(row.equipment_id),
+      was: String(row.was ?? ''),
+      status: String(row.status ?? 'Normal'),
+    }))
+  } catch (error) {
+    console.error('Error getVerbrauchMedienAusruestungLinks:', error)
+    return []
+  }
+}
+
+export async function setVerbrauchMediumAusruestung(
+  db: D1Database,
+  mediumId: string,
+  equipmentIds: string[]
+): Promise<VerbrauchMediumAusruestungLink[]> {
+  const medium = await getVerbrauchMedium(db, mediumId)
+  if (!medium) return []
+
+  const unique = [...new Set(equipmentIds.map((id) => id.trim()).filter(Boolean))]
+
+  try {
+    await db
+      .prepare('DELETE FROM verbrauch_medien_ausruestung WHERE medium_id = ?')
+      .bind(mediumId)
+      .run()
+
+    for (const equipmentId of unique) {
+      await db
+        .prepare(
+          `INSERT INTO verbrauch_medien_ausruestung (medium_id, equipment_id)
+           VALUES (?, ?)`
+        )
+        .bind(mediumId, equipmentId)
+        .run()
+    }
+  } catch (error) {
+    console.error('Error setVerbrauchMediumAusruestung:', error)
+  }
+
+  return getVerbrauchMedienAusruestungLinks(db, mediumId)
+}
