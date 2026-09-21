@@ -439,7 +439,12 @@ async function recalculateMessungVerbrauch(
 
 export async function getVerbrauchMessungen(
   db: D1Database,
-  options?: { typ?: VerbrauchMessungTyp; urlaubId?: string }
+  options?: {
+    typ?: VerbrauchMessungTyp
+    urlaubId?: string
+    /** Standard true; Attention/Reichweite braucht keine Auffüllungs-Events. */
+    withEreignisse?: boolean
+  }
 ): Promise<VerbrauchMessung[]> {
   try {
     const conditions: string[] = []
@@ -467,6 +472,7 @@ export async function getVerbrauchMessungen(
       .bind(...binds)
       .all<Record<string, unknown>>()
     const items = (res.results || []).map(mapVerbrauchRow)
+    if (options?.withEreignisse === false) return items
     const byMessung = await getEreignisseForMessungIds(
       db,
       items.map((i) => i.id)
@@ -837,20 +843,20 @@ export async function setVerbrauchMediumAusruestung(
   const unique = [...new Set(equipmentIds.map((id) => id.trim()).filter(Boolean))]
 
   try {
-    await db
-      .prepare('DELETE FROM verbrauch_medien_ausruestung WHERE medium_id = ?')
-      .bind(mediumId)
-      .run()
-
-    for (const equipmentId of unique) {
-      await db
-        .prepare(
-          `INSERT INTO verbrauch_medien_ausruestung (medium_id, equipment_id)
-           VALUES (?, ?)`
-        )
-        .bind(mediumId, equipmentId)
-        .run()
-    }
+    const statements = [
+      db
+        .prepare('DELETE FROM verbrauch_medien_ausruestung WHERE medium_id = ?')
+        .bind(mediumId),
+      ...unique.map((equipmentId) =>
+        db
+          .prepare(
+            `INSERT INTO verbrauch_medien_ausruestung (medium_id, equipment_id)
+             VALUES (?, ?)`
+          )
+          .bind(mediumId, equipmentId)
+      ),
+    ]
+    await db.batch(statements)
   } catch (error) {
     console.error('Error setVerbrauchMediumAusruestung:', error)
   }

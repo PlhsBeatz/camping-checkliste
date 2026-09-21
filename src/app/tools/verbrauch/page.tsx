@@ -70,7 +70,11 @@ function VerbrauchPageContent() {
 
   const upsertMessung = useCallback((item: VerbrauchMessung) => {
     setMessungen((prev) => {
-      const next = [item, ...prev.filter((m) => m.id !== item.id)]
+      const next = [item, ...prev.filter((m) => m.id !== item.id)].sort((a, b) => {
+        const da = a.messdatum_ende || a.messdatum_start || a.created_at
+        const db = b.messdatum_ende || b.messdatum_start || b.created_at
+        return db.localeCompare(da)
+      })
       void cacheVerbrauchMessungen(next)
       return next
     })

@@ -66,7 +66,7 @@ async function buildVerbrauchReichweiteItems(
   const [medien, links, messungen] = await Promise.all([
     getVerbrauchMedien(db, { onlyActive: true }),
     getVerbrauchMedienAusruestungLinks(db),
-    getVerbrauchMessungen(db),
+    getVerbrauchMessungen(db, { withEreignisse: false }),
   ])
   if (medien.length === 0 || links.length === 0) return []
 
@@ -211,19 +211,21 @@ export async function loadAttentionFeedInput(
   ] = await Promise.all([
     relevant ? getPackingItemsForHub(db, relevant.id) : Promise.resolve<PackingItem[]>([]),
     relevant ? getPackStatus(db, relevant.id) : Promise.resolve<PackStatusData | null>(null),
-    full && hubVacation && !sameHub
+    // Auch im countMode laden: Reichweiten-Relevanz braucht die Hub-Packliste
+    hubVacation && !sameHub
       ? getPackingItemsForHub(db, hubVacation.id)
       : Promise.resolve<PackingItem[] | null>(null),
     full && hubVacation && !sameHub
       ? getPackStatus(db, hubVacation.id)
       : Promise.resolve<PackStatusData | null>(null),
-    (full || needsSonnenContext) && hubVacation
+    // Stays für Hub (Sonne/Travel) oder zumindest für Reichweiten-Klimaproxy
+    hubVacation
       ? getCampingStaysForVacation(db, hubVacation.id)
       : Promise.resolve<VacationCampingStay[]>([]),
     opts.includeWartungItems ? getFaelligkeitenForHub(db) : Promise.resolve([]),
     getChecklistenHubSummaries(db),
     opts.snoozes ? Promise.resolve(opts.snoozes) : getAttentionSnoozes(db),
-    (full || needsSonnenContext) && opts.userId
+    (full || needsSonnenContext || !!hubVacation) && opts.userId
       ? getUserById(db, opts.userId)
       : Promise.resolve(null),
     opts.includeOptimierungItems
@@ -256,7 +258,7 @@ export async function loadAttentionFeedInput(
   }
 
   const reichweiteVacation = hubVacation ?? relevant
-  let reichweitePacking: PackingItem[] =
+  const reichweitePacking: PackingItem[] =
     reichweiteVacation && hubVacation && relevant && hubVacation.id === relevant.id
       ? packingItems
       : reichweiteVacation && hubVacation && !sameHub
@@ -265,21 +267,12 @@ export async function loadAttentionFeedInput(
           ? packingItems
           : []
 
-  if (
-    reichweiteVacation &&
-    reichweitePacking.length === 0 &&
-    !(hubVacation && relevant && hubVacation.id === relevant.id)
-  ) {
-    // countMode lädt Hub-Packliste sonst nicht – für Relevanz nachladen
-    reichweitePacking = await getPackingItemsForHub(db, reichweiteVacation.id)
-  }
-
-  let reichweiteStays = campingStays
-  if (reichweiteVacation && hubVacation && reichweiteVacation.id !== hubVacation.id) {
-    reichweiteStays = await getCampingStaysForVacation(db, reichweiteVacation.id)
-  } else if (countMode && reichweiteVacation && campingStays.length === 0) {
-    reichweiteStays = await getCampingStaysForVacation(db, reichweiteVacation.id)
-  }
+  const reichweiteStays =
+    reichweiteVacation && hubVacation && reichweiteVacation.id === hubVacation.id
+      ? campingStays
+      : reichweiteVacation
+        ? await getCampingStaysForVacation(db, reichweiteVacation.id)
+        : []
 
   const verbrauchReichweiteItems = reichweiteVacation
     ? await buildVerbrauchReichweiteItems(db, {

@@ -28,6 +28,44 @@ function parseOptionalNumber(raw: string): number | null {
   return Number.isFinite(n) ? n : null
 }
 
+/** Wie bei Alternativen: Namenssuche; leer → Vorschläge zum Medium-Namen/Schlüssel. */
+function equipmentHitsForMedium(
+  medium: VerbrauchMedium,
+  equipment: EquipmentItem[],
+  linkedIds: Set<string>,
+  query: string
+): { mode: 'suggest' | 'search'; items: EquipmentItem[] } {
+  const available = equipment.filter(
+    (e) => !linkedIds.has(e.id) && e.status !== 'Ausgemustert'
+  )
+  const q = query.trim().toLowerCase()
+  if (q.length >= 1) {
+    return {
+      mode: 'search',
+      items: available.filter((e) => e.was.toLowerCase().includes(q)).slice(0, 8),
+    }
+  }
+  const needles = [medium.name, medium.schluessel]
+    .map((s) => s.trim().toLowerCase())
+    .filter((s) => s.length >= 2)
+  if (needles.length === 0) return { mode: 'suggest', items: [] }
+  const scored = available
+    .map((e) => {
+      const was = e.was.toLowerCase()
+      let score = 0
+      for (const n of needles) {
+        if (was === n) score = Math.max(score, 100)
+        else if (was.startsWith(n)) score = Math.max(score, 80)
+        else if (was.includes(n)) score = Math.max(score, 60)
+        else if (n.includes(was) && was.length >= 3) score = Math.max(score, 40)
+      }
+      return { e, score }
+    })
+    .filter((x) => x.score > 0)
+    .sort((a, b) => b.score - a.score || a.e.was.localeCompare(b.e.was, 'de'))
+  return { mode: 'suggest', items: scored.slice(0, 8).map((x) => x.e) }
+}
+
 export function VerbrauchMedienManager({
   medien,
   onRefresh,
@@ -48,7 +86,7 @@ export function VerbrauchMedienManager({
   const [linksByMedium, setLinksByMedium] = useState<
     Record<string, VerbrauchMediumAusruestungLink[]>
   >({})
-  const [addEquipmentId, setAddEquipmentId] = useState<Record<string, string>>({})
+  const [equipmentQuery, setEquipmentQuery] = useState<Record<string, string>>({})
 
   const configuredKeys = useMemo(
     () => new Set(medien.map((m) => m.schluessel)),
@@ -70,23 +108,24 @@ export function VerbrauchMedienManager({
     let cancelled = false
     ;(async () => {
       try {
-        const [eqRes, ...linkResults] = await Promise.all([
+        const [eqRes, linksRes] = await Promise.all([
           fetch('/api/equipment-items'),
-          ...medien.map((m) =>
-            fetch(`/api/verbrauch-medien/${m.id}/ausruestung`).then(async (r) => ({
-              id: m.id,
-              data: (await r.json()) as ApiResponse<VerbrauchMediumAusruestungLink[]>,
-            }))
-          ),
+          fetch('/api/verbrauch-medien/ausruestung'),
         ])
         if (cancelled) return
         const eqData = (await eqRes.json()) as ApiResponse<EquipmentItem[]>
         if (eqData.success && eqData.data) setEquipment(eqData.data)
 
+        const linksData = (await linksRes.json()) as ApiResponse<
+          VerbrauchMediumAusruestungLink[]
+        >
         const next: Record<string, VerbrauchMediumAusruestungLink[]> = {}
-        for (const row of linkResults) {
-          if (row.data.success && row.data.data) next[row.id] = row.data.data
-          else next[row.id] = []
+        for (const m of medien) next[m.id] = []
+        if (linksData.success && linksData.data) {
+          for (const link of linksData.data) {
+            const list = next[link.medium_id] ?? (next[link.medium_id] = [])
+            list.push(link)
+          }
         }
         setLinksByMedium(next)
       } catch (e) {
@@ -165,13 +204,15 @@ export function VerbrauchMedienManager({
     }
   }
 
-  const addLink = async (mediumId: string) => {
-    const eqId = addEquipmentId[mediumId]
-    if (!eqId) return
+  const addLink = async (mediumId: string, equipmentId: string) => {
+    if (!equipmentId) return
     const current = linksByMedium[mediumId] ?? []
-    if (current.some((l) => l.equipment_id === eqId)) return
-    await saveAusruestung(mediumId, [...current.map((l) => l.equipment_id), eqId])
-    setAddEquipmentId((prev) => ({ ...prev, [mediumId]: '' }))
+    if (current.some((l) => l.equipment_id === equipmentId)) return
+    await saveAusruestung(mediumId, [
+      ...current.map((l) => l.equipment_id),
+      equipmentId,
+    ])
+    setEquipmentQuery((prev) => ({ ...prev, [mediumId]: '' }))
   }
 
   const removeLink = async (mediumId: string, equipmentId: string) => {
@@ -228,11 +269,6 @@ export function VerbrauchMedienManager({
   const inactive = medien.filter((m) => !m.ist_aktiv)
   const showCustomDichte = customEinheit.trim().toLowerCase() === 'l'
 
-  const equipmentOptionsFor = (mediumId: string) => {
-    const linked = new Set((linksByMedium[mediumId] ?? []).map((l) => l.equipment_id))
-    return equipment.filter((e) => !linked.has(e.id))
-  }
-
   return (
     <div className="space-y-8 max-w-2xl">
       <p className="text-sm text-muted-foreground">
@@ -276,7 +312,12 @@ export function VerbrauchMedienManager({
               const leerVal =
                 editLeer[m.id] ?? (m.leergewicht_kg != null ? String(m.leergewicht_kg) : '')
               const links = linksByMedium[m.id] ?? []
-              const options = equipmentOptionsFor(m.id)
+              const linkedIds = new Set(links.map((l) => l.equipment_id))
+              const query = equipmentQuery[m.id] ?? ''
+              const hits = equipmentHitsForMedium(m, equipment, linkedIds, query)
+              const showSuggest =
+                links.length === 0 && hits.mode === 'suggest' && hits.items.length > 0
+              const showSearchHits = hits.mode === 'search' && hits.items.length > 0
               return (
                 <li key={m.id} className="rounded-md border px-3 py-2 text-sm bg-card space-y-2">
                   <div className="flex items-center justify-between gap-2">
@@ -351,7 +392,9 @@ export function VerbrauchMedienManager({
                     </div>
                   )}
                   <div className="space-y-2 border-t pt-2">
-                    <Label className="text-xs">Ausrüstung (Relevanz für Urlaub)</Label>
+                    <Label htmlFor={`eq-search-${m.id}`} className="text-xs">
+                      Ausrüstung (Relevanz für Urlaub)
+                    </Label>
                     {links.length > 0 && (
                       <ul className="flex flex-wrap gap-1.5">
                         {links.map((l) => (
@@ -376,38 +419,59 @@ export function VerbrauchMedienManager({
                         ))}
                       </ul>
                     )}
-                    {options.length > 0 && (
-                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                        <Select
-                          value={addEquipmentId[m.id] || undefined}
-                          onValueChange={(v) =>
-                            setAddEquipmentId((prev) => ({ ...prev, [m.id]: v }))
-                          }
-                        >
-                          <SelectTrigger className="h-8 text-xs">
-                            <SelectValue placeholder="Gegenstand zuordnen…" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {options.map((e) => (
-                              <SelectItem key={e.id} value={e.id}>
+                    {showSuggest && (
+                      <div className="space-y-1">
+                        <p className="text-xs text-muted-foreground">
+                          Vorschläge – mit Klick übernehmen
+                        </p>
+                        <ul className="max-h-32 overflow-y-auto rounded-md border bg-card divide-y">
+                          {hits.items.map((e) => (
+                            <li key={e.id}>
+                              <button
+                                type="button"
+                                disabled={saving}
+                                className="w-full text-left px-2 py-1.5 text-xs hover:bg-muted disabled:opacity-50"
+                                onClick={() => void addLink(m.id, e.id)}
+                              >
                                 {e.was}
-                                {e.status === 'Fest Installiert' ? ' (fest)' : ''}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="secondary"
-                          disabled={saving || !addEquipmentId[m.id]}
-                          onClick={() => void addLink(m.id)}
-                        >
-                          Hinzufügen
-                        </Button>
+                                {e.status === 'Fest Installiert' ? ' · fest' : ''}
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
                       </div>
                     )}
-                    {links.length === 0 && options.length === 0 && (
+                    <Input
+                      id={`eq-search-${m.id}`}
+                      value={query}
+                      onChange={(e) =>
+                        setEquipmentQuery((prev) => ({ ...prev, [m.id]: e.target.value }))
+                      }
+                      placeholder="Namen suchen…"
+                      className="h-8 text-sm"
+                      disabled={saving || equipment.length === 0}
+                    />
+                    {showSearchHits && (
+                      <ul className="max-h-32 overflow-y-auto rounded-md border bg-card divide-y">
+                        {hits.items.map((e) => (
+                          <li key={e.id}>
+                            <button
+                              type="button"
+                              disabled={saving}
+                              className="w-full text-left px-2 py-1.5 text-xs hover:bg-muted disabled:opacity-50"
+                              onClick={() => void addLink(m.id, e.id)}
+                            >
+                              {e.was}
+                              {e.status === 'Fest Installiert' ? ' · fest' : ''}
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    {hits.mode === 'search' && query.trim() && hits.items.length === 0 && (
+                      <p className="text-xs text-muted-foreground">Kein Treffer.</p>
+                    )}
+                    {equipment.length === 0 && (
                       <p className="text-xs text-muted-foreground">
                         Keine Ausrüstung vorhanden.
                       </p>

@@ -45,11 +45,18 @@ import {
   Trash2,
   Flag,
   CircleDot,
+  AlertTriangle,
 } from 'lucide-react'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { VerbrauchChart } from '@/components/verbrauch/verbrauch-chart'
 import { GewichtZuLiterEingabe } from '@/components/verbrauch/gewicht-zu-liter-eingabe'
 import { cn } from '@/lib/utils'
+import {
+  computeVerbrauchRateStats,
+  evaluateReichweite,
+  plannedTempForVacation,
+  reichweiteReiseTage,
+} from '@/lib/verbrauch-reichweite'
 
 function formatDate(d: string | null | undefined): string {
   if (!d) return '—'
@@ -60,29 +67,49 @@ function isComplete(m: VerbrauchMessung): boolean {
   return m.wert_start != null && m.wert_ende != null
 }
 
-/** Vergangene/laufende Urlaube + höchstens der nächste zukünftige (jeweils ohne Messung). */
+/** Endstand erst am letzten Urlaubstag oder danach. */
+function canEnterEndstand(
+  vacation: Vacation | undefined,
+  messung: VerbrauchMessung
+): boolean {
+  const endRaw = vacation?.enddatum?.trim() || messung.messdatum_ende
+  if (!endRaw) return false
+  const endYmd = normalizeCalendarDate(endRaw)
+  const today = todayInAppTimezone()
+  return endYmd <= today
+}
+
+/** Vergangene/laufende Urlaube ohne Messung + höchstens der nächste Zukunfts-Urlaub
+ * (nur wenn für diesen noch keine Messung existiert; sonst kein Zukunfts-Vorschlag). */
 function vacationsForAnfangsstand(
   vacations: Vacation[],
   usedUrlaubIds: Set<string>
 ): { selectable: Vacation[]; nextFuture: Vacation | null } {
   const today = todayInAppTimezone()
-  const unused = vacations
-    .filter((v) => !usedUrlaubIds.has(v.id))
-    .slice()
-    .sort((a, b) =>
-      normalizeCalendarDate(a.startdatum).localeCompare(normalizeCalendarDate(b.startdatum))
-    )
+  const sorted = vacations.slice().sort((a, b) =>
+    normalizeCalendarDate(a.startdatum).localeCompare(normalizeCalendarDate(b.startdatum))
+  )
 
-  const pastOrCurrent: Vacation[] = []
-  const future: Vacation[] = []
-  for (const v of unused) {
-    if (normalizeCalendarDate(v.startdatum) <= today) pastOrCurrent.push(v)
-    else future.push(v)
-  }
+  const pastOrCurrentUnused = sorted.filter(
+    (v) =>
+      normalizeCalendarDate(v.startdatum) <= today && !usedUrlaubIds.has(v.id)
+  )
 
-  const nextFuture = future[0] ?? null
+  // Nächster Zukunfts-Urlaub global – nicht der nächste ohne Messung
+  const nextFutureOverall =
+    sorted.find((v) => normalizeCalendarDate(v.startdatum) > today) ?? null
+
+  const nextFuture =
+    nextFutureOverall && !usedUrlaubIds.has(nextFutureOverall.id)
+      ? nextFutureOverall
+      : null
+
   return {
-    selectable: nextFuture ? [...pastOrCurrent, nextFuture] : pastOrCurrent,
+    selectable: (nextFuture ? [...pastOrCurrentUnused, nextFuture] : pastOrCurrentUnused)
+      .slice()
+      .sort((a, b) =>
+        normalizeCalendarDate(b.startdatum).localeCompare(normalizeCalendarDate(a.startdatum))
+      ),
     nextFuture,
   }
 }
@@ -127,18 +154,28 @@ export function VerbrauchMessungSection({
     messungId: string
     ereignisId: string
   } | null>(null)
-  const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set())
 
   const filtered = useMemo(
-    () => messungen.filter((m) => m.typ === medium.schluessel),
+    () =>
+      messungen
+        .filter((m) => m.typ === medium.schluessel)
+        .slice()
+        .sort((a, b) => {
+          const da = a.messdatum_ende || a.messdatum_start || a.created_at
+          const db = b.messdatum_ende || b.messdatum_start || b.created_at
+          return db.localeCompare(da)
+        }),
     [messungen, medium.schluessel]
   )
 
   const newestId = filtered[0]?.id ?? null
 
+  // Nur beim Medium-Wechsel zurücksetzen – aufgeklappte Urlaube bleiben sonst offen
   useEffect(() => {
-    setExpandedId(newestId)
-  }, [medium.schluessel, newestId])
+    setExpandedIds(newestId ? new Set([newestId]) : new Set())
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- nur bei Medium-Wechsel
+  }, [medium.schluessel])
 
   const suggestedStart = useMemo(() => {
     const completed = filtered
@@ -171,9 +208,9 @@ export function VerbrauchMessungSection({
     setUrlaubId('')
 
     if (mode.kind === 'start') {
-      setWert(suggestedStart != null ? String(suggestedStart) : '')
-      if (nextFutureVacation && !usedUrlaubIds.has(nextFutureVacation.id)) {
+      if (nextFutureVacation) {
         setUrlaubId(nextFutureVacation.id)
+        setWert(suggestedStart != null ? String(suggestedStart) : '')
       }
     } else if (mode.kind === 'ende') {
       setWert('')
@@ -194,11 +231,56 @@ export function VerbrauchMessungSection({
     }
   }
 
+  const onAnfangsstandUrlaubChange = (id: string) => {
+    setUrlaubId(id)
+    if (nextFutureVacation && id === nextFutureVacation.id && suggestedStart != null) {
+      setWert(String(suggestedStart))
+    } else {
+      setWert('')
+    }
+  }
+
   useEffect(() => {
     setDialog(null)
   }, [medium.schluessel])
 
   const selectedVacation = vacations.find((v) => v.id === urlaubId)
+
+  const anfangsstandReichweite = useMemo(() => {
+    if (dialog?.kind !== 'start' || !selectedVacation) return null
+    const verfuegbar = Number(String(wert).replace(',', '.'))
+    if (!Number.isFinite(verfuegbar) || wert.trim() === '') return null
+    const plannedTempC = plannedTempForVacation({
+      startdatum: selectedVacation.startdatum,
+      enddatum: selectedVacation.enddatum || selectedVacation.startdatum,
+      lat: null,
+    })
+    const stats = computeVerbrauchRateStats(medium, messungen, { plannedTempC })
+    return evaluateReichweite({
+      medium,
+      verfuegbar,
+      days: reichweiteReiseTage(selectedVacation),
+      stats,
+    })
+  }, [dialog?.kind, selectedVacation, wert, medium, messungen])
+
+  const showAnfangsstandWarnung =
+    anfangsstandReichweite != null &&
+    (anfangsstandReichweite.ampel === 'eng' || anfangsstandReichweite.ampel === 'kritisch')
+
+  const isNextFutureSelected =
+    !!nextFutureVacation && urlaubId === nextFutureVacation.id
+
+  const editEndstandAllowed = useMemo(() => {
+    if (dialog?.kind !== 'edit') return true
+    if (dialog.messung.wert_ende != null) return true
+    const editVac = vacations.find((v) => v.id === urlaubId)
+    return canEnterEndstand(editVac, {
+      ...dialog.messung,
+      urlaub_id: urlaubId || dialog.messung.urlaub_id,
+      messdatum_ende: editVac?.enddatum ?? dialog.messung.messdatum_ende,
+    })
+  }, [dialog, urlaubId, vacations])
 
   const handleSubmit = async () => {
     if (!dialog) return
@@ -223,11 +305,13 @@ export function VerbrauchMessungSection({
         const data = (await res.json()) as ApiResponse<VerbrauchMessung>
         if (res.ok && data.success && data.data) {
           onMessungCreated(data.data)
+          setExpandedIds((prev) => new Set(prev).add(data.data!.id))
           setDialog(null)
         } else onRefresh()
       } else if (dialog.kind === 'ende') {
         if (!wert) return
         const vacation = vacations.find((v) => v.id === dialog.messung.urlaub_id)
+        if (!canEnterEndstand(vacation, dialog.messung)) return
         const res = await fetch(`/api/verbrauch-messungen/${dialog.messung.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
@@ -283,6 +367,19 @@ export function VerbrauchMessungSection({
         }
       } else if (dialog.kind === 'edit') {
         const vacation = vacations.find((v) => v.id === urlaubId)
+        const endRef: VerbrauchMessung = {
+          ...dialog.messung,
+          urlaub_id: urlaubId || dialog.messung.urlaub_id,
+          messdatum_ende: vacation?.enddatum ?? dialog.messung.messdatum_ende,
+        }
+        const endAllowed =
+          dialog.messung.wert_ende != null || canEnterEndstand(vacation, endRef)
+        const wertEnde =
+          menge === ''
+            ? null
+            : endAllowed
+              ? Number(menge)
+              : dialog.messung.wert_ende
         const res = await fetch(`/api/verbrauch-messungen/${dialog.messung.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
@@ -291,7 +388,7 @@ export function VerbrauchMessungSection({
             messdatum_start: vacation?.startdatum ?? dialog.messung.messdatum_start,
             messdatum_ende: vacation?.enddatum ?? dialog.messung.messdatum_ende,
             wert_start: wert === '' ? null : Number(wert),
-            wert_ende: menge === '' ? null : Number(menge),
+            wert_ende: wertEnde,
             notizen: notizen.trim() || null,
           }),
         })
@@ -370,6 +467,8 @@ export function VerbrauchMessungSection({
         <ul className="space-y-3">
           {filtered.map((m) => {
             const complete = isComplete(m)
+            const vacation = vacations.find((v) => v.id === m.urlaub_id)
+            const endstandAllowed = canEnterEndstand(vacation, m)
             const auffuellungen =
               supportsAuffuellung ? (m.auffuellungen_summe ?? 0) : 0
             const gesamt =
@@ -382,7 +481,7 @@ export function VerbrauchMessungSection({
                   )
                 : m.verbrauch_gesamt
             const ereignisse = m.ereignisse ?? []
-            const expanded = expandedId === m.id
+            const expanded = expandedIds.has(m.id)
 
             return (
               <li
@@ -399,7 +498,12 @@ export function VerbrauchMessungSection({
                     type="button"
                     className="min-w-0 flex-1 text-left"
                     onClick={() =>
-                      setExpandedId((id) => (id === m.id ? null : m.id))
+                      setExpandedIds((prev) => {
+                        const next = new Set(prev)
+                        if (next.has(m.id)) next.delete(m.id)
+                        else next.add(m.id)
+                        return next
+                      })
                     }
                     aria-expanded={expanded}
                   >
@@ -446,7 +550,7 @@ export function VerbrauchMessungSection({
                           <Pencil className="h-4 w-4 mr-2" />
                           Bearbeiten
                         </DropdownMenuItem>
-                        {!complete && (
+                        {!complete && endstandAllowed && (
                           <DropdownMenuItem
                             onSelect={() => openDialog({ kind: 'ende', messung: m })}
                           >
@@ -548,14 +652,21 @@ export function VerbrauchMessungSection({
                         <Flag className="h-3 w-3" />
                       </span>
                       {canAdmin ? (
-                        <div className="flex flex-wrap gap-2">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => openDialog({ kind: 'ende', messung: m })}
-                          >
-                            Ende erfassen
-                          </Button>
+                        <div className="flex flex-wrap items-center gap-2">
+                          {endstandAllowed ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => openDialog({ kind: 'ende', messung: m })}
+                            >
+                              Ende erfassen
+                            </Button>
+                          ) : (
+                            <span className="text-sm text-muted-foreground">
+                              Ende ab{' '}
+                              {formatDate(vacation?.enddatum ?? m.messdatum_ende)}
+                            </span>
+                          )}
                           {supportsAuffuellung && (
                             <Button
                               size="sm"
@@ -568,7 +679,11 @@ export function VerbrauchMessungSection({
                           )}
                         </div>
                       ) : (
-                        <span className="text-sm text-muted-foreground">Ende ausstehend</span>
+                        <span className="text-sm text-muted-foreground">
+                          {endstandAllowed
+                            ? 'Ende ausstehend'
+                            : `Ende ab ${formatDate(vacation?.enddatum ?? m.messdatum_ende)}`}
+                        </span>
                       )}
                     </li>
                   )}
@@ -589,7 +704,9 @@ export function VerbrauchMessungSection({
                 z.&nbsp;B. 11&nbsp;{medium.einheit} {medium.name} nachgekauft / aufgefüllt.
               </DialogDescription>
             )}
-            {dialog?.kind === 'start' && suggestedStart != null && (
+            {dialog?.kind === 'start' &&
+              isNextFutureSelected &&
+              suggestedStart != null && (
               <DialogDescription>
                 Vorschlag: Endwert letzter Urlaub ({formatVerbrauch(suggestedStart, 1)}{' '}
                 {medium.einheit})
@@ -602,7 +719,7 @@ export function VerbrauchMessungSection({
               <>
                 <div className="space-y-1.5">
                   <Label>Urlaub</Label>
-                  <Select value={urlaubId} onValueChange={setUrlaubId}>
+                  <Select value={urlaubId} onValueChange={onAnfangsstandUrlaubChange}>
                     <SelectTrigger>
                       <SelectValue placeholder="Urlaub wählen…" />
                     </SelectTrigger>
@@ -634,6 +751,36 @@ export function VerbrauchMessungSection({
                     defaultLeergewichtKg={medium.leergewicht_kg}
                     onUebernehmen={(liter) => setWert(String(liter))}
                   />
+                )}
+                {showAnfangsstandWarnung && anfangsstandReichweite && (
+                  <div
+                    className={cn(
+                      'rounded-md border px-3 py-2 space-y-1',
+                      anfangsstandReichweite.ampel === 'kritisch'
+                        ? 'border-destructive/40 bg-destructive/5'
+                        : 'border-amber-600/30 bg-amber-500/5'
+                    )}
+                  >
+                    <p
+                      className={cn(
+                        'text-sm font-medium flex items-start gap-1.5',
+                        anfangsstandReichweite.ampel === 'kritisch'
+                          ? 'text-destructive'
+                          : 'text-amber-800 dark:text-amber-200'
+                      )}
+                    >
+                      <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+                      <span>{anfangsstandReichweite.title}</span>
+                    </p>
+                    <p className="text-xs text-muted-foreground pl-5">
+                      {anfangsstandReichweite.reason}
+                    </p>
+                    {anfangsstandReichweite.risk ? (
+                      <p className="text-xs text-destructive/80 pl-5">
+                        {anfangsstandReichweite.risk}
+                      </p>
+                    ) : null}
+                  </div>
                 )}
               </>
             )}
@@ -731,7 +878,13 @@ export function VerbrauchMessungSection({
                       value={menge}
                       onChange={(e) => setMenge(e.target.value)}
                       placeholder="optional"
+                      disabled={!editEndstandAllowed}
                     />
+                    {!editEndstandAllowed && (
+                      <p className="text-xs text-muted-foreground">
+                        Erst am letzten Urlaubstag oder danach.
+                      </p>
+                    )}
                   </div>
                 </div>
               </>
