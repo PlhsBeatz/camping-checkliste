@@ -17,14 +17,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-  DialogDescription,
-} from '@/components/ui/dialog'
+import { ResponsiveModal } from '@/components/ui/responsive-modal'
 import { CalendarDatePicker } from '@/components/ui/calendar-date-picker'
 import type {
   VerbrauchEreignis,
@@ -447,6 +440,15 @@ export function VerbrauchMessungSection({
             ? 'Messung bearbeiten'
             : ''
 
+  const dialogDescription =
+    dialog?.kind === 'auffuellung' && !dialog.ereignis
+      ? `z.\u00a0B. 11\u00a0${medium.einheit} ${medium.name} nachgekauft / aufgefüllt.`
+      : dialog?.kind === 'start' &&
+          isNextFutureSelected &&
+          suggestedStart != null
+        ? `Vorschlag: Endwert letzter Urlaub (${formatVerbrauch(suggestedStart, 1)} ${medium.einheit})`
+        : undefined
+
   return (
     <div className="space-y-4 pb-20">
       <div className="flex items-baseline justify-between gap-2">
@@ -695,26 +697,14 @@ export function VerbrauchMessungSection({
         </ul>
       )}
 
-      <Dialog open={!!dialog} onOpenChange={(o) => !o && setDialog(null)}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>{dialogTitle}</DialogTitle>
-            {dialog?.kind === 'auffuellung' && !dialog.ereignis && (
-              <DialogDescription>
-                z.&nbsp;B. 11&nbsp;{medium.einheit} {medium.name} nachgekauft / aufgefüllt.
-              </DialogDescription>
-            )}
-            {dialog?.kind === 'start' &&
-              isNextFutureSelected &&
-              suggestedStart != null && (
-              <DialogDescription>
-                Vorschlag: Endwert letzter Urlaub ({formatVerbrauch(suggestedStart, 1)}{' '}
-                {medium.einheit})
-              </DialogDescription>
-            )}
-          </DialogHeader>
-
-          <div className="space-y-3 py-1">
+      <ResponsiveModal
+        open={!!dialog}
+        onOpenChange={(o) => !o && setDialog(null)}
+        title={dialogTitle}
+        description={dialogDescription}
+        contentClassName="sm:max-w-sm"
+      >
+        <div className="space-y-3 pt-1">
             {dialog?.kind === 'start' && (
               <>
                 <div className="space-y-1.5">
@@ -898,9 +888,8 @@ export function VerbrauchMessungSection({
                 placeholder="optional"
               />
             </div>
-          </div>
 
-          <DialogFooter>
+          <div className="flex justify-end gap-2 pt-2">
             <Button variant="outline" onClick={() => setDialog(null)}>
               Abbrechen
             </Button>
@@ -915,9 +904,9 @@ export function VerbrauchMessungSection({
             >
               Speichern
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </div>
+        </div>
+      </ResponsiveModal>
 
       <ConfirmDialog
         open={!!deleteMessungId}
