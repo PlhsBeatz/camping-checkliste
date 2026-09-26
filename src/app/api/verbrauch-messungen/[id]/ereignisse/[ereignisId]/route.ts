@@ -3,7 +3,6 @@ import {
   getDB,
   updateVerbrauchEreignis,
   deleteVerbrauchEreignis,
-  getVerbrauchMessung,
   type CloudflareEnv,
 } from '@/lib/db'
 import { requireAuth, requireWriteWartung } from '@/lib/api-auth'
@@ -28,12 +27,14 @@ export async function PUT(
     const body = (await request.json()) as EreignisUpdateBody
     const env = process.env as unknown as CloudflareEnv
     const db = await getDB(env)
-    const item = await updateVerbrauchEreignis(db, ereignisId, body)
-    if (!item || item.messung_id !== id) {
+    const result = await updateVerbrauchEreignis(db, ereignisId, body)
+    if (!result || result.ereignis.messung_id !== id) {
       return NextResponse.json({ error: 'Nicht gefunden' }, { status: 404 })
     }
-    const messung = await getVerbrauchMessung(db, id)
-    return NextResponse.json({ success: true, data: { ereignis: item, messung } })
+    return NextResponse.json({
+      success: true,
+      data: { ereignis: result.ereignis, messung: result.messung },
+    })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error)
     return NextResponse.json({ error: message }, { status: 500 })
@@ -53,12 +54,14 @@ export async function DELETE(
     const { id, ereignisId } = await params
     const env = process.env as unknown as CloudflareEnv
     const db = await getDB(env)
-    const ok = await deleteVerbrauchEreignis(db, ereignisId)
-    if (!ok) {
+    const result = await deleteVerbrauchEreignis(db, ereignisId)
+    if (!result.ok) {
       return NextResponse.json({ error: 'Nicht gefunden' }, { status: 404 })
     }
-    const messung = await getVerbrauchMessung(db, id)
-    return NextResponse.json({ success: true, data: { messung } })
+    if (result.messung && result.messung.id !== id) {
+      return NextResponse.json({ error: 'Nicht gefunden' }, { status: 404 })
+    }
+    return NextResponse.json({ success: true, data: { messung: result.messung } })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error)
     return NextResponse.json({ error: message }, { status: 500 })

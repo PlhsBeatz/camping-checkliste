@@ -13,7 +13,7 @@ import {
   KLIMA_TEMP_DELTA_MAX_C,
   midYmdBetween,
 } from '@/lib/verbrauch-klima'
-import { formatVerbrauch } from '@/lib/verbrauch-format'
+import { formatVerbrauchMitEinheit } from '@/lib/verbrauch-format'
 
 export type ReichweiteAmpel = 'ok' | 'eng' | 'kritisch'
 
@@ -278,9 +278,9 @@ export function evaluateReichweite(opts: {
   else if (verfuegbar < bedarfMax) ampel = 'eng'
 
   const einheit = medium.einheit
-  const vFmt = formatVerbrauch(verfuegbar, 2)
-  const avgFmt = formatVerbrauch(bedarfAvg, 2)
-  const maxFmt = formatVerbrauch(bedarfMax, 2)
+  const vFmt = formatVerbrauchMitEinheit(verfuegbar, einheit, 2)
+  const avgFmt = formatVerbrauchMitEinheit(bedarfAvg, einheit, 2)
+  const maxFmt = formatVerbrauchMitEinheit(bedarfMax, einheit, 2)
 
   if (ampel === 'ok') {
     return {
@@ -297,7 +297,7 @@ export function evaluateReichweite(opts: {
       mediumName: medium.name,
       mediumSchluessel: medium.schluessel,
       title: `${medium.name} reicht`,
-      reason: `Startstand ${vFmt} ${einheit}`,
+      reason: `Startstand ${vFmt}`,
       risk: null,
     }
   }
@@ -317,7 +317,7 @@ export function evaluateReichweite(opts: {
       mediumName: medium.name,
       mediumSchluessel: medium.schluessel,
       title: `${medium.name}: knapp bei hohem Verbrauch`,
-      reason: `Typisch ~${avgFmt} ${einheit}, bis ${maxFmt} ${einheit} bei hohem Verbrauch · Startstand ${vFmt} ${einheit}`,
+      reason: `Typisch ~${avgFmt}, bis ${maxFmt} bei hohem Verbrauch · Startstand ${vFmt}`,
       risk: 'Unter ungünstigen Bedingungen könnte die Menge nicht reichen.',
     }
   }
@@ -336,7 +336,7 @@ export function evaluateReichweite(opts: {
     mediumName: medium.name,
     mediumSchluessel: medium.schluessel,
     title: `${medium.name}: Startstand erhöhen`,
-    reason: `Typisch ~${avgFmt} ${einheit} nötig, bis ${maxFmt} ${einheit} · Startstand ${vFmt} ${einheit}`,
+    reason: `Typisch ~${avgFmt} nötig, bis ${maxFmt} · Startstand ${vFmt}`,
     risk: 'Der aktuelle Stand reicht voraussichtlich nicht für die Reisedauer.',
   }
 }

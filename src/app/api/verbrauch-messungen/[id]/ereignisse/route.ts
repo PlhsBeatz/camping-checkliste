@@ -55,17 +55,19 @@ export async function POST(
 
     const env = process.env as unknown as CloudflareEnv
     const db = await getDB(env)
-    const item = await createVerbrauchEreignis(db, {
+    const result = await createVerbrauchEreignis(db, {
       messung_id: id,
       menge: Number(body.menge),
       datum: body.datum ?? null,
       notizen: body.notizen ?? null,
     })
-    if (!item) {
+    if (!result) {
       return NextResponse.json({ error: 'Ereignis konnte nicht gespeichert werden' }, { status: 400 })
     }
-    const messung = await getVerbrauchMessung(db, id)
-    return NextResponse.json({ success: true, data: { ereignis: item, messung } })
+    return NextResponse.json({
+      success: true,
+      data: { ereignis: result.ereignis, messung: result.messung },
+    })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error)
     return NextResponse.json({ error: message }, { status: 500 })

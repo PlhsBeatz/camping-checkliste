@@ -3,7 +3,7 @@
 import { useId, useMemo } from 'react'
 import { Area, AreaChart, ResponsiveContainer, YAxis } from 'recharts'
 import type { VerbrauchMedium, VerbrauchMessung } from '@/lib/db'
-import { formatVerbrauch } from '@/lib/verbrauch-format'
+import { formatVerbrauch, scaleVerbrauchAnzeige } from '@/lib/verbrauch-format'
 import {
   computeAlleVerbrauchUebersichten,
   VERBRAUCH_UEBERSICHT_JAHRE,
@@ -65,6 +65,10 @@ function UebersichtKarte({
   const uid = useId().replace(/:/g, '')
   const { medium, durchschnittProTag, punkte, tripCount } = stats
   const hasSpark = punkte.length >= 2
+  const avgAnzeige =
+    durchschnittProTag != null
+      ? scaleVerbrauchAnzeige(durchschnittProTag, medium.einheit)
+      : null
 
   return (
     <button
@@ -90,12 +94,17 @@ function UebersichtKarte({
           {medium.name}
         </p>
         <div className="mt-auto">
-          {durchschnittProTag != null ? (
+          {avgAnzeige != null ? (
             <>
               <p className="text-xl sm:text-3xl font-bold tracking-tight tabular-nums text-brand-heading leading-none">
-                {formatVerbrauch(durchschnittProTag, 2)}
+                {formatVerbrauch(
+                  avgAnzeige.value,
+                  avgAnzeige.einheit === 'g' || avgAnzeige.einheit === 'ml'
+                    ? avgAnzeige.decimals
+                    : 2
+                )}
                 <span className="ml-1 text-sm sm:text-base font-semibold text-muted-foreground">
-                  {medium.einheit}/Tag
+                  {avgAnzeige.einheit}/Tag
                 </span>
               </p>
               <p className="mt-1 text-xs sm:text-sm text-muted-foreground">

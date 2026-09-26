@@ -2,7 +2,7 @@
 
 import { useMemo } from 'react'
 import type { VerbrauchMedium, VerbrauchMessung } from '@/lib/db'
-import { formatVerbrauch, verbrauchDifferenz } from '@/lib/verbrauch-format'
+import { formatVerbrauchMitEinheit, verbrauchDifferenz } from '@/lib/verbrauch-format'
 import { cn } from '@/lib/utils'
 
 /** Einfacher Vergleich: Verbrauch pro Tag der abgeschlossenen Messungen (Balken). */
@@ -56,7 +56,7 @@ export function VerbrauchChart({
         <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           Vergleich
         </h3>
-        <span className="text-xs text-muted-foreground">{medium.einheit}/Tag</span>
+        <span className="text-xs text-muted-foreground">pro Tag</span>
       </div>
       <ul className="space-y-2">
         {bars.map((b) => (
@@ -64,10 +64,10 @@ export function VerbrauchChart({
             <div className="flex items-center justify-between gap-2 text-xs">
               <span className="truncate font-medium text-foreground">{b.label}</span>
               <span className="tabular-nums text-muted-foreground flex-shrink-0">
-                {formatVerbrauch(b.proTag, 2)}
+                {formatVerbrauchMitEinheit(b.proTag, medium.einheit, 2)}
                 <span className="text-muted-foreground/70">
                   {' '}
-                  · {formatVerbrauch(b.gesamt, 1)} {medium.einheit}
+                  · {formatVerbrauchMitEinheit(b.gesamt, medium.einheit, 1)}
                 </span>
               </span>
             </div>

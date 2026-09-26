@@ -9,6 +9,9 @@ import {
   type VerbrauchMessmodus,
 } from '@/lib/verbrauch-medien-katalog'
 
+/** D1 erlaubt max. 99 Bound-Parameter pro Statement. */
+const D1_MAX_BIND_PARAMS = 99
+
 /** Medien-Schlüssel (Katalog oder custom_…). */
 export type VerbrauchMessungTyp = string
 
@@ -374,21 +377,24 @@ async function getEreignisseForMessungIds(
   const map = new Map<string, VerbrauchEreignis[]>()
   if (messungIds.length === 0) return map
   try {
-    const placeholders = messungIds.map(() => '?').join(',')
-    const res = await db
-      .prepare(
-        `SELECT id, messung_id, typ, datum, menge, notizen, created_at
-         FROM verbrauch_ereignisse
-         WHERE messung_id IN (${placeholders})
-         ORDER BY COALESCE(datum, created_at) ASC, created_at ASC`
-      )
-      .bind(...messungIds)
-      .all<Record<string, unknown>>()
-    for (const row of res.results || []) {
-      const e = mapEreignisRow(row)
-      const list = map.get(e.messung_id) ?? []
-      list.push(e)
-      map.set(e.messung_id, list)
+    for (let i = 0; i < messungIds.length; i += D1_MAX_BIND_PARAMS) {
+      const chunk = messungIds.slice(i, i + D1_MAX_BIND_PARAMS)
+      const placeholders = chunk.map(() => '?').join(',')
+      const res = await db
+        .prepare(
+          `SELECT id, messung_id, typ, datum, menge, notizen, created_at
+           FROM verbrauch_ereignisse
+           WHERE messung_id IN (${placeholders})
+           ORDER BY COALESCE(datum, created_at) ASC, created_at ASC`
+        )
+        .bind(...chunk)
+        .all<Record<string, unknown>>()
+      for (const row of res.results || []) {
+        const e = mapEreignisRow(row)
+        const list = map.get(e.messung_id) ?? []
+        list.push(e)
+        map.set(e.messung_id, list)
+      }
     }
   } catch (error) {
     console.error('Error getEreignisseForMessungIds:', error)
@@ -410,12 +416,10 @@ function attachEreignisse(
   })
 }
 
-async function recalculateMessungVerbrauch(
+async function recalculateMessungVerbrauchFrom(
   db: D1Database,
-  messungId: string
-): Promise<VerbrauchMessung | null> {
-  const existing = await getVerbrauchMessung(db, messungId)
-  if (!existing) return null
+  existing: VerbrauchMessung
+): Promise<VerbrauchMessung> {
   const messmodus = await resolveMessmodusForTyp(db, existing.typ)
   const auffuellungen = existing.auffuellungen_summe ?? 0
   const { verbrauch_gesamt, verbrauch_pro_tag } = computeVerbrauchValues(
@@ -432,9 +436,13 @@ async function recalculateMessungVerbrauch(
        SET verbrauch_gesamt = ?, verbrauch_pro_tag = ?
        WHERE id = ?`
     )
-    .bind(verbrauch_gesamt, verbrauch_pro_tag, messungId)
+    .bind(verbrauch_gesamt, verbrauch_pro_tag, existing.id)
     .run()
-  return getVerbrauchMessung(db, messungId)
+  return {
+    ...existing,
+    verbrauch_gesamt,
+    verbrauch_pro_tag,
+  }
 }
 
 export async function getVerbrauchMessungen(
@@ -442,6 +450,11 @@ export async function getVerbrauchMessungen(
   options?: {
     typ?: VerbrauchMessungTyp
     urlaubId?: string
+    /**
+     * Nur Messungen ab diesem Kalenderdatum (YYYY-MM-DD), plus offene
+     * (wert_ende IS NULL). Cutoff über COALESCE(ende, start, created_at).
+     */
+    sinceYmd?: string
     /** Standard true; Attention/Reichweite braucht keine Auffüllungs-Events. */
     withEreignisse?: boolean
   }
@@ -456,6 +469,12 @@ export async function getVerbrauchMessungen(
     if (options?.urlaubId) {
       conditions.push('v.urlaub_id = ?')
       binds.push(options.urlaubId)
+    }
+    if (options?.sinceYmd) {
+      conditions.push(
+        `(COALESCE(v.messdatum_ende, v.messdatum_start, substr(v.created_at, 1, 10)) >= ? OR v.wert_ende IS NULL)`
+      )
+      binds.push(options.sinceYmd)
     }
     const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''
     const res = await db
@@ -482,6 +501,97 @@ export async function getVerbrauchMessungen(
     console.error('Error getVerbrauchMessungen:', error)
     return []
   }
+}
+
+/**
+ * Schlanke Messungs-Liste für Hub-Reichweite: nur benötigte Spalten,
+ * Zeitfenster + offene Messungen + optional aktueller Urlaub, ohne Ereignisse.
+ */
+export async function getVerbrauchMessungenForReichweite(
+  db: D1Database,
+  opts: { sinceYmd: string; includeUrlaubId?: string }
+): Promise<VerbrauchMessung[]> {
+  try {
+    const binds: (string | number)[] = [opts.sinceYmd]
+    let urlaubClause = ''
+    if (opts.includeUrlaubId) {
+      urlaubClause = ' OR v.urlaub_id = ?'
+      binds.push(opts.includeUrlaubId)
+    }
+    const res = await db
+      .prepare(
+        `SELECT v.id, v.typ, v.urlaub_id, v.equipment_id, v.transport_id,
+                v.messdatum_start, v.messdatum_ende, v.wert_start, v.wert_ende,
+                v.einheit, v.verbrauch_gesamt, v.verbrauch_pro_tag, v.notizen, v.created_at
+         FROM verbrauch_messungen v
+         WHERE COALESCE(v.messdatum_ende, v.messdatum_start, substr(v.created_at, 1, 10)) >= ?
+            OR v.wert_ende IS NULL
+            ${urlaubClause}
+         ORDER BY v.messdatum_ende DESC, v.created_at DESC`
+      )
+      .bind(...binds)
+      .all<Record<string, unknown>>()
+    return (res.results || []).map(mapVerbrauchRow)
+  } catch (error) {
+    console.error('Error getVerbrauchMessungenForReichweite:', error)
+    return []
+  }
+}
+
+/** Minimaler Stay-Hinweis für Klimaproxy (nur Lat + Daten). */
+export type VerbrauchClimateStayHint = {
+  urlaub_id: string
+  start_datum: string | null
+  end_datum: string | null
+  lat: number | null
+}
+
+/**
+ * Schlanke Campingplatz-Stays nur mit lat + Aufenthaltsdaten (kein c.*, kein Cover).
+ */
+export async function getVerbrauchClimateStayHints(
+  db: D1Database,
+  vacationIds: string[]
+): Promise<Map<string, VerbrauchClimateStayHint[]>> {
+  const grouped = new Map<string, VerbrauchClimateStayHint[]>()
+  for (const id of vacationIds) grouped.set(id, [])
+  if (vacationIds.length === 0) return grouped
+
+  try {
+    for (let i = 0; i < vacationIds.length; i += D1_MAX_BIND_PARAMS) {
+      const chunk = vacationIds.slice(i, i + D1_MAX_BIND_PARAMS)
+      const placeholders = chunk.map(() => '?').join(',')
+      const res = await db
+        .prepare(
+          `SELECT uc.urlaub_id AS urlaub_id,
+                  uc.start_datum AS start_datum,
+                  uc.end_datum AS end_datum,
+                  c.lat AS lat
+           FROM urlaub_campingplaetze uc
+           JOIN campingplaetze c ON c.id = uc.campingplatz_id
+           WHERE uc.urlaub_id IN (${placeholders})
+           ORDER BY uc.urlaub_id, (uc.start_datum IS NULL), uc.start_datum,
+                    COALESCE(uc.sort_index, 999999)`
+        )
+        .bind(...chunk)
+        .all<Record<string, unknown>>()
+      for (const row of res.results || []) {
+        const urlaubId = String(row.urlaub_id)
+        const hint: VerbrauchClimateStayHint = {
+          urlaub_id: urlaubId,
+          start_datum: row.start_datum != null ? String(row.start_datum) : null,
+          end_datum: row.end_datum != null ? String(row.end_datum) : null,
+          lat: row.lat != null && Number.isFinite(Number(row.lat)) ? Number(row.lat) : null,
+        }
+        const list = grouped.get(urlaubId)
+        if (list) list.push(hint)
+        else grouped.set(urlaubId, [hint])
+      }
+    }
+  } catch (error) {
+    console.error('Error getVerbrauchClimateStayHints:', error)
+  }
+  return grouped
 }
 
 export async function getVerbrauchMessung(
@@ -688,6 +798,11 @@ export async function deleteVerbrauchMessung(db: D1Database, id: string): Promis
 
 // --- Ereignisse (Auffüllungen) ---
 
+export type VerbrauchEreignisMutationResult = {
+  ereignis: VerbrauchEreignis
+  messung: VerbrauchMessung
+}
+
 export async function createVerbrauchEreignis(
   db: D1Database,
   data: {
@@ -696,30 +811,39 @@ export async function createVerbrauchEreignis(
     datum?: string | null
     notizen?: string | null
   }
-): Promise<VerbrauchEreignis | null> {
+): Promise<VerbrauchEreignisMutationResult | null> {
   try {
     const messung = await getVerbrauchMessung(db, data.messung_id)
     if (!messung) return null
     if (!(data.menge > 0)) return null
 
     const id = crypto.randomUUID()
+    const datum = data.datum ? normalizeCalendarDate(data.datum) : null
     await db
       .prepare(
         `INSERT INTO verbrauch_ereignisse (id, messung_id, typ, datum, menge, notizen)
          VALUES (?, ?, 'auffuellung', ?, ?, ?)`
       )
-      .bind(
-        id,
-        data.messung_id,
-        data.datum ? normalizeCalendarDate(data.datum) : null,
-        data.menge,
-        data.notizen ?? null
-      )
+      .bind(id, data.messung_id, datum, data.menge, data.notizen ?? null)
       .run()
-    await recalculateMessungVerbrauch(db, data.messung_id)
 
-    const byMessung = await getEreignisseForMessungIds(db, [data.messung_id])
-    return (byMessung.get(data.messung_id) ?? []).find((e) => e.id === id) ?? null
+    const ereignis: VerbrauchEreignis = {
+      id,
+      messung_id: data.messung_id,
+      typ: 'auffuellung',
+      datum,
+      menge: data.menge,
+      notizen: data.notizen ?? null,
+      created_at: new Date().toISOString(),
+    }
+    const ereignisse = [...(messung.ereignisse ?? []), ereignis]
+    const updated: VerbrauchMessung = {
+      ...messung,
+      ereignisse,
+      auffuellungen_summe: sumAuffuellungen(ereignisse),
+    }
+    const messungOut = await recalculateMessungVerbrauchFrom(db, updated)
+    return { ereignis, messung: messungOut }
   } catch (error) {
     console.error('Error createVerbrauchEreignis:', error)
     return null
@@ -734,7 +858,7 @@ export async function updateVerbrauchEreignis(
     datum: string | null
     notizen: string | null
   }>
-): Promise<VerbrauchEreignis | null> {
+): Promise<VerbrauchEreignisMutationResult | null> {
   try {
     const row = await db
       .prepare(
@@ -768,29 +892,55 @@ export async function updateVerbrauchEreignis(
         .bind(...values)
         .run()
     }
-    await recalculateMessungVerbrauch(db, existing.messung_id)
-    const byMessung = await getEreignisseForMessungIds(db, [existing.messung_id])
-    return (byMessung.get(existing.messung_id) ?? []).find((e) => e.id === id) ?? null
+
+    const messung = await getVerbrauchMessung(db, existing.messung_id)
+    if (!messung) return null
+    const ereignis =
+      (messung.ereignisse ?? []).find((e) => e.id === id) ??
+      ({
+        ...existing,
+        menge: updates.menge ?? existing.menge,
+        datum:
+          updates.datum !== undefined
+            ? updates.datum
+              ? normalizeCalendarDate(updates.datum)
+              : null
+            : existing.datum,
+        notizen: updates.notizen !== undefined ? updates.notizen : existing.notizen,
+      } satisfies VerbrauchEreignis)
+
+    const messungOut = await recalculateMessungVerbrauchFrom(db, {
+      ...messung,
+      auffuellungen_summe: sumAuffuellungen(messung.ereignisse ?? []),
+    })
+    return { ereignis, messung: messungOut }
   } catch (error) {
     console.error('Error updateVerbrauchEreignis:', error)
     return null
   }
 }
 
-export async function deleteVerbrauchEreignis(db: D1Database, id: string): Promise<boolean> {
+export async function deleteVerbrauchEreignis(
+  db: D1Database,
+  id: string
+): Promise<{ ok: true; messung: VerbrauchMessung | null } | { ok: false }> {
   try {
     const row = await db
       .prepare('SELECT messung_id FROM verbrauch_ereignisse WHERE id = ?')
       .bind(id)
       .first<{ messung_id: string }>()
-    if (!row) return false
+    if (!row) return { ok: false }
     const r = await db.prepare('DELETE FROM verbrauch_ereignisse WHERE id = ?').bind(id).run()
-    const ok = r.success && (r.meta?.changes ?? 0) > 0
-    if (ok) await recalculateMessungVerbrauch(db, row.messung_id)
-    return ok
+    const deleted = r.success && (r.meta?.changes ?? 0) > 0
+    if (!deleted) return { ok: false }
+
+    const messung = await getVerbrauchMessung(db, row.messung_id)
+    if (!messung) return { ok: true, messung: null }
+    const messungOut = await recalculateMessungVerbrauchFrom(db, messung)
+    return { ok: true, messung: messungOut }
   } catch (error) {
     console.error('Error deleteVerbrauchEreignis:', error)
-    return false
+    return { ok: false }
   }
 }
 

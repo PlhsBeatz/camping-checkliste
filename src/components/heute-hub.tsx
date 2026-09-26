@@ -154,6 +154,7 @@ function HeuteHubContent() {
   const [acceptingKey, setAcceptingKey] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const positionRef = useRef<GeoPoint | null>(null)
+  const feedRef = useRef<AttentionFeed | null>(null)
 
   useEffect(() => {
     if (showNavSidebar) {
@@ -178,6 +179,7 @@ function HeuteHubContent() {
       })
       const json = (await res.json()) as ApiResponse<AttentionFeed>
       if (json.success && json.data) {
+        feedRef.current = json.data
         setFeed(json.data)
         setError(null)
         await cacheAttentionFeed(json.data)
@@ -188,6 +190,7 @@ function HeuteHubContent() {
     } catch (e) {
       const cached = await getCachedAttentionFeed()
       if (cached) {
+        feedRef.current = cached
         setFeed(cached)
         setError(null)
         notifyAttentionChanged(cached.badgeCount)
@@ -212,6 +215,7 @@ function HeuteHubContent() {
         cached != null &&
         Math.abs(cached.lat - live.lat) < 0.0008 &&
         Math.abs(cached.lng - live.lng) < 0.0008
+      // Travel-Nav / Sonne brauchen Live-Position; Reichweite ist serverseitig schlank.
       if (sameSpot) return
       await load(live)
     }
@@ -268,6 +272,7 @@ function HeuteHubContent() {
         return
       }
       setFeed(json.data)
+      feedRef.current = json.data
       setSnoozeOpenKey(null)
       await cacheAttentionFeed(json.data)
       notifyAttentionChanged(json.data.badgeCount)

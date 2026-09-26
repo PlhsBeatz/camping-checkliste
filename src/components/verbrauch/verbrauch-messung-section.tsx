@@ -26,7 +26,7 @@ import type {
   Vacation,
 } from '@/lib/db'
 import type { ApiResponse } from '@/lib/api-types'
-import { formatVerbrauch, verbrauchDifferenz } from '@/lib/verbrauch-format'
+import { formatVerbrauchMitEinheit, verbrauchDifferenz } from '@/lib/verbrauch-format'
 import { supportsGewichtZuLiter } from '@/lib/verbrauch-medien-katalog'
 import { normalizeCalendarDate, todayInAppTimezone } from '@/lib/app-timezone'
 import {
@@ -446,18 +446,12 @@ export function VerbrauchMessungSection({
       : dialog?.kind === 'start' &&
           isNextFutureSelected &&
           suggestedStart != null
-        ? `Vorschlag: Endwert letzter Urlaub (${formatVerbrauch(suggestedStart, 1)} ${medium.einheit})`
+        ? `Vorschlag: Endwert letzter Urlaub (${formatVerbrauchMitEinheit(suggestedStart, medium.einheit, 1)})`
         : undefined
 
   return (
     <div className="space-y-4 pb-20">
-      <div className="flex items-baseline justify-between gap-2">
-        <h2 className="text-base font-semibold text-brand-heading">{medium.name}</h2>
-        <p className="text-sm text-muted-foreground">
-          Timeline
-          {supportsAuffuellung ? ' · inkl. Zwischenkäufe' : ''}
-        </p>
-      </div>
+      <h2 className="text-base font-semibold text-brand-heading">{medium.name}</h2>
 
       <VerbrauchChart medium={medium} messungen={messungen} />
 
@@ -522,11 +516,12 @@ export function VerbrauchMessungSection({
                       {formatDate(m.messdatum_start)} – {formatDate(m.messdatum_ende)}
                       {complete ? (
                         <span className="ml-2 text-foreground">
-                          · {formatVerbrauch(gesamt, 1)} {medium.einheit}
+                          · {formatVerbrauchMitEinheit(gesamt, medium.einheit, 1)}
                           {m.verbrauch_pro_tag != null && (
                             <>
                               {' '}
-                              ({formatVerbrauch(m.verbrauch_pro_tag, 2)} {medium.einheit}/Tag)
+                              ({formatVerbrauchMitEinheit(m.verbrauch_pro_tag, medium.einheit, 2)}
+                              /Tag)
                             </>
                           )}
                         </span>
@@ -581,13 +576,19 @@ export function VerbrauchMessungSection({
                 </div>
 
                 {expanded && (
+                <div className="border-t border-border/60">
+                  {m.notizen?.trim() ? (
+                    <p className="px-3 pt-2.5 text-sm text-foreground/90 whitespace-pre-wrap break-words leading-snug">
+                      {m.notizen.trim()}
+                    </p>
+                  ) : null}
                 <ol className="relative px-3 py-3 space-y-0">
                   <TimelineRow
                     icon={<CircleDot className="h-3.5 w-3.5" />}
                     label="Start"
                     value={
                       m.wert_start != null
-                        ? `${formatVerbrauch(m.wert_start, 1)} ${medium.einheit}`
+                        ? formatVerbrauchMitEinheit(m.wert_start, medium.einheit, 1)
                         : '—'
                     }
                     meta={formatDate(m.messdatum_start)}
@@ -599,8 +600,9 @@ export function VerbrauchMessungSection({
                       key={e.id}
                       icon={<Fuel className="h-3.5 w-3.5" />}
                       label="Auffüllung"
-                      value={`+${formatVerbrauch(e.menge, 1)} ${medium.einheit}`}
-                      meta={[formatDate(e.datum), e.notizen?.trim()].filter(Boolean).join(' · ')}
+                      value={`+${formatVerbrauchMitEinheit(e.menge, medium.einheit, 1)}`}
+                      meta={formatDate(e.datum)}
+                      note={e.notizen?.trim() || undefined}
                       accent
                       isLast={idx === ereignisse.length - 1 && complete}
                       menu={
@@ -642,7 +644,7 @@ export function VerbrauchMessungSection({
                       label="Ende"
                       value={
                         m.wert_ende != null
-                          ? `${formatVerbrauch(m.wert_ende, 1)} ${medium.einheit}`
+                          ? formatVerbrauchMitEinheit(m.wert_ende, medium.einheit, 1)
                           : '—'
                       }
                       meta={formatDate(m.messdatum_ende)}
@@ -690,6 +692,7 @@ export function VerbrauchMessungSection({
                     </li>
                   )}
                 </ol>
+                </div>
                 )}
               </li>
             )
@@ -944,6 +947,7 @@ function TimelineRow({
   label,
   value,
   meta,
+  note,
   accent,
   isLast,
   menu,
@@ -952,6 +956,7 @@ function TimelineRow({
   label: string
   value: string
   meta?: string
+  note?: string
   accent?: boolean
   isLast?: boolean
   menu?: ReactNode
@@ -975,14 +980,19 @@ function TimelineRow({
         {icon}
       </span>
       <div className="flex min-w-0 flex-1 items-start justify-between gap-2 pt-0.5">
-        <div className="min-w-0">
-          <p className="text-sm leading-tight">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5 text-sm leading-snug">
             <span className="text-muted-foreground">{label}</span>
-            <span className="mx-1.5 text-muted-foreground/50">·</span>
-            <span className="font-medium tabular-nums">{value}</span>
-          </p>
+            <span className="text-muted-foreground/50">·</span>
+            <span className="font-medium tabular-nums break-all">{value}</span>
+          </div>
           {meta ? (
-            <p className="text-xs text-muted-foreground truncate mt-0.5">{meta}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">{meta}</p>
+          ) : null}
+          {note ? (
+            <p className="text-xs sm:text-sm text-foreground/85 mt-1 whitespace-pre-wrap break-words leading-snug">
+              {note}
+            </p>
           ) : null}
         </div>
         {menu}

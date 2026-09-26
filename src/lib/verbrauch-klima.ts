@@ -59,14 +59,20 @@ export function latFromCampingStays(
   stays: Array<{
     start_datum?: string | null
     end_datum?: string | null
+    lat?: number | null
     campingplatz?: { lat?: number | null } | null
   }>
 ): number | null {
   let bestLat: number | null = null
   let bestDays = -1
   for (const s of stays) {
-    const lat = s.campingplatz?.lat
-    if (lat == null || !Number.isFinite(lat)) continue
+    const lat =
+      s.lat != null && Number.isFinite(s.lat)
+        ? s.lat
+        : s.campingplatz?.lat != null && Number.isFinite(s.campingplatz.lat)
+          ? s.campingplatz.lat
+          : null
+    if (lat == null) continue
     if (s.start_datum && s.end_datum) {
       const [ys, ms, ds] = s.start_datum.slice(0, 10).split('-').map(Number)
       const [ye, me, de] = s.end_datum.slice(0, 10).split('-').map(Number)

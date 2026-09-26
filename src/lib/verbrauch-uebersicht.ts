@@ -22,10 +22,15 @@ export type VerbrauchUebersichtStats = {
   tripCount: number
 }
 
-function cutoffYmd(jahre = VERBRAUCH_UEBERSICHT_JAHRE): string {
+/** Cutoff YYYY-MM-DD für Übersicht/Reichweite (heute minus N Jahre). */
+export function verbrauchUebersichtCutoffYmd(jahre = VERBRAUCH_UEBERSICHT_JAHRE): string {
   const today = todayInAppTimezone()
   const y = Number(today.slice(0, 4)) - jahre
   return `${y}${today.slice(4)}`
+}
+
+function cutoffYmd(jahre = VERBRAUCH_UEBERSICHT_JAHRE): string {
+  return verbrauchUebersichtCutoffYmd(jahre)
 }
 
 function tripDays(m: VerbrauchMessung): number | null {

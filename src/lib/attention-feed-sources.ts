@@ -1,6 +1,6 @@
+import type { D1Database } from '@cloudflare/workers-types'
 import {
   getCampingStaysForVacation,
-  getCampingStaysForVacations,
   getChecklistenHubSummaries,
   getOptimierungen,
   getPackingItemsForHub,
@@ -9,15 +9,17 @@ import {
   getRestzahlungAttentionStays,
   getUserById,
   getVacations,
+  getVerbrauchClimateStayHints,
   getVerbrauchMedien,
   getVerbrauchMedienAusruestungLinks,
-  getVerbrauchMessungen,
+  getVerbrauchMessungenForReichweite,
   type PackingItem,
   type PackStatusData,
   type Rastplatz,
   type RestzahlungAttentionStay,
   type Vacation,
   type VacationCampingStay,
+  type VerbrauchClimateStayHint,
 } from '@/lib/db'
 import { getFaelligkeitenForHub } from '@/lib/db-wartung'
 import { getAttentionSnoozes } from '@/lib/db-attention'
@@ -37,6 +39,7 @@ import {
   type HubTravelNavRouteMatch,
 } from '@/lib/hub-travel-nav'
 import { climateProxyTempForYmd, latFromCampingStays, midYmdBetween } from '@/lib/verbrauch-klima'
+import { verbrauchUebersichtCutoffYmd } from '@/lib/verbrauch-uebersicht'
 import {
   computeVerbrauchRateStats,
   evaluateReichweite,
@@ -54,6 +57,19 @@ function vacationTitelForSuggestion(s: SmartSuggestion, vacations: Vacation[]): 
   return vacations.find((v) => v.id === id)?.titel ?? null
 }
 
+function latFromClimateHints(
+  hints: VerbrauchClimateStayHint[],
+  fallbackStays?: VacationCampingStay[],
+  homeLat?: number | null
+): number | null {
+  return (
+    latFromCampingStays(hints) ??
+    (fallbackStays ? latFromCampingStays(fallbackStays) : null) ??
+    homeLat ??
+    null
+  )
+}
+
 async function buildVerbrauchReichweiteItems(
   db: D1Database,
   opts: {
@@ -63,10 +79,9 @@ async function buildVerbrauchReichweiteItems(
     homeLat: number | null
   }
 ): Promise<AttentionFeedInput['verbrauchReichweiteItems']> {
-  const [medien, links, messungen] = await Promise.all([
+  const [medien, links] = await Promise.all([
     getVerbrauchMedien(db, { onlyActive: true }),
     getVerbrauchMedienAusruestungLinks(db),
-    getVerbrauchMessungen(db, { withEreignisse: false }),
   ])
   if (medien.length === 0 || links.length === 0) return []
 
@@ -81,6 +96,12 @@ async function buildVerbrauchReichweiteItems(
   )
   if (relevantMedien.length === 0) return []
 
+  const sinceYmd = verbrauchUebersichtCutoffYmd()
+  const messungen = await getVerbrauchMessungenForReichweite(db, {
+    sinceYmd,
+    includeUrlaubId: opts.vacation.id,
+  })
+
   const needsSeasonal = relevantMedien.some((m) => m.schluessel === 'petroleum')
   const urlaubIds = new Set<string>()
   urlaubIds.add(opts.vacation.id)
@@ -90,17 +111,18 @@ async function buildVerbrauchReichweiteItems(
     }
   }
 
-  const staysByVacation = needsSeasonal
-    ? await getCampingStaysForVacations(db, [...urlaubIds])
-    : new Map<string, VacationCampingStay[]>([[opts.vacation.id, opts.campingStays]])
-
-  if (needsSeasonal && !staysByVacation.has(opts.vacation.id)) {
-    staysByVacation.set(opts.vacation.id, opts.campingStays)
-  }
+  const climateHints = needsSeasonal
+    ? await getVerbrauchClimateStayHints(db, [...urlaubIds])
+    : new Map<string, VerbrauchClimateStayHint[]>()
 
   const urlaubTempById = new Map<string, number>()
-  for (const [vid, stays] of staysByVacation) {
-    const lat = latFromCampingStays(stays) ?? opts.homeLat
+  for (const vid of urlaubIds) {
+    const hints = climateHints.get(vid) ?? []
+    const lat = latFromClimateHints(
+      hints,
+      vid === opts.vacation.id ? opts.campingStays : undefined,
+      opts.homeLat
+    )
     if (vid === opts.vacation.id) {
       const mid = midYmdBetween(
         opts.vacation.startdatum,
@@ -109,7 +131,7 @@ async function buildVerbrauchReichweiteItems(
       urlaubTempById.set(vid, climateProxyTempForYmd(mid, lat))
       continue
     }
-    const dated = stays.filter((s) => s.start_datum && s.end_datum)
+    const dated = hints.filter((s) => s.start_datum && s.end_datum)
     if (dated.length > 0) {
       const starts = dated.map((s) => s.start_datum!).sort()
       const ends = dated.map((s) => s.end_datum!).sort()
@@ -164,7 +186,7 @@ async function buildVerbrauchReichweiteItems(
       title: bewertung.title,
       reason: bewertung.reason,
       risk: bewertung.risk,
-      href: '/tools/verbrauch',
+      href: `/tools/verbrauch?medium=${encodeURIComponent(medium.schluessel)}`,
       score: bewertung.ampel === 'kritisch' ? 520 : 480,
       ampel: bewertung.ampel,
     })

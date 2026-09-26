@@ -7,6 +7,7 @@ import {
   type VerbrauchMessungTyp,
 } from '@/lib/db'
 import { requireAuth, requireWriteWartung, requireReadWartung } from '@/lib/api-auth'
+import { verbrauchUebersichtCutoffYmd } from '@/lib/verbrauch-uebersicht'
 
 interface VerbrauchBody {
   typ?: VerbrauchMessungTyp
@@ -30,12 +31,24 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const typ = searchParams.get('typ')
     const urlaubId = searchParams.get('urlaubId')
+    const sinceParam = searchParams.get('since')
+    const all = searchParams.get('all') === '1'
+    const ereignisseParam = searchParams.get('ereignisse')
+    const withEreignisse = ereignisseParam !== '0'
+
+    const sinceYmd = all
+      ? undefined
+      : sinceParam && /^\d{4}-\d{2}-\d{2}$/.test(sinceParam)
+        ? sinceParam
+        : verbrauchUebersichtCutoffYmd()
 
     const env = process.env as unknown as CloudflareEnv
     const db = await getDB(env)
     const items = await getVerbrauchMessungen(db, {
       typ: typ ?? undefined,
       urlaubId: urlaubId ?? undefined,
+      sinceYmd,
+      withEreignisse,
     })
     return NextResponse.json({ success: true, data: items })
   } catch (error: unknown) {

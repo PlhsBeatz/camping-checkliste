@@ -2,7 +2,7 @@
 
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuth } from '@/components/auth-provider'
 import { NavigationSidebar } from '@/components/navigation-sidebar'
 import { Button } from '@/components/ui/button'
@@ -26,6 +26,8 @@ import {
 
 function VerbrauchPageContent() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const mediumParam = searchParams.get('medium')?.trim() || ''
   const { canReadWartung, canWriteWartung, canAccessConfig, loading: authLoading } = useAuth()
   const [showNavSidebar, setShowNavSidebar] = useState(false)
   const [medien, setMedien] = useState<VerbrauchMedium[]>([])
@@ -34,12 +36,26 @@ function VerbrauchPageContent() {
   const [loading, setLoading] = useState(true)
   const [activeMediumKey, setActiveMediumKey] = useState<string>('')
   const loadSeqRef = useRef(0)
+  const appliedMediumParamRef = useRef<string | null>(null)
 
   const activeMedien = useMemo(() => medien.filter((m) => m.ist_aktiv), [medien])
 
   const activeMedium = useMemo(
     () => activeMedien.find((m) => m.schluessel === activeMediumKey) ?? null,
     [activeMedien, activeMediumKey]
+  )
+
+  const selectMedium = useCallback(
+    (schluessel: string) => {
+      setActiveMediumKey(schluessel)
+      appliedMediumParamRef.current = schluessel
+      const params = new URLSearchParams(searchParams.toString())
+      if (schluessel) params.set('medium', schluessel)
+      else params.delete('medium')
+      const qs = params.toString()
+      router.replace(qs ? `/tools/verbrauch?${qs}` : '/tools/verbrauch', { scroll: false })
+    },
+    [router, searchParams]
   )
 
   const fetchNoStore = useCallback((url: string) => {
@@ -143,12 +159,20 @@ function VerbrauchPageContent() {
       setActiveMediumKey('')
       return
     }
-    const first = activeMedien[0]
-    if (!first) return
-    if (!activeMediumKey || !activeMedien.some((m) => m.schluessel === activeMediumKey)) {
-      setActiveMediumKey(first.schluessel)
+    if (
+      mediumParam &&
+      activeMedien.some((m) => m.schluessel === mediumParam) &&
+      appliedMediumParamRef.current !== mediumParam
+    ) {
+      appliedMediumParamRef.current = mediumParam
+      setActiveMediumKey(mediumParam)
+      return
     }
-  }, [activeMedien, activeMediumKey])
+    if (!activeMediumKey || !activeMedien.some((m) => m.schluessel === activeMediumKey)) {
+      const first = activeMedien[0]
+      if (first) setActiveMediumKey(first.schluessel)
+    }
+  }, [activeMedien, activeMediumKey, mediumParam])
 
   if (authLoading || !canReadWartung) {
     return (
@@ -201,7 +225,7 @@ function VerbrauchPageContent() {
                 medien={activeMedien}
                 messungen={messungen}
                 activeSchluessel={activeMediumKey}
-                onSelect={setActiveMediumKey}
+                onSelect={selectMedium}
               />
 
               {activeMedium && (
