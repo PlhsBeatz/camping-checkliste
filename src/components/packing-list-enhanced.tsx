@@ -1246,15 +1246,17 @@ const PackingItem: React.FC<PackingItemProps> = ({
                     'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold shrink-0',
                     showAusgemustertHighlight
                       ? 'bg-red-600 text-white dark:bg-red-500'
-                      : 'bg-red-100 text-red-800 dark:bg-red-950/70 dark:text-red-200'
+                      : 'bg-muted text-muted-foreground'
                   )}
                   title={
                     showAusgemustertHighlight
                       ? 'Ausgemustert – für diesen Urlaub noch auf der Packliste'
-                      : 'In der Ausrüstung ausgemustert'
+                      : 'In der Ausrüstung ausgemustert (historischer Eintrag)'
                   }
                 >
-                  <AlertTriangle className="h-3 w-3" aria-hidden />
+                  {showAusgemustertHighlight && (
+                    <AlertTriangle className="h-3 w-3" aria-hidden />
+                  )}
                   Ausgemustert
                 </span>
               )}
@@ -1279,7 +1281,13 @@ const PackingItem: React.FC<PackingItemProps> = ({
             {(isAusgemustert || details) && (
               <p className="text-xs text-muted-foreground mt-1.5">
                 {isAusgemustert && (
-                  <span className="font-medium text-red-700 dark:text-red-300">
+                  <span
+                    className={cn(
+                      showAusgemustertHighlight
+                        ? 'font-medium text-red-700 dark:text-red-300'
+                        : 'text-muted-foreground'
+                    )}
+                  >
                     {formatAusgemustertHint(fullItem.ersetzt_durch_was, successorAlreadyOnList)}
                   </span>
                 )}
@@ -1619,6 +1627,11 @@ interface PackingListProps {
   onBulkSelectionModeChange?: (active: boolean) => void;
   onToggleGruppe?: (packingItemId: string, gruppeId: string, currentStatus: boolean) => void;
   isAdmin?: boolean;
+  /**
+   * Starke rote Ausgemustert-Hervorhebung (Kartenhintergrund, Balken).
+   * In vergangenen Urlauben auf false setzen – Kennzeichnung bleibt, wirkt aber ruhiger.
+   */
+  highlightAusgemustert?: boolean;
   /** Parent kann Undo-Toast auslösen (z. B. nach Löschen in page.tsx) */
   showUndoToastRef?: MutableRefObject<ShowPackListUndoToast | null>;
 }
@@ -1671,6 +1684,7 @@ export function PackingList({
   onBulkSelectionModeChange,
   onToggleGruppe,
   isAdmin = false,
+  highlightAusgemustert = true,
   showUndoToastRef,
 }: PackingListProps) {
   const [assignmentItemId, setAssignmentItemId] = useState<string | null>(null);
@@ -2866,6 +2880,7 @@ export function PackingList({
                               }
                               packListTabKey={`${activeMainCategory}|${selectedProfile ?? 'alle'}|${pauschalGruppenFilter}`}
                               searchFocusHighlight={highlightedItemId === item.id}
+                              highlightAusgemustert={highlightAusgemustert}
                             />
                           ))}
                       </CardContent>

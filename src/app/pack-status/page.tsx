@@ -20,6 +20,7 @@ import type {
 import { getCachedVacations, getCachedPackStatus, enqueueSync } from '@/lib/offline-sync'
 import { cacheVacations, cachePackStatus } from '@/lib/offline-db'
 import { useReconnectRefetch } from '@/hooks/use-reconnect-refetch'
+import { useVisibilityRefetch } from '@/hooks/use-visibility-refetch'
 import { usePackingSync } from '@/hooks/use-packing-sync'
 import { showOfflineToast, showOfflineErrorToast, isOffline } from '@/lib/offline-toast'
 import { PullToRefreshWrapper } from '@/components/pull-to-refresh-wrapper'
@@ -198,8 +199,9 @@ function PackStatusContent() {
     fetchPackStatus()
   }, [fetchPackStatus])
 
-  // Bei Reconnect: Pack-Status erneut vom Server holen
+  // Bei Reconnect / Wiederaufnahme: Pack-Status erneut vom Server holen
   useReconnectRefetch(fetchPackStatus)
+  useVisibilityRefetch(fetchPackStatus)
 
   const currentVacation = vacations.find((v) => v.id === selectedVacationId)
 

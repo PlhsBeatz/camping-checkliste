@@ -62,6 +62,7 @@ import {
 } from '@/lib/client-route-info'
 import { isUsableRoutePolyline } from '@/lib/route-polyline'
 import { useReconnectRefetch } from '@/hooks/use-reconnect-refetch'
+import { useVisibilityRefetch } from '@/hooks/use-visibility-refetch'
 import { useBookingImportBadge } from '@/components/booking-import-badge-provider'
 import { getVacationCountdown } from '@/lib/vacation-helpers'
 import { groupAllMitreisendeByGruppe } from '@/lib/pack-profile-groups'
@@ -420,6 +421,7 @@ export default function UrlaubDetailPage() {
   }, [load])
 
   useReconnectRefetch(load)
+  useVisibilityRefetch(load)
 
   useEffect(() => {
     let aborted = false

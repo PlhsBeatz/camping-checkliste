@@ -82,6 +82,7 @@ import {
   applyEquipmentStatusToPackingItems,
   type PacklistSearchHit,
 } from '@/lib/packlist-visibility'
+import { isVacationInPastForEquipmentReplace } from '@/lib/equipment-lifecycle'
 import { AdminFremdeGruppeWarningDialog } from '@/components/admin-fremde-gruppe-warning-dialog'
 import { ReiseRastPanel } from '@/components/reise-rast-panel'
 import { useReiseModus } from '@/hooks/use-reise-modus'
@@ -1301,6 +1302,14 @@ function HomeContent() {
     () => currentVacation?.abfahrtdatum?.trim() || currentVacation?.startdatum || null,
     [currentVacation]
   )
+
+  /** In vergangenen Urlauben Ausgemustert nur dezent kennzeichnen (nicht alarmrot). */
+  const highlightAusgemustert = useMemo(() => {
+    if (!currentVacation) return true
+    const hasRealMeta = vacations.some((v) => v.id === currentVacation.id)
+    if (!hasRealMeta) return true
+    return !isVacationInPastForEquipmentReplace(currentVacation)
+  }, [currentVacation, vacations])
 
   const packlistSearchHits = useMemo(() => {
     if (packlistSearchQuery.trim().length < 1) return [] as PacklistSearchHit[]
@@ -3802,6 +3811,7 @@ function HomeContent() {
                   ownGruppeId={ownGruppeId}
                   packProfileScopeMitreisende={packProfileScopeMitreisende}
                   abreiseDatum={abreiseDatumForPacklist}
+                  highlightAusgemustert={highlightAusgemustert}
                   searchQuery={packlistSearchQuery}
                   onSearchQueryChange={setPacklistSearchQuery}
                   focusItemId={packlistFocusItemId}

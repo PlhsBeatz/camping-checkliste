@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { usePathname } from 'next/navigation'
 import { ATTENTION_CHANGED_EVENT } from '@/lib/attention-events'
 import { useReconnectRefetch } from '@/hooks/use-reconnect-refetch'
+import { useVisibilityRefetch } from '@/hooks/use-visibility-refetch'
 
 const BADGE_CACHE_KEY = 'camping-attention-badge'
 const BADGE_CACHE_MS = 45_000
@@ -75,6 +76,12 @@ export function useAttentionBadge() {
   }, [load, pathname])
 
   useReconnectRefetch(() => {
+    if (pathname === '/') return
+    clearBadgeCache()
+    void load({ bypassCache: true })
+  })
+
+  useVisibilityRefetch(() => {
     if (pathname === '/') return
     clearBadgeCache()
     void load({ bypassCache: true })

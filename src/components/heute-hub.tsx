@@ -25,6 +25,7 @@ import {
 } from '@/lib/attention-feed'
 import { SNOOZE_PRESET_DAYS } from '@/lib/attention-snooze'
 import { useReconnectRefetch } from '@/hooks/use-reconnect-refetch'
+import { useVisibilityRefetch } from '@/hooks/use-visibility-refetch'
 import { getCachedAttentionFeed, cacheAttentionFeed } from '@/lib/offline-db'
 import { notifyAttentionChanged } from '@/lib/attention-events'
 import { notifySmartSuggestionsChanged } from '@/lib/smart-suggestions-events'
@@ -226,6 +227,12 @@ function HeuteHubContent() {
   }, [load])
 
   useReconnectRefetch(() => {
+    void load()
+  })
+
+  // PWA bleibt oft gemountet: bei Wiederaufnahme Feed still aktualisieren
+  // (Tage bis Urlaub, Packfortschritt, Attention-Karten) ohne Seiten-Reload.
+  useVisibilityRefetch(() => {
     void load()
   })
 

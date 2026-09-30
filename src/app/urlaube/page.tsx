@@ -51,6 +51,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { getCachedVacations, getCachedCampingplaetze, getCachedRoute } from '@/lib/offline-sync'
 import { cacheVacations, cacheCampingplaetze, cacheRoute } from '@/lib/offline-db'
 import { useReconnectRefetch } from '@/hooks/use-reconnect-refetch'
+import { useVisibilityRefetch } from '@/hooks/use-visibility-refetch'
 import { notifyVacationSearchParamChanged } from '@/hooks/use-vacation-search-param'
 import { format, isSameMonth, isSameYear } from 'date-fns'
 import { de } from 'date-fns/locale'
@@ -98,9 +99,11 @@ function UrlaubePageContent() {
     }
   }, [showNavSidebar])
 
-  // Refetch-Tick: bei Reconnect bumpen → die nachfolgenden useEffects mit Cache-Anbindung neu auslösen.
+  // Refetch-Tick: bei Reconnect / Wiederaufnahme bumpen → useEffects neu auslösen
+  // (Aktuell/Archiv-Cutoff und Countdowns sind datumsabhängig).
   const [refetchTick, setRefetchTick] = useState(0)
   useReconnectRefetch(() => setRefetchTick((t) => t + 1))
+  useVisibilityRefetch(() => setRefetchTick((t) => t + 1))
 
   useEffect(() => {
     if (searchParams.get('bookingImport') === '1' && canAccessConfig) {
