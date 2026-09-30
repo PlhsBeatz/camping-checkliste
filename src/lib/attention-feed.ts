@@ -317,9 +317,10 @@ function stayNights(start: string | null, end: string | null): number {
   return days > 0 ? days : 0
 }
 
-function vacationTileCountdown(
-  vacation: Vacation,
-  todayYmd: string
+/** Countdown für Urlaubs-Kachel (auch clientseitig für Resume ohne API). */
+export function computeVacationTileCountdown(
+  vacation: Pick<Vacation, 'startdatum' | 'enddatum'>,
+  todayYmd: string = todayInAppTimezone()
 ): Pick<AttentionVacationTile, 'countdownDays' | 'countdownKind'> {
   const start = normalizeCalendarDate(vacation.startdatum)
   const end = normalizeCalendarDate(vacation.enddatum)
@@ -339,6 +340,30 @@ function vacationTileCountdown(
     return { countdownDays: untilEnd + 1, countdownKind: 'today' }
   }
   return { countdownDays: untilEnd + 1, countdownKind: 'remaining' }
+}
+
+/** Aktualisiert nur datumsabhängige Kachel-Felder – ohne Worker-Roundtrip. */
+export function refreshAttentionFeedForToday(
+  feed: AttentionFeed,
+  todayYmd: string = todayInAppTimezone()
+): AttentionFeed {
+  const tile = feed.vacationTile
+  if (!tile) {
+    if (feed.generatedAt.slice(0, 10) === todayYmd) return feed
+    return { ...feed, generatedAt: new Date().toISOString() }
+  }
+  const nextCountdown = computeVacationTileCountdown(tile, todayYmd)
+  if (
+    tile.countdownDays === nextCountdown.countdownDays &&
+    tile.countdownKind === nextCountdown.countdownKind
+  ) {
+    return feed
+  }
+  return {
+    ...feed,
+    generatedAt: new Date().toISOString(),
+    vacationTile: { ...tile, ...nextCountdown },
+  }
 }
 
 export function buildVacationTile(
@@ -367,7 +392,7 @@ export function buildVacationTile(
     href: `/urlaube/${encodeURIComponent(vacation.id)}`,
     campingplatzName,
     extraCampingCount,
-    ...vacationTileCountdown(vacation, todayYmd),
+    ...computeVacationTileCountdown(vacation, todayYmd),
   }
 }
 

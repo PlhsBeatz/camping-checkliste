@@ -17,6 +17,7 @@ import { cn } from '@/lib/utils'
 import type { ApiResponse } from '@/lib/api-types'
 import {
   MAX_ATTENTION_ITEMS,
+  refreshAttentionFeedForToday,
   type AttentionFeed,
   type AttentionItem,
   type AttentionKind,
@@ -25,7 +26,6 @@ import {
 } from '@/lib/attention-feed'
 import { SNOOZE_PRESET_DAYS } from '@/lib/attention-snooze'
 import { useReconnectRefetch } from '@/hooks/use-reconnect-refetch'
-import { useVisibilityRefetch } from '@/hooks/use-visibility-refetch'
 import { getCachedAttentionFeed, cacheAttentionFeed } from '@/lib/offline-db'
 import { notifyAttentionChanged } from '@/lib/attention-events'
 import { notifySmartSuggestionsChanged } from '@/lib/smart-suggestions-events'
@@ -230,11 +230,22 @@ function HeuteHubContent() {
     void load()
   })
 
-  // PWA bleibt oft gemountet: bei Wiederaufnahme Feed still aktualisieren
-  // (Tage bis Urlaub, Packfortschritt, Attention-Karten) ohne Seiten-Reload.
-  useVisibilityRefetch(() => {
-    void load()
-  })
+  // Resume: nur Countdown lokal (kein /api/attention) – Full-Feed bleibt Mount/Reconnect/Aktionen.
+  // Visibility-Network hatte Workers Free (Error 1102) ausgelöst.
+  useEffect(() => {
+    const syncLocal = () => {
+      if (document.visibilityState !== 'visible') return
+      const current = feedRef.current
+      if (!current) return
+      const refreshed = refreshAttentionFeedForToday(current)
+      if (refreshed === current) return
+      feedRef.current = refreshed
+      setFeed(refreshed)
+      void cacheAttentionFeed(refreshed)
+    }
+    document.addEventListener('visibilitychange', syncLocal)
+    return () => document.removeEventListener('visibilitychange', syncLocal)
+  }, [])
 
   const acceptPackingAdd = async (item: AttentionItem) => {
     if (!item.suggestionId) return

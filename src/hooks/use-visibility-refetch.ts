@@ -5,22 +5,26 @@ import { todayInAppTimezone } from '@/lib/app-timezone'
 
 export type UseVisibilityRefetchOptions = {
   /**
-   * Mindestabstand zwischen zwei Refetches (ms). Verhindert Spam bei kurzen
-   * App-Wechseln; nach längerem Hintergrund reicht ein Resume.
-   * Kalendertag-Wechsel (Europe/Berlin) umgeht dieses Intervall immer.
-   * Default: 30 Sekunden.
+   * Mindestabstand zwischen zwei Refetches (ms).
+   * Default: 10 Minuten – schützt Cloudflare Workers Free (CPU 1102)
+   * vor Resume-Spam bei schweren APIs wie `/api/attention`.
    */
   minIntervalMs?: number
-  /** Refetch auch bei `pageshow` (bfcache), Default true. */
+  /**
+   * Wenn true, umgeht ein Kalendertag-Wechsel (Europe/Berlin) das Intervall.
+   * Default false – Tagwechsel lokal behandeln, nicht mit schweren API-Calls.
+   */
+  forceOnDayChange?: boolean
+  /**
+   * `pageshow` nur bei bfcache-Restore (`persisted`), Default true.
+   * Vermeidet Doppel-Fire mit visibilitychange beim normalen Resume.
+   */
   includePageShow?: boolean
 }
 
 /**
- * Ruft `refetch` auf, wenn die App/PWA wieder sichtbar wird (Tab zurück,
- * Smartphone entsperren, PWA aus Hintergrund). Aktualisiert State ohne
- * vollständigen Seiten-Reload – ideal für datumsabhängige Hub-Inhalte.
- *
- * Übergebenes `refetch` wird via Ref gehalten (wie `useReconnectRefetch`).
+ * Ruft `refetch` auf, wenn die App/PWA wieder sichtbar wird.
+ * Stark gedrosselt, damit Resume nicht Worker-Limits (1102) auslöst.
  */
 export function useVisibilityRefetch(
   refetch: () => void | Promise<void>,
@@ -29,7 +33,8 @@ export function useVisibilityRefetch(
   const refetchRef = useRef(refetch)
   refetchRef.current = refetch
 
-  const minIntervalMs = options?.minIntervalMs ?? 30_000
+  const minIntervalMs = options?.minIntervalMs ?? 10 * 60_000
+  const forceOnDayChange = options?.forceOnDayChange === true
   const includePageShow = options?.includePageShow !== false
   const lastRefetchAtRef = useRef(Date.now())
   const lastDayRef = useRef(todayInAppTimezone())
@@ -39,9 +44,11 @@ export function useVisibilityRefetch(
       const today = todayInAppTimezone()
       const dayChanged = today !== lastDayRef.current
       const now = Date.now()
-      if (!dayChanged && now - lastRefetchAtRef.current < minIntervalMs) return
+      if (dayChanged) lastDayRef.current = today
+      if (!forceOnDayChange || !dayChanged) {
+        if (now - lastRefetchAtRef.current < minIntervalMs) return
+      }
       lastRefetchAtRef.current = now
-      lastDayRef.current = today
       try {
         void refetchRef.current()
       } catch (err) {
@@ -54,8 +61,8 @@ export function useVisibilityRefetch(
     }
 
     const onPageShow = (event: PageTransitionEvent) => {
-      // bfcache-Restore oder normales pageshow nach Resume
-      if (event.persisted || document.visibilityState === 'visible') run()
+      // Nur bfcache – normales pageshow + visibilitychange würde sonst doppelt feuern
+      if (event.persisted) run()
     }
 
     document.addEventListener('visibilitychange', onVisibility)
@@ -69,5 +76,5 @@ export function useVisibilityRefetch(
         window.removeEventListener('pageshow', onPageShow)
       }
     }
-  }, [minIntervalMs, includePageShow])
+  }, [minIntervalMs, forceOnDayChange, includePageShow])
 }

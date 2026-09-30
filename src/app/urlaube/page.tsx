@@ -51,7 +51,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { getCachedVacations, getCachedCampingplaetze, getCachedRoute } from '@/lib/offline-sync'
 import { cacheVacations, cacheCampingplaetze, cacheRoute } from '@/lib/offline-db'
 import { useReconnectRefetch } from '@/hooks/use-reconnect-refetch'
-import { useVisibilityRefetch } from '@/hooks/use-visibility-refetch'
+import { useAppCalendarDay } from '@/hooks/use-app-calendar-day'
 import { notifyVacationSearchParamChanged } from '@/hooks/use-vacation-search-param'
 import { format, isSameMonth, isSameYear } from 'date-fns'
 import { de } from 'date-fns/locale'
@@ -99,11 +99,11 @@ function UrlaubePageContent() {
     }
   }, [showNavSidebar])
 
-  // Refetch-Tick: bei Reconnect / Wiederaufnahme bumpen → useEffects neu auslösen
-  // (Aktuell/Archiv-Cutoff und Countdowns sind datumsabhängig).
+  // Refetch-Tick: bei Reconnect bumpen → die nachfolgenden useEffects mit Cache-Anbindung neu auslösen.
   const [refetchTick, setRefetchTick] = useState(0)
   useReconnectRefetch(() => setRefetchTick((t) => t + 1))
-  useVisibilityRefetch(() => setRefetchTick((t) => t + 1))
+  // Kein Visibility-API-Refetch: Aktuell/Archiv-Cutoff läuft über Kalendertag (kostenlos).
+  const calendarDay = useAppCalendarDay()
 
   useEffect(() => {
     if (searchParams.get('bookingImport') === '1' && canAccessConfig) {
@@ -322,8 +322,7 @@ function UrlaubePageContent() {
       )
     }
 
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
+    const today = new Date(`${calendarDay}T12:00:00`)
     const cutoffDate = new Date(today)
     cutoffDate.setDate(cutoffDate.getDate() - 7)
 
@@ -347,7 +346,7 @@ function UrlaubePageContent() {
     }
 
     return list
-  }, [vacations, vacationCampingplaetze, filterCampingplatzId, vacationsViewMode])
+  }, [vacations, vacationCampingplaetze, filterCampingplatzId, vacationsViewMode, calendarDay])
 
   const filterCampingplatzName = useMemo(() => {
     if (!filterCampingplatzId) return null

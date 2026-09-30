@@ -1334,6 +1334,7 @@ function HomeContent() {
       abreiseDatum: abreiseDatumForPacklist,
       hidePackedItems,
       canConfirmVorgemerkt: canSelectOtherProfiles,
+      keepAusgemustertVisible: highlightAusgemustert,
       allVacationGruppeIds: getVacationGruppeIds(vacationMitreisende),
       scope: {
         canEditPauschalEntries,
@@ -1352,6 +1353,7 @@ function HomeContent() {
     abreiseDatumForPacklist,
     hidePackedItems,
     canSelectOtherProfiles,
+    highlightAusgemustert,
     vacationMitreisende,
     packProfileScopeMitreisende,
     packProfileScopeIdSet,

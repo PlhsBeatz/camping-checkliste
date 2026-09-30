@@ -118,15 +118,21 @@ export function applyEquipmentStatusToPackingItems(
 
 export function formatAusgemustertHint(
   successorWas: string | null | undefined,
-  successorAlreadyOnList = false
-): string {
+  successorAlreadyOnList = false,
+  opts?: { showRemoveHint?: boolean }
+): string | null {
+  const showRemoveHint = opts?.showRemoveHint !== false
   const name = successorWas?.trim()
   if (name && successorAlreadyOnList) {
-    return `Ausgemustert – Ersatz „${name}“ ist bereits auf der Liste. Diesen Eintrag von der Packliste entfernen.`
+    return showRemoveHint
+      ? `Ausgemustert – Ersatz „${name}“ ist bereits auf der Liste. Diesen Eintrag von der Packliste entfernen.`
+      : `Ausgemustert – Ersatz „${name}“ war bereits auf der Liste.`
   }
   if (name) {
     return `Ausgemustert – Ersatz in der Ausrüstung: „${name}“.`
   }
+  // Vergangene Urlaube: kein Aufräum-Hinweis
+  if (!showRemoveHint) return null
   return 'Ausgemustert – von der Packliste entfernen.'
 }
 
@@ -138,9 +144,14 @@ export function getTodayLocalYmd(): string {
 /** Dauerausstattung: nur bei Ansicht „packliste“ ausblenden */
 export function passesDauerausstattungFilter(
   item: Pick<PackingItem, 'status'>,
-  listDisplayMode: 'alles' | 'packliste'
+  listDisplayMode: 'alles' | 'packliste',
+  opts?: { keepAusgemustertVisible?: boolean }
 ): boolean {
-  if (listDisplayMode === 'packliste' && isImmerGepacktStatus(item)) return false
+  if (listDisplayMode !== 'packliste') return true
+  if (isImmerGepacktStatus(item)) return false
+  // Vergangene Urlaube: Ausgemustert wie Dauerausstattung ausblenden.
+  // Aktuell/zukünftig: sichtbar halten (Aufräumen / Ersetzen).
+  if (isAusgemustertStatus(item) && !opts?.keepAusgemustertVisible) return false
   return true
 }
 
@@ -159,9 +170,20 @@ export function passesAbreiseFilter(
 
 export function passesBaseVisibleFilters(
   item: Pick<PackingItem, 'status' | 'erst_abreisetag_gepackt'>,
-  opts: { listDisplayMode: 'alles' | 'packliste'; abreiseDatum?: string | null }
+  opts: {
+    listDisplayMode: 'alles' | 'packliste'
+    abreiseDatum?: string | null
+    /** Aktuell/zukünftiger Urlaub: Ausgemustert nicht wie Dauerausstattung ausblenden */
+    keepAusgemustertVisible?: boolean
+  }
 ): boolean {
-  if (!passesDauerausstattungFilter(item, opts.listDisplayMode)) return false
+  if (
+    !passesDauerausstattungFilter(item, opts.listDisplayMode, {
+      keepAusgemustertVisible: opts.keepAusgemustertVisible,
+    })
+  ) {
+    return false
+  }
   if (!passesAbreiseFilter(item, opts.abreiseDatum)) return false
   return true
 }
@@ -292,19 +314,26 @@ export function buildPacklistSearchHits(
     canConfirmVorgemerkt: boolean
     scope: ProfileScopeFilterOpts
     allVacationGruppeIds?: string[]
+    /** Aktuell/zukünftig: Ausgemustert trotz Packliste-/Gepackt-Filter zeigen */
+    keepAusgemustertVisible?: boolean
   }
 ): PacklistSearchHit[] {
   const q = query.trim()
   if (q.length < 1) return []
 
   const abreiseYmd = opts.abreiseDatum ? toPacklistYYYYMMDD(opts.abreiseDatum) : ''
+  const keepAusgemustertVisible = !!opts.keepAusgemustertVisible
 
   return items
     .filter((item) => passesProfileScopeFilters(item, opts.selectedProfile, opts.scope))
     .filter((item) => matchesPacklistSearchQuery(item, q))
     .map((item) => {
       const hideReasons: PacklistHideReason[] = []
-      if (!passesDauerausstattungFilter(item, opts.listDisplayMode)) {
+      if (
+        !passesDauerausstattungFilter(item, opts.listDisplayMode, {
+          keepAusgemustertVisible,
+        })
+      ) {
         hideReasons.push('dauerausstattung')
       }
       if (!passesAbreiseFilter(item, opts.abreiseDatum)) {
@@ -321,7 +350,8 @@ export function buildPacklistSearchHits(
         opts.allVacationGruppeIds,
         opts.scope.vacationMitreisende
       )
-      if (opts.hidePackedItems && packed && hideReasons.length === 0) {
+      const keepDespitePacked = keepAusgemustertVisible && isAusgemustertStatus(item)
+      if (opts.hidePackedItems && packed && hideReasons.length === 0 && !keepDespitePacked) {
         // Gepackt zählt nur, wenn der Eintrag sonst in der Basisansicht sichtbar wäre
         hideReasons.push('gepackt')
       }

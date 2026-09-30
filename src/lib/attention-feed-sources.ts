@@ -205,7 +205,7 @@ export async function loadAttentionFeedInput(
     snoozes?: Map<string, string>
     userId?: string
     userPosition?: GeoPoint | null
-    /** Nur Badge-Zahl: ohne Rastplätze, Routen-Polyline und Campingplatz-Aufenthalte. */
+    /** Nur Badge-Zahl: ohne Travel-Nav, Verbrauch-Reichweite und Extra-Hub-Queries. */
     mode?: 'full' | 'count'
   }
 ): Promise<AttentionFeedInput> {
@@ -233,21 +233,21 @@ export async function loadAttentionFeedInput(
   ] = await Promise.all([
     relevant ? getPackingItemsForHub(db, relevant.id) : Promise.resolve<PackingItem[]>([]),
     relevant ? getPackStatus(db, relevant.id) : Promise.resolve<PackStatusData | null>(null),
-    // Auch im countMode laden: Reichweiten-Relevanz braucht die Hub-Packliste
-    hubVacation && !sameHub
+    // Extra-Hub-Packliste nur im Full-Feed (Tile/Travel); Count braucht sie nicht
+    full && hubVacation && !sameHub
       ? getPackingItemsForHub(db, hubVacation.id)
       : Promise.resolve<PackingItem[] | null>(null),
     full && hubVacation && !sameHub
       ? getPackStatus(db, hubVacation.id)
       : Promise.resolve<PackStatusData | null>(null),
-    // Stays für Hub (Sonne/Travel) oder zumindest für Reichweiten-Klimaproxy
-    hubVacation
+    // Stays: Full-Feed (Sonne/Travel/Klima) oder Count nur bei Live-GPS für Sonne
+    hubVacation && (full || needsSonnenContext)
       ? getCampingStaysForVacation(db, hubVacation.id)
       : Promise.resolve<VacationCampingStay[]>([]),
     opts.includeWartungItems ? getFaelligkeitenForHub(db) : Promise.resolve([]),
     getChecklistenHubSummaries(db),
     opts.snoozes ? Promise.resolve(opts.snoozes) : getAttentionSnoozes(db),
-    (full || needsSonnenContext || !!hubVacation) && opts.userId
+    (full || needsSonnenContext) && opts.userId
       ? getUserById(db, opts.userId)
       : Promise.resolve(null),
     opts.includeOptimierungItems
@@ -279,31 +279,31 @@ export async function loadAttentionFeedInput(
     }
   }
 
-  const reichweiteVacation = hubVacation ?? relevant
-  const reichweitePacking: PackingItem[] =
-    reichweiteVacation && hubVacation && relevant && hubVacation.id === relevant.id
-      ? packingItems
-      : reichweiteVacation && hubVacation && !sameHub
-        ? (hubPackingExtra ?? [])
-        : reichweiteVacation && relevant && reichweiteVacation.id === relevant.id
+  // Verbrauch-Reichweite: bewusst nur im Full-Feed – sonst wird count=1 (Badge) wieder CPU-schwer.
+  let verbrauchReichweiteItems: AttentionFeedInput['verbrauchReichweiteItems'] = []
+  if (full) {
+    const reichweiteVacation = hubVacation ?? relevant
+    if (reichweiteVacation) {
+      const reichweitePacking: PackingItem[] =
+        hubVacation && relevant && hubVacation.id === relevant.id
           ? packingItems
-          : []
+          : hubVacation && !sameHub
+            ? (hubPackingExtra ?? [])
+            : packingItems
 
-  const reichweiteStays =
-    reichweiteVacation && hubVacation && reichweiteVacation.id === hubVacation.id
-      ? campingStays
-      : reichweiteVacation
-        ? await getCampingStaysForVacation(db, reichweiteVacation.id)
-        : []
+      const reichweiteStays =
+        hubVacation && reichweiteVacation.id === hubVacation.id
+          ? campingStays
+          : await getCampingStaysForVacation(db, reichweiteVacation.id)
 
-  const verbrauchReichweiteItems = reichweiteVacation
-    ? await buildVerbrauchReichweiteItems(db, {
+      verbrauchReichweiteItems = await buildVerbrauchReichweiteItems(db, {
         vacation: reichweiteVacation,
         packingItems: reichweitePacking,
         campingStays: reichweiteStays,
         homeLat: homeCoords?.lat ?? null,
       })
-    : []
+    }
+  }
 
   return {
     vacations,

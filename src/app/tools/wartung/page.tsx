@@ -22,7 +22,6 @@ import { FaelligkeitQuittierungDialog } from '@/components/wartung/faelligkeit-q
 import { FaelligkeitHistorieList } from '@/components/wartung/faelligkeit-historie-list'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { useReconnectRefetch } from '@/hooks/use-reconnect-refetch'
-import { useVisibilityRefetch } from '@/hooks/use-visibility-refetch'
 import { flattenFaelligkeitDashboard } from '@/lib/faelligkeit-time-groups'
 import {
   getCachedFaelligkeiten,
@@ -191,7 +190,6 @@ function WartungPageContent() {
   }, [load])
 
   useReconnectRefetch(load)
-  useVisibilityRefetch(load)
 
   const handleEdit = (item: Faelligkeit) => {
     setEditItem(item)

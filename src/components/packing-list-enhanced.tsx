@@ -84,6 +84,8 @@ import {
 type VisibleItemsFilterOpts = ProfileScopeFilterOpts & {
   listDisplayMode: 'alles' | 'packliste';
   abreiseDatum?: string | null;
+  /** Aktuell/zukünftig: Ausgemustert trotz Packlisten-Filter sichtbar halten */
+  keepAusgemustertVisible?: boolean;
 };
 
 function filterVisibleItemsForProfile(
@@ -770,6 +772,8 @@ const PackingItem: React.FC<PackingItemProps> = ({
   // Check if item should be hidden in individual profile view
   const shouldHideInProfileView = useMemo(() => {
     if (!hidePackedItems) return false;
+    // Aktuell/zukünftig: Ausgemustert sichtbar lassen (Aufräumen), auch wenn gepackt
+    if (highlightAusgemustert && isAusgemustertStatus(fullItem)) return false;
     if (mitreisenden_typ === 'pauschal') {
       if (pauschalHidePacked !== null) return pauschalHidePacked
       return canConfirmVorgemerkt ? isFullyPackedFinal : isFullyPacked
@@ -787,6 +791,8 @@ const PackingItem: React.FC<PackingItemProps> = ({
     return canConfirmVorgemerkt ? isFullyPackedFinal : isFullyPacked;
   }, [
     hidePackedItems,
+    highlightAusgemustert,
+    fullItem,
     mitreisenden_typ,
     pauschalHidePacked,
     selectedProfile,
@@ -1075,6 +1081,11 @@ const PackingItem: React.FC<PackingItemProps> = ({
 
   const isAusgemustert = isAusgemustertStatus(fullItem);
   const showAusgemustertHighlight = isAusgemustert && highlightAusgemustert;
+  const ausgemustertHint = isAusgemustert
+    ? formatAusgemustertHint(fullItem.ersetzt_durch_was, successorAlreadyOnList, {
+        showRemoveHint: showAusgemustertHighlight,
+      })
+    : null;
 
   return (
     <>
@@ -1278,9 +1289,9 @@ const PackingItem: React.FC<PackingItemProps> = ({
               )}
             </div>
             
-            {(isAusgemustert || details) && (
+            {(ausgemustertHint || details) && (
               <p className="text-xs text-muted-foreground mt-1.5">
-                {isAusgemustert && (
+                {ausgemustertHint && (
                   <span
                     className={cn(
                       showAusgemustertHighlight
@@ -1288,10 +1299,10 @@ const PackingItem: React.FC<PackingItemProps> = ({
                         : 'text-muted-foreground'
                     )}
                   >
-                    {formatAusgemustertHint(fullItem.ersetzt_durch_was, successorAlreadyOnList)}
+                    {ausgemustertHint}
                   </span>
                 )}
-                {isAusgemustert && details ? ' ' : null}
+                {ausgemustertHint && details ? ' ' : null}
                 {details}
               </p>
             )}
@@ -1988,13 +1999,14 @@ export function PackingList({
   const visibleItemsFilterOpts = useMemo((): VisibleItemsFilterOpts => ({
     listDisplayMode,
     abreiseDatum,
+    keepAusgemustertVisible: highlightAusgemustert,
     canEditPauschalEntries,
     vacationMitreisende: effectiveScopeMitreisende,
     alleScopeIds,
     pauschalGruppenFilter,
     multiGroupActive,
     ownGruppeId,
-  }), [listDisplayMode, abreiseDatum, canEditPauschalEntries, effectiveScopeMitreisende, alleScopeIds, pauschalGruppenFilter, multiGroupActive, ownGruppeId]);
+  }), [listDisplayMode, abreiseDatum, highlightAusgemustert, canEditPauschalEntries, effectiveScopeMitreisende, alleScopeIds, pauschalGruppenFilter, multiGroupActive, ownGruppeId]);
 
   const searchQueryTrimmed = searchQuery.trim();
   const searchActive = searchQueryTrimmed.length >= 1;
@@ -2230,6 +2242,16 @@ export function PackingList({
     ]
   );
 
+  /** Gepackt-ausblenden: Ausgemustert in aktuell/zukünftig weiter anzeigen */
+  const isHiddenByPackedFilter = useCallback(
+    (item: DBPackingItem) => {
+      if (!hidePackedItems) return false
+      if (highlightAusgemustert && isAusgemustertStatus(item)) return false
+      return isItemFullyPackedForView(item)
+    },
+    [hidePackedItems, highlightAusgemustert, isItemFullyPackedForView]
+  );
+
   const sortedProfileMitreisende = useMemo(
     () => sortMitreisendeNachRolleUndName(visiblePackProfileMitreisende ?? vacationMitreisende),
     [visiblePackProfileMitreisende, vacationMitreisende]
@@ -2453,12 +2475,12 @@ export function PackingList({
   const allPackedFromCurrentView =
     !searchActive &&
     hasItems &&
-    profileVisibleItems.every((item) => isItemFullyPackedForView(item));
+    profileVisibleItems.every((item) => isHiddenByPackedFilter(item));
   const showTeamPackOverview = allPackedFromCurrentView && hidePackedItems && canSelectOtherProfiles && !allPersonsFullyPacked;
   const showAllPackedCelebration = allPackedFromCurrentView && hidePackedItems && (!canSelectOtherProfiles || allPersonsFullyPacked);
   const hasDisplayableSearchHits =
     visibleItems.length > 0 &&
-    (!hidePackedItems || visibleItems.some((item) => !isItemFullyPackedForView(item)));
+    (!hidePackedItems || visibleItems.some((item) => !isHiddenByPackedFilter(item)));
   const showNoSearchResults = searchActive && !hasDisplayableSearchHits;
   const currentProfileName = selectedProfile
     ? vacationMitreisende.find(m => m.id === selectedProfile)?.name
@@ -2468,9 +2490,9 @@ export function PackingList({
     return mainCategories.filter(mainCat => {
       const cats = itemsByMainCategory[mainCat] ?? {};
       const allItems = Object.values(cats).flat();
-      return allItems.some(item => !isItemFullyPackedForView(item));
+      return allItems.some(item => !isHiddenByPackedFilter(item));
     });
-  }, [mainCategories, itemsByMainCategory, hidePackedItems, isItemFullyPackedForView]);
+  }, [mainCategories, itemsByMainCategory, hidePackedItems, isHiddenByPackedFilter]);
 
   // Aktive Tab nur korrigieren wenn die aktuelle Hauptkategorie wirklich nicht mehr sichtbar ist
   const visibleMainCategoriesKey = visibleMainCategories.join('\u0001');
@@ -2500,10 +2522,10 @@ export function PackingList({
     setActiveMainCategory,
   ]);
 
-  // Kategorien anzeigen: wenn hidePackedItems, nur wenn mind. ein Eintrag ungepackt
+  // Kategorien anzeigen: wenn hidePackedItems, nur wenn mind. ein Eintrag noch sichtbar
   const shouldShowCategory = (categoryItems: DBPackingItem[]) => {
     if (!hidePackedItems) return true;
-    return categoryItems.some(item => !isItemFullyPackedForView(item));
+    return categoryItems.some(item => !isHiddenByPackedFilter(item));
   };
 
   const tabsForSwipe = (allPackedFromCurrentView && hidePackedItems)

@@ -62,7 +62,7 @@ import {
 } from '@/lib/client-route-info'
 import { isUsableRoutePolyline } from '@/lib/route-polyline'
 import { useReconnectRefetch } from '@/hooks/use-reconnect-refetch'
-import { useVisibilityRefetch } from '@/hooks/use-visibility-refetch'
+import { useAppCalendarDay } from '@/hooks/use-app-calendar-day'
 import { useBookingImportBadge } from '@/components/booking-import-badge-provider'
 import { getVacationCountdown } from '@/lib/vacation-helpers'
 import { groupAllMitreisendeByGruppe } from '@/lib/pack-profile-groups'
@@ -156,11 +156,14 @@ function formatDurationMinutes(durationMinutes: number) {
 }
 
 function CountdownHeader({ vacation }: { vacation: Vacation }) {
+  // Kalendertag-Tick: Countdown neu berechnen ohne API (PWA über Mitternacht).
+  const calendarDay = useAppCalendarDay()
   const countdown = getVacationCountdown(vacation)
   const isPast = countdown.tone === 'past'
 
   return (
     <div
+      data-calendar-day={calendarDay}
       className={cn(
         'rounded-t-lg px-4 py-2.5 text-center md:py-4',
         isPast
@@ -421,7 +424,6 @@ export default function UrlaubDetailPage() {
   }, [load])
 
   useReconnectRefetch(load)
-  useVisibilityRefetch(load)
 
   useEffect(() => {
     let aborted = false
