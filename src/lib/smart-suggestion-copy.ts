@@ -31,6 +31,7 @@ export function packingTargetVacation(s: SmartSuggestion): string | null {
 
 export function acceptButtonLabel(s: SmartSuggestion): string {
   if (s.kind === 'packing_add' || s.kind === 'packing_copack') return 'Auf die Packliste'
+  if (s.kind === 'temp_promote') return 'In Ausrüstung anlegen'
   if (s.kind === 'platzplan') return 'Platzplan speichern'
   if (s.kind === 'place_update') return 'Prüfen'
   if (s.kind === 'xor_candidate') return 'Als Alternative speichern'
@@ -47,8 +48,7 @@ export function acceptConsequence(s: SmartSuggestion): string {
     return `Wie beim Packlisten-Generator: Zuordnung und Menge kommen aus der Ausrüstung, nicht aus dem gerade gewählten Packprofil. Die Ausrüstung selbst bleibt unverändert.`
   }
   if (s.kind === 'temp_promote') {
-    const was = String(s.payload.was ?? 'den Eintrag')
-    return `Übernehmen merkt den Vorschlag als erledigt. „${was}“ wird noch nicht automatisch in die Ausrüstung übernommen – das geht weiter über Ausrüstung → Neu.`
+    return `Öffnet den Dialog zum Anlegen von Ausrüstung. Gewicht, Anzahl, Kategorie und Transport kommen aus den temporären Einträgen (bei Abweichungen die zuletzt genutzten Werte). Nach dem Speichern ist der Vorschlag erledigt.`
   }
   if (s.kind === 'xor_candidate') {
     const names = Array.isArray(s.payload.names) ? s.payload.names.map(String) : []

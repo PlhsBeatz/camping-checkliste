@@ -30,11 +30,14 @@ export function SmartSuggestionCard({
   suggestion,
   busy,
   highlighted = false,
+  canCreateEquipment = false,
   onAct,
 }: {
   suggestion: SmartSuggestion
   busy: boolean
   highlighted?: boolean
+  /** Admin: temp_promote öffnet den Ausrüstungs-Dialog statt nur „erledigt“. */
+  canCreateEquipment?: boolean
   onAct: (action: 'accept' | 'dismiss' | 'snooze', extra?: { url?: string }) => void
 }) {
   const choices = useMemo(() => platzplanChoices(suggestion), [suggestion])
@@ -51,6 +54,15 @@ export function SmartSuggestionCard({
     : []
   const vacationName = packingTargetVacation(suggestion)
   const seasonHint = packingAddSeasonHint(suggestion)
+
+  const primaryLabel =
+    suggestion.kind === 'temp_promote' && !canCreateEquipment
+      ? 'Erledigt markieren'
+      : acceptButtonLabel(suggestion)
+  const consequenceText =
+    suggestion.kind === 'temp_promote' && !canCreateEquipment
+      ? 'Markiert den Hinweis als erledigt. Anlegen in der Ausrüstung ist nur für Admins möglich.'
+      : acceptConsequence(suggestion)
 
   return (
     <Card
@@ -171,13 +183,13 @@ export function SmartSuggestionCard({
         )}
 
         <p className="text-xs text-muted-foreground leading-relaxed">
-          {acceptConsequence(suggestion)}
+          {consequenceText}
         </p>
 
         <div className="flex flex-wrap gap-2 items-center">
           {suggestion.kind === 'place_update' ? (
             <Button size="sm" asChild disabled={busy}>
-              <a href={suggestionHref(suggestion)}>{acceptButtonLabel(suggestion)}</a>
+              <a href={suggestionHref(suggestion)}>{primaryLabel}</a>
             </Button>
           ) : (
             <Button
@@ -190,7 +202,7 @@ export function SmartSuggestionCard({
                 )
               }
             >
-              {acceptButtonLabel(suggestion)}
+              {primaryLabel}
             </Button>
           )}
           <Button

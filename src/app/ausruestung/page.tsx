@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { NavigationSidebar } from '@/components/navigation-sidebar'
 import { EquipmentTable } from '@/components/equipment-table'
 import { EquipmentItemFormFields } from '@/components/equipment/equipment-item-form-fields'
+import { EquipmentAddDialog } from '@/components/equipment/equipment-add-dialog'
 import { Plus, Menu, MoreVertical, Trash2 } from 'lucide-react'
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
@@ -847,8 +848,7 @@ export default function AusruestungPage() {
         </div>
       </div>
 
-      {/* Add Equipment Dialog – Padding wie Packliste (px-6) */}
-      <ResponsiveModal
+      <EquipmentAddDialog
         open={showAddDialog}
         onOpenChange={(open) => {
           setShowAddDialog(open)
@@ -866,26 +866,23 @@ export default function AusruestungPage() {
             ? 'Der alte Eintrag wird ausgemustert und mit dem neuen verknüpft. Details und Gewicht bitte neu eintragen.'
             : undefined
         }
-        contentClassName="max-w-2xl max-h-[90vh] overflow-y-auto"
-        noPadding
-      >
-        <div className="space-y-4 px-6 pt-4 pb-6">
-          <EquipmentItemFormFields
-            value={formData}
-            onChange={setFormData}
-            idPrefix="add-eq"
-            categories={categories}
-            mainCategories={mainCategories}
-            transportVehicles={transportVehicles}
-            tagGroups={tagGroupsForEquipment}
-            mitreisende={mitreisende}
-            categorySelectScrollTarget={addEquipmentCategoryScrollTarget}
-            individuelleMitreisendeExtraOpen={individuelleMitreisendeExtraOffen}
-            onIndividuelleMitreisendeExtraOpenChange={setIndividuelleMitreisendeExtraOffen}
-            ageNeighbors={ageNeighbors}
-            lifecycleSessionKey={replacingItem ? `replace:${replacingItem.id}` : 'create'}
-          />
-          {replacingItem && (
+        value={formData}
+        onChange={setFormData}
+        categories={categories}
+        mainCategories={mainCategories}
+        transportVehicles={transportVehicles}
+        tagGroups={tagGroupsForEquipment}
+        mitreisende={mitreisende}
+        categorySelectScrollTarget={addEquipmentCategoryScrollTarget}
+        individuelleMitreisendeExtraOpen={individuelleMitreisendeExtraOffen}
+        onIndividuelleMitreisendeExtraOpenChange={setIndividuelleMitreisendeExtraOffen}
+        ageNeighbors={ageNeighbors}
+        lifecycleSessionKey={replacingItem ? `replace:${replacingItem.id}` : 'create'}
+        onSave={handleSaveEquipment}
+        isSaving={isSaving}
+        saveLabel={replacingItem ? 'Ersetzen' : 'Speichern'}
+        footerExtra={
+          replacingItem ? (
             <div className="space-y-2">
               <div className="flex items-start gap-2 rounded-md border px-3 py-2">
                 <Checkbox
@@ -919,29 +916,24 @@ export default function AusruestungPage() {
                 </div>
               </div>
             </div>
-          )}
-          {addCategoryLoading && (
-            <p className="text-xs text-muted-foreground">Kategorie wird vorgeschlagen…</p>
-          )}
-          {!replacingItem && addCategorySuggestion?.duplicate && (
-            <p className="text-xs text-amber-800 dark:text-amber-200">
-              Ähnlich zu vorhandener Ausrüstung „{addCategorySuggestion.duplicate.was}“.
-            </p>
-          )}
-          {addCategorySuggestion && !addCategorySuggestion.duplicate && (
-            <p className="text-xs text-muted-foreground">{addCategorySuggestion.begruendung}</p>
-          )}
-
-          <div className="flex gap-2 pt-4">
-            <Button onClick={handleSaveEquipment} disabled={isSaving} className="flex-1">
-              {isSaving ? 'Speichert...' : replacingItem ? 'Ersetzen' : 'Speichern'}
-            </Button>
-            <Button variant="outline" onClick={() => setShowAddDialog(false)} disabled={isSaving}>
-              Abbrechen
-            </Button>
-          </div>
-        </div>
-      </ResponsiveModal>
+          ) : null
+        }
+        afterFields={
+          <>
+            {addCategoryLoading && (
+              <p className="text-xs text-muted-foreground">Kategorie wird vorgeschlagen…</p>
+            )}
+            {!replacingItem && addCategorySuggestion?.duplicate && (
+              <p className="text-xs text-amber-800 dark:text-amber-200">
+                Ähnlich zu vorhandener Ausrüstung „{addCategorySuggestion.duplicate.was}“.
+              </p>
+            )}
+            {addCategorySuggestion && !addCategorySuggestion.duplicate && (
+              <p className="text-xs text-muted-foreground">{addCategorySuggestion.begruendung}</p>
+            )}
+          </>
+        }
+      />
 
       <ResponsiveModal
         open={showAlternativeGroupsDialog}
