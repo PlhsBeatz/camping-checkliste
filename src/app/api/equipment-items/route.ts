@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getCloudflareContext } from '@opennextjs/cloudflare'
 import {
   getDB,
   getEquipmentItems,
@@ -9,10 +10,12 @@ import {
   getTagsForEquipment,
   getAllTagsForEquipment,
   applyEquipmentFaelligkeitDisposition,
+  replaceTemporaryWithEquipmentInFuturePacklisten,
   CloudflareEnv,
 } from '@/lib/db'
 import { requireAuth, requireAdmin } from '@/lib/api-auth'
 import type { MengenRegel } from '@/lib/packing-quantity'
+import { notifyPackingSyncChange } from '@/lib/packing-sync'
 
 interface EquipmentItemBody {
   was?: string
@@ -41,6 +44,12 @@ interface PostEquipmentBody extends EquipmentItemBody {
   kategorie_id: string
   /** Optional: Client-ID für Offline-Anlegen */
   id?: string
+  /** Temp→Ausrüstung: auf zukünftigen Packlisten tauschen */
+  replace_temp_in_future_packlists?: boolean
+  /** Originalname der temporären Einträge (Match), falls umbenannt */
+  temp_match_was?: string
+  /** Original-Kategorie der temporären Einträge (Match) */
+  temp_match_kategorie_id?: string
 }
 
 interface PutEquipmentBody extends EquipmentItemBody {
@@ -118,6 +127,9 @@ export async function POST(request: NextRequest) {
       links,
       anschaffungsdatum,
       ausgemustert_am,
+      replace_temp_in_future_packlists,
+      temp_match_was,
+      temp_match_kategorie_id,
     } = body
 
     if (!was || !kategorie_id) {
@@ -151,6 +163,29 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ 
         error: 'Failed to create equipment item' 
       }, { status: 500 })
+    }
+
+    if (replace_temp_in_future_packlists === true) {
+      const matchWas = String(temp_match_was ?? was).trim()
+      const matchKat = String(temp_match_kategorie_id ?? kategorie_id).trim()
+      if (matchWas && matchKat) {
+        const vacationIds = await replaceTemporaryWithEquipmentInFuturePacklisten(
+          db,
+          matchWas,
+          matchKat,
+          item.id
+        )
+        if (vacationIds.length > 0) {
+          try {
+            const cfEnv = (await getCloudflareContext({ async: true })).env as unknown as CloudflareEnv
+            for (const vacationId of vacationIds) {
+              await notifyPackingSyncChange(cfEnv, vacationId)
+            }
+          } catch {
+            /* ohne Worker-Kontext */
+          }
+        }
+      }
     }
 
     return NextResponse.json({ success: true, data: item }, { status: 201 })

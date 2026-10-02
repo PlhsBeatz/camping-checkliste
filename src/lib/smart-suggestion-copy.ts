@@ -48,7 +48,7 @@ export function acceptConsequence(s: SmartSuggestion): string {
     return `Wie beim Packlisten-Generator: Zuordnung und Menge kommen aus der Ausrüstung, nicht aus dem gerade gewählten Packprofil. Die Ausrüstung selbst bleibt unverändert.`
   }
   if (s.kind === 'temp_promote') {
-    return `Öffnet den Dialog zum Anlegen von Ausrüstung. Gewicht, Anzahl, Kategorie und Transport kommen aus den temporären Einträgen (bei Abweichungen die zuletzt genutzten Werte). Nach dem Speichern ist der Vorschlag erledigt.`
+    return `Öffnet den Dialog zum Anlegen von Ausrüstung. Gewicht, Anzahl, Kategorie und Transport kommen aus den temporären Einträgen (bei Abweichungen die zuletzt genutzten Werte). Optional werden zukünftige Packlisten umgestellt. Nach dem Speichern ist der Vorschlag erledigt.`
   }
   if (s.kind === 'xor_candidate') {
     const names = Array.isArray(s.payload.names) ? s.payload.names.map(String) : []

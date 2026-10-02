@@ -2165,6 +2165,178 @@ export async function replaceEquipmentInFuturePacklisten(
 }
 
 /**
+ * Temporäre Packlisteneinträge (gleicher Name + Kategorie) auf zukünftigen Urlauben
+ * durch einen neu angelegten Ausrüstungsgegenstand ersetzen.
+ * Vergangene Urlaube bleiben unverändert. Gibt betroffene Urlaub-IDs zurück.
+ */
+export async function replaceTemporaryWithEquipmentInFuturePacklisten(
+  db: D1Database,
+  was: string,
+  kategorieId: string,
+  gegenstandId: string
+): Promise<string[]> {
+  const trimmedWas = was.trim()
+  const trimmedKat = kategorieId.trim()
+  if (!trimmedWas || !trimmedKat || !gegenstandId.trim()) return []
+
+  const todayYmd = todayInAppTimezone()
+  const rows = await db
+    .prepare(
+      `SELECT pet.id AS eintrag_id, pet.packliste_id, pet.anzahl, pet.bemerkung, pet.transport_id,
+              pet.gepackt, pet.gepackt_vorgemerkt, pet.gepackt_vorgemerkt_durch,
+              pet.pauschal_gruppen_modus, pet.verantwortliche_gruppe_id,
+              p.urlaub_id, u.startdatum, u.abfahrtdatum, u.enddatum
+       FROM packlisten_eintraege_temporaer pet
+       INNER JOIN packlisten p ON p.id = pet.packliste_id
+       INNER JOIN urlaube u ON u.id = p.urlaub_id
+       WHERE lower(trim(pet.was)) = lower(?) AND pet.kategorie_id = ?`
+    )
+    .bind(trimmedWas, trimmedKat)
+    .all<{
+      eintrag_id: string
+      packliste_id: string
+      anzahl: number
+      bemerkung: string | null
+      transport_id: string | null
+      gepackt: number
+      gepackt_vorgemerkt: number
+      gepackt_vorgemerkt_durch: string | null
+      pauschal_gruppen_modus: string | null
+      verantwortliche_gruppe_id: string | null
+      urlaub_id: string
+      startdatum: string
+      abfahrtdatum: string | null
+      enddatum: string | null
+    }>()
+
+  const affectedVacationIds: string[] = []
+  const seenVacations = new Set<string>()
+
+  for (const row of rows.results || []) {
+    if (!isFutureVacationForEquipmentReplace(row, todayYmd)) continue
+
+    const existing = await db
+      .prepare(
+        'SELECT id FROM packlisten_eintraege WHERE packliste_id = ? AND gegenstand_id = ? LIMIT 1'
+      )
+      .bind(row.packliste_id, gegenstandId)
+      .first<{ id: string }>()
+
+    if (existing) {
+      await db
+        .prepare('DELETE FROM packlisten_eintraege_temporaer WHERE id = ?')
+        .bind(row.eintrag_id)
+        .run()
+    } else {
+      const newId = crypto.randomUUID()
+      const modus = row.pauschal_gruppen_modus || 'einmal'
+      await db
+        .prepare(
+          `INSERT INTO packlisten_eintraege
+           (id, packliste_id, gegenstand_id, anzahl, gepackt, gepackt_vorgemerkt, gepackt_vorgemerkt_durch,
+            bemerkung, transport_id, pauschal_gruppen_modus, verantwortliche_gruppe_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        )
+        .bind(
+          newId,
+          row.packliste_id,
+          gegenstandId,
+          row.anzahl ?? 1,
+          row.gepackt ? 1 : 0,
+          row.gepackt_vorgemerkt ? 1 : 0,
+          row.gepackt_vorgemerkt_durch ?? null,
+          row.bemerkung ?? null,
+          row.transport_id ?? null,
+          modus,
+          row.verantwortliche_gruppe_id ?? null
+        )
+        .run()
+
+      const mitRows = await db
+        .prepare(
+          `SELECT mitreisender_id, gepackt, gepackt_vorgemerkt, anzahl, transport_id, einzelgewicht_override
+           FROM packlisten_eintrag_mitreisende_temporaer
+           WHERE packlisten_eintrag_id = ?`
+        )
+        .bind(row.eintrag_id)
+        .all<{
+          mitreisender_id: string
+          gepackt: number
+          gepackt_vorgemerkt: number
+          anzahl: number | null
+          transport_id: string | null
+          einzelgewicht_override: number | null
+        }>()
+
+      for (const m of mitRows.results || []) {
+        await db
+          .prepare(
+            `INSERT OR IGNORE INTO packlisten_eintrag_mitreisende
+             (packlisten_eintrag_id, mitreisender_id, gepackt, gepackt_vorgemerkt, anzahl, transport_id, einzelgewicht_override)
+             VALUES (?, ?, ?, ?, ?, ?, ?)`
+          )
+          .bind(
+            newId,
+            m.mitreisender_id,
+            m.gepackt ? 1 : 0,
+            m.gepackt_vorgemerkt ? 1 : 0,
+            m.anzahl ?? null,
+            m.transport_id ?? null,
+            m.einzelgewicht_override ?? null
+          )
+          .run()
+      }
+
+      const grpRows = await db
+        .prepare(
+          `SELECT gruppe_id, gepackt, gepackt_vorgemerkt, gepackt_vorgemerkt_durch, anzahl
+           FROM packlisten_eintrag_gruppen_temporaer
+           WHERE packlisten_eintrag_id = ?`
+        )
+        .bind(row.eintrag_id)
+        .all<{
+          gruppe_id: string
+          gepackt: number
+          gepackt_vorgemerkt: number
+          gepackt_vorgemerkt_durch: string | null
+          anzahl: number
+        }>()
+
+      for (const g of grpRows.results || []) {
+        await db
+          .prepare(
+            `INSERT OR IGNORE INTO packlisten_eintrag_gruppen
+             (id, packlisten_eintrag_id, gruppe_id, gepackt, gepackt_vorgemerkt, gepackt_vorgemerkt_durch, anzahl)
+             VALUES (?, ?, ?, ?, ?, ?, ?)`
+          )
+          .bind(
+            crypto.randomUUID(),
+            newId,
+            g.gruppe_id,
+            g.gepackt ? 1 : 0,
+            g.gepackt_vorgemerkt ? 1 : 0,
+            g.gepackt_vorgemerkt_durch ?? null,
+            g.anzahl ?? 1
+          )
+          .run()
+      }
+
+      await db
+        .prepare('DELETE FROM packlisten_eintraege_temporaer WHERE id = ?')
+        .bind(row.eintrag_id)
+        .run()
+    }
+
+    if (!seenVacations.has(row.urlaub_id)) {
+      seenVacations.add(row.urlaub_id)
+      affectedVacationIds.push(row.urlaub_id)
+    }
+  }
+
+  return affectedVacationIds
+}
+
+/**
  * Löschen eines Ausrüstungsgegenstands
  */
 export async function deleteEquipmentItem(db: D1Database, id: string): Promise<boolean> {

@@ -10,6 +10,8 @@ import {
 } from '@/components/brand-empty-illustrations'
 import { EquipmentAddDialog } from '@/components/equipment/equipment-add-dialog'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Label } from '@/components/ui/label'
 import { Menu } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { ApiResponse } from '@/lib/api-types'
@@ -78,6 +80,7 @@ function VorschlaegePageContent() {
   const [promoteHints, setPromoteHints] = useState<TempPromotePrefillHint[]>([])
   const [promoteBusy, setPromoteBusy] = useState(false)
   const [promoteSaving, setPromoteSaving] = useState(false)
+  const [replaceTempInFuturePacklists, setReplaceTempInFuturePacklists] = useState(true)
   const [individuelleMitreisendeExtraOffen, setIndividuelleMitreisendeExtraOffen] = useState(false)
   const [promoteScrollTarget, setPromoteScrollTarget] = useState<CategorySelectScrollTarget | null>(
     null
@@ -206,6 +209,7 @@ function VorschlaegePageContent() {
 
       setPromoteBusy(true)
       setIndividuelleMitreisendeExtraOffen(false)
+      setReplaceTempInFuturePacklists(true)
 
       try {
         await ensureEquipmentCatalog()
@@ -265,6 +269,7 @@ function VorschlaegePageContent() {
     setPromoteHints([])
     setPromoteScrollTarget(null)
     setIndividuelleMitreisendeExtraOffen(false)
+    setReplaceTempInFuturePacklists(true)
     setPromoteForm(createDefaultEquipmentFormValues())
   }, [])
 
@@ -276,6 +281,11 @@ function VorschlaegePageContent() {
       return
     }
 
+    const matchWas = String(promoteSuggestion.payload.was ?? promoteForm.was).trim()
+    const matchKat = String(
+      promoteSuggestion.payload.kategorie_id ?? promoteForm.kategorie_id
+    ).trim()
+
     setPromoteSaving(true)
     try {
       const clientId = crypto.randomUUID()
@@ -283,7 +293,13 @@ function VorschlaegePageContent() {
         table: 'equipment-items',
         action: 'post',
         key: clientId,
-        payload: { id: clientId, ...buildEquipmentApiPayload(promoteForm) },
+        payload: {
+          id: clientId,
+          ...buildEquipmentApiPayload(promoteForm),
+          replace_temp_in_future_packlists: replaceTempInFuturePacklists,
+          temp_match_was: matchWas,
+          temp_match_kategorie_id: matchKat,
+        },
       })
       if (!result.ok && !result.queued) {
         alert('Fehler beim Speichern' + (result.error ? `: ${result.error}` : ''))
@@ -309,7 +325,14 @@ function VorschlaegePageContent() {
     } finally {
       setPromoteSaving(false)
     }
-  }, [promoteSuggestion, promoteForm, mutate, closePromoteDialog, load])
+  }, [
+    promoteSuggestion,
+    promoteForm,
+    replaceTempInFuturePacklists,
+    mutate,
+    closePromoteDialog,
+    load,
+  ])
 
   const handleCardAct = useCallback(
     (suggestion: SmartSuggestion, action: 'accept' | 'dismiss' | 'snooze', extra?: { url?: string }) => {
@@ -400,6 +423,28 @@ function VorschlaegePageContent() {
           prefillHints={promoteHints}
           onSave={savePromoteEquipment}
           isSaving={promoteSaving}
+          footerExtra={
+            <div className="flex items-start gap-2 rounded-md border px-3 py-2">
+              <Checkbox
+                id="replace-temp-in-future-packlists"
+                checked={replaceTempInFuturePacklists}
+                onCheckedChange={(c) => setReplaceTempInFuturePacklists(!!c)}
+                className="mt-0.5"
+              />
+              <div className="space-y-0.5">
+                <Label
+                  htmlFor="replace-temp-in-future-packlists"
+                  className="cursor-pointer text-sm font-normal"
+                >
+                  Auf zukünftigen Packlisten den temporären Eintrag durch die Ausrüstung ersetzen
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Nur Urlaube, die noch nicht begonnen haben. Vergangene Packlisten bleiben
+                  unverändert.
+                </p>
+              </div>
+            </div>
+          }
           afterFields={
             <>
               {categoryLoading && (
