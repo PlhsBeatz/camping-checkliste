@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { AlertTriangle, Clock, Menu } from 'lucide-react'
@@ -31,6 +32,7 @@ import { notifyAttentionChanged } from '@/lib/attention-events'
 import { notifySmartSuggestionsChanged } from '@/lib/smart-suggestions-events'
 import { HeuteTravelNav } from '@/components/heute-travel-nav'
 import { PushDeviceActivatePrompt } from '@/components/push-device-activate'
+import { useAuth } from '@/components/auth-provider'
 import { usePushSubscribe } from '@/hooks/use-push-subscribe'
 import { useUserPushSettings } from '@/hooks/use-user-push-settings'
 import {
@@ -40,6 +42,12 @@ import {
   rememberAttentionPosition,
 } from '@/lib/attention-geo-client'
 import type { GeoPoint } from '@/lib/sonnen-hub-arrival'
+
+const TempPromoteEquipmentHost = dynamic(
+  () =>
+    import('@/components/temp-promote-equipment-host').then((m) => m.TempPromoteEquipmentHost),
+  { ssr: false }
+)
 
 const KIND_META: Record<AttentionKind, { label: string; icon: string }> = {
   wartung_sicherheit: { label: 'Wartung', icon: 'build' },
@@ -145,6 +153,7 @@ function OverviewTile({ href, children }: { href: string; children: ReactNode })
 
 function HeuteHubContent() {
   const router = useRouter()
+  const { canAccessConfig } = useAuth()
   const pushSubscribe = usePushSubscribe()
   const { settings: pushSettings } = useUserPushSettings(pushSubscribe.subscribed)
   const [showNavSidebar, setShowNavSidebar] = useState(false)
@@ -153,6 +162,8 @@ function HeuteHubContent() {
   const [snoozingKey, setSnoozingKey] = useState<string | null>(null)
   const [snoozeOpenKey, setSnoozeOpenKey] = useState<string | null>(null)
   const [acceptingKey, setAcceptingKey] = useState<string | null>(null)
+  const [promoteHostMounted, setPromoteHostMounted] = useState(false)
+  const [promoteRequestId, setPromoteRequestId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const positionRef = useRef<GeoPoint | null>(null)
   const feedRef = useRef<AttentionFeed | null>(null)
@@ -270,6 +281,20 @@ function HeuteHubContent() {
       setAcceptingKey(null)
     }
   }
+
+  const openTempPromote = useCallback((suggestionId: string) => {
+    setPromoteHostMounted(true)
+    setPromoteRequestId(suggestionId)
+  }, [])
+
+  const clearPromoteRequest = useCallback(() => {
+    setPromoteRequestId(null)
+  }, [])
+
+  const onTempPromoteCompleted = useCallback(async () => {
+    notifySmartSuggestionsChanged()
+    await load()
+  }, [load])
 
   const snooze = async (item: AttentionItem, days: number) => {
     setSnoozingKey(item.key)
@@ -467,43 +492,70 @@ function HeuteHubContent() {
                         item.verbrauchAmpel === 'kritisch'
                       const canAddToPacklist =
                         item.suggestionKind === 'packing_add' && Boolean(item.suggestionId)
-                      const itemBusy = snoozingKey === item.key || acceptingKey === item.key
+                      const canPromoteTemp =
+                        canAccessConfig &&
+                        item.suggestionKind === 'temp_promote' &&
+                        Boolean(item.suggestionId)
+                      const promotingThis =
+                        canPromoteTemp &&
+                        promoteRequestId === item.suggestionId
+                      const itemBusy =
+                        snoozingKey === item.key ||
+                        acceptingKey === item.key ||
+                        promotingThis
+                      const bodyClassName = 'flex items-start gap-3 min-w-0 w-full text-left'
+                      const body = (
+                        <>
+                          <span
+                            className={cn(
+                              'material-icons text-xl leading-none mt-0.5 shrink-0',
+                              danger ? 'text-destructive' : 'text-[rgb(45,79,30)]'
+                            )}
+                            aria-hidden
+                          >
+                            {meta.icon}
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                              {meta.label}
+                            </p>
+                            <p className="font-medium text-sm text-brand-heading leading-snug">
+                              {item.title}
+                            </p>
+                            <p className="text-xs text-muted-foreground mt-0.5">{item.reason}</p>
+                            {canAddToPacklist && item.vacationTitel ? (
+                              <p className="text-xs font-medium text-brand-heading mt-1">
+                                Packliste: {item.vacationTitel}
+                              </p>
+                            ) : null}
+                            {item.risk ? (
+                              <p className="text-xs text-destructive/80 mt-1 flex items-start gap-1">
+                                <AlertTriangle className="h-3 w-3 mt-0.5 shrink-0" />
+                                {item.risk}
+                              </p>
+                            ) : null}
+                          </div>
+                        </>
+                      )
                       return (
                         <li key={item.key}>
                           <Card className={cn(danger && 'border-destructive/40')}>
                             <CardContent className="p-3 space-y-2">
-                              <Link href={item.href} className="flex items-start gap-3 min-w-0">
-                                <span
-                                  className={cn(
-                                    'material-icons text-xl leading-none mt-0.5 shrink-0',
-                                    danger ? 'text-destructive' : 'text-[rgb(45,79,30)]'
-                                  )}
-                                  aria-hidden
+                              {canPromoteTemp ? (
+                                <button
+                                  type="button"
+                                  className={bodyClassName}
+                                  disabled={itemBusy}
+                                  onClick={() => openTempPromote(item.suggestionId!)}
                                 >
-                                  {meta.icon}
-                                </span>
-                                <div className="min-w-0 flex-1">
-                                  <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                                    {meta.label}
-                                  </p>
-                                  <p className="font-medium text-sm text-brand-heading leading-snug">
-                                    {item.title}
-                                  </p>
-                                  <p className="text-xs text-muted-foreground mt-0.5">{item.reason}</p>
-                                  {canAddToPacklist && item.vacationTitel ? (
-                                    <p className="text-xs font-medium text-brand-heading mt-1">
-                                      Packliste: {item.vacationTitel}
-                                    </p>
-                                  ) : null}
-                                  {item.risk ? (
-                                    <p className="text-xs text-destructive/80 mt-1 flex items-start gap-1">
-                                      <AlertTriangle className="h-3 w-3 mt-0.5 shrink-0" />
-                                      {item.risk}
-                                    </p>
-                                  ) : null}
-                                </div>
-                              </Link>
-                              {canAddToPacklist || item.snoozeAllowed ? (
+                                  {body}
+                                </button>
+                              ) : (
+                                <Link href={item.href} className={bodyClassName}>
+                                  {body}
+                                </Link>
+                              )}
+                              {canAddToPacklist || canPromoteTemp || item.snoozeAllowed ? (
                                 <div className="pl-8 flex flex-wrap gap-1.5 items-center">
                                   {canAddToPacklist && snoozeOpenKey !== item.key ? (
                                     <Button
@@ -514,6 +566,17 @@ function HeuteHubContent() {
                                       onClick={() => void acceptPackingAdd(item)}
                                     >
                                       {acceptingKey === item.key ? 'Fügt hinzu…' : 'Auf die Packliste'}
+                                    </Button>
+                                  ) : null}
+                                  {canPromoteTemp && snoozeOpenKey !== item.key ? (
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      className="h-8 bg-[rgb(45,79,30)] hover:bg-[rgb(45,79,30)]/90 text-white"
+                                      disabled={itemBusy}
+                                      onClick={() => openTempPromote(item.suggestionId!)}
+                                    >
+                                      {promotingThis ? 'Öffnet…' : 'In Ausrüstung anlegen'}
                                     </Button>
                                   ) : null}
                                   {item.snoozeAllowed ? (
@@ -607,6 +670,14 @@ function HeuteHubContent() {
           ) : null}
         </div>
       </div>
+
+      {canAccessConfig && promoteHostMounted ? (
+        <TempPromoteEquipmentHost
+          requestId={promoteRequestId}
+          onRequestClear={clearPromoteRequest}
+          onCompleted={onTempPromoteCompleted}
+        />
+      ) : null}
     </div>
   )
 }

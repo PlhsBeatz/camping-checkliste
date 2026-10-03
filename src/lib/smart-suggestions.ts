@@ -292,7 +292,7 @@ export function suggestionHref(s: SmartSuggestion): string {
       ? `/campingplaetze/${encodeURIComponent(cpId)}?bearbeiten=1&vorschlag=${encodeURIComponent(s.id)}`
       : '/campingplaetze'
   }
-  if (s.kind === 'temp_promote') return '/ausruestung'
+  if (s.kind === 'temp_promote') return suggestionInboxHref(s.id)
   if (s.kontext_typ === 'vacation' && s.kontext_id) {
     return `/packliste?vacation=${encodeURIComponent(s.kontext_id)}`
   }
