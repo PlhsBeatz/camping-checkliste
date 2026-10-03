@@ -1638,6 +1638,32 @@ export async function getPackingItemsForHub(
 }
 
 /**
+ * Nur Ausrüstungs-IDs der Packliste – für Verbrauch-Relevanz ohne Hub-Volljoin.
+ */
+export async function getPackingGegenstandIdsForVacation(
+  db: D1Database,
+  vacationId: string
+): Promise<string[]> {
+  try {
+    const res = await db
+      .prepare(
+        `SELECT DISTINCT pe.gegenstand_id AS gegenstand_id
+         FROM packlisten_eintraege pe
+         JOIN packlisten p ON pe.packliste_id = p.id
+         WHERE p.urlaub_id = ?
+           AND pe.gegenstand_id IS NOT NULL
+           AND TRIM(pe.gegenstand_id) != ''`
+      )
+      .bind(vacationId)
+      .all<{ gegenstand_id: string }>()
+    return (res.results || []).map((r) => String(r.gegenstand_id))
+  } catch (error) {
+    console.error('getPackingGegenstandIdsForVacation failed for vacationId=', vacationId, error)
+    return []
+  }
+}
+
+/**
  * Vorgemerk-Status eines Pauschal-Eintrags (für Kind-Berechtigung: nur eigene Vormerkung entfernen)
  */
 export async function getPackingItemPauschalVorgemerkt(

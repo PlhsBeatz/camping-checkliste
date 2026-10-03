@@ -252,13 +252,13 @@ export function isVerbrauchMediumRelevant(
   )
 }
 
-export function evaluateReichweite(opts: {
-  medium: VerbrauchMedium
+/** Nur Ampel – ohne Textformatierung (Badge-Count). */
+export function evaluateReichweiteAmpel(opts: {
   verfuegbar: number
   days: number
   stats: VerbrauchRateStats
-}): ReichweiteBewertung | null {
-  const { medium, verfuegbar, days, stats } = opts
+}): ReichweiteAmpel | null {
+  const { verfuegbar, days, stats } = opts
   if (
     stats.avgProTag == null ||
     stats.minProTag == null ||
@@ -268,14 +268,26 @@ export function evaluateReichweite(opts: {
   ) {
     return null
   }
-
   const bedarfAvg = roundDecimals(stats.avgProTag * days, 2)
-  const bedarfMin = roundDecimals(stats.minProTag * days, 2)
   const bedarfMax = roundDecimals(stats.maxProTag * days, 2)
+  if (verfuegbar < bedarfAvg) return 'kritisch'
+  if (verfuegbar < bedarfMax) return 'eng'
+  return 'ok'
+}
 
-  let ampel: ReichweiteAmpel = 'ok'
-  if (verfuegbar < bedarfAvg) ampel = 'kritisch'
-  else if (verfuegbar < bedarfMax) ampel = 'eng'
+export function evaluateReichweite(opts: {
+  medium: VerbrauchMedium
+  verfuegbar: number
+  days: number
+  stats: VerbrauchRateStats
+}): ReichweiteBewertung | null {
+  const { medium, verfuegbar, days, stats } = opts
+  const ampel = evaluateReichweiteAmpel({ verfuegbar, days, stats })
+  if (!ampel) return null
+
+  const bedarfAvg = roundDecimals(stats.avgProTag! * days, 2)
+  const bedarfMin = roundDecimals(stats.minProTag! * days, 2)
+  const bedarfMax = roundDecimals(stats.maxProTag! * days, 2)
 
   const einheit = medium.einheit
   const vFmt = formatVerbrauchMitEinheit(verfuegbar, einheit, 2)

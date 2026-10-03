@@ -3,6 +3,7 @@ import {
   getCampingStaysForVacation,
   getChecklistenHubSummaries,
   getOptimierungen,
+  getPackingGegenstandIdsForVacation,
   getPackingItemsForHub,
   getPackStatus,
   getRastplaetzeForHub,
@@ -43,10 +44,19 @@ import { verbrauchUebersichtCutoffYmd } from '@/lib/verbrauch-uebersicht'
 import {
   computeVerbrauchRateStats,
   evaluateReichweite,
+  evaluateReichweiteAmpel,
   isVerbrauchMediumRelevant,
   reichweiteReiseTage,
   resolveVerfuegbareMenge,
 } from '@/lib/verbrauch-reichweite'
+
+function packingGegenstandIds(items: PackingItem[]): Set<string> {
+  return new Set(
+    items
+      .map((p) => p.gegenstand_id)
+      .filter((id): id is string => typeof id === 'string' && id.length > 0)
+  )
+}
 
 function vacationTitelForSuggestion(s: SmartSuggestion, vacations: Vacation[]): string | null {
   if (s.kind !== 'packing_add') return null
@@ -74,9 +84,11 @@ async function buildVerbrauchReichweiteItems(
   db: D1Database,
   opts: {
     vacation: Vacation
-    packingItems: PackingItem[]
+    packingGegenstandIds: Set<string>
     campingStays: VacationCampingStay[]
     homeLat: number | null
+    /** full = Kartentexte; light = nur Badge-Keys (weniger CPU, Lat aus Climate-Hints). */
+    detail: 'full' | 'light'
   }
 ): Promise<AttentionFeedInput['verbrauchReichweiteItems']> {
   const [medien, links] = await Promise.all([
@@ -85,14 +97,8 @@ async function buildVerbrauchReichweiteItems(
   ])
   if (medien.length === 0 || links.length === 0) return []
 
-  const packingIds = new Set(
-    opts.packingItems
-      .map((p) => p.gegenstand_id)
-      .filter((id): id is string => typeof id === 'string' && id.length > 0)
-  )
-
   const relevantMedien = medien.filter((m) =>
-    isVerbrauchMediumRelevant(m.id, links, packingIds)
+    isVerbrauchMediumRelevant(m.id, links, opts.packingGegenstandIds)
   )
   if (relevantMedien.length === 0) return []
 
@@ -153,7 +159,11 @@ async function buildVerbrauchReichweiteItems(
     }
   }
 
-  const plannedLat = latFromCampingStays(opts.campingStays) ?? opts.homeLat
+  const currentHints = climateHints.get(opts.vacation.id) ?? []
+  const plannedLat =
+    latFromCampingStays(opts.campingStays) ??
+    latFromClimateHints(currentHints, undefined, opts.homeLat) ??
+    opts.homeLat
   const plannedTempC = climateProxyTempForYmd(
     midYmdBetween(
       opts.vacation.startdatum,
@@ -165,6 +175,7 @@ async function buildVerbrauchReichweiteItems(
 
   const days = reichweiteReiseTage(opts.vacation)
   const items: NonNullable<AttentionFeedInput['verbrauchReichweiteItems']> = []
+  const light = opts.detail === 'light'
 
   for (const medium of relevantMedien) {
     const verfuegbar = resolveVerfuegbareMenge(
@@ -178,6 +189,22 @@ async function buildVerbrauchReichweiteItems(
       urlaubTempById,
       plannedTempC,
     })
+
+    if (light) {
+      const ampel = evaluateReichweiteAmpel({ verfuegbar, days, stats })
+      if (!ampel || ampel === 'ok') continue
+      items.push({
+        key: `verbrauch-reichweite:${medium.schluessel}:${opts.vacation.id}`,
+        title: medium.name,
+        reason: '',
+        risk: null,
+        href: `/tools/verbrauch?medium=${encodeURIComponent(medium.schluessel)}`,
+        score: ampel === 'kritisch' ? 520 : 480,
+        ampel,
+      })
+      continue
+    }
+
     const bewertung = evaluateReichweite({ medium, verfuegbar, days, stats })
     if (!bewertung || bewertung.ampel === 'ok') continue
 
@@ -205,7 +232,10 @@ export async function loadAttentionFeedInput(
     snoozes?: Map<string, string>
     userId?: string
     userPosition?: GeoPoint | null
-    /** Nur Badge-Zahl: ohne Travel-Nav, Verbrauch-Reichweite und Extra-Hub-Queries. */
+    /**
+     * count = Badge-Zahl ohne Travel-Nav/Tile-Extras.
+     * Verbrauch-Reichweite zählt mit, aber über einen schlanken Pfad (IDs + Climate-Hints).
+     */
     mode?: 'full' | 'count'
   }
 ): Promise<AttentionFeedInput> {
@@ -216,6 +246,7 @@ export async function loadAttentionFeedInput(
   const hubVacation = findCurrentOrNextVacation(vacations)
   const sameHub = !!relevant && !!hubVacation && relevant.id === hubVacation.id
   const needsSonnenContext = countMode && !!hubVacation && !!opts.userPosition
+  const needsReichweite = !!(hubVacation ?? relevant)
 
   const [
     packingItems,
@@ -233,7 +264,7 @@ export async function loadAttentionFeedInput(
   ] = await Promise.all([
     relevant ? getPackingItemsForHub(db, relevant.id) : Promise.resolve<PackingItem[]>([]),
     relevant ? getPackStatus(db, relevant.id) : Promise.resolve<PackStatusData | null>(null),
-    // Extra-Hub-Packliste nur im Full-Feed (Tile/Travel); Count braucht sie nicht
+    // Extra-Hub-Packliste nur im Full-Feed (Tile/Travel)
     full && hubVacation && !sameHub
       ? getPackingItemsForHub(db, hubVacation.id)
       : Promise.resolve<PackingItem[] | null>(null),
@@ -279,28 +310,34 @@ export async function loadAttentionFeedInput(
     }
   }
 
-  // Verbrauch-Reichweite: bewusst nur im Full-Feed – sonst wird count=1 (Badge) wieder CPU-schwer.
   let verbrauchReichweiteItems: AttentionFeedInput['verbrauchReichweiteItems'] = []
-  if (full) {
+  if (needsReichweite) {
     const reichweiteVacation = hubVacation ?? relevant
     if (reichweiteVacation) {
-      const reichweitePacking: PackingItem[] =
-        hubVacation && relevant && hubVacation.id === relevant.id
-          ? packingItems
-          : hubVacation && !sameHub
-            ? (hubPackingExtra ?? [])
-            : packingItems
+      let packingIds: Set<string>
+      if (hubVacation && relevant && hubVacation.id === relevant.id) {
+        packingIds = packingGegenstandIds(packingItems)
+      } else if (hubVacation && !sameHub) {
+        packingIds = full
+          ? packingGegenstandIds(hubPackingExtra ?? [])
+          : new Set(await getPackingGegenstandIdsForVacation(db, reichweiteVacation.id))
+      } else {
+        packingIds = packingGegenstandIds(packingItems)
+      }
 
-      const reichweiteStays =
-        hubVacation && reichweiteVacation.id === hubVacation.id
+      // Count: keine vollen Stays – Lat kommt aus Climate-Hints (Petroleum).
+      const reichweiteStays = full
+        ? hubVacation && reichweiteVacation.id === hubVacation.id
           ? campingStays
           : await getCampingStaysForVacation(db, reichweiteVacation.id)
+        : []
 
       verbrauchReichweiteItems = await buildVerbrauchReichweiteItems(db, {
         vacation: reichweiteVacation,
-        packingItems: reichweitePacking,
+        packingGegenstandIds: packingIds,
         campingStays: reichweiteStays,
         homeLat: homeCoords?.lat ?? null,
+        detail: full ? 'full' : 'light',
       })
     }
   }
