@@ -15,7 +15,16 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { ArrowLeft, ExternalLink, Menu, MoreVertical, Pencil, Trash2 } from 'lucide-react'
+import { UndoToast } from '@/components/undo-toast'
+import {
+  ArrowLeft,
+  CheckCircle2,
+  ExternalLink,
+  Menu,
+  MoreVertical,
+  Pencil,
+  Trash2,
+} from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/components/auth-provider'
 import type { ApiResponse } from '@/lib/api-types'
@@ -45,6 +54,7 @@ import {
   PrioritaetIcon,
   PRIO_LABEL,
   STATUS_LABEL,
+  truncateForUndoToast,
 } from '@/components/optimierung-shared'
 
 function StatusHeader({ item }: { item: Optimierung }) {
@@ -95,6 +105,11 @@ export default function OptimierungDetailPage() {
   const [lightboxId, setLightboxId] = useState<string | null>(null)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleteBusy, setDeleteBusy] = useState(false)
+  const [undoToast, setUndoToast] = useState<{
+    visible: boolean
+    message: string
+    action: () => void
+  } | null>(null)
 
   useEffect(() => {
     if (authLoading) return
@@ -193,6 +208,64 @@ export default function OptimierungDetailPage() {
   useReconnectRefetch(() => {
     void load()
   })
+
+  const patchStatus = useCallback(
+    async (id: string, status: OptimierungStatus, previousStatus: OptimierungStatus) => {
+      setItem((prev) =>
+        prev && prev.id === id ? { ...prev, status } : prev
+      )
+      const result = await mutate({
+        table: 'optimierungen',
+        action: 'put',
+        key: id,
+        payload: { status },
+      })
+      if (!result.ok && !result.queued) {
+        setItem((prev) =>
+          prev && prev.id === id ? { ...prev, status: previousStatus } : prev
+        )
+        toast({
+          title: 'Status konnte nicht gespeichert werden',
+          description: result.error || 'Unbekannter Fehler',
+          variant: 'destructive',
+        })
+        return false
+      }
+      setItem((prev) => {
+        if (!prev || prev.id !== id) return prev
+        const next = { ...prev, status }
+        void cacheOptimierung(next).catch(() => {})
+        return next
+      })
+      if (result.queued) showQueuedToast()
+      return true
+    },
+    [mutate, toast]
+  )
+
+  const handleToggleErledigt = useCallback(
+    async (checked: boolean) => {
+      if (!item || !canWriteOptimierung) return
+      if (checked) {
+        if (item.status === 'erledigt') return
+        const previousStatus = item.status
+        const ok = await patchStatus(item.id, 'erledigt', previousStatus)
+        if (!ok) return
+        const textPart = truncateForUndoToast(item.titel, 72)
+        setUndoToast({
+          visible: true,
+          message: `„${textPart}“ erledigt`,
+          action: () => {
+            void patchStatus(item.id, previousStatus, 'erledigt')
+          },
+        })
+        return
+      }
+      if (item.status !== 'erledigt') return
+      await patchStatus(item.id, 'idee', 'erledigt')
+    },
+    [canWriteOptimierung, item, patchStatus]
+  )
 
   const handleDelete = async () => {
     if (!item) return
@@ -402,6 +475,28 @@ export default function OptimierungDetailPage() {
                       </div>
                     )}
                   </section>
+
+                  {canWriteOptimierung ? (
+                    <div className="flex justify-end">
+                      <Button
+                        type="button"
+                        variant={item.status === 'erledigt' ? 'outline' : 'default'}
+                        className={cn(
+                          item.status === 'erledigt'
+                            ? 'border-[rgb(45,79,30)]/40 bg-card text-brand-heading hover:bg-muted'
+                            : 'bg-[rgb(45,79,30)] text-white hover:bg-[rgb(38,68,25)]'
+                        )}
+                        onClick={() => {
+                          void handleToggleErledigt(item.status !== 'erledigt')
+                        }}
+                      >
+                        <CheckCircle2 className="h-4 w-4 mr-2" />
+                        {item.status === 'erledigt'
+                          ? 'Erledigt rückgängig'
+                          : 'Als erledigt markieren'}
+                      </Button>
+                    </div>
+                  ) : null}
                 </CardContent>
               </Card>
             </>
@@ -449,6 +544,15 @@ export default function OptimierungDetailPage() {
         onConfirm={handleDelete}
         isLoading={deleteBusy}
       />
+
+      {undoToast ? (
+        <UndoToast
+          isVisible={undoToast.visible}
+          message={undoToast.message}
+          onUndo={undoToast.action}
+          onDismiss={() => setUndoToast(null)}
+        />
+      ) : null}
     </div>
   )
 }
