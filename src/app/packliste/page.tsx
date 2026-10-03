@@ -127,7 +127,9 @@ import {
   getCachedCategories,
   getCachedMainCategories,
   getCachedTransportVehicles,
+  getCachedVacationTransportIds,
   getCachedVacationMitreisende,
+  cacheVacationTransports,
   getCachedRoute,
   getCachedSegmentRoute,
   subscribeToOnlineStatus,
@@ -1137,26 +1139,102 @@ function HomeContent() {
     fetchMainCategories()
   }, [refetchTick])
 
-  // Fetch Transport Vehicles
+  const usedTransportIdsKey = useMemo(() => {
+    const ids = new Set<string>()
+    for (const p of packingItems) {
+      if (p.transport_id) ids.add(p.transport_id)
+      for (const m of p.mitreisende ?? []) {
+        if (m.transport_id) ids.add(m.transport_id)
+      }
+    }
+    return [...ids].sort().join(',')
+  }, [packingItems])
+
+  // Fetch Transport Vehicles (Urlaubsauswahl ∪ bereits in Packliste verwendete)
   useEffect(() => {
     const fetchTransportVehicles = async () => {
       try {
         const res = await fetch('/api/transport-vehicles')
         const data = (await res.json()) as ApiResponse<TransportVehicle[]>
-        if (data.success && data.data) {
-          setTransportVehicles(data.data)
-          await cacheTransportVehicles(data.data)
+        if (!data.success || !data.data) return
+        let list = data.data
+        await cacheTransportVehicles(data.data)
+
+        if (selectedVacationId) {
+          try {
+            const vtRes = await fetch(
+              `/api/vacations/transports?vacationId=${selectedVacationId}`
+            )
+            const vtData = (await vtRes.json()) as ApiResponse<{
+              transportIds: string[]
+              allVehicles: TransportVehicle[]
+              mitreisendeSitz?: Record<string, string | null>
+            }>
+            if (vtData.success && vtData.data) {
+              await cacheVacationTransports(
+                selectedVacationId,
+                vtData.data.transportIds,
+                vtData.data.mitreisendeSitz ?? {}
+              )
+              const byId = new Map(data.data.map((v) => [v.id, v]))
+              for (const v of vtData.data.allVehicles ?? []) byId.set(v.id, v)
+              const vacationIds = new Set(vtData.data.transportIds)
+              const usedIds = new Set(
+                usedTransportIdsKey ? usedTransportIdsKey.split(',') : []
+              )
+              const unionIds = new Set([...vacationIds, ...usedIds])
+              if (unionIds.size > 0) {
+                list = [...unionIds]
+                  .map((id) => byId.get(id))
+                  .filter((v): v is TransportVehicle => !!v)
+                  .sort((a, b) => a.name.localeCompare(b.name))
+              }
+            }
+          } catch {
+            const cachedIds = await getCachedVacationTransportIds(selectedVacationId)
+            if (cachedIds.length > 0) {
+              const byId = new Map(data.data.map((v) => [v.id, v]))
+              const usedIds = new Set(
+                usedTransportIdsKey ? usedTransportIdsKey.split(',') : []
+              )
+              const unionIds = new Set([...cachedIds, ...usedIds])
+              list = [...unionIds]
+                .map((id) => byId.get(id))
+                .filter((v): v is TransportVehicle => !!v)
+                .sort((a, b) => a.name.localeCompare(b.name, 'de'))
+            }
+          }
         }
+
+        setTransportVehicles(list)
       } catch (error) {
         console.error('Failed to fetch transport vehicles:', error)
         if (typeof navigator !== 'undefined' && !navigator.onLine) {
           const cached = await getCachedTransportVehicles()
-          if (cached.length > 0) setTransportVehicles(cached)
+          if (cached.length === 0) return
+          if (selectedVacationId) {
+            const cachedIds = await getCachedVacationTransportIds(selectedVacationId)
+            if (cachedIds.length > 0) {
+              const byId = new Map(cached.map((v) => [v.id, v]))
+              const usedIds = new Set(
+                usedTransportIdsKey ? usedTransportIdsKey.split(',') : []
+              )
+              const unionIds = new Set([...cachedIds, ...usedIds])
+              setTransportVehicles(
+                [...unionIds]
+                  .map((id) => byId.get(id))
+                  .filter((v): v is TransportVehicle => !!v)
+                  .sort((a, b) => a.name.localeCompare(b.name, 'de'))
+              )
+              return
+            }
+          }
+          setTransportVehicles(cached)
         }
       }
     }
     fetchTransportVehicles()
-  }, [refetchTick])
+  }, [refetchTick, selectedVacationId, usedTransportIdsKey])
 
   // Get available equipment (not on packing list, or on list but without selected person)
   const availableEquipment = useMemo(() => {
@@ -4038,19 +4116,18 @@ function HomeContent() {
               <div>
                 <Label htmlFor="edit-transport">Transport</Label>
                 <Select
-                  value={packingItemForm.transportId || 'none'}
+                  value={packingItemForm.transportId || undefined}
                   onValueChange={(v) =>
                     setPackingItemForm({
                       ...packingItemForm,
-                      transportId: v === 'none' ? '' : v,
+                      transportId: v,
                     })
                   }
                 >
-                  <SelectTrigger>
+                  <SelectTrigger id="edit-transport">
                     <SelectValue placeholder="Kein Transport" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="none">Kein Transport</SelectItem>
                     {transportVehicles.map((tv) => (
                       <SelectItem key={tv.id} value={tv.id}>
                         {tv.name}
@@ -4058,6 +4135,11 @@ function HomeContent() {
                     ))}
                   </SelectContent>
                 </Select>
+                {!packingItemForm.transportId && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Beim Anlegen/Generieren ohne Zuordnung – bitte ein Transportmittel wählen.
+                  </p>
+                )}
               </div>
               <Button onClick={handleUpdatePackingItem} disabled={isLoading} className="w-full">
                 {isLoading ? 'Wird aktualisiert...' : 'Aktualisieren'}

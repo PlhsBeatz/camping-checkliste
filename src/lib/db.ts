@@ -19,6 +19,25 @@ import {
   isFutureVacationForEquipmentReplace,
   optionalCalendarYmd,
 } from './equipment-lifecycle'
+import {
+  dayBeforeYmd,
+  defaultTransportIdsForDate,
+  effectiveStuetzlast,
+  iconKeyFromFahrzeugtyp,
+  inferFahrzeugtypFromIconOrName,
+  isAnbau,
+  isFahrzeugtyp,
+  isGezogen,
+  isTransportActiveOn,
+  isZugfaehig,
+  resolveVacationPackTransportId,
+  vacationActivityDate,
+  zulGesamtgewichtForAnbau,
+  type Fahrzeugtyp,
+} from './transport-types'
+import { filterVehiclesByGruppeIds } from './pauschal-gruppen'
+
+export { filterVehiclesByGruppeIds }
 
 export interface Vacation {
   id: string
@@ -124,6 +143,10 @@ export interface Mitreisender {
   /** Gruppe wird bei neuen Urlauben vorausgewählt */
   urlaub_standard_mitnehmen?: boolean
   farbe?: string | null
+  /** Körpergewicht in kg (Stammdaten) */
+  koerpergewicht?: number | null
+  /** Sitzfahrzeug im Urlaubskontext (urlaub_mitreisende.transport_id) */
+  sitz_transport_id?: string | null
   created_at: string
 }
 
@@ -182,12 +205,46 @@ export interface EquipmentLink {
 export interface TransportVehicle {
   id: string
   name: string
-  /** Packlisten-Icon: caravan | car | truck | bus */
+  /** Packlisten-Icon: caravan | car | truck | bus | … */
   icon?: string | null
   zul_gesamtgewicht: number
   eigengewicht: number
   fest_installiert_mitrechnen: boolean
+  fahrzeugtyp?: string | null
+  hersteller?: string | null
+  modell?: string | null
+  max_stuetzlast?: number | null
+  max_traglast?: number | null
+  aktiv_von?: string | null
+  aktiv_bis?: string | null
+  ersetzt_durch_id?: string | null
+  traeger_transport_id?: string | null
+  /** Haushalt (mitreisenden_gruppe) */
+  gruppe_id?: string | null
+  gruppe_name?: string | null
+  /** Bei Urlauben der zugehörigen Haushalte standardmäßig vorauswählen */
+  urlaub_standard?: boolean
   created_at: string
+}
+
+export type TransportVehicleInput = {
+  name: string
+  icon?: string | null
+  zulGesamtgewicht: number
+  eigengewicht: number
+  festInstalliertMitrechnen?: boolean
+  fahrzeugtyp?: string | null
+  hersteller?: string | null
+  modell?: string | null
+  maxStuetzlast?: number | null
+  maxTraglast?: number | null
+  aktivVon?: string | null
+  aktivBis?: string | null
+  ersetztDurchId?: string | null
+  traegerTransportId?: string | null
+  /** Haushalt; fehlt → Standard-Haushalt */
+  gruppeId?: string | null
+  urlaubStandard?: boolean
 }
 
 export interface TransportVehicleFestgewichtManuell {
@@ -754,6 +811,13 @@ export async function createVacation(
     // Auch eine Packliste für diesen Urlaub erstellen
     const packlisteId = crypto.randomUUID()
     await db.prepare('INSERT INTO packlisten (id, urlaub_id) VALUES (?, ?)').bind(packlisteId, id).run()
+
+    await ensureVacationTransportDefaults(
+      db,
+      id,
+      vacation.startdatum,
+      vacation.abfahrtdatum
+    )
 
     return getVacation(db, id)
   } catch (error) {
@@ -2413,10 +2477,26 @@ interface TransportVehicleRow {
   zul_gesamtgewicht: number
   eigengewicht: number
   fest_installiert_mitrechnen?: number
+  fahrzeugtyp?: string | null
+  hersteller?: string | null
+  modell?: string | null
+  max_stuetzlast?: number | null
+  max_traglast?: number | null
+  aktiv_von?: string | null
+  aktiv_bis?: string | null
+  ersetzt_durch_id?: string | null
+  traeger_transport_id?: string | null
+  gruppe_id?: string | null
+  gruppe_name?: string | null
+  urlaub_standard?: number | boolean | null
   created_at: string
 }
 
 function mapTransportVehicleRow(row: TransportVehicleRow): TransportVehicle {
+  const fahrzeugtyp =
+    row.fahrzeugtyp && isFahrzeugtyp(row.fahrzeugtyp)
+      ? row.fahrzeugtyp
+      : inferFahrzeugtypFromIconOrName(row.icon, row.name)
   return {
     id: row.id,
     name: row.name,
@@ -2424,17 +2504,119 @@ function mapTransportVehicleRow(row: TransportVehicleRow): TransportVehicle {
     zul_gesamtgewicht: row.zul_gesamtgewicht,
     eigengewicht: row.eigengewicht,
     fest_installiert_mitrechnen: !!(row.fest_installiert_mitrechnen ?? 0),
+    fahrzeugtyp,
+    hersteller: row.hersteller ?? null,
+    modell: row.modell ?? null,
+    max_stuetzlast: row.max_stuetzlast != null ? Number(row.max_stuetzlast) : null,
+    max_traglast: row.max_traglast != null ? Number(row.max_traglast) : null,
+    aktiv_von: row.aktiv_von ?? null,
+    aktiv_bis: row.aktiv_bis ?? null,
+    ersetzt_durch_id: row.ersetzt_durch_id ?? null,
+    traeger_transport_id: row.traeger_transport_id ?? null,
+    gruppe_id: row.gruppe_id ?? null,
+    gruppe_name: row.gruppe_name ?? null,
+    urlaub_standard: !!(row.urlaub_standard ?? 0),
     created_at: row.created_at,
+  }
+}
+
+function normalizeTransportInput(input: TransportVehicleInput): {
+  name: string
+  icon: string | null
+  zulGesamtgewicht: number
+  eigengewicht: number
+  festInstalliertMitrechnen: boolean
+  fahrzeugtyp: Fahrzeugtyp
+  hersteller: string | null
+  modell: string | null
+  maxStuetzlast: number | null
+  maxTraglast: number | null
+  aktivVon: string | null
+  aktivBis: string | null
+  ersetztDurchId: string | null
+  traegerTransportId: string | null
+  gruppeId: string | null
+  urlaubStandard: boolean
+} {
+  const name = input.name.trim()
+  const fahrzeugtyp: Fahrzeugtyp = isFahrzeugtyp(input.fahrzeugtyp)
+    ? input.fahrzeugtyp
+    : inferFahrzeugtypFromIconOrName(input.icon, name)
+  const eigengewicht = Number(input.eigengewicht)
+  let zulGesamtgewicht = Number(input.zulGesamtgewicht)
+  let maxTraglast =
+    input.maxTraglast != null && Number.isFinite(input.maxTraglast) ? Number(input.maxTraglast) : null
+  if (isAnbau(fahrzeugtyp)) {
+    if (maxTraglast == null || maxTraglast <= 0) {
+      maxTraglast = Math.max(zulGesamtgewicht - eigengewicht, 0.01)
+    }
+    zulGesamtgewicht = zulGesamtgewichtForAnbau(eigengewicht, maxTraglast)
+  }
+  const icon =
+    input.icon?.trim() ||
+    iconKeyFromFahrzeugtyp(fahrzeugtyp)
+  const traegerTransportId = isAnbau(fahrzeugtyp)
+    ? input.traegerTransportId?.trim() || null
+    : null
+  const gruppeId = input.gruppeId?.trim() || null
+  return {
+    name,
+    icon,
+    zulGesamtgewicht,
+    eigengewicht,
+    festInstalliertMitrechnen: !!input.festInstalliertMitrechnen,
+    fahrzeugtyp,
+    hersteller: input.hersteller?.trim() || null,
+    modell: input.modell?.trim() || null,
+    maxStuetzlast:
+      input.maxStuetzlast != null && Number.isFinite(input.maxStuetzlast) && input.maxStuetzlast > 0
+        ? Number(input.maxStuetzlast)
+        : null,
+    maxTraglast: isAnbau(fahrzeugtyp) ? maxTraglast : null,
+    aktivVon: input.aktivVon?.trim().slice(0, 10) || null,
+    aktivBis: input.aktivBis?.trim().slice(0, 10) || null,
+    ersetztDurchId: input.ersetztDurchId?.trim() || null,
+    traegerTransportId,
+    gruppeId,
+    urlaubStandard: !!input.urlaubStandard,
   }
 }
 
 export async function getTransportVehicles(db: D1Database): Promise<TransportVehicle[]> {
   try {
-    const result = await db.prepare('SELECT * FROM transportmittel ORDER BY name').all<TransportVehicleRow>()
+    const result = await db
+      .prepare(
+        `SELECT t.*, g.name AS gruppe_name
+         FROM transportmittel t
+         LEFT JOIN mitreisenden_gruppe g ON g.id = t.gruppe_id
+         ORDER BY t.name`
+      )
+      .all<TransportVehicleRow>()
     return (result.results || []).map(mapTransportVehicleRow)
   } catch (error) {
     console.error('Error fetching transport vehicles:', error)
     return []
+  }
+}
+
+export async function getTransportVehicleById(
+  db: D1Database,
+  id: string
+): Promise<TransportVehicle | null> {
+  try {
+    const row = await db
+      .prepare(
+        `SELECT t.*, g.name AS gruppe_name
+         FROM transportmittel t
+         LEFT JOIN mitreisenden_gruppe g ON g.id = t.gruppe_id
+         WHERE t.id = ?`
+      )
+      .bind(id)
+      .first<TransportVehicleRow>()
+    return row ? mapTransportVehicleRow(row) : null
+  } catch (error) {
+    console.error('Error fetching transport vehicle:', error)
+    return null
   }
 }
 
@@ -2443,52 +2625,57 @@ export async function getTransportVehicles(db: D1Database): Promise<TransportVeh
  */
 export async function createTransportVehicle(
   db: D1Database,
-  name: string,
-  zulGesamtgewicht: number,
-  eigengewicht: number,
+  nameOrInput: string | TransportVehicleInput,
+  zulGesamtgewicht?: number,
+  eigengewicht?: number,
   festInstalliertMitrechnen: boolean = false,
   icon?: string | null
 ): Promise<string | null> {
+  const input: TransportVehicleInput =
+    typeof nameOrInput === 'string'
+      ? {
+          name: nameOrInput,
+          zulGesamtgewicht: zulGesamtgewicht ?? 0,
+          eigengewicht: eigengewicht ?? 0,
+          festInstalliertMitrechnen,
+          icon,
+        }
+      : nameOrInput
+  const n = normalizeTransportInput(input)
   const id = crypto.randomUUID()
   try {
+    // gruppeId bereits vom Caller geprüft → direkt nutzen; sonst Default-Haushalt
+    const gruppeId = n.gruppeId || (await resolveDefaultGruppeId(db, true))
     await db
       .prepare(
-        'INSERT INTO transportmittel (id, name, icon, zul_gesamtgewicht, eigengewicht, fest_installiert_mitrechnen) VALUES (?, ?, ?, ?, ?, ?)'
+        `INSERT INTO transportmittel (
+          id, name, icon, zul_gesamtgewicht, eigengewicht, fest_installiert_mitrechnen,
+          fahrzeugtyp, hersteller, modell, max_stuetzlast, max_traglast,
+          aktiv_von, aktiv_bis, ersetzt_durch_id, traeger_transport_id, gruppe_id, urlaub_standard
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
-      .bind(id, name, icon ?? null, zulGesamtgewicht, eigengewicht, festInstalliertMitrechnen ? 1 : 0)
+      .bind(
+        id,
+        n.name,
+        n.icon,
+        n.zulGesamtgewicht,
+        n.eigengewicht,
+        n.festInstalliertMitrechnen ? 1 : 0,
+        n.fahrzeugtyp,
+        n.hersteller,
+        n.modell,
+        n.maxStuetzlast,
+        n.maxTraglast,
+        n.aktivVon,
+        n.aktivBis,
+        n.ersetztDurchId,
+        n.traegerTransportId,
+        gruppeId,
+        n.urlaubStandard ? 1 : 0
+      )
       .run()
     return id
   } catch (error) {
-    const errMsg = error instanceof Error ? error.message : String(error)
-    if (errMsg.includes('icon') || errMsg.includes('fest_installiert_mitrechnen') || errMsg.includes('no such column')) {
-      try {
-        await db
-          .prepare(
-            'INSERT INTO transportmittel (id, name, zul_gesamtgewicht, eigengewicht, fest_installiert_mitrechnen) VALUES (?, ?, ?, ?, ?)'
-          )
-          .bind(id, name, zulGesamtgewicht, eigengewicht, festInstalliertMitrechnen ? 1 : 0)
-          .run()
-        return id
-      } catch (fallbackError) {
-        const errMsg2 = fallbackError instanceof Error ? fallbackError.message : String(fallbackError)
-        if (errMsg2.includes('fest_installiert_mitrechnen') || errMsg2.includes('no such column')) {
-          try {
-            await db
-              .prepare(
-                'INSERT INTO transportmittel (id, name, zul_gesamtgewicht, eigengewicht) VALUES (?, ?, ?, ?)'
-              )
-              .bind(id, name, zulGesamtgewicht, eigengewicht)
-              .run()
-            return id
-          } catch (fallbackError2) {
-            console.error('Error creating transport vehicle (fallback):', fallbackError2)
-            return null
-          }
-        }
-        console.error('Error creating transport vehicle (fallback):', fallbackError)
-        return null
-      }
-    }
     console.error('Error creating transport vehicle:', error)
     return null
   }
@@ -2496,58 +2683,60 @@ export async function createTransportVehicle(
 
 /**
  * Aktualisieren eines Transportmittels
- * Versucht zuerst UPDATE mit fest_installiert_mitrechnen (nach Migration 0006).
- * Falls die Spalte noch nicht existiert, Fallback auf UPDATE ohne diese Spalte.
  */
 export async function updateTransportVehicle(
   db: D1Database,
   id: string,
-  name: string,
-  zulGesamtgewicht: number,
-  eigengewicht: number,
+  nameOrInput: string | TransportVehicleInput,
+  zulGesamtgewicht?: number,
+  eigengewicht?: number,
   festInstalliertMitrechnen?: boolean,
   icon?: string | null
 ): Promise<boolean> {
-  const fim = festInstalliertMitrechnen ?? false
+  const input: TransportVehicleInput =
+    typeof nameOrInput === 'string'
+      ? {
+          name: nameOrInput,
+          zulGesamtgewicht: zulGesamtgewicht ?? 0,
+          eigengewicht: eigengewicht ?? 0,
+          festInstalliertMitrechnen,
+          icon,
+        }
+      : nameOrInput
+  const n = normalizeTransportInput(input)
   try {
+    const gruppeId = n.gruppeId || (await resolveDefaultGruppeId(db, true))
     await db
       .prepare(
-        'UPDATE transportmittel SET name = ?, icon = ?, zul_gesamtgewicht = ?, eigengewicht = ?, fest_installiert_mitrechnen = ? WHERE id = ?'
+        `UPDATE transportmittel SET
+          name = ?, icon = ?, zul_gesamtgewicht = ?, eigengewicht = ?, fest_installiert_mitrechnen = ?,
+          fahrzeugtyp = ?, hersteller = ?, modell = ?, max_stuetzlast = ?, max_traglast = ?,
+          aktiv_von = ?, aktiv_bis = ?, ersetzt_durch_id = ?, traeger_transport_id = ?, gruppe_id = ?,
+          urlaub_standard = ?
+        WHERE id = ?`
       )
-      .bind(name, icon ?? null, zulGesamtgewicht, eigengewicht, fim ? 1 : 0, id)
+      .bind(
+        n.name,
+        n.icon,
+        n.zulGesamtgewicht,
+        n.eigengewicht,
+        n.festInstalliertMitrechnen ? 1 : 0,
+        n.fahrzeugtyp,
+        n.hersteller,
+        n.modell,
+        n.maxStuetzlast,
+        n.maxTraglast,
+        n.aktivVon,
+        n.aktivBis,
+        n.ersetztDurchId,
+        n.traegerTransportId,
+        gruppeId,
+        n.urlaubStandard ? 1 : 0,
+        id
+      )
       .run()
     return true
   } catch (error) {
-    const errMsg = error instanceof Error ? error.message : String(error)
-    if (errMsg.includes('icon') || errMsg.includes('fest_installiert_mitrechnen') || errMsg.includes('no such column')) {
-      try {
-        await db
-          .prepare(
-            'UPDATE transportmittel SET name = ?, zul_gesamtgewicht = ?, eigengewicht = ?, fest_installiert_mitrechnen = ? WHERE id = ?'
-          )
-          .bind(name, zulGesamtgewicht, eigengewicht, fim ? 1 : 0, id)
-          .run()
-        return true
-      } catch (fallbackError) {
-        const errMsg2 = fallbackError instanceof Error ? fallbackError.message : String(fallbackError)
-        if (errMsg2.includes('fest_installiert_mitrechnen') || errMsg2.includes('no such column')) {
-          try {
-            await db
-              .prepare(
-                'UPDATE transportmittel SET name = ?, zul_gesamtgewicht = ?, eigengewicht = ? WHERE id = ?'
-              )
-              .bind(name, zulGesamtgewicht, eigengewicht, id)
-              .run()
-            return true
-          } catch (fallbackError2) {
-            console.error('Error updating transport vehicle (fallback):', fallbackError2)
-            return false
-          }
-        }
-        console.error('Error updating transport vehicle (fallback):', fallbackError)
-        return false
-      }
-    }
     console.error('Error updating transport vehicle:', error)
     return false
   }
@@ -2564,6 +2753,553 @@ export async function deleteTransportVehicle(db: D1Database, id: string): Promis
     console.error('Error deleting transport vehicle:', error)
     return false
   }
+}
+
+/**
+ * Ob ein Transportmittel bereits referenziert wird (Ausrüstung, Packlisten, Urlaube, …).
+ * Entscheidet den Vorschlagswert Inaktivieren vs. Löschen.
+ */
+export async function isTransportVehicleInUse(
+  db: D1Database,
+  transportId: string
+): Promise<boolean> {
+  try {
+    const row = await db
+      .prepare(
+        `SELECT 1 AS ok WHERE EXISTS (
+           SELECT 1 FROM ausruestungsgegenstaende WHERE transport_id = ?
+         ) OR EXISTS (
+           SELECT 1 FROM packlisten_eintraege WHERE transport_id = ?
+         ) OR EXISTS (
+           SELECT 1 FROM packlisten_eintraege_temporaer WHERE transport_id = ?
+         ) OR EXISTS (
+           SELECT 1 FROM packlisten_eintrag_mitreisende WHERE transport_id = ?
+         ) OR EXISTS (
+           SELECT 1 FROM urlaub_transportmittel WHERE transport_id = ?
+         ) OR EXISTS (
+           SELECT 1 FROM urlaub_mitreisende WHERE transport_id = ?
+         ) OR EXISTS (
+           SELECT 1 FROM faelligkeiten WHERE transport_id = ?
+         ) OR EXISTS (
+           SELECT 1 FROM verbrauch_messungen WHERE transport_id = ?
+         ) OR EXISTS (
+           SELECT 1 FROM transportmittel_festgewicht_manuell WHERE transport_id = ?
+         ) OR EXISTS (
+           SELECT 1 FROM hauptkategorien WHERE pauschal_transport_id = ?
+         ) OR EXISTS (
+           SELECT 1 FROM kategorien WHERE pauschal_transport_id = ?
+         ) OR EXISTS (
+           SELECT 1 FROM transportmittel WHERE traeger_transport_id = ? OR ersetzt_durch_id = ?
+         )`
+      )
+      .bind(
+        transportId,
+        transportId,
+        transportId,
+        transportId,
+        transportId,
+        transportId,
+        transportId,
+        transportId,
+        transportId,
+        transportId,
+        transportId,
+        transportId,
+        transportId
+      )
+      .first<{ ok: number }>()
+    return row != null
+  } catch (error) {
+    console.error('Error checking transport vehicle usage:', error)
+    return true
+  }
+}
+
+/**
+ * Ohne Ersatz inaktivieren: aktiv_bis = gestern (ab heute nicht mehr aktiv).
+ */
+export async function inactivateTransportVehicle(
+  db: D1Database,
+  id: string,
+  asOfDateYmd?: string
+): Promise<boolean> {
+  try {
+    const asOf = (asOfDateYmd ?? todayInAppTimezone()).trim().slice(0, 10)
+    if (!asOf) return false
+    const bis = dayBeforeYmd(asOf)
+    const result = await db
+      .prepare('UPDATE transportmittel SET aktiv_bis = ? WHERE id = ?')
+      .bind(bis, id)
+      .run()
+    return (result.meta.changes ?? 0) > 0
+  } catch (error) {
+    console.error('Error inactivating transport vehicle:', error)
+    return false
+  }
+}
+
+/** Ob das Fahrzeug am heutigen App-Kalendertag aktiv ist. */
+export function isTransportVehicleActiveNow(vehicle: {
+  aktiv_von?: string | null
+  aktiv_bis?: string | null
+}): boolean {
+  return isTransportActiveOn(vehicle, todayInAppTimezone())
+}
+
+/** Transportmittel-IDs eines Urlaubs (Batch). */
+export async function getVacationTransportIds(
+  db: D1Database,
+  vacationId: string
+): Promise<string[]> {
+  try {
+    const result = await db
+      .prepare('SELECT transport_id FROM urlaub_transportmittel WHERE urlaub_id = ?')
+      .bind(vacationId)
+      .all<{ transport_id: string }>()
+    return (result.results || []).map((r) => r.transport_id)
+  } catch (error) {
+    console.error('Error fetching vacation transport ids:', error)
+    return []
+  }
+}
+
+export async function getVacationTransports(
+  db: D1Database,
+  vacationId: string
+): Promise<TransportVehicle[]> {
+  try {
+    const result = await db
+      .prepare(
+        `SELECT t.*, g.name AS gruppe_name
+         FROM transportmittel t
+         INNER JOIN urlaub_transportmittel ut ON ut.transport_id = t.id
+         LEFT JOIN mitreisenden_gruppe g ON g.id = t.gruppe_id
+         WHERE ut.urlaub_id = ?
+         ORDER BY t.name`
+      )
+      .bind(vacationId)
+      .all<TransportVehicleRow>()
+    return (result.results || []).map(mapTransportVehicleRow)
+  } catch (error) {
+    console.error('Error fetching vacation transports:', error)
+    return []
+  }
+}
+
+/** Haushalt-IDs für Urlaubs-Transportfilter (Mitreisende oder Standard-Haushalte). */
+export async function getTransportGruppeIdsForVacation(
+  db: D1Database,
+  vacationId: string
+): Promise<string[]> {
+  const people = await getMitreisendeForVacation(db, vacationId)
+  const fromPeople = [
+    ...new Set(people.map((m) => m.gruppe_id).filter((id): id is string => Boolean(id))),
+  ]
+  if (fromPeople.length > 0) return fromPeople
+
+  const groups = await getMitreisendenGruppen(db)
+  const standard = groups.filter((g) => g.urlaub_standard_mitnehmen).map((g) => g.id)
+  if (standard.length > 0) return standard
+  return groups.length > 0 && groups[0] ? [groups[0].id] : []
+}
+
+function sameTransportIdSet(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false
+  const set = new Set(a)
+  return b.every((id) => set.has(id))
+}
+
+/** Entfernt Urlaubs-Fahrzeuge, deren Haushalt nicht mehr geplant ist. */
+export async function pruneVacationTransportsToGruppen(
+  db: D1Database,
+  vacationId: string,
+  gruppeIds: string[]
+): Promise<void> {
+  try {
+    if (gruppeIds.length === 0) {
+      const current = await getVacationTransportIds(db, vacationId)
+      if (current.length === 0) return
+      await setVacationTransports(db, vacationId, [])
+      return
+    }
+
+    const placeholders = gruppeIds.map(() => '?').join(',')
+    const result = await db
+      .prepare(
+        `DELETE FROM urlaub_transportmittel
+         WHERE urlaub_id = ?
+           AND transport_id IN (
+             SELECT t.id FROM transportmittel t
+             WHERE t.gruppe_id IS NULL OR t.gruppe_id NOT IN (${placeholders})
+           )`
+      )
+      .bind(vacationId, ...gruppeIds)
+      .run()
+
+    const changes = Number(result.meta?.changes ?? 0)
+    if (changes > 0) {
+      const kept = await getVacationTransportIds(db, vacationId)
+      await remapPackingTransportsForVacation(db, vacationId, kept)
+    }
+  } catch (error) {
+    console.error('Error pruning vacation transports:', error)
+  }
+}
+
+export async function setVacationTransports(
+  db: D1Database,
+  vacationId: string,
+  transportIds: string[]
+): Promise<boolean> {
+  try {
+    const unique = [...new Set(transportIds.filter(Boolean))]
+    const current = await getVacationTransportIds(db, vacationId)
+    if (sameTransportIdSet(current, unique)) {
+      return true
+    }
+
+    await db.prepare('DELETE FROM urlaub_transportmittel WHERE urlaub_id = ?').bind(vacationId).run()
+    if (unique.length > 0) {
+      const stmts = unique.map((tid) =>
+        db
+          .prepare(
+            'INSERT INTO urlaub_transportmittel (urlaub_id, transport_id) VALUES (?, ?)'
+          )
+          .bind(vacationId, tid)
+      )
+      await db.batch(stmts)
+    }
+    await remapPackingTransportsForVacation(db, vacationId, unique)
+    return true
+  } catch (error) {
+    console.error('Error setting vacation transports:', error)
+    return false
+  }
+}
+
+/**
+ * Packlisten-Transport aus Stammdaten-ID auf die Urlaubsauswahl abbilden.
+ * Ohne Urlaubsauswahl bleibt die Quell-ID unverändert.
+ */
+export async function resolvePackTransportForVacation(
+  db: D1Database,
+  vacationId: string,
+  sourceTransportId: string | null | undefined
+): Promise<string | null> {
+  if (sourceTransportId == null || sourceTransportId === '') return null
+  const vacationIds = await getVacationTransportIds(db, vacationId)
+  if (vacationIds.length === 0) return sourceTransportId
+  const vehicles = await getTransportVehicles(db)
+  return resolveVacationPackTransportId(sourceTransportId, vacationIds, vehicles)
+}
+
+async function resolvePackTransportForPackliste(
+  db: D1Database,
+  packlisteId: string,
+  sourceTransportId: string | null | undefined
+): Promise<string | null> {
+  if (sourceTransportId == null || sourceTransportId === '') return null
+  const row = await db
+    .prepare('SELECT urlaub_id FROM packlisten WHERE id = ?')
+    .bind(packlisteId)
+    .first<{ urlaub_id: string }>()
+  if (!row?.urlaub_id) return sourceTransportId
+  return resolvePackTransportForVacation(db, row.urlaub_id, sourceTransportId)
+}
+
+/**
+ * Bestehende Packlisten-Einträge eines Urlaubs an die aktuelle Transportauswahl anpassen.
+ * Ändert nur packlisten_* – nicht die Ausrüstungs-Stammdaten.
+ */
+export async function remapPackingTransportsForVacation(
+  db: D1Database,
+  vacationId: string,
+  transportIds?: string[]
+): Promise<void> {
+  const packlisteId = await getPacklisteId(db, vacationId)
+  if (!packlisteId) return
+
+  const vacIds = transportIds ?? (await getVacationTransportIds(db, vacationId))
+  if (vacIds.length === 0) return
+
+  const vehicles = await getTransportVehicles(db)
+  const vacSet = new Set(vacIds)
+
+  type TidRow = { id: string; transport_id: string }
+  const [normal, temp, pem, pemTemp] = await db.batch([
+    db
+      .prepare(
+        `SELECT id, transport_id FROM packlisten_eintraege
+         WHERE packliste_id = ? AND transport_id IS NOT NULL`
+      )
+      .bind(packlisteId),
+    db
+      .prepare(
+        `SELECT id, transport_id FROM packlisten_eintraege_temporaer
+         WHERE packliste_id = ? AND transport_id IS NOT NULL`
+      )
+      .bind(packlisteId),
+    db
+      .prepare(
+        `SELECT pem.packlisten_eintrag_id AS id, pem.mitreisender_id AS mid, pem.transport_id
+         FROM packlisten_eintrag_mitreisende pem
+         INNER JOIN packlisten_eintraege pe ON pe.id = pem.packlisten_eintrag_id
+         WHERE pe.packliste_id = ? AND pem.transport_id IS NOT NULL`
+      )
+      .bind(packlisteId),
+    db
+      .prepare(
+        `SELECT pem.packlisten_eintrag_id AS id, pem.mitreisender_id AS mid, pem.transport_id
+         FROM packlisten_eintrag_mitreisende_temporaer pem
+         INNER JOIN packlisten_eintraege_temporaer pe ON pe.id = pem.packlisten_eintrag_id
+         WHERE pe.packliste_id = ? AND pem.transport_id IS NOT NULL`
+      )
+      .bind(packlisteId),
+  ])
+
+  const updates: D1PreparedStatement[] = []
+
+  for (const row of (normal.results || []) as TidRow[]) {
+    if (vacSet.has(row.transport_id)) continue
+    const next = resolveVacationPackTransportId(row.transport_id, vacIds, vehicles)
+    if (next && next !== row.transport_id) {
+      updates.push(
+        db
+          .prepare(
+            `UPDATE packlisten_eintraege SET transport_id = ?, updated_at = datetime('now') WHERE id = ?`
+          )
+          .bind(next, row.id)
+      )
+    }
+  }
+
+  for (const row of (temp.results || []) as TidRow[]) {
+    if (vacSet.has(row.transport_id)) continue
+    const next = resolveVacationPackTransportId(row.transport_id, vacIds, vehicles)
+    if (next && next !== row.transport_id) {
+      updates.push(
+        db
+          .prepare(
+            `UPDATE packlisten_eintraege_temporaer SET transport_id = ?, updated_at = datetime('now') WHERE id = ?`
+          )
+          .bind(next, row.id)
+      )
+    }
+  }
+
+  type PemRow = { id: string; mid: string; transport_id: string }
+  for (const row of (pem.results || []) as PemRow[]) {
+    if (vacSet.has(row.transport_id)) continue
+    const next = resolveVacationPackTransportId(row.transport_id, vacIds, vehicles)
+    if (next && next !== row.transport_id) {
+      updates.push(
+        db
+          .prepare(
+            `UPDATE packlisten_eintrag_mitreisende
+             SET transport_id = ?
+             WHERE packlisten_eintrag_id = ? AND mitreisender_id = ?`
+          )
+          .bind(next, row.id, row.mid)
+      )
+    }
+  }
+
+  for (const row of (pemTemp.results || []) as PemRow[]) {
+    if (vacSet.has(row.transport_id)) continue
+    const next = resolveVacationPackTransportId(row.transport_id, vacIds, vehicles)
+    if (next && next !== row.transport_id) {
+      updates.push(
+        db
+          .prepare(
+            `UPDATE packlisten_eintrag_mitreisende_temporaer
+             SET transport_id = ?
+             WHERE packlisten_eintrag_id = ? AND mitreisender_id = ?`
+          )
+          .bind(next, row.id, row.mid)
+      )
+    }
+  }
+
+  const CHUNK = 40
+  for (let i = 0; i < updates.length; i += CHUNK) {
+    await db.batch(updates.slice(i, i + CHUNK))
+  }
+}
+
+/** Defaults für neuen Urlaub schreiben (nur wenn noch keine Auswahl). */
+export async function ensureVacationTransportDefaults(
+  db: D1Database,
+  vacationId: string,
+  startdatum: string,
+  abfahrtdatum?: string | null
+): Promise<string[]> {
+  const existing = await getVacationTransportIds(db, vacationId)
+  if (existing.length > 0) return existing
+  const vehicles = await getTransportVehicles(db)
+  const gruppeIds = await getTransportGruppeIdsForVacation(db, vacationId)
+  const eligible = filterVehiclesByGruppeIds(vehicles, gruppeIds)
+  const dateYmd = vacationActivityDate({ startdatum, abfahrtdatum })
+  const ids = defaultTransportIdsForDate(eligible, dateYmd)
+  if (ids.length > 0) {
+    await setVacationTransports(db, vacationId, ids)
+  }
+  return ids
+}
+
+/**
+ * Fahrzeug ersetzen: altes schließen, neues anlegen, Ausrüstung + zukünftige Urlaube/Packlisten umbiegen.
+ */
+export async function replaceTransportVehicle(
+  db: D1Database,
+  oldId: string,
+  tauschdatum: string,
+  newInput: TransportVehicleInput
+): Promise<{ newId: string } | null> {
+  const old = await getTransportVehicleById(db, oldId)
+  if (!old) return null
+  const swap = tauschdatum.trim().slice(0, 10)
+  if (!swap) return null
+
+  const oldBis = dayBeforeYmd(swap)
+  // Name bleibt UNIQUE: altes Fahrzeug umbenennen, damit der neue Name frei ist
+  const desiredNewName = newInput.name.trim() || old.name
+  let archivedName = `${old.name} (bis ${oldBis})`
+  if (archivedName === desiredNewName || archivedName === old.name) {
+    archivedName = `${old.name} (bis ${oldBis}, ${oldId.slice(0, 8)})`
+  }
+  try {
+    await db
+      .prepare('UPDATE transportmittel SET name = ?, aktiv_bis = ? WHERE id = ?')
+      .bind(archivedName, oldBis, oldId)
+      .run()
+  } catch {
+    archivedName = `${old.name} (${oldId.slice(0, 8)})`
+    await db
+      .prepare('UPDATE transportmittel SET name = ?, aktiv_bis = ? WHERE id = ?')
+      .bind(archivedName, oldBis, oldId)
+      .run()
+  }
+
+  const newId = await createTransportVehicle(db, {
+    ...newInput,
+    name: desiredNewName,
+    fahrzeugtyp: newInput.fahrzeugtyp || old.fahrzeugtyp,
+    aktivVon: swap,
+    aktivBis: newInput.aktivBis ?? null,
+    gruppeId: newInput.gruppeId ?? old.gruppe_id ?? null,
+    urlaubStandard: newInput.urlaubStandard ?? old.urlaub_standard ?? false,
+  })
+  if (!newId) {
+    // Rollback Name soweit möglich
+    await db
+      .prepare('UPDATE transportmittel SET name = ?, aktiv_bis = NULL WHERE id = ?')
+      .bind(old.name, oldId)
+      .run()
+    return null
+  }
+
+  await db
+    .prepare('UPDATE transportmittel SET ersetzt_durch_id = ? WHERE id = ?')
+    .bind(newId, oldId)
+    .run()
+
+  await db
+    .prepare(
+      `UPDATE transportmittel SET traeger_transport_id = ? WHERE traeger_transport_id = ?`
+    )
+    .bind(newId, oldId)
+    .run()
+
+  // Zukunftige Urlaubs-Zuordnungen umbiegen (Abfahrt/Start >= Tausch)
+  // INSERT OR IGNORE + DELETE vermeidet PK-Konflikte, falls das neue Fahrzeug schon gewählt ist
+  await db
+    .prepare(
+      `INSERT OR IGNORE INTO urlaub_transportmittel (urlaub_id, transport_id)
+       SELECT urlaub_id, ?
+       FROM urlaub_transportmittel
+       WHERE transport_id = ?
+         AND urlaub_id IN (
+           SELECT id FROM urlaube
+           WHERE COALESCE(NULLIF(TRIM(abfahrtdatum), ''), startdatum) >= ?
+         )`
+    )
+    .bind(newId, oldId, swap)
+    .run()
+  await db
+    .prepare(
+      `DELETE FROM urlaub_transportmittel
+       WHERE transport_id = ?
+         AND urlaub_id IN (
+           SELECT id FROM urlaube
+           WHERE COALESCE(NULLIF(TRIM(abfahrtdatum), ''), startdatum) >= ?
+         )`
+    )
+    .bind(oldId, swap)
+    .run()
+
+  await db
+    .prepare(
+      `UPDATE urlaub_mitreisende
+       SET transport_id = ?
+       WHERE transport_id = ?
+         AND urlaub_id IN (
+           SELECT id FROM urlaube
+           WHERE COALESCE(NULLIF(TRIM(abfahrtdatum), ''), startdatum) >= ?
+         )`
+    )
+    .bind(newId, oldId, swap)
+    .run()
+
+  await db
+    .prepare(
+      `UPDATE packlisten_eintraege
+       SET transport_id = ?
+       WHERE transport_id = ?
+         AND packliste_id IN (
+           SELECT p.id FROM packlisten p
+           INNER JOIN urlaube u ON u.id = p.urlaub_id
+           WHERE COALESCE(NULLIF(TRIM(u.abfahrtdatum), ''), u.startdatum) >= ?
+         )`
+    )
+    .bind(newId, oldId, swap)
+    .run()
+
+  await db
+    .prepare(
+      `UPDATE packlisten_eintraege_temporaer
+       SET transport_id = ?
+       WHERE transport_id = ?
+         AND packliste_id IN (
+           SELECT p.id FROM packlisten p
+           INNER JOIN urlaube u ON u.id = p.urlaub_id
+           WHERE COALESCE(NULLIF(TRIM(u.abfahrtdatum), ''), u.startdatum) >= ?
+         )`
+    )
+    .bind(newId, oldId, swap)
+    .run()
+
+  await db
+    .prepare(
+      `UPDATE packlisten_eintrag_mitreisende
+       SET transport_id = ?
+       WHERE transport_id = ?
+         AND packlisten_eintrag_id IN (
+           SELECT pe.id FROM packlisten_eintraege pe
+           INNER JOIN packlisten p ON p.id = pe.packliste_id
+           INNER JOIN urlaube u ON u.id = p.urlaub_id
+           WHERE COALESCE(NULLIF(TRIM(u.abfahrtdatum), ''), u.startdatum) >= ?
+         )`
+    )
+    .bind(newId, oldId, swap)
+    .run()
+
+  // Ausrüstungs-Stammdaten: alle Zuordnungen auf das neue Fahrzeug umbiegen (nur bei Ersatz)
+  await db
+    .prepare('UPDATE ausruestungsgegenstaende SET transport_id = ?, updated_at = datetime(\'now\') WHERE transport_id = ?')
+    .bind(newId, oldId)
+    .run()
+
+  return { newId }
 }
 
 /**
@@ -2757,10 +3493,22 @@ export async function getTransportVehiclesWithFestgewicht(
 export interface PackStatusTransportOverview {
   transportId: string
   transportName: string
+  fahrzeugtyp?: string | null
+  /** Kapazität: ZGG−Eigengewicht bzw. max_traglast bei Anbauten */
   zuladung: number
   festInstalliert: number
   beladung: number
+  /** Körpergewichte der zugeordneten Personen */
+  personenGewicht: number
+  /** Anbauten: Eigengewicht+Beladung, die auf diesen Träger wirken */
+  anbautenGewicht: number
   reserve: number
+  /** Wirksames Stützlast-Limit (nur Zug/Gezogenes), sonst null */
+  stuetzlastLimit?: number | null
+  /** true wenn Anbau ohne gewählten Träger */
+  anbauOhneTraeger?: boolean
+  /** Hinweistext z.B. „+ X kg am Träger“ */
+  traegerHinweis?: string | null
 }
 
 export interface PackStatusEntryOhneGewicht {
@@ -2804,31 +3552,43 @@ export async function getPackStatus(db: D1Database, vacationId: string): Promise
     const packlisteId = packlisteResult?.id
     if (!packlisteId) return null
 
-    const transporte = await getTransportVehicles(db)
+    const transporte = await getVacationTransports(db, vacationId)
+    const transportIds = transporte.map((t) => t.id)
+    const transportIdSet = new Set(transportIds)
 
-    // Festgewicht für alle Transporte in 2 Batch-Queries (statt 2*N Einzelabfragen)
+    // Festgewicht nur für Urlaubs-Transporte (2 Batch-Queries)
     const festSums = new Map<string, { manuell: number; equipment: number }>()
     for (const t of transporte) {
       festSums.set(t.id, { manuell: 0, equipment: 0 })
     }
-    const manuellAll = await db
-      .prepare(
-        'SELECT transport_id, COALESCE(SUM(gewicht), 0) as s FROM transportmittel_festgewicht_manuell GROUP BY transport_id'
-      )
-      .all<{ transport_id: string; s: number }>()
-    for (const r of manuellAll.results || []) {
-      const entry = festSums.get(r.transport_id)
-      if (entry) entry.manuell = r.s
-    }
-    const equipAll = await db
-      .prepare(
-        `SELECT transport_id, COALESCE(SUM(einzelgewicht * COALESCE(standard_anzahl, 1)), 0) as s
-         FROM ausruestungsgegenstaende WHERE status = 'Fest Installiert' AND transport_id IS NOT NULL GROUP BY transport_id`
-      )
-      .all<{ transport_id: string; s: number }>()
-    for (const r of equipAll.results || []) {
-      const entry = festSums.get(r.transport_id)
-      if (entry) entry.equipment = r.s
+    if (transportIds.length > 0) {
+      const placeholders = transportIds.map(() => '?').join(',')
+      const manuellAll = await db
+        .prepare(
+          `SELECT transport_id, COALESCE(SUM(gewicht), 0) as s
+           FROM transportmittel_festgewicht_manuell
+           WHERE transport_id IN (${placeholders})
+           GROUP BY transport_id`
+        )
+        .bind(...transportIds)
+        .all<{ transport_id: string; s: number }>()
+      for (const r of manuellAll.results || []) {
+        const entry = festSums.get(r.transport_id)
+        if (entry) entry.manuell = r.s
+      }
+      const equipAll = await db
+        .prepare(
+          `SELECT transport_id, COALESCE(SUM(einzelgewicht * COALESCE(standard_anzahl, 1)), 0) as s
+           FROM ausruestungsgegenstaende
+           WHERE status = 'Fest Installiert' AND transport_id IN (${placeholders})
+           GROUP BY transport_id`
+        )
+        .bind(...transportIds)
+        .all<{ transport_id: string; s: number }>()
+      for (const r of equipAll.results || []) {
+        const entry = festSums.get(r.transport_id)
+        if (entry) entry.equipment = r.s
+      }
     }
 
     const beladungQuery = `
@@ -2859,6 +3619,7 @@ export async function getPackStatus(db: D1Database, vacationId: string): Promise
       beladungByTransport.set(t.id, 0)
     }
     for (const r of beladungResult.results || []) {
+      if (!transportIdSet.has(r.transport_id)) continue
       const cur = beladungByTransport.get(r.transport_id) ?? 0
       beladungByTransport.set(r.transport_id, cur + r.gewicht)
     }
@@ -2891,6 +3652,7 @@ export async function getPackStatus(db: D1Database, vacationId: string): Promise
       .bind(packlisteId)
       .all<{ transport_id: string; gewicht: number }>()
     for (const r of tempBeladungResult.results || []) {
+      if (!transportIdSet.has(r.transport_id)) continue
       const cur = beladungByTransport.get(r.transport_id) ?? 0
       beladungByTransport.set(r.transport_id, cur + r.gewicht)
     }
@@ -2901,7 +3663,8 @@ export async function getPackStatus(db: D1Database, vacationId: string): Promise
       .bind(vacationId)
       .first<{ c: number }>()
     const mitreisendeCount = mitreisendeCountResult?.c ?? 0
-    const firstTransportId = transporte[0]?.id ?? null
+    const firstZug = transporte.find((t) => isZugfaehig(t.fahrzeugtyp))
+    const firstTransportId = firstZug?.id ?? transporte[0]?.id ?? null
 
     // Kategorien mit Pauschale: Hat mindestens ein inbegriffenes Item in der Packliste?
     const kategorienPauschalResult = await db
@@ -2923,7 +3686,7 @@ export async function getPackStatus(db: D1Database, vacationId: string): Promise
       const gewicht =
         Number(row.pauschalgewicht) * (row.pauschal_pro_person ? mitreisendeCount : 1)
       const tid = row.pauschal_transport_id || firstTransportId
-      if (tid) {
+      if (tid && transportIdSet.has(tid)) {
         const cur = beladungByTransport.get(tid) ?? 0
         beladungByTransport.set(tid, cur + gewicht)
       }
@@ -2951,25 +3714,104 @@ export async function getPackStatus(db: D1Database, vacationId: string): Promise
       const gewicht =
         Number(row.pauschalgewicht) * (row.pauschal_pro_person ? mitreisendeCount : 1)
       const tid = row.pauschal_transport_id || firstTransportId
-      if (tid) {
+      if (tid && transportIdSet.has(tid)) {
         const cur = beladungByTransport.get(tid) ?? 0
         beladungByTransport.set(tid, cur + gewicht)
       }
     }
 
+    // Personengewichte (eine Batch-Query)
+    const personenGewichtByTransport = new Map<string, number>()
+    for (const t of transporte) personenGewichtByTransport.set(t.id, 0)
+    const zugIds = transporte.filter((t) => isZugfaehig(t.fahrzeugtyp)).map((t) => t.id)
+    // Ohne Sitzplatz-Zuordnung („Automatisch“): erstes Zugfahrzeug im Urlaub
+    const defaultSitzId = zugIds[0] ?? null
+    const personenRows = await db
+      .prepare(
+        `SELECT um.transport_id as sitz_transport_id, m.koerpergewicht
+         FROM urlaub_mitreisende um
+         INNER JOIN mitreisende m ON m.id = um.mitreisender_id
+         WHERE um.urlaub_id = ?`
+      )
+      .bind(vacationId)
+      .all<{ sitz_transport_id: string | null; koerpergewicht: number | null }>()
+    for (const r of personenRows.results || []) {
+      const kg = r.koerpergewicht != null ? Number(r.koerpergewicht) : 0
+      if (!(kg > 0)) continue
+      // Sitzplatz nur zählen, wenn es ein Zugfahrzeug des Urlaubs ist
+      const sitzOk =
+        r.sitz_transport_id &&
+        transportIdSet.has(r.sitz_transport_id) &&
+        zugIds.includes(r.sitz_transport_id)
+      const tid = sitzOk ? r.sitz_transport_id! : defaultSitzId
+      if (!tid) continue
+      personenGewichtByTransport.set(tid, (personenGewichtByTransport.get(tid) ?? 0) + kg)
+    }
+
+    // Anbau-Aufschlag auf Träger (Memory)
+    const anbautenGewichtByTraeger = new Map<string, number>()
+    for (const t of transporte) anbautenGewichtByTraeger.set(t.id, 0)
+    for (const anbau of transporte.filter((t) => isAnbau(t.fahrzeugtyp))) {
+      const beladungAnbau = beladungByTransport.get(anbau.id) ?? 0
+      const aufschlag = anbau.eigengewicht + beladungAnbau
+      const traegerId = anbau.traeger_transport_id
+      if (traegerId && transportIdSet.has(traegerId)) {
+        anbautenGewichtByTraeger.set(
+          traegerId,
+          (anbautenGewichtByTraeger.get(traegerId) ?? 0) + aufschlag
+        )
+      }
+    }
+
+    const zugVehicles = transporte.filter((t) => isZugfaehig(t.fahrzeugtyp))
+    const gezogenVehicles = transporte.filter((t) => isGezogen(t.fahrzeugtyp))
+    const firstZugVehicle = zugVehicles[0]
+    const firstGezogenVehicle = gezogenVehicles[0]
+    const stuetzlastLimit =
+      firstZugVehicle && firstGezogenVehicle
+        ? effectiveStuetzlast(firstZugVehicle.max_stuetzlast, firstGezogenVehicle.max_stuetzlast)
+        : null
+
     const transportOverview: PackStatusTransportOverview[] = transporte.map((t) => {
-      const zuladung = t.zul_gesamtgewicht - t.eigengewicht
+      const isAnbauTyp = isAnbau(t.fahrzeugtyp)
+      const zuladung = isAnbauTyp
+        ? t.max_traglast != null && t.max_traglast > 0
+          ? t.max_traglast
+          : Math.max(t.zul_gesamtgewicht - t.eigengewicht, 0)
+        : t.zul_gesamtgewicht - t.eigengewicht
       const fest = festSums.get(t.id)
       const festInstalliert = fest ? fest.manuell + fest.equipment : 0
       const beladung = beladungByTransport.get(t.id) ?? 0
-      const reserve = zuladung - festInstalliert - beladung
+      const personenGewicht = personenGewichtByTransport.get(t.id) ?? 0
+      const anbautenGewicht = anbautenGewichtByTraeger.get(t.id) ?? 0
+      // Anbau: Reserve gegen Traglast (ohne Eigengewicht/Personen/Fest)
+      // Träger: Zuladung − Fest − Beladung − Personen − Anbauten
+      const reserve = isAnbauTyp
+        ? zuladung - beladung
+        : zuladung - festInstalliert - beladung - personenGewicht - anbautenGewicht
+      const anbauOhneTraeger =
+        isAnbauTyp &&
+        (!t.traeger_transport_id || !transportIdSet.has(t.traeger_transport_id))
+      let traegerHinweis: string | null = null
+      if (isAnbauTyp && t.traeger_transport_id && transportIdSet.has(t.traeger_transport_id)) {
+        const aufschlag = t.eigengewicht + beladung
+        const traeger = transporte.find((x) => x.id === t.traeger_transport_id)
+        traegerHinweis = `+ ${aufschlag.toFixed(1).replace(/\.0$/, '')} kg am ${traeger?.name ?? 'Träger'}`
+      }
       return {
         transportId: t.id,
         transportName: t.name,
+        fahrzeugtyp: t.fahrzeugtyp ?? null,
         zuladung,
-        festInstalliert,
+        festInstalliert: isAnbauTyp ? 0 : festInstalliert,
         beladung,
-        reserve
+        personenGewicht: isAnbauTyp ? 0 : personenGewicht,
+        anbautenGewicht: isAnbauTyp ? 0 : anbautenGewicht,
+        reserve,
+        stuetzlastLimit:
+          isZugfaehig(t.fahrzeugtyp) || isGezogen(t.fahrzeugtyp) ? stuetzlastLimit : null,
+        anbauOhneTraeger,
+        traegerHinweis,
       }
     })
 
@@ -3315,12 +4157,17 @@ export async function addPackingItem(
   pauschalGruppenModus: PauschalGruppenModus = 'einmal'
 ): Promise<string | null> {
   try {
+    const resolvedTransportId = await resolvePackTransportForPackliste(
+      db,
+      packlisteId,
+      transportId
+    )
     const id = crypto.randomUUID()
     await db
       .prepare(
         'INSERT INTO packlisten_eintraege (id, packliste_id, gegenstand_id, anzahl, bemerkung, transport_id, pauschal_gruppen_modus) VALUES (?, ?, ?, ?, ?, ?, ?)'
       )
-      .bind(id, packlisteId, gegenstandId, anzahl, bemerkung || null, transportId || null, pauschalGruppenModus)
+      .bind(id, packlisteId, gegenstandId, anzahl, bemerkung || null, resolvedTransportId, pauschalGruppenModus)
       .run()
 
     // Add mitreisende associations if provided
@@ -3357,13 +4204,18 @@ export async function addTemporaryPackingItem(
   pauschalGruppenModus: PauschalGruppenModus = 'einmal'
 ): Promise<string | null> {
   try {
+    const resolvedTransportId = await resolvePackTransportForPackliste(
+      db,
+      packlisteId,
+      transportId
+    )
     const id = crypto.randomUUID()
     const modus = mitreisende && mitreisende.length > 0 ? 'einmal' : pauschalGruppenModus
     await db
       .prepare(
         `INSERT INTO packlisten_eintraege_temporaer (id, packliste_id, was, kategorie_id, anzahl, bemerkung, transport_id, pauschal_gruppen_modus) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
       )
-      .bind(id, packlisteId, was.trim(), kategorieId, anzahl, bemerkung || null, transportId || null, modus)
+      .bind(id, packlisteId, was.trim(), kategorieId, anzahl, bemerkung || null, resolvedTransportId, modus)
       .run()
     // optionale Mitreisende-Zuordnung für temporäre Einträge
     if (mitreisende && mitreisende.length > 0) {
@@ -3577,6 +4429,15 @@ export async function addPackingItemsBatch(
     gegenstandId: string
   }[] = []
 
+  const vacationRow = await db
+    .prepare('SELECT urlaub_id FROM packlisten WHERE id = ?')
+    .bind(packlisteId)
+    .first<{ urlaub_id: string }>()
+  const vacationIds = vacationRow?.urlaub_id
+    ? await getVacationTransportIds(db, vacationRow.urlaub_id)
+    : []
+  const vehicles = vacationIds.length > 0 ? await getTransportVehicles(db) : []
+
   items.forEach((item, itemIndex) => {
     if (!item.gegenstandId) {
       results.push({ success: false })
@@ -3586,6 +4447,10 @@ export async function addPackingItemsBatch(
     const anzahl = item.anzahl ?? 1
     const mitreisende = item.mitreisende ?? []
     const modus = item.pauschalGruppenModus ?? 'einmal'
+    const resolvedTransportId =
+      vacationIds.length > 0
+        ? resolveVacationPackTransportId(item.transportId, vacationIds, vehicles)
+        : item.transportId || null
 
     const resultIndex = results.length
     results.push({ success: false, gegenstandId: item.gegenstandId, id })
@@ -3602,7 +4467,7 @@ export async function addPackingItemsBatch(
           item.gegenstandId,
           anzahl,
           item.bemerkung || null,
-          item.transportId || null,
+          resolvedTransportId,
           modus
         )
     )
@@ -3697,6 +4562,8 @@ type MitreisenderRowRaw = {
   is_default_member?: number | boolean
   personentyp?: string | null
   farbe?: string | null
+  koerpergewicht?: number | null
+  sitz_transport_id?: string | null
   created_at: string
 }
 
@@ -3713,6 +4580,8 @@ function mapMitreisenderRow(r: MitreisenderRowRaw): Mitreisender {
     gruppe_name: r.gruppe_name ?? null,
     urlaub_standard_mitnehmen: sqliteBool(r.urlaub_standard_mitnehmen),
     farbe: r.farbe ?? null,
+    koerpergewicht: r.koerpergewicht != null ? Number(r.koerpergewicht) : null,
+    sitz_transport_id: r.sitz_transport_id ?? null,
     created_at: r.created_at,
   }
 }
@@ -3845,7 +4714,7 @@ export async function deleteMitreisendenGruppe(db: D1Database, id: string): Prom
   }
 }
 
-async function resolveDefaultGruppeId(db: D1Database, preferStandard: boolean): Promise<string> {
+export async function resolveDefaultGruppeId(db: D1Database, preferStandard: boolean): Promise<string> {
   if (preferStandard) {
     const row = await db
       .prepare(
@@ -3906,8 +4775,13 @@ export async function getMitreisendeForVacation(db: D1Database, vacationId: stri
   try {
     const result = await db
       .prepare(`
-        ${MITREISENDE_SELECT}
+        SELECT m.*, u.email as user_email, u.role as user_role,
+               g.name as gruppe_name, g.urlaub_standard_mitnehmen,
+               um.transport_id as sitz_transport_id
+        FROM mitreisende m
         INNER JOIN urlaub_mitreisende um ON m.id = um.mitreisender_id
+        LEFT JOIN users u ON m.user_id = u.id
+        LEFT JOIN mitreisenden_gruppe g ON m.gruppe_id = g.id
         WHERE um.urlaub_id = ?
         ORDER BY m.name
       `)
@@ -3934,6 +4808,7 @@ export async function createMitreisender(
     gruppeId?: string | null
     personentyp?: Personentyp
     farbe?: string | null
+    koerpergewicht?: number | null
   } = {}
 ): Promise<string | null> {
   try {
@@ -3947,9 +4822,13 @@ export async function createMitreisender(
     const personentyp = options.personentyp ?? 'erwachsen'
     const defaultGruppe = await resolveDefaultGruppeId(db, true)
     const isDefault = options.isDefaultMember ?? gruppeId === defaultGruppe
+    const koerpergewicht =
+      options.koerpergewicht != null && Number.isFinite(options.koerpergewicht) && options.koerpergewicht > 0
+        ? Number(options.koerpergewicht)
+        : null
     await db
       .prepare(
-        'INSERT INTO mitreisende (id, name, user_id, is_default_member, farbe, gruppe_id, personentyp) VALUES (?, ?, ?, ?, ?, ?, ?)'
+        'INSERT INTO mitreisende (id, name, user_id, is_default_member, farbe, gruppe_id, personentyp, koerpergewicht) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
       )
       .bind(
         id,
@@ -3958,7 +4837,8 @@ export async function createMitreisender(
         isDefault ? 1 : 0,
         options.farbe || null,
         gruppeId,
-        personentyp
+        personentyp,
+        koerpergewicht
       )
       .run()
     return id
@@ -3981,6 +4861,7 @@ export async function updateMitreisender(
     gruppeId?: string | null
     personentyp?: Personentyp
     farbe?: string | null
+    koerpergewicht?: number | null
   } = {}
 ): Promise<boolean> {
   try {
@@ -4005,6 +4886,16 @@ export async function updateMitreisender(
     if (options.personentyp !== undefined) {
       fields.push('personentyp = ?')
       values.push(options.personentyp)
+    }
+    if (options.koerpergewicht !== undefined) {
+      fields.push('koerpergewicht = ?')
+      values.push(
+        options.koerpergewicht != null &&
+          Number.isFinite(options.koerpergewicht) &&
+          options.koerpergewicht > 0
+          ? Number(options.koerpergewicht)
+          : null
+      )
     }
 
     values.push(id)
@@ -4073,24 +4964,51 @@ export async function removeMitreisenderFromVacation(
 }
 
 /**
- * Setzen der Mitreisenden für einen Urlaub (ersetzt alle bisherigen)
+ * Setzen der Mitreisenden für einen Urlaub (ersetzt alle bisherigen).
+ * Optional: Sitzfahrzeug pro Person (transport_id).
  */
 export async function setMitreisendeForVacation(
   db: D1Database,
   vacationId: string,
-  mitreisendeIds: string[]
+  mitreisendeIds: string[],
+  sitzTransportByMitreisender?: Record<string, string | null | undefined>
 ): Promise<boolean> {
   try {
-    // Erst alle bisherigen Zuordnungen löschen
-    await db.prepare('DELETE FROM urlaub_mitreisende WHERE urlaub_id = ?').bind(vacationId).run()
-    
-    // Dann neue Zuordnungen hinzufügen
-    for (const mitreisenderId of mitreisendeIds) {
-      await db
-        .prepare('INSERT INTO urlaub_mitreisende (urlaub_id, mitreisender_id) VALUES (?, ?)')
-        .bind(vacationId, mitreisenderId)
-        .run()
+    // Bestehende Sitzplatz-Zuordnungen merken, falls nicht neu übergeben
+    const prevSitz = new Map<string, string | null>()
+    if (!sitzTransportByMitreisender) {
+      const prev = await db
+        .prepare(
+          'SELECT mitreisender_id, transport_id FROM urlaub_mitreisende WHERE urlaub_id = ?'
+        )
+        .bind(vacationId)
+        .all<{ mitreisender_id: string; transport_id: string | null }>()
+      for (const r of prev.results || []) {
+        prevSitz.set(r.mitreisender_id, r.transport_id ?? null)
+      }
     }
+
+    await db.prepare('DELETE FROM urlaub_mitreisende WHERE urlaub_id = ?').bind(vacationId).run()
+
+    const unique = [...new Set(mitreisendeIds.filter(Boolean))]
+    if (unique.length > 0) {
+      const stmts = unique.map((mitreisenderId) => {
+        const sitz =
+          sitzTransportByMitreisender !== undefined
+            ? sitzTransportByMitreisender[mitreisenderId] ?? null
+            : prevSitz.get(mitreisenderId) ?? null
+        return db
+          .prepare(
+            'INSERT INTO urlaub_mitreisende (urlaub_id, mitreisender_id, transport_id) VALUES (?, ?, ?)'
+          )
+          .bind(vacationId, mitreisenderId, sitz)
+      })
+      await db.batch(stmts)
+    }
+
+    const gruppeIds = await getTransportGruppeIdsForVacation(db, vacationId)
+    await pruneVacationTransportsToGruppen(db, vacationId, gruppeIds)
+
     return true
   } catch (error) {
     console.error('Error setting mitreisende for vacation:', error)

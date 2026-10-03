@@ -64,7 +64,8 @@ export function BulkPackingEditModal({
   const handleSubmit = () => {
     const patch: BulkPackingPatch = {}
     if (changeTransport) {
-      patch.transport_id = transportId || null
+      if (!transportId) return
+      patch.transport_id = transportId
     }
     if (changeBemerkung) {
       patch.bemerkung = bemerkung.trim() || null
@@ -78,7 +79,10 @@ export function BulkPackingEditModal({
     onConfirm(patch)
   }
 
-  const canSubmit = changeTransport || changeBemerkung || changeAnzahl
+  const canSubmit =
+    (changeTransport && !!transportId) ||
+    changeBemerkung ||
+    changeAnzahl
 
   return (
     <ResponsiveModal
@@ -99,14 +103,13 @@ export function BulkPackingEditModal({
           </label>
           {changeTransport && (
             <Select
-              value={transportId || 'none'}
-              onValueChange={(v) => setTransportId(v === 'none' ? '' : v)}
+              value={transportId || undefined}
+              onValueChange={(v) => setTransportId(v)}
             >
               <SelectTrigger>
-                <SelectValue placeholder="Transport wählen" />
+                <SelectValue placeholder="Kein Transport" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="none">Kein Transport</SelectItem>
                 {transportVehicles.map((tv) => (
                   <SelectItem key={tv.id} value={tv.id}>
                     {tv.name}

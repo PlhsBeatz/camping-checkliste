@@ -12,6 +12,16 @@ export function getVacationGruppeIds(mitreisende: Mitreisender[]): string[] {
   return [...ids]
 }
 
+/** Fahrzeuge auf die angegebenen Haushalte beschränken (leere Liste → keine Fahrzeuge). */
+export function filterVehiclesByGruppeIds<T extends { gruppe_id?: string | null }>(
+  vehicles: T[],
+  gruppeIds: string[]
+): T[] {
+  if (gruppeIds.length === 0) return []
+  const allowed = new Set(gruppeIds)
+  return vehicles.filter((v) => v.gruppe_id != null && allowed.has(v.gruppe_id))
+}
+
 export function hasMultipleVacationGroups(mitreisende: Mitreisender[]): boolean {
   return getVacationGruppeIds(mitreisende).length > 1
 }

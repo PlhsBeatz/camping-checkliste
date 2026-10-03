@@ -43,7 +43,7 @@ export const TRANSPORT_ICON_OPTIONS: Array<{
   { key: 'bus', label: 'Wohnmobil', Icon: Bus },
   { key: 'container', label: 'Anhänger', Icon: TransportTrailer },
   { key: 'package', label: 'Dachbox', Icon: TransportRoofBox },
-  { key: 'box', label: 'Heckbox', Icon: TransportRearBox },
+  { key: 'box', label: 'Heckträger', Icon: TransportRearBox },
 ]
 
 const ICON_BY_KEY: Record<AnyTransportIconKey, LucideIcon> = {

@@ -66,9 +66,20 @@ export async function POST(request: NextRequest) {
       gruppe_id?: string | null
       personentyp?: Personentyp
       farbe?: string | null
+      koerpergewicht?: number | null
     }
-    const { name, userId, user_id, isDefaultMember, is_default_member, gruppeId, gruppe_id, personentyp, farbe } =
-      body
+    const {
+      name,
+      userId,
+      user_id,
+      isDefaultMember,
+      is_default_member,
+      gruppeId,
+      gruppe_id,
+      personentyp,
+      farbe,
+      koerpergewicht,
+    } = body
 
     if (!name) {
       return NextResponse.json({ success: false, error: 'Name is required' }, { status: 400 })
@@ -91,6 +102,7 @@ export async function POST(request: NextRequest) {
       gruppeId: finalGruppeId,
       personentyp: personentyp ?? 'erwachsen',
       farbe,
+      koerpergewicht: koerpergewicht ?? null,
     })
 
     return NextResponse.json({ success: true, data: { id } })
@@ -122,8 +134,10 @@ export async function PUT(request: NextRequest) {
       gruppe_id?: string | null
       personentyp?: Personentyp
       farbe?: string | null
+      koerpergewicht?: number | null
       vacationId?: string
       mitreisendeIds?: string[]
+      sitzTransportByMitreisender?: Record<string, string | null>
     }
     const {
       id,
@@ -136,12 +150,19 @@ export async function PUT(request: NextRequest) {
       gruppe_id,
       personentyp,
       farbe,
+      koerpergewicht,
       vacationId,
       mitreisendeIds,
+      sitzTransportByMitreisender,
     } = body
 
     if (vacationId && mitreisendeIds) {
-      const success = await setMitreisendeForVacation(db, vacationId, mitreisendeIds)
+      const success = await setMitreisendeForVacation(
+        db,
+        vacationId,
+        mitreisendeIds,
+        sitzTransportByMitreisender
+      )
       if (!success) {
         return NextResponse.json({ success: false, error: 'Failed to set mitreisende for vacation' }, { status: 500 })
       }
@@ -169,6 +190,7 @@ export async function PUT(request: NextRequest) {
       gruppeId: finalGruppeId,
       personentyp,
       farbe,
+      koerpergewicht,
     })
 
     return NextResponse.json({ success: true })

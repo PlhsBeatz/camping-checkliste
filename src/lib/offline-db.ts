@@ -1,8 +1,8 @@
 /**
  * IndexedDB (Dexie) für Offline-Cache der D1-Daten.
- * Speichert: Urlaube, Ausrüstung, Kategorien, Tags, Mitreisende, Transportmittel, Packlisten-Einträge,
- * Tools-Checklisten, Optimierungen, letzte GPS-Position, Tag-Kategorien, Pack-Status, Campingplätze (+ Fotos),
- * Routen, Profil-Heimat-Adresse, Rastplätze, Entweder-oder-Gruppen und letzte Auth-Session.
+ * Speichert: Urlaube, Ausrüstung, Kategorien, Tags, Mitreisende, Transportmittel (inkl. Urlaubsauswahl),
+ * Packlisten-Einträge, Tools-Checklisten, Optimierungen, letzte GPS-Position, Tag-Kategorien, Pack-Status,
+ * Campingplätze (+ Fotos), Routen, Profil-Heimat-Adresse, Rastplätze, Entweder-oder-Gruppen und Auth-Session.
  *
  * Außerdem: Sync-Queue für Mutationen, die bei Reconnect mit Last-Write-Wins gesendet werden.
  */
@@ -77,6 +77,16 @@ export interface CachedMitreisender extends Mitreisender {
 }
 
 export interface CachedTransportVehicle extends TransportVehicle {
+  _cachedAt: number
+  _updatedAt: number
+}
+
+/** Urlaubs-Transportauswahl (eine Zeile pro Urlaub) */
+export interface CachedVacationTransports {
+  /** = vacationId */
+  id: string
+  transportIds: string[]
+  mitreisendeSitz: Record<string, string | null>
   _cachedAt: number
   _updatedAt: number
 }
@@ -245,6 +255,7 @@ export class OfflineDB extends Dexie {
   mitreisendenGruppen!: EntityTable<CachedMitreisendenGruppe, 'id'>
   vacationMitreisende!: EntityTable<CachedVacationMitreisender, 'id_compound'>
   transportVehicles!: EntityTable<CachedTransportVehicle, 'id'>
+  vacationTransports!: EntityTable<CachedVacationTransports, 'id'>
   packingItems!: EntityTable<CachedPackingItem, 'id'>
   checklisten!: EntityTable<CachedChecklist, 'id'>
   optimierungen!: EntityTable<CachedOptimierung, 'id'>
@@ -480,6 +491,10 @@ export class OfflineDB extends Dexie {
     this.version(12).stores({
       verbrauchMedien: 'id, schluessel, ist_aktiv, sort_order, _cachedAt, _updatedAt',
     })
+    // Version 13: Urlaubs-Transportauswahl
+    this.version(13).stores({
+      vacationTransports: 'id, _cachedAt, _updatedAt',
+    })
   }
 }
 
@@ -581,6 +596,32 @@ export async function cacheTransportVehicles(
 ): Promise<void> {
   const withMetaItems = items.map((v) => withMeta(v)) as CachedTransportVehicle[]
   await snapshotReplace(offlineDb.transportVehicles, withMetaItems)
+}
+
+export async function cacheVacationTransports(
+  vacationId: string,
+  transportIds: string[],
+  mitreisendeSitz: Record<string, string | null> = {}
+): Promise<void> {
+  const t = now()
+  await offlineDb.vacationTransports.put({
+    id: vacationId,
+    transportIds: [...new Set(transportIds.filter(Boolean))],
+    mitreisendeSitz: { ...mitreisendeSitz },
+    _cachedAt: t,
+    _updatedAt: t,
+  })
+}
+
+export async function getCachedVacationTransports(
+  vacationId: string
+): Promise<CachedVacationTransports | null> {
+  try {
+    const row = await offlineDb.vacationTransports.get(vacationId)
+    return row ?? null
+  } catch {
+    return null
+  }
 }
 
 export async function cachePackingItems(

@@ -3,8 +3,8 @@ import type { BackupPreset } from './types'
 /** FK-sichere Reihenfolge für Merge-Import */
 export const BACKUP_TABLE_ORDER: string[] = [
   'hauptkategorien',
-  'transportmittel',
   'mitreisenden_gruppe',
+  'transportmittel',
   'mitreisende',
   'tag_kategorien',
   'users',
@@ -24,6 +24,7 @@ export const BACKUP_TABLE_ORDER: string[] = [
   'campingplatz_fotos',
   'urlaube',
   'urlaub_mitreisende',
+  'urlaub_transportmittel',
   'urlaub_campingplaetze',
   'urlaub_campingplatz_emails',
   'booking_import_pending',
@@ -104,6 +105,7 @@ const REFERENCE_STAMMDATEN = new Set([
 const VACATIONS = new Set([
   'urlaube',
   'urlaub_mitreisende',
+  'urlaub_transportmittel',
   'urlaub_campingplaetze',
   'urlaub_campingplatz_emails',
   'booking_import_pending',
@@ -174,6 +176,7 @@ export const PK_PARTS: Record<string, string[]> = {
   campingplatz_fotos: ['id'],
   urlaube: ['id'],
   urlaub_mitreisende: ['urlaub_id', 'mitreisender_id'],
+  urlaub_transportmittel: ['urlaub_id', 'transport_id'],
   urlaub_campingplaetze: ['id'],
   urlaub_campingplatz_emails: ['id'],
   booking_import_pending: ['id'],

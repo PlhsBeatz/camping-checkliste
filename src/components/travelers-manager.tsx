@@ -4,7 +4,9 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { WeightInput } from '@/components/ui/weight-input'
 import { Checkbox } from '@/components/ui/checkbox'
+import { parseWeightInput } from '@/lib/utils'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -57,6 +59,7 @@ function emptyTravelerForm(gruppeId: string) {
     gruppeId,
     personentyp: 'erwachsen' as Personentyp,
     farbe: DEFAULT_USER_COLOR_BG,
+    koerpergewicht: '',
   }
 }
 
@@ -204,6 +207,7 @@ export function TravelersManager({
     gruppeId: 'grp-familie',
     personentyp: 'erwachsen' as Personentyp,
     farbe: DEFAULT_USER_COLOR_BG,
+    koerpergewicht: '',
   })
   const [formBerechtigungen, setFormBerechtigungen] = useState<string[]>([])
   const [formUserRole, setFormUserRole] = useState<UserRole | ''>('')
@@ -309,6 +313,10 @@ export function TravelersManager({
           gruppeId: form.gruppeId,
           personentyp: form.personentyp,
           farbe: form.farbe || null,
+          koerpergewicht: (() => {
+            const p = parseWeightInput(form.koerpergewicht)
+            return p != null && p > 0 ? p : null
+          })(),
         }),
       })
       const data = (await res.json()) as ApiResponse<unknown>
@@ -345,6 +353,10 @@ export function TravelersManager({
           gruppeId: form.gruppeId,
           personentyp: form.personentyp,
           farbe: form.farbe || null,
+          koerpergewicht: (() => {
+            const p = parseWeightInput(form.koerpergewicht)
+            return p != null && p > 0 ? p : null
+          })(),
         }),
       })
       const data = (await res.json()) as ApiResponse<unknown>
@@ -434,6 +446,10 @@ export function TravelersManager({
       gruppeId: traveler.gruppe_id || defaultGruppeId,
       personentyp: traveler.personentyp ?? 'erwachsen',
       farbe: traveler.farbe || DEFAULT_USER_COLOR_BG,
+      koerpergewicht:
+        traveler.koerpergewicht != null && traveler.koerpergewicht > 0
+          ? String(traveler.koerpergewicht)
+          : '',
     })
     setFormUserRole(traveler.user_role || '')
     setFormBerechtigungen([])
@@ -868,6 +884,22 @@ export function TravelersManager({
                   <SelectItem value="kind">Kind</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+            <div>
+              <Label>Körpergewicht (kg)</Label>
+              <WeightInput
+                value={form.koerpergewicht}
+                onChange={(_, parsed) =>
+                  setForm({
+                    ...form,
+                    koerpergewicht: parsed != null ? String(parsed) : '',
+                  })
+                }
+                placeholder="z.B. 75"
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Fließt in den Pack-Status des Sitzfahrzeugs ein.
+              </p>
             </div>
             <div>
               <Label htmlFor="traveler-farbe">Farbe</Label>

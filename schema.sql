@@ -17,10 +17,23 @@ CREATE TABLE IF NOT EXISTS transportmittel (
     zul_gesamtgewicht REAL NOT NULL,
     eigengewicht REAL NOT NULL,
     fest_installiert_mitrechnen INTEGER NOT NULL DEFAULT 0,
+    fahrzeugtyp TEXT NOT NULL DEFAULT 'auto',
+    hersteller TEXT,
+    modell TEXT,
+    max_stuetzlast REAL,
+    max_traglast REAL,
+    aktiv_von TEXT,
+    aktiv_bis TEXT,
+    ersetzt_durch_id TEXT,
+    traeger_transport_id TEXT,
+    gruppe_id TEXT,
+    urlaub_standard INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
     CHECK (zul_gesamtgewicht > 0),
-    CHECK (eigengewicht >= 0)
+    CHECK (eigengewicht >= 0),
+    FOREIGN KEY (ersetzt_durch_id) REFERENCES transportmittel(id) ON DELETE SET NULL,
+    FOREIGN KEY (traeger_transport_id) REFERENCES transportmittel(id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS transportmittel_festgewicht_manuell (
@@ -38,6 +51,7 @@ CREATE TABLE IF NOT EXISTS mitreisende (
     name TEXT NOT NULL,
     user_id TEXT UNIQUE,
     is_default_member INTEGER NOT NULL DEFAULT 0,
+    koerpergewicht REAL,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -114,10 +128,21 @@ CREATE TABLE IF NOT EXISTS packlisten (
 CREATE TABLE IF NOT EXISTS urlaub_mitreisende (
     urlaub_id TEXT NOT NULL,
     mitreisender_id TEXT NOT NULL,
+    transport_id TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     PRIMARY KEY (urlaub_id, mitreisender_id),
     FOREIGN KEY (urlaub_id) REFERENCES urlaube(id) ON DELETE CASCADE,
-    FOREIGN KEY (mitreisender_id) REFERENCES mitreisende(id) ON DELETE CASCADE
+    FOREIGN KEY (mitreisender_id) REFERENCES mitreisende(id) ON DELETE CASCADE,
+    FOREIGN KEY (transport_id) REFERENCES transportmittel(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS urlaub_transportmittel (
+    urlaub_id TEXT NOT NULL,
+    transport_id TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (urlaub_id, transport_id),
+    FOREIGN KEY (urlaub_id) REFERENCES urlaube(id) ON DELETE CASCADE,
+    FOREIGN KEY (transport_id) REFERENCES transportmittel(id) ON DELETE CASCADE
 );
 
 -- 3. Tabellen mit Abhängigkeiten Ebene 2 (Haupt-Gegenstände)
@@ -217,6 +242,13 @@ CREATE INDEX idx_ausruestungsgegenstaende_links_gegenstand_id ON ausruestungsgeg
 CREATE INDEX idx_mitreisende_user_id ON mitreisende(user_id);
 CREATE INDEX idx_urlaub_mitreisende_urlaub_id ON urlaub_mitreisende(urlaub_id);
 CREATE INDEX idx_urlaub_mitreisende_mitreisender_id ON urlaub_mitreisende(mitreisender_id);
+CREATE INDEX idx_urlaub_mitreisende_transport ON urlaub_mitreisende(transport_id);
+CREATE INDEX idx_urlaub_transportmittel_urlaub ON urlaub_transportmittel(urlaub_id);
+CREATE INDEX idx_urlaub_transportmittel_transport ON urlaub_transportmittel(transport_id);
+CREATE INDEX idx_transportmittel_traeger ON transportmittel(traeger_transport_id);
+CREATE INDEX idx_transportmittel_fahrzeugtyp ON transportmittel(fahrzeugtyp);
+CREATE INDEX idx_transportmittel_gruppe ON transportmittel(gruppe_id);
+CREATE INDEX idx_transportmittel_urlaub_standard ON transportmittel(urlaub_standard);
 CREATE INDEX idx_packlisten_urlaub_id ON packlisten(urlaub_id);
 CREATE INDEX idx_packlisten_eintraege_packliste_id ON packlisten_eintraege(packliste_id);
 CREATE INDEX idx_packlisten_eintraege_gegenstand_id ON packlisten_eintraege(gegenstand_id);

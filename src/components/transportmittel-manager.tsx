@@ -1,13 +1,13 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { ResponsiveModal } from '@/components/ui/responsive-modal'
-import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { WeightInput } from '@/components/ui/weight-input'
+import { CalendarDatePicker } from '@/components/ui/calendar-date-picker'
 import {
   Collapsible,
   CollapsibleContent,
@@ -19,7 +19,14 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Trash2, Plus, MoreVertical, Pencil, ChevronDown, ChevronRight, Wrench } from 'lucide-react'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { Trash2, Plus, MoreVertical, Pencil, ChevronDown, ChevronRight, Wrench, RefreshCw } from 'lucide-react'
 import { BrandEmptyState } from '@/components/brand-empty-state'
 import {
   EMPTY_ILLUSTRATION_CLASS,
@@ -29,6 +36,8 @@ import {
   TransportVehicle,
   TransportVehicleFestgewichtManuell,
   type TransportVehicleWithFestgewicht,
+  type Mitreisender,
+  type MitreisendenGruppe,
 } from '@/lib/db'
 import type { ApiResponse } from '@/lib/api-types'
 import { cn, formatWeightForDisplay, parseWeightInput } from '@/lib/utils'
@@ -36,41 +45,129 @@ import { useAuth } from '@/components/auth-provider'
 import {
   TRANSPORT_ICON_OPTIONS,
   TransportIcon,
-  inferTransportIconFromName,
   resolveTransportIconKeyForForm,
   type TransportIconKey,
 } from '@/lib/transport-icons'
+import {
+  FAHRZEUGTYPEN,
+  FAHRZEUGTYP_LABELS,
+  groupVehiclesByRole,
+  iconKeyFromFahrzeugtyp,
+  isAnbau,
+  isFahrzeugtyp,
+  isGezogen,
+  isTransportActiveOn,
+  isZugfaehig,
+  type Fahrzeugtyp,
+} from '@/lib/transport-types'
+import { todayInAppTimezone } from '@/lib/app-timezone'
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
+import { Checkbox } from '@/components/ui/checkbox'
 
 function TransportmittelRow({
   vehicle,
   onEdit,
   onDelete,
+  onReplace,
   onWartung,
   wartungCount,
   canManageWartung,
+  showHaushalt,
+  isOtherHaushalt = false,
 }: {
   vehicle: TransportVehicleWithFestgewicht | TransportVehicle
   onEdit: (v: TransportVehicle) => void
   onDelete: (id: string) => void
+  onReplace: (v: TransportVehicle) => void
   onWartung: (v: TransportVehicle) => void
   wartungCount: number
   canManageWartung: boolean
+  showHaushalt?: boolean
+  /** Visuell zurückgenommen – nicht Standard-Haushalt */
+  isOtherHaushalt?: boolean
 }) {
   const [menuOpen, setMenuOpen] = useState(false)
-  const nutzlast = vehicle.zul_gesamtgewicht - vehicle.eigengewicht
+  const typ = isFahrzeugtyp(vehicle.fahrzeugtyp) ? vehicle.fahrzeugtyp : 'auto'
+  const nutzlast = isAnbau(typ)
+    ? vehicle.max_traglast ?? vehicle.zul_gesamtgewicht - vehicle.eigengewicht
+    : vehicle.zul_gesamtgewicht - vehicle.eigengewicht
   const festgewichtTotal = 'festgewichtTotal' in vehicle ? vehicle.festgewichtTotal : 0
+  const isActive = isTransportActiveOn(vehicle, todayInAppTimezone())
   return (
-    <div className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 bg-card">
-      <div className="flex items-center gap-3">
-        <div className="h-10 w-10 rounded-lg bg-[rgb(45,79,30)]/10 flex items-center justify-center flex-shrink-0">
-          <TransportIcon icon={vehicle.icon} name={vehicle.name} className="text-brand-heading [&_svg]:h-5 [&_svg]:w-5" />
+    <div
+      className={cn(
+        'flex items-center justify-between p-3 border rounded-lg',
+        isOtherHaushalt
+          ? 'border-dashed bg-muted/40 text-muted-foreground hover:bg-muted/55'
+          : 'bg-card hover:bg-muted/50',
+        !isActive && 'opacity-70'
+      )}
+    >
+      <div className="flex items-center gap-3 min-w-0">
+        <div
+          className={cn(
+            'h-10 w-10 rounded-lg flex items-center justify-center flex-shrink-0',
+            isOtherHaushalt ? 'bg-muted' : 'bg-[rgb(45,79,30)]/10'
+          )}
+        >
+          <TransportIcon
+            icon={vehicle.icon}
+            name={vehicle.name}
+            className={cn(
+              '[&_svg]:h-5 [&_svg]:w-5',
+              isOtherHaushalt ? 'text-muted-foreground' : 'text-brand-heading'
+            )}
+          />
         </div>
-        <div>
-          <p className="font-medium">{vehicle.name}</p>
+        <div className="min-w-0">
+          <p
+            className={cn(
+              'font-medium flex flex-wrap items-center gap-2',
+              isOtherHaushalt && 'text-foreground/80'
+            )}
+          >
+            {vehicle.name}
+            <span className="text-xs font-normal text-muted-foreground">
+              {FAHRZEUGTYP_LABELS[typ]}
+            </span>
+            {showHaushalt && vehicle.gruppe_name ? (
+              <span
+                className={cn(
+                  'inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium',
+                  isOtherHaushalt
+                    ? 'border border-muted-foreground/35 bg-background/80 text-muted-foreground'
+                    : 'bg-[rgb(45,79,30)]/10 text-[rgb(45,79,30)]'
+                )}
+              >
+                {vehicle.gruppe_name}
+              </span>
+            ) : null}
+            <span
+              className={cn(
+                'inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium',
+                isActive
+                  ? isOtherHaushalt
+                    ? 'bg-muted text-muted-foreground'
+                    : 'bg-[rgb(45,79,30)]/10 text-[rgb(45,79,30)]'
+                  : 'bg-muted text-muted-foreground'
+              )}
+            >
+              {isActive ? 'Aktiv' : 'Inaktiv'}
+            </span>
+          </p>
           <p className="text-xs text-muted-foreground">
-            Zul. Gesamt: {formatWeightForDisplay(vehicle.zul_gesamtgewicht)} kg · Eigengewicht:{' '}
-            {formatWeightForDisplay(vehicle.eigengewicht)} kg · Nutzlast:{' '}
-            {formatWeightForDisplay(nutzlast)} kg
+            {isAnbau(typ) ? (
+              <>
+                Eigengewicht: {formatWeightForDisplay(vehicle.eigengewicht)} kg · Max. Traglast:{' '}
+                {formatWeightForDisplay(nutzlast)} kg
+              </>
+            ) : (
+              <>
+                Zul. Gesamt: {formatWeightForDisplay(vehicle.zul_gesamtgewicht)} kg · Eigengewicht:{' '}
+                {formatWeightForDisplay(vehicle.eigengewicht)} kg · Nutzlast:{' '}
+                {formatWeightForDisplay(nutzlast)} kg
+              </>
+            )}
             {festgewichtTotal > 0 && (
               <> · Fest Installiert: {formatWeightForDisplay(festgewichtTotal)} kg</>
             )}
@@ -93,6 +190,17 @@ function TransportmittelRow({
             <Pencil className="h-4 w-4 mr-2" />
             Bearbeiten
           </DropdownMenuItem>
+          {!isAnbau(typ) && (
+            <DropdownMenuItem
+              onSelect={() => {
+                setMenuOpen(false)
+                onReplace(vehicle)
+              }}
+            >
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Ersetzen
+            </DropdownMenuItem>
+          )}
           {canManageWartung && (
             <DropdownMenuItem
               onSelect={() => {
@@ -120,6 +228,100 @@ function TransportmittelRow({
   )
 }
 
+type FormState = {
+  name: string
+  fahrzeugtyp: Fahrzeugtyp
+  icon: TransportIconKey
+  hersteller: string
+  modell: string
+  zulGesamtgewicht: string
+  eigengewicht: string
+  maxStuetzlast: string
+  maxTraglast: string
+  aktivVon: string
+  aktivBis: string
+  traegerTransportId: string
+  gruppeId: string
+  urlaubStandard: boolean
+}
+
+const emptyForm = (defaultGruppeId = ''): FormState => ({
+  name: '',
+  fahrzeugtyp: 'auto',
+  icon: 'car',
+  hersteller: '',
+  modell: '',
+  zulGesamtgewicht: '',
+  eigengewicht: '',
+  maxStuetzlast: '',
+  maxTraglast: '',
+  aktivVon: '',
+  aktivBis: '',
+  traegerTransportId: '',
+  gruppeId: defaultGruppeId,
+  urlaubStandard: false,
+})
+
+function VehicleSection({
+  title,
+  vehicles,
+  onEdit,
+  onDelete,
+  onReplace,
+  onWartung,
+  wartungCountByTransportId,
+  canManageWartung,
+  showHaushalt,
+  isOtherHaushalt = false,
+  titleClassName,
+}: {
+  title: string
+  vehicles: (TransportVehicleWithFestgewicht | TransportVehicle)[]
+  onEdit: (v: TransportVehicle) => void
+  onDelete: (id: string) => void
+  onReplace: (v: TransportVehicle) => void
+  onWartung: (v: TransportVehicle) => void
+  wartungCountByTransportId: Map<string, number>
+  canManageWartung: boolean
+  showHaushalt?: boolean
+  isOtherHaushalt?: boolean
+  titleClassName?: string
+}) {
+  if (vehicles.length === 0) return null
+  return (
+    <div className="space-y-2">
+      <h3
+        className={cn(
+          'text-sm font-semibold tracking-tight pt-1',
+          titleClassName ?? (isOtherHaushalt ? 'text-muted-foreground' : 'text-brand-heading')
+        )}
+      >
+        {title}
+      </h3>
+      <div className="space-y-2">
+        {vehicles.map((vehicle) => (
+          <TransportmittelRow
+            key={vehicle.id}
+            vehicle={vehicle}
+            onEdit={onEdit}
+            onDelete={onDelete}
+            onReplace={onReplace}
+            onWartung={onWartung}
+            wartungCount={wartungCountByTransportId.get(vehicle.id) ?? 0}
+            canManageWartung={canManageWartung}
+            showHaushalt={showHaushalt}
+            isOtherHaushalt={isOtherHaushalt}
+          />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function groupVehiclesByTyp(list: (TransportVehicleWithFestgewicht | TransportVehicle)[]) {
+  return groupVehiclesByRole(list)
+}
+
 interface TransportmittelManagerProps {
   vehicles: (TransportVehicleWithFestgewicht | TransportVehicle)[]
   onRefresh: () => void
@@ -127,28 +329,109 @@ interface TransportmittelManagerProps {
 
 export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelManagerProps) {
   const router = useRouter()
-  const { canAccessConfig, canWriteWartung } = useAuth()
+  const { canWriteWartung } = useAuth()
   const [showDialog, setShowDialog] = useState(false)
   const [editingVehicle, setEditingVehicle] = useState<TransportVehicle | null>(null)
   const [deleteVehicleId, setDeleteVehicleId] = useState<string | null>(null)
+  const [deleteMode, setDeleteMode] = useState<'inactivate' | 'delete'>('inactivate')
+  const [deleteUsageLoading, setDeleteUsageLoading] = useState(false)
+  const [deleteInUse, setDeleteInUse] = useState<boolean | null>(null)
+  const [replaceVehicle, setReplaceVehicle] = useState<TransportVehicle | null>(null)
+  const [tauschdatum, setTauschdatum] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [aktivDatesExpanded, setAktivDatesExpanded] = useState(false)
   const [wartungCountByTransportId, setWartungCountByTransportId] = useState<Map<string, number>>(
     new Map()
   )
-
-  const [form, setForm] = useState({
-    name: '',
-    icon: 'van' as TransportIconKey,
-    zulGesamtgewicht: '',
-    eigengewicht: '',
-  })
+  const [form, setForm] = useState<FormState>(emptyForm)
   const [manuellEntries, setManuellEntries] = useState<TransportVehicleFestgewichtManuell[]>([])
   const [festgewichtEquipment, setFestgewichtEquipment] = useState<
     Array<{ id: string; was: string; einzelgewicht: number; standard_anzahl: number; gesamtgewicht: number }>
   >([])
   const [festInstalliertExpanded, setFestInstalliertExpanded] = useState(false)
+  const [mitreisende, setMitreisende] = useState<Mitreisender[]>([])
+  const [gruppen, setGruppen] = useState<MitreisendenGruppe[]>([])
+  const [personWeights, setPersonWeights] = useState<Record<string, string>>({})
+  const [showWeiterePersonen, setShowWeiterePersonen] = useState(false)
+  const festgewichtLoadedRef = useRef(false)
+
+  const anbauMode = isAnbau(form.fahrzeugtyp)
+  const zugfaehigMode = isZugfaehig(form.fahrzeugtyp)
+  const showStuetzlast = zugfaehigMode || isGezogen(form.fahrzeugtyp)
+  const traegerOptions = vehicles.filter((v) => isZugfaehig(v.fahrzeugtyp))
+  const formIsActive = isTransportActiveOn(
+    { aktiv_von: form.aktivVon || null, aktiv_bis: form.aktivBis || null },
+    todayInAppTimezone()
+  )
+  const deleteVehicleName =
+    vehicles.find((v) => v.id === deleteVehicleId)?.name ?? 'dieses Transportmittel'
+
+  const showHaushaltSelect = gruppen.length > 1
+  const defaultGruppeId = useMemo(() => {
+    const standard = gruppen.find((g) => g.urlaub_standard_mitnehmen)
+    return standard?.id ?? gruppen[0]?.id ?? ''
+  }, [gruppen])
+  const standardGruppeName = useMemo(() => {
+    return gruppen.find((g) => g.id === defaultGruppeId)?.name ?? 'Standard-Haushalt'
+  }, [gruppen, defaultGruppeId])
+
+  const { standardGrouped, otherHaushalte } = useMemo(() => {
+    if (!showHaushaltSelect || !defaultGruppeId) {
+      return {
+        standardGrouped: groupVehiclesByTyp(vehicles),
+        otherHaushalte: [] as Array<{
+          id: string
+          name: string
+          grouped: ReturnType<typeof groupVehiclesByTyp>
+        }>,
+      }
+    }
+    const standardList = vehicles.filter(
+      (v) => !v.gruppe_id || v.gruppe_id === defaultGruppeId
+    )
+    const otherList = vehicles.filter(
+      (v) => v.gruppe_id != null && v.gruppe_id !== defaultGruppeId
+    )
+    const byGruppe = new Map<string, (TransportVehicleWithFestgewicht | TransportVehicle)[]>()
+    for (const v of otherList) {
+      const gid = v.gruppe_id!
+      const arr = byGruppe.get(gid) ?? []
+      arr.push(v)
+      byGruppe.set(gid, arr)
+    }
+    const otherHaushalte = [...byGruppe.entries()]
+      .map(([id, list]) => ({
+        id,
+        name: list[0]?.gruppe_name ?? gruppen.find((g) => g.id === id)?.name ?? 'Haushalt',
+        grouped: groupVehiclesByTyp(list),
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name, 'de'))
+    return {
+      standardGrouped: groupVehiclesByTyp(standardList),
+      otherHaushalte,
+    }
+  }, [vehicles, showHaushaltSelect, defaultGruppeId, gruppen])
+
+  const haushaltPersonen = useMemo(
+    () =>
+      form.gruppeId
+        ? mitreisende.filter((m) => m.gruppe_id === form.gruppeId)
+        : mitreisende.filter((m) => m.urlaub_standard_mitnehmen),
+    [mitreisende, form.gruppeId]
+  )
+  const anderePersonen = useMemo(
+    () =>
+      form.gruppeId
+        ? mitreisende.filter((m) => m.gruppe_id !== form.gruppeId)
+        : mitreisende.filter((m) => !m.urlaub_standard_mitnehmen),
+    [mitreisende, form.gruppeId]
+  )
+  const visiblePersonen = showWeiterePersonen
+    ? [...haushaltPersonen, ...anderePersonen]
+    : haushaltPersonen
 
   const loadFestgewicht = async (transportId: string) => {
+    festgewichtLoadedRef.current = false
     try {
       const res = await fetch(`/api/transport-vehicles/festgewicht?transportId=${transportId}`)
       const data = (await res.json()) as ApiResponse<{
@@ -164,11 +447,44 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
       if (data.success && data.data) {
         setManuellEntries(data.data.manuell)
         setFestgewichtEquipment(data.data.equipment ?? [])
+        festgewichtLoadedRef.current = true
       }
     } catch (e) {
       console.error('Failed to load festgewicht:', e)
     }
   }
+
+  const loadMitreisende = async () => {
+    try {
+      const res = await fetch('/api/mitreisende?includeGroups=1')
+      const data = (await res.json()) as ApiResponse<Mitreisender[]>
+      if (data.success && data.data) {
+        setMitreisende(data.data)
+        const weights: Record<string, string> = {}
+        for (const m of data.data) {
+          weights[m.id] =
+            m.koerpergewicht != null && m.koerpergewicht > 0 ? String(m.koerpergewicht) : ''
+        }
+        setPersonWeights(weights)
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
+  const loadGruppen = async () => {
+    try {
+      const res = await fetch('/api/mitreisenden-gruppen')
+      const data = (await res.json()) as ApiResponse<MitreisendenGruppe[]>
+      if (data.success && data.data) setGruppen(data.data)
+    } catch {
+      /* ignore */
+    }
+  }
+
+  useEffect(() => {
+    void loadGruppen()
+  }, [])
 
   useEffect(() => {
     if (vehicles.length === 0) {
@@ -187,6 +503,22 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
       .catch(() => {})
   }, [vehicles])
 
+  useEffect(() => {
+    if (editingVehicle && showDialog) {
+      void loadFestgewicht(editingVehicle.id)
+      if (isZugfaehig(editingVehicle.fahrzeugtyp)) {
+        void loadMitreisende()
+      }
+      setShowWeiterePersonen(false)
+    } else {
+      setManuellEntries([])
+      setFestgewichtEquipment([])
+      setFestInstalliertExpanded(false)
+      festgewichtLoadedRef.current = false
+      setShowWeiterePersonen(false)
+    }
+  }, [editingVehicle, showDialog])
+
   const handleWartung = (vehicle: TransportVehicle) => {
     const count = wartungCountByTransportId.get(vehicle.id) ?? 0
     if (count > 0) {
@@ -196,55 +528,151 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
     }
   }
 
-  useEffect(() => {
-    if (editingVehicle && showDialog) {
-      loadFestgewicht(editingVehicle.id)
-    } else {
-      setManuellEntries([])
-      setFestgewichtEquipment([])
-      setFestInstalliertExpanded(false)
+  const buildPayload = () => {
+    const name = form.name.trim()
+    const eigen = parseWeightInput(form.eigengewicht)
+    if (!name) return { error: 'Bitte geben Sie einen Namen ein' }
+    if (eigen === null || eigen < 0) return { error: 'Eigengewicht muss 0 oder größer sein' }
+
+    if (anbauMode) {
+      const trag = parseWeightInput(form.maxTraglast)
+      if (trag === null || trag <= 0) return { error: 'Max. Traglast muss größer als 0 sein' }
+      return {
+        payload: {
+          name,
+          fahrzeugtyp: form.fahrzeugtyp,
+          hersteller: form.hersteller.trim() || null,
+          modell: form.modell.trim() || null,
+          icon: form.icon || iconKeyFromFahrzeugtyp(form.fahrzeugtyp),
+          eigengewicht: eigen,
+          maxTraglast: trag,
+          zulGesamtgewicht: eigen + trag,
+          aktivVon: form.aktivVon || null,
+          aktivBis: form.aktivBis || null,
+          traegerTransportId: form.traegerTransportId || null,
+          maxStuetzlast: null,
+          gruppeId: form.gruppeId || defaultGruppeId || null,
+          urlaubStandard: form.urlaubStandard,
+        },
+      }
     }
-  }, [editingVehicle, showDialog])
+
+    const zul = parseWeightInput(form.zulGesamtgewicht)
+    if (zul === null || zul <= 0) return { error: 'Zulässiges Gesamtgewicht muss größer als 0 sein' }
+    const stuetz = parseWeightInput(form.maxStuetzlast)
+    return {
+      payload: {
+        name,
+        fahrzeugtyp: form.fahrzeugtyp,
+        hersteller: form.hersteller.trim() || null,
+        modell: form.modell.trim() || null,
+        icon: form.icon || iconKeyFromFahrzeugtyp(form.fahrzeugtyp),
+        eigengewicht: eigen,
+        zulGesamtgewicht: zul,
+        maxStuetzlast: stuetz != null && stuetz > 0 ? stuetz : null,
+        maxTraglast: null,
+        aktivVon: form.aktivVon || null,
+        aktivBis: form.aktivBis || null,
+        traegerTransportId: null,
+        gruppeId: form.gruppeId || defaultGruppeId || null,
+        urlaubStandard: form.urlaubStandard,
+      },
+    }
+  }
+
+  /** Differentielles Sync – nie „alles löschen“, wenn Laden fehlgeschlagen ist. */
+  const syncFestgewichte = async (transportId: string) => {
+    if (!festgewichtLoadedRef.current) return
+    const resFest = await fetch(`/api/transport-vehicles/festgewicht?transportId=${transportId}`)
+    const dataFest = (await resFest.json()) as ApiResponse<{
+      manuell: TransportVehicleFestgewichtManuell[]
+    }>
+    const prevManuell = dataFest.success && dataFest.data ? dataFest.data.manuell : []
+    const keepIds = new Set(
+      manuellEntries.filter((e) => e.id && e.titel.trim()).map((e) => e.id)
+    )
+
+    for (const e of prevManuell) {
+      if (!keepIds.has(e.id)) {
+        await fetch(`/api/transport-vehicles/festgewicht-manuell?id=${e.id}`, { method: 'DELETE' })
+      }
+    }
+    for (const e of manuellEntries) {
+      if (!e.titel.trim()) continue
+      const gewicht = e.gewicht >= 0 ? e.gewicht : 0
+      if (e.id && keepIds.has(e.id)) {
+        const prev = prevManuell.find((p) => p.id === e.id)
+        if (prev && prev.titel === e.titel.trim() && prev.gewicht === gewicht) continue
+        await fetch('/api/transport-vehicles/festgewicht-manuell', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: e.id, titel: e.titel.trim(), gewicht }),
+        })
+      } else if (!e.id) {
+        await fetch('/api/transport-vehicles/festgewicht-manuell', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            transportId,
+            titel: e.titel.trim(),
+            gewicht,
+          }),
+        })
+      }
+    }
+  }
+
+  const savePersonWeights = async () => {
+    if (!zugfaehigMode) return
+    // Nur sichtbare / relevante Personen speichern (Standard + ggf. weitere)
+    const toSave = showWeiterePersonen ? mitreisende : haushaltPersonen
+    for (const m of toSave) {
+      const raw = personWeights[m.id]
+      const parsed = raw != null && raw !== '' ? parseWeightInput(raw) : null
+      const next = parsed != null && parsed > 0 ? parsed : null
+      const prev = m.koerpergewicht != null && m.koerpergewicht > 0 ? m.koerpergewicht : null
+      if (next === prev) continue
+      await fetch('/api/mitreisende', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: m.id,
+          name: m.name,
+          userId: m.user_id ?? null,
+          gruppeId: m.gruppe_id ?? null,
+          personentyp: m.personentyp,
+          farbe: m.farbe ?? null,
+          koerpergewicht: next,
+        }),
+      })
+    }
+  }
 
   const handleCreate = async () => {
-    const name = form.name.trim()
-    const zul = parseWeightInput(form.zulGesamtgewicht)
-    const eigen = parseWeightInput(form.eigengewicht)
-    if (!name) {
-      alert('Bitte geben Sie einen Namen ein')
+    const built = buildPayload()
+    if ('error' in built && built.error) {
+      alert(built.error)
       return
     }
-    if (zul === null || zul <= 0) {
-      alert('Zulässiges Gesamtgewicht muss größer als 0 sein')
-      return
-    }
-    if (eigen === null || eigen < 0) {
-      alert('Eigengewicht muss 0 oder größer sein')
-      return
-    }
-
+    if (!('payload' in built) || !built.payload) return
     setIsLoading(true)
     try {
       const res = await fetch('/api/transport-vehicles', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name,
-          icon: form.icon,
-          zulGesamtgewicht: zul,
-          eigengewicht: eigen,
-        }),
+        body: JSON.stringify(built.payload),
       })
       const data = (await res.json()) as ApiResponse<{ id: string }>
       if (data.success && data.data?.id) {
         const newId = data.data.id
         for (const e of manuellEntries) {
+          if (!e.titel.trim()) continue
           await fetch('/api/transport-vehicles/festgewicht-manuell', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               transportId: newId,
-              titel: e.titel,
+              titel: e.titel.trim(),
               gewicht: e.gewicht,
             }),
           })
@@ -265,65 +693,30 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
 
   const handleUpdate = async () => {
     if (!editingVehicle) return
-    const name = form.name.trim()
-    const zul = parseWeightInput(form.zulGesamtgewicht)
-    const eigen = parseWeightInput(form.eigengewicht)
-    if (!name) {
-      alert('Bitte geben Sie einen Namen ein')
+    const built = buildPayload()
+    if ('error' in built && built.error) {
+      alert(built.error)
       return
     }
-    if (zul === null || zul <= 0) {
-      alert('Zulässiges Gesamtgewicht muss größer als 0 sein')
-      return
-    }
-    if (eigen === null || eigen < 0) {
-      alert('Eigengewicht muss 0 oder größer sein')
-      return
-    }
-
+    if (!('payload' in built) || !built.payload) return
     setIsLoading(true)
     try {
       const res = await fetch('/api/transport-vehicles', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: editingVehicle.id,
-          name,
-          icon: form.icon,
-          zulGesamtgewicht: zul,
-          eigengewicht: eigen,
-        }),
+        body: JSON.stringify({ id: editingVehicle.id, ...built.payload }),
       })
       const data = (await res.json()) as ApiResponse<unknown>
       if (data.success) {
         try {
-          const resFest = await fetch(
-            `/api/transport-vehicles/festgewicht?transportId=${editingVehicle.id}`
-          )
-          const dataFest = (await resFest.json()) as ApiResponse<{
-            manuell: TransportVehicleFestgewichtManuell[]
-          }>
-          const prevManuell = dataFest.success && dataFest.data ? dataFest.data.manuell : []
-          for (const e of prevManuell) {
-            await fetch(`/api/transport-vehicles/festgewicht-manuell?id=${e.id}`, {
-              method: 'DELETE',
-            })
-          }
-          for (const e of manuellEntries) {
-            if (e.titel.trim()) {
-              await fetch('/api/transport-vehicles/festgewicht-manuell', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  transportId: editingVehicle.id,
-                  titel: e.titel.trim(),
-                  gewicht: e.gewicht >= 0 ? e.gewicht : 0,
-                }),
-              })
-            }
-          }
+          await syncFestgewichte(editingVehicle.id)
         } catch (festErr) {
-          console.warn('Festgewicht-Sync fehlgeschlagen (Migration 0006 evtl. nicht ausgeführt):', festErr)
+          console.warn('Festgewicht-Sync fehlgeschlagen:', festErr)
+        }
+        try {
+          await savePersonWeights()
+        } catch (pwErr) {
+          console.warn('Personengewichte-Sync fehlgeschlagen:', pwErr)
         }
         setShowDialog(false)
         setEditingVehicle(null)
@@ -340,35 +733,102 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
     }
   }
 
-  const resetForm = () => {
-    setForm({
-      name: '',
-      icon: 'van',
-      zulGesamtgewicht: '',
-      eigengewicht: '',
-    })
-    setManuellEntries([])
-  }
-
-  const handleDelete = (id: string) => setDeleteVehicleId(id)
-
-  const executeDelete = async () => {
-    if (!deleteVehicleId) return
+  const handleReplace = async () => {
+    if (!replaceVehicle || !tauschdatum) {
+      alert('Bitte Tauschdatum angeben')
+      return
+    }
+    const built = buildPayload()
+    if ('error' in built && built.error) {
+      alert(built.error)
+      return
+    }
+    if (!('payload' in built) || !built.payload) return
     setIsLoading(true)
     try {
-      const res = await fetch(`/api/transport-vehicles?id=${deleteVehicleId}`, {
-        method: 'DELETE',
+      const res = await fetch('/api/transport-vehicles', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...built.payload,
+          replaceOfId: replaceVehicle.id,
+          tauschdatum,
+        }),
       })
-      const data = (await res.json()) as ApiResponse<unknown>
+      const data = (await res.json()) as ApiResponse<{ id: string }>
       if (data.success) {
-        setDeleteVehicleId(null)
+        setReplaceVehicle(null)
+        setTauschdatum('')
+        resetForm()
         onRefresh()
       } else {
         alert('Fehler: ' + (data.error ?? 'Unbekannt'))
       }
     } catch (error) {
-      console.error('Failed to delete transport vehicle:', error)
-      alert('Fehler beim Löschen')
+      console.error('Failed to replace transport vehicle:', error)
+      alert('Fehler beim Ersetzen')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const resetForm = () => {
+    setForm(emptyForm(defaultGruppeId))
+    setManuellEntries([])
+  }
+
+  const handleDelete = (id: string) => {
+    setDeleteVehicleId(id)
+    setDeleteInUse(null)
+    setDeleteMode('inactivate')
+    setDeleteUsageLoading(true)
+    void fetch(`/api/transport-vehicles?usageId=${encodeURIComponent(id)}`)
+      .then((r) => r.json())
+      .then((raw: unknown) => {
+        const data = raw as ApiResponse<{ inUse: boolean }>
+        const inUse = !!(data.success && data.data?.inUse)
+        setDeleteInUse(inUse)
+        setDeleteMode(inUse ? 'inactivate' : 'delete')
+      })
+      .catch(() => {
+        setDeleteInUse(true)
+        setDeleteMode('inactivate')
+      })
+      .finally(() => setDeleteUsageLoading(false))
+  }
+
+  const executeDeleteOrInactivate = async () => {
+    if (!deleteVehicleId) return
+    setIsLoading(true)
+    try {
+      if (deleteMode === 'inactivate') {
+        const res = await fetch('/api/transport-vehicles', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: deleteVehicleId, action: 'inactivate' }),
+        })
+        const data = (await res.json()) as ApiResponse<unknown>
+        if (data.success) {
+          setDeleteVehicleId(null)
+          onRefresh()
+        } else {
+          alert('Fehler: ' + (data.error ?? 'Unbekannt'))
+        }
+      } else {
+        const res = await fetch(`/api/transport-vehicles?id=${deleteVehicleId}`, {
+          method: 'DELETE',
+        })
+        const data = (await res.json()) as ApiResponse<unknown>
+        if (data.success) {
+          setDeleteVehicleId(null)
+          onRefresh()
+        } else {
+          alert('Fehler: ' + (data.error ?? 'Unbekannt'))
+        }
+      }
+    } catch (error) {
+      console.error('Failed to remove transport vehicle:', error)
+      alert(deleteMode === 'inactivate' ? 'Fehler beim Inaktivieren' : 'Fehler beim Löschen')
     } finally {
       setIsLoading(false)
     }
@@ -376,18 +836,75 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
 
   const openEdit = (vehicle: TransportVehicle) => {
     setEditingVehicle(vehicle)
+    setReplaceVehicle(null)
+    setAktivDatesExpanded(false)
+    const typ = isFahrzeugtyp(vehicle.fahrzeugtyp) ? vehicle.fahrzeugtyp : 'auto'
     setForm({
       name: vehicle.name,
-      icon: resolveTransportIconKeyForForm(vehicle.icon, vehicle.name),
+      fahrzeugtyp: typ,
+      icon: resolveTransportIconKeyForForm(
+        vehicle.icon ?? iconKeyFromFahrzeugtyp(typ),
+        vehicle.name
+      ),
+      hersteller: vehicle.hersteller ?? '',
+      modell: vehicle.modell ?? '',
       zulGesamtgewicht: String(vehicle.zul_gesamtgewicht),
       eigengewicht: String(vehicle.eigengewicht),
+      maxStuetzlast: vehicle.max_stuetzlast != null ? String(vehicle.max_stuetzlast) : '',
+      maxTraglast:
+        vehicle.max_traglast != null
+          ? String(vehicle.max_traglast)
+          : isAnbau(typ)
+            ? String(Math.max(vehicle.zul_gesamtgewicht - vehicle.eigengewicht, 0))
+            : '',
+      aktivVon: vehicle.aktiv_von ?? '',
+      aktivBis: vehicle.aktiv_bis ?? '',
+      traegerTransportId: vehicle.traeger_transport_id ?? '',
+      gruppeId: vehicle.gruppe_id ?? defaultGruppeId,
+      urlaubStandard: !!vehicle.urlaub_standard,
     })
     setShowDialog(true)
   }
 
   const openNew = () => {
     setEditingVehicle(null)
-    resetForm()
+    setReplaceVehicle(null)
+    setAktivDatesExpanded(false)
+    const today = todayInAppTimezone()
+    setForm({ ...emptyForm(defaultGruppeId), aktivVon: today })
+    setManuellEntries([])
+    festgewichtLoadedRef.current = true
+    setShowDialog(true)
+  }
+
+  const openReplace = (vehicle: TransportVehicle) => {
+    setReplaceVehicle(vehicle)
+    setEditingVehicle(null)
+    setAktivDatesExpanded(false)
+    const typ = isFahrzeugtyp(vehicle.fahrzeugtyp) ? vehicle.fahrzeugtyp : 'auto'
+    const swap = todayInAppTimezone()
+    setForm({
+      name: vehicle.name,
+      fahrzeugtyp: typ,
+      icon: resolveTransportIconKeyForForm(
+        vehicle.icon ?? iconKeyFromFahrzeugtyp(typ),
+        vehicle.name
+      ),
+      hersteller: vehicle.hersteller ?? '',
+      modell: vehicle.modell ?? '',
+      zulGesamtgewicht: String(vehicle.zul_gesamtgewicht),
+      eigengewicht: String(vehicle.eigengewicht),
+      maxStuetzlast: vehicle.max_stuetzlast != null ? String(vehicle.max_stuetzlast) : '',
+      maxTraglast: '',
+      // Server setzt aktivVon = Tauschdatum; Form spiegelt das für die Statusanzeige
+      aktivVon: swap,
+      aktivBis: '',
+      traegerTransportId: '',
+      gruppeId: vehicle.gruppe_id ?? defaultGruppeId,
+      urlaubStandard: !!vehicle.urlaub_standard,
+    })
+    setTauschdatum(swap)
+    festgewichtLoadedRef.current = true
     setShowDialog(true)
   }
 
@@ -421,31 +938,114 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
     }
   }
 
+  const dialogTitle = replaceVehicle
+    ? 'Fahrzeug ersetzen'
+    : editingVehicle
+      ? 'Transportmittel bearbeiten'
+      : 'Neues Transportmittel'
+
   return (
     <div className="space-y-6">
       <div className="space-y-2">
         {vehicles.length === 0 ? (
           <BrandEmptyState
             className="min-h-[36vh] py-10"
-            illustration={
-              <TransportEmptyIllustration className={EMPTY_ILLUSTRATION_CLASS} />
-            }
+            illustration={<TransportEmptyIllustration className={EMPTY_ILLUSTRATION_CLASS} />}
             title="Noch keine Transportmittel"
             description="Legt Fahrzeuge oder Anhänger an – für Gewichte, Packstatus und Wartung."
           />
         ) : (
-          <div className="space-y-2">
-            {vehicles.map((vehicle) => (
-              <TransportmittelRow
-                key={vehicle.id}
-                vehicle={vehicle}
-                onEdit={openEdit}
-                onDelete={handleDelete}
-                onWartung={handleWartung}
-                wartungCount={wartungCountByTransportId.get(vehicle.id) ?? 0}
-                canManageWartung={canWriteWartung}
-              />
-            ))}
+          <div className="space-y-6">
+            {showHaushaltSelect ? (
+              <div className="flex flex-wrap items-center gap-2 pb-0.5">
+                <p className="text-sm font-semibold text-brand-heading">{standardGruppeName}</p>
+                <span className="inline-flex items-center rounded-full bg-[rgb(45,79,30)]/10 px-1.5 py-0.5 text-[10px] font-medium text-[rgb(45,79,30)]">
+                  Standard
+                </span>
+              </div>
+            ) : null}
+            <VehicleSection
+              title="Fahrzeuge (selbstfahrend)"
+              vehicles={standardGrouped.zug}
+              onEdit={openEdit}
+              onDelete={handleDelete}
+              onReplace={openReplace}
+              onWartung={handleWartung}
+              wartungCountByTransportId={wartungCountByTransportId}
+              canManageWartung={canWriteWartung}
+              showHaushalt={false}
+            />
+            <VehicleSection
+              title="Anhänger / Wohnwagen"
+              vehicles={standardGrouped.gezogen}
+              onEdit={openEdit}
+              onDelete={handleDelete}
+              onReplace={openReplace}
+              onWartung={handleWartung}
+              wartungCountByTransportId={wartungCountByTransportId}
+              canManageWartung={canWriteWartung}
+              showHaushalt={false}
+            />
+            <VehicleSection
+              title="Anbauten"
+              vehicles={standardGrouped.anbau}
+              onEdit={openEdit}
+              onDelete={handleDelete}
+              onReplace={openReplace}
+              onWartung={handleWartung}
+              wartungCountByTransportId={wartungCountByTransportId}
+              canManageWartung={canWriteWartung}
+              showHaushalt={false}
+            />
+
+            {otherHaushalte.length > 0 ? (
+              <div className="space-y-5 rounded-xl border border-dashed border-muted-foreground/30 bg-muted/25 px-3 py-4 sm:px-4">
+                <p className="text-sm font-medium text-muted-foreground">Weitere Haushalte</p>
+                {otherHaushalte.map((haushalt) => (
+                  <div key={haushalt.id} className="space-y-3">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground border-b border-dashed border-muted-foreground/25 pb-1">
+                      {haushalt.name}
+                    </p>
+                    <VehicleSection
+                      title="Fahrzeuge (selbstfahrend)"
+                      vehicles={haushalt.grouped.zug}
+                      onEdit={openEdit}
+                      onDelete={handleDelete}
+                      onReplace={openReplace}
+                      onWartung={handleWartung}
+                      wartungCountByTransportId={wartungCountByTransportId}
+                      canManageWartung={canWriteWartung}
+                      showHaushalt={false}
+                      isOtherHaushalt
+                    />
+                    <VehicleSection
+                      title="Anhänger / Wohnwagen"
+                      vehicles={haushalt.grouped.gezogen}
+                      onEdit={openEdit}
+                      onDelete={handleDelete}
+                      onReplace={openReplace}
+                      onWartung={handleWartung}
+                      wartungCountByTransportId={wartungCountByTransportId}
+                      canManageWartung={canWriteWartung}
+                      showHaushalt={false}
+                      isOtherHaushalt
+                    />
+                    <VehicleSection
+                      title="Anbauten"
+                      vehicles={haushalt.grouped.anbau}
+                      onEdit={openEdit}
+                      onDelete={handleDelete}
+                      onReplace={openReplace}
+                      onWartung={handleWartung}
+                      wartungCountByTransportId={wartungCountByTransportId}
+                      canManageWartung={canWriteWartung}
+                      showHaushalt={false}
+                      isOtherHaushalt
+                    />
+                  </div>
+                ))}
+              </div>
+            ) : null}
           </div>
         )}
       </div>
@@ -462,33 +1062,119 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
 
       <ResponsiveModal
         open={showDialog}
-        onOpenChange={setShowDialog}
-        title={editingVehicle ? 'Transportmittel bearbeiten' : 'Neues Transportmittel'}
+        onOpenChange={(open) => {
+          setShowDialog(open)
+          if (!open) {
+            setReplaceVehicle(null)
+            setEditingVehicle(null)
+          }
+        }}
+        title={dialogTitle}
         contentClassName="max-w-2xl max-h-[90vh] overflow-y-auto"
         noPadding
       >
         <div className="space-y-4 px-6 pt-4 pb-6">
+          {replaceVehicle && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/30 p-3 text-sm space-y-2">
+              <p>
+                Ersetzt <strong>{replaceVehicle.name}</strong>. Vergangene Urlaube behalten das alte
+                Fahrzeug; zukünftige und die Ausrüstung werden umgestellt.
+              </p>
+              <div>
+                <Label>Tauschdatum *</Label>
+                <CalendarDatePicker
+                  value={tauschdatum}
+                  onChange={(v) => {
+                    setTauschdatum(v)
+                    setForm((prev) => ({ ...prev, aktivVon: v }))
+                  }}
+                  placeholder="Tauschdatum wählen"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Altes Fahrzeug: aktiv bis Vortag · Neues: aktiv ab diesem Datum.
+                </p>
+              </div>
+            </div>
+          )}
+
+          <div>
+            <Label>Fahrzeugtyp *</Label>
+            <Select
+              value={form.fahrzeugtyp}
+              onValueChange={(v) => {
+                const typ = v as Fahrzeugtyp
+                setForm((prev) => ({
+                  ...prev,
+                  fahrzeugtyp: typ,
+                  icon: iconKeyFromFahrzeugtyp(typ),
+                }))
+                if (isZugfaehig(typ) && editingVehicle) {
+                  void loadMitreisende()
+                }
+              }}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {FAHRZEUGTYPEN.map((t) => (
+                  <SelectItem key={t} value={t}>
+                    {FAHRZEUGTYP_LABELS[t]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
           <div>
             <Label htmlFor="vehicle-name">Name *</Label>
             <Input
               id="vehicle-name"
               value={form.name}
-              onChange={(e) => {
-                const name = e.target.value
-                setForm((prev) => ({
-                  ...prev,
-                  name,
-                  icon: editingVehicle
-                    ? prev.icon
-                    : inferTransportIconFromName(name),
-                }))
-              }}
-              placeholder="z.B. Wohnwagen, Auto"
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              placeholder="z.B. VW Passat, Knaus Südwind"
             />
           </div>
+
+          {showHaushaltSelect && (
+            <div>
+              <Label>Haushalt</Label>
+              <Select
+                value={form.gruppeId || defaultGruppeId}
+                onValueChange={(v) => setForm((prev) => ({ ...prev, gruppeId: v }))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Haushalt wählen" />
+                </SelectTrigger>
+                <SelectContent>
+                  {gruppen.map((g) => (
+                    <SelectItem key={g.id} value={g.id}>
+                      {g.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          <div className="flex items-start gap-2 rounded-lg border px-3 py-2.5">
+            <Checkbox
+              id="urlaub-standard"
+              checked={form.urlaubStandard}
+              onCheckedChange={(c) => setForm((prev) => ({ ...prev, urlaubStandard: !!c }))}
+              className="mt-0.5"
+            />
+            <Label htmlFor="urlaub-standard" className="cursor-pointer text-sm font-normal">
+              Standardmäßig bei Urlauben vorauswählen
+            </Label>
+          </div>
+
           <div>
-            <Label>Icon (Packliste)</Label>
-            <div className="mt-2 flex flex-wrap gap-2">
+            <Label>Icon</Label>
+            <p className="text-xs text-muted-foreground mb-2">
+              Wird beim Typwechsel automatisch gesetzt, kann aber überschrieben werden.
+            </p>
+            <div className="flex flex-wrap gap-2">
               {TRANSPORT_ICON_OPTIONS.map(({ key, label, Icon }) => (
                 <button
                   key={key}
@@ -509,42 +1195,276 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
               ))}
             </div>
           </div>
-          <div>
-            <Label>Zulässiges Gesamtgewicht *</Label>
-            <WeightInput
-              value={form.zulGesamtgewicht}
-              onChange={(_, parsed) =>
-                setForm({ ...form, zulGesamtgewicht: parsed != null ? String(parsed) : '' })
-              }
-              placeholder="z.B. 2000"
-            />
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label>Hersteller</Label>
+              <Input
+                value={form.hersteller}
+                onChange={(e) => setForm({ ...form, hersteller: e.target.value })}
+                placeholder="z.B. VW"
+              />
+            </div>
+            <div>
+              <Label>Modell</Label>
+              <Input
+                value={form.modell}
+                onChange={(e) => setForm({ ...form, modell: e.target.value })}
+                placeholder="z.B. Passat Variant"
+              />
+            </div>
           </div>
-          <div>
-            <Label>Eigengewicht *</Label>
-            <WeightInput
-              value={form.eigengewicht}
-              onChange={(_, parsed) =>
-                setForm({ ...form, eigengewicht: parsed != null ? String(parsed) : '' })
-              }
-              placeholder="z.B. 1475"
-            />
-            <p className="text-xs text-muted-foreground mt-1">
-              Nutzlast = Zul. Gesamtgewicht − Eigengewicht
-            </p>
-          </div>
+
+          {anbauMode ? (
+            <>
+              <div>
+                <Label>Eigengewicht *</Label>
+                <WeightInput
+                  value={form.eigengewicht}
+                  onChange={(_, parsed) =>
+                    setForm({ ...form, eigengewicht: parsed != null ? String(parsed) : '' })
+                  }
+                  placeholder="z.B. 18"
+                />
+              </div>
+              <div>
+                <Label>Max. Traglast *</Label>
+                <WeightInput
+                  value={form.maxTraglast}
+                  onChange={(_, parsed) =>
+                    setForm({ ...form, maxTraglast: parsed != null ? String(parsed) : '' })
+                  }
+                  placeholder="z.B. 50"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Beladung wird gegen die Traglast geprüft; Eigengewicht + Beladung zählen am Träger.
+                </p>
+              </div>
+              <div>
+                <Label>Trägerfahrzeug</Label>
+                <Select
+                  value={form.traegerTransportId || '__none__'}
+                  onValueChange={(v) => {
+                    const tid = v === '__none__' ? '' : v
+                    const traeger = tid ? vehicles.find((x) => x.id === tid) : null
+                    setForm((prev) => ({
+                      ...prev,
+                      traegerTransportId: tid,
+                      gruppeId: traeger?.gruppe_id || prev.gruppeId || defaultGruppeId,
+                    }))
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Kein Träger" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">Kein Träger</SelectItem>
+                    {traegerOptions.map((v) => (
+                      <SelectItem key={v.id} value={v.id}>
+                        {v.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </>
+          ) : (
+            <>
+              <div>
+                <Label>Zulässiges Gesamtgewicht *</Label>
+                <WeightInput
+                  value={form.zulGesamtgewicht}
+                  onChange={(_, parsed) =>
+                    setForm({ ...form, zulGesamtgewicht: parsed != null ? String(parsed) : '' })
+                  }
+                  placeholder="z.B. 2000"
+                />
+              </div>
+              <div>
+                <Label>Eigengewicht *</Label>
+                <WeightInput
+                  value={form.eigengewicht}
+                  onChange={(_, parsed) =>
+                    setForm({ ...form, eigengewicht: parsed != null ? String(parsed) : '' })
+                  }
+                  placeholder="z.B. 1475"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Nutzlast = Zul. Gesamtgewicht − Eigengewicht
+                </p>
+              </div>
+              {showStuetzlast && (
+                <div>
+                  <Label>Max. Stützlast</Label>
+                  <WeightInput
+                    value={form.maxStuetzlast}
+                    onChange={(_, parsed) =>
+                      setForm({ ...form, maxStuetzlast: parsed != null ? String(parsed) : '' })
+                    }
+                    placeholder="z.B. 100"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Bei Zugfahrzeug und Wohnwagen: wirksames Limit = Minimum beider Werte.
+                  </p>
+                </div>
+              )}
+            </>
+          )}
+
+          <Collapsible open={aktivDatesExpanded} onOpenChange={setAktivDatesExpanded}>
+            <div className="rounded-lg border overflow-hidden">
+              <CollapsibleTrigger asChild>
+                <button
+                  type="button"
+                  className="flex w-full items-center justify-between px-3 py-2 text-left hover:bg-muted/40 transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    {aktivDatesExpanded ? (
+                      <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                    ) : (
+                      <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                    )}
+                    <span className="text-sm font-medium">Status</span>
+                    <span
+                      className={cn(
+                        'inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium',
+                        formIsActive
+                          ? 'bg-[rgb(45,79,30)]/10 text-[rgb(45,79,30)]'
+                          : 'bg-muted text-muted-foreground'
+                      )}
+                    >
+                      {formIsActive ? 'Aktiv' : 'Inaktiv'}
+                    </span>
+                  </div>
+                  <span className="text-xs text-muted-foreground">
+                    {aktivDatesExpanded ? 'Zeitraum ausblenden' : 'Zeitraum bearbeiten'}
+                  </span>
+                </button>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <div className="space-y-3 border-t bg-muted/20 px-3 py-3">
+                  <p className="text-xs font-medium text-muted-foreground">Aktivitätszeitraum</p>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <Label>Aktiv von</Label>
+                        {form.aktivVon ? (
+                          <button
+                            type="button"
+                            className="text-[11px] text-muted-foreground hover:text-foreground underline-offset-2 hover:underline"
+                            onClick={() => setForm((prev) => ({ ...prev, aktivVon: '' }))}
+                          >
+                            Leeren
+                          </button>
+                        ) : null}
+                      </div>
+                      <CalendarDatePicker
+                        value={form.aktivVon}
+                        onChange={(ymd) => setForm((prev) => ({ ...prev, aktivVon: ymd }))}
+                        placeholder="Optional"
+                        dialogTitle="Aktiv von"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <Label>Aktiv bis</Label>
+                        {form.aktivBis ? (
+                          <button
+                            type="button"
+                            className="text-[11px] text-muted-foreground hover:text-foreground underline-offset-2 hover:underline"
+                            onClick={() => setForm((prev) => ({ ...prev, aktivBis: '' }))}
+                          >
+                            Leeren
+                          </button>
+                        ) : null}
+                      </div>
+                      <CalendarDatePicker
+                        value={form.aktivBis}
+                        onChange={(ymd) => setForm((prev) => ({ ...prev, aktivBis: ymd }))}
+                        placeholder="Optional"
+                        dialogTitle="Aktiv bis"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </CollapsibleContent>
+            </div>
+          </Collapsible>
+
+          {editingVehicle && !replaceVehicle && zugfaehigMode && (
+            <div className="space-y-2">
+              <Label>Personengewichte</Label>
+              <p className="text-xs text-muted-foreground">
+                Nur bei selbstfahrenden Fahrzeugen. Eine Person zählt nur in einem Auto – nicht bei
+                Wohnwagen oder Anbauten. Stammdaten an der Person; alte „Insassen“-Festgewichte bei
+                Bedarf später manuell entfernen.
+              </p>
+              <div className="space-y-2 border rounded-lg p-3">
+                {visiblePersonen.length === 0 ? (
+                  <p className="text-sm text-muted-foreground italic">
+                    Keine Personen in diesem Haushalt.
+                  </p>
+                ) : (
+                  visiblePersonen.map((m) => (
+                    <div key={m.id} className="flex gap-2 items-center">
+                      <span className="flex-1 text-sm">
+                        {m.name}
+                        {form.gruppeId && m.gruppe_id !== form.gruppeId && (
+                          <span className="text-muted-foreground/70 text-xs ml-1">
+                            · {m.gruppe_name ?? 'anderer Haushalt'}
+                          </span>
+                        )}
+                      </span>
+                      <WeightInput
+                        value={personWeights[m.id] ?? ''}
+                        onChange={(_, parsed) =>
+                          setPersonWeights((prev) => ({
+                            ...prev,
+                            [m.id]: parsed != null ? String(parsed) : '',
+                          }))
+                        }
+                        className="w-28"
+                        placeholder="kg"
+                      />
+                    </div>
+                  ))
+                )}
+                {anderePersonen.length > 0 && !showWeiterePersonen && (
+                  <button
+                    type="button"
+                    className="text-[11px] text-muted-foreground/60 hover:text-muted-foreground underline-offset-2 hover:underline pt-1"
+                    onClick={() => setShowWeiterePersonen(true)}
+                  >
+                    Weitere Personen einblenden
+                  </button>
+                )}
+                {showWeiterePersonen && anderePersonen.length > 0 && (
+                  <button
+                    type="button"
+                    className="text-[11px] text-muted-foreground/60 hover:text-muted-foreground underline-offset-2 hover:underline pt-1"
+                    onClick={() => setShowWeiterePersonen(false)}
+                  >
+                    Weitere ausblenden
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
 
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <Label>Manuelle Festgewicht-Einträge</Label>
+              <Label>Weitere Festgewichte</Label>
               <Button type="button" variant="outline" size="sm" onClick={addManuellEntry}>
                 <Plus className="h-4 w-4 mr-1" />
                 Hinzufügen
               </Button>
             </div>
+            <p className="text-xs text-muted-foreground">
+              z.B. Tank, Batterie. Nicht für Insassen oder Anbauten nutzen, die bereits als
+              Transportmittel geführt werden.
+            </p>
             {manuellEntries.length === 0 ? (
-              <p className="text-sm text-muted-foreground italic py-2">
-                Keine manuellen Einträge (z.B. Stützlast, Insassen, Tank)
-              </p>
+              <p className="text-sm text-muted-foreground italic py-2">Keine manuellen Einträge</p>
             ) : (
               <div className="space-y-2 border rounded-lg p-3">
                 {manuellEntries.map((entry, idx) => (
@@ -552,14 +1472,12 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
                     <Input
                       value={entry.titel}
                       onChange={(e) => updateManuellEntry(idx, 'titel', e.target.value)}
-                      placeholder="z.B. Stützlast"
+                      placeholder="z.B. Tank"
                       className="flex-1"
                     />
                     <WeightInput
                       value={String(entry.gewicht)}
-                      onChange={(_, parsed) =>
-                        updateManuellEntry(idx, 'gewicht', parsed ?? 0)
-                      }
+                      onChange={(_, parsed) => updateManuellEntry(idx, 'gewicht', parsed ?? 0)}
                       className="w-28"
                     />
                     <Button
@@ -577,7 +1495,7 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
             )}
           </div>
 
-          {editingVehicle && (
+          {editingVehicle && !replaceVehicle && (
             <Collapsible open={festInstalliertExpanded} onOpenChange={setFestInstalliertExpanded}>
               <CollapsibleTrigger className="flex items-center gap-2 text-sm font-medium">
                 {festInstalliertExpanded ? (
@@ -617,23 +1535,98 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
           )}
 
           <Button
-            onClick={editingVehicle ? handleUpdate : handleCreate}
+            onClick={
+              replaceVehicle ? handleReplace : editingVehicle ? handleUpdate : handleCreate
+            }
             disabled={isLoading}
             className="w-full"
           >
-            {isLoading ? 'Wird gespeichert...' : editingVehicle ? 'Aktualisieren' : 'Erstellen'}
+            {isLoading
+              ? 'Wird gespeichert...'
+              : replaceVehicle
+                ? 'Ersetzen'
+                : editingVehicle
+                  ? 'Aktualisieren'
+                  : 'Erstellen'}
           </Button>
         </div>
       </ResponsiveModal>
 
-      <ConfirmDialog
+      <ResponsiveModal
         open={!!deleteVehicleId}
-        onOpenChange={(open) => !open && setDeleteVehicleId(null)}
-        title="Transportmittel löschen"
-        description="Möchten Sie dieses Transportmittel wirklich löschen? Die Zuordnung bei Ausrüstungsgegenständen und Packlisten-Einträgen wird entfernt."
-        onConfirm={executeDelete}
-        isLoading={isLoading}
-      />
+        onOpenChange={(open) => {
+          if (!open) setDeleteVehicleId(null)
+        }}
+        title="Transportmittel entfernen"
+        description={`Was soll mit „${deleteVehicleName}“ geschehen?`}
+      >
+        <div className="space-y-4 pt-1">
+          {deleteUsageLoading ? (
+            <p className="text-sm text-muted-foreground">Nutzung wird geprüft…</p>
+          ) : (
+            <RadioGroup
+              value={deleteMode}
+              onValueChange={(v) => setDeleteMode(v as 'inactivate' | 'delete')}
+              className="gap-3"
+            >
+              <label
+                className={cn(
+                  'flex items-start gap-3 rounded-lg border p-3 cursor-pointer transition-colors',
+                  deleteMode === 'inactivate' ? 'border-[rgb(45,79,30)] bg-[rgb(45,79,30)]/5' : 'border-border'
+                )}
+              >
+                <RadioGroupItem value="inactivate" className="mt-0.5" />
+                <div className="space-y-0.5">
+                  <p className="text-sm font-medium">Inaktivieren</p>
+                  <p className="text-xs text-muted-foreground">
+                    Bleibt in der Historie, erscheint aber nicht mehr in neuen Urlauben.
+                    {deleteInUse === true ? ' Empfohlen, weil bereits verwendet.' : ''}
+                  </p>
+                </div>
+              </label>
+              <label
+                className={cn(
+                  'flex items-start gap-3 rounded-lg border p-3 cursor-pointer transition-colors',
+                  deleteMode === 'delete' ? 'border-destructive/50 bg-destructive/5' : 'border-border'
+                )}
+              >
+                <RadioGroupItem value="delete" className="mt-0.5" />
+                <div className="space-y-0.5">
+                  <p className="text-sm font-medium">Endgültig löschen</p>
+                  <p className="text-xs text-muted-foreground">
+                    Entfernt Zuordnungen in Ausrüstung und Packlisten.
+                    {deleteInUse === false ? ' Empfohlen, weil noch nicht verwendet.' : ''}
+                  </p>
+                </div>
+              </label>
+            </RadioGroup>
+          )}
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-1">
+            <Button
+              variant="outline"
+              onClick={() => setDeleteVehicleId(null)}
+              disabled={isLoading}
+              className="w-full sm:w-auto"
+            >
+              Abbrechen
+            </Button>
+            <Button
+              variant={deleteMode === 'delete' ? 'destructive' : 'default'}
+              onClick={() => void executeDeleteOrInactivate()}
+              disabled={isLoading || deleteUsageLoading}
+              className="w-full sm:w-auto"
+            >
+              {isLoading
+                ? deleteMode === 'inactivate'
+                  ? 'Wird inaktiviert…'
+                  : 'Wird gelöscht…'
+                : deleteMode === 'inactivate'
+                  ? 'Inaktivieren'
+                  : 'Löschen'}
+            </Button>
+          </div>
+        </div>
+      </ResponsiveModal>
     </div>
   )
 }

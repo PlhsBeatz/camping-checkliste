@@ -16,6 +16,8 @@ import {
   cacheMitreisendenGruppen,
   cacheVacationMitreisende,
   cacheTransportVehicles,
+  cacheVacationTransports,
+  getCachedVacationTransports,
   cachePackingItems,
   cacheChecklisten,
   cacheOptimierungen,
@@ -297,6 +299,15 @@ export async function getCachedTransportVehicles(): Promise<TransportVehicle[]> 
   return rows.map(stripMeta)
 }
 
+export async function getCachedVacationTransportIds(
+  vacationId: string
+): Promise<string[]> {
+  const row = await getCachedVacationTransports(vacationId)
+  return row?.transportIds ?? []
+}
+
+export { cacheVacationTransports, getCachedVacationTransports }
+
 export async function getCachedPackingItems(
   vacationId: string
 ): Promise<PackingItem[]> {
@@ -460,6 +471,7 @@ export const cacheFns = {
   mitreisende: cacheMitreisende,
   vacationMitreisende: cacheVacationMitreisende,
   transportVehicles: cacheTransportVehicles,
+  vacationTransports: cacheVacationTransports,
   packingItems: cachePackingItems,
   checklisten: cacheChecklisten,
   optimierungen: cacheOptimierungen,
@@ -765,6 +777,16 @@ function resolveRoute(e: SyncQueueEntry): ResolvedRoute | null {
     }
     case 'equipment-items-replace': {
       return { method: 'POST', url: '/api/equipment-items/replace', body: e.payload }
+    }
+    case 'vacation-transports': {
+      if (e.action === 'put') {
+        return {
+          method: 'PUT',
+          url: '/api/vacations/transports',
+          body: e.payload,
+        }
+      }
+      return null
     }
     default:
       return null

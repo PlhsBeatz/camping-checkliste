@@ -6,6 +6,7 @@ import { ResponsiveModal } from '@/components/ui/responsive-modal'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { MitreisendeManager } from '@/components/mitreisende-manager'
+import { UrlaubTransportManager } from '@/components/urlaub-transport-manager'
 import { cn } from '@/lib/utils'
 import { getCachedCampingplaetze } from '@/lib/offline-sync'
 import type { ApiResponse } from '@/lib/api-types'
@@ -248,6 +249,8 @@ export function VacationEditModal({
   const [apiStaysByKey, setApiStaysByKey] = useState<Record<string, VacationCampingStay>>({})
   const [campingSearchOpen, setCampingSearchOpen] = useState(false)
   const [vacationMitreisende, setVacationMitreisende] = useState<Mitreisender[]>([])
+  const [pendingTransportIds, setPendingTransportIds] = useState<string[] | null>(null)
+  const [pendingSitz, setPendingSitz] = useState<Record<string, string | null>>({})
   const [newVacationForm, setNewVacationForm] = useState<VacationFormState>(emptyVacationForm)
   const [showVacationSettingsModal, setShowVacationSettingsModal] = useState(false)
   const [abfahrtPopoverOpen, setAbfahrtPopoverOpen] = useState(false)
@@ -515,6 +518,19 @@ export function VacationEditModal({
             body: JSON.stringify({
               vacationId: vacationIdForCamping,
               mitreisendeIds: selectedIds,
+              sitzTransportByMitreisender: pendingSitz,
+            }),
+          })
+        }
+
+        if (!isEditing && pendingTransportIds && pendingTransportIds.length > 0) {
+          await fetch('/api/vacations/transports', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              vacationId: vacationIdForCamping,
+              transportIds: pendingTransportIds,
+              sitzTransportByMitreisender: pendingSitz,
             }),
           })
         }
@@ -1048,6 +1064,17 @@ export function VacationEditModal({
           <MitreisendeManager
             vacationId={vacationId}
             onMitreisendeChange={setVacationMitreisende}
+          />
+
+          <UrlaubTransportManager
+            vacationId={vacationId}
+            startdatum={newVacationForm.startdatum || new Date().toISOString().slice(0, 10)}
+            abfahrtdatum={newVacationForm.abfahrtdatum}
+            mitreisende={vacationMitreisende}
+            onSelectionChange={(ids, sitz) => {
+              setPendingTransportIds(ids)
+              setPendingSitz(sitz)
+            }}
           />
 
           <Button onClick={handleSaveVacation} disabled={isLoading} className="w-full">

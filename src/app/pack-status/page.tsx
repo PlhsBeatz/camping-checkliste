@@ -269,7 +269,7 @@ function PackStatusContent() {
                     Gewichtsübersicht
                   </CardTitle>
                   <CardDescription>
-                    Kapazität (Zuladung) und Aufteilung in Fest installiert, Beladung und Reserve
+                    Kapazität (Zuladung/Traglast) inkl. Personen, Anbauten und Reserve
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -286,7 +286,8 @@ function PackStatusContent() {
                     ))}
                     {packStatus.transportOverview.length === 0 && (
                       <p className="text-sm text-muted-foreground">
-                        Keine Transportmittel konfiguriert oder keine Packliste vorhanden.
+                        Keine Transportmittel für diesen Urlaub ausgewählt. Bitte im Urlaub
+                        bearbeiten wählen.
                       </p>
                     )}
                   </div>
@@ -342,40 +343,6 @@ function PackStatusContent() {
   )
 }
 
-function WeightSegmentLabel({
-  dotClass,
-  label,
-  value,
-  valueClass,
-  style,
-  align = 'center',
-}: {
-  dotClass: string
-  label: string
-  value: string
-  valueClass?: string
-  style?: React.CSSProperties
-  align?: 'left' | 'center' | 'right'
-}) {
-  return (
-    <div
-      className={cn(
-        'absolute top-0 text-xs whitespace-nowrap',
-        align === 'left' && 'left-0',
-        align === 'center' && '-translate-x-1/2',
-        align === 'right' && 'right-0 left-auto'
-      )}
-      style={style}
-    >
-      <div className="flex items-center gap-1.5">
-        <span className={cn('h-2 w-2 rounded-full shrink-0', dotClass)} aria-hidden />
-        <span className="text-muted-foreground">{label}</span>
-      </div>
-      <p className={cn('font-medium tabular-nums mt-0.5 pl-3.5', valueClass)}>{value}</p>
-    </div>
-  )
-}
-
 function TransportWeightCard({
   data,
   missingWeightCount = 0,
@@ -383,38 +350,130 @@ function TransportWeightCard({
   data: PackStatusTransportOverview
   missingWeightCount?: number
 }) {
-  const { transportName, zuladung, festInstalliert, beladung, reserve } = data
+  const {
+    transportName,
+    zuladung,
+    festInstalliert,
+    beladung,
+    personenGewicht = 0,
+    anbautenGewicht = 0,
+    reserve,
+    stuetzlastLimit,
+    anbauOhneTraeger,
+    traegerHinweis,
+    fahrzeugtyp,
+  } = data
+  const isAnbauCard =
+    fahrzeugtyp === 'dachbox' || fahrzeugtyp === 'hecktraeger'
+  const showPersonen = !isAnbauCard && personenGewicht > 0
+  const showAnbauten = !isAnbauCard && anbautenGewicht > 0
   const reservePct = zuladung > 0 ? (reserve / zuladung) * 100 : 0
   const isNegative = reserve < 0
   const isLow = !isNegative && reservePct < 10 && reservePct >= 0
 
-  const festPct = zuladung > 0 ? (festInstalliert / zuladung) * 100 : 0
-  const beladPct = zuladung > 0 ? (beladung / zuladung) * 100 : 0
+  const pct = (kg: number) => (zuladung > 0 ? (kg / zuladung) * 100 : 0)
+  const festPct = pct(festInstalliert)
+  const beladPct = pct(beladung)
+  const personenPct = pct(showPersonen ? personenGewicht : 0)
+  const anbautenPct = pct(showAnbauten ? anbautenGewicht : 0)
   const reservePctBar = zuladung > 0 ? Math.max(0, (reserve / zuladung) * 100) : 0
-
-  const beladLabelLeft = festPct + beladPct / 2
 
   const reserveColorClass = isNegative ? 'text-red-600' : isLow ? 'text-amber-600' : 'text-emerald-600'
   const reserveDotClass = isNegative ? 'bg-red-400' : isLow ? 'bg-amber-400' : 'bg-emerald-400'
+  const capacityLabel = isAnbauCard ? 'Traglast' : 'Zuladung'
+
+  const legendRows: Array<{
+    key: string
+    dotClass: string
+    label: string
+    value: string
+    valueClass?: string
+  }> = [
+    {
+      key: 'fest',
+      dotClass: 'bg-amber-200',
+      label: 'Fest installiert',
+      value: formatWeight(festInstalliert, 0),
+    },
+    {
+      key: 'beladung',
+      dotClass: 'bg-[rgb(45,79,30)]/80',
+      label: 'Beladung',
+      value: formatWeight(beladung, 0),
+    },
+  ]
+  if (showPersonen) {
+    legendRows.push({
+      key: 'personen',
+      dotClass: 'bg-accent-orange',
+      label: 'Personen',
+      value: formatWeight(personenGewicht, 0),
+    })
+  }
+  if (showAnbauten) {
+    legendRows.push({
+      key: 'anbauten',
+      dotClass: 'bg-violet-400',
+      label: 'Anbauten',
+      value: formatWeight(anbautenGewicht, 0),
+    })
+  }
+  legendRows.push({
+    key: 'reserve',
+    dotClass: reserveDotClass,
+    label: 'Reserve',
+    value: formatWeight(reserve, 0),
+    valueClass: cn('font-semibold', reserveColorClass),
+  })
 
   return (
     <div className="rounded-xl border border-border bg-card p-4 sm:p-5">
       <div className="flex items-start justify-between gap-3 mb-4">
-        <h3 className="font-semibold text-brand-heading">{transportName}</h3>
+        <div>
+          <h3 className="font-semibold text-brand-heading">{transportName}</h3>
+          {traegerHinweis && (
+            <p className="text-xs text-muted-foreground mt-0.5">{traegerHinweis}</p>
+          )}
+          {anbauOhneTraeger && (
+            <p className="text-xs text-amber-600 mt-0.5">Kein Träger im Urlaub gewählt</p>
+          )}
+        </div>
         <div className="text-right shrink-0">
-          <span className="text-xs text-muted-foreground block">Zuladung</span>
+          <span className="text-xs text-muted-foreground block">{capacityLabel}</span>
           <span className="font-semibold tabular-nums">{formatWeight(zuladung, 0)}</span>
         </div>
       </div>
 
       <div className="space-y-3 mb-4">
         <div className="h-8 rounded-lg overflow-hidden flex bg-muted">
-          <div className="bg-amber-200 min-w-0 transition-all" style={{ width: `${festPct}%` }} title="Fest installiert" />
-          <div
-            className="bg-[rgb(45,79,30)]/80 min-w-0 transition-all"
-            style={{ width: `${beladPct}%` }}
-            title="Beladung"
-          />
+          {festPct > 0 && (
+            <div
+              className="bg-amber-200 min-w-0 transition-all"
+              style={{ width: `${festPct}%` }}
+              title="Fest installiert"
+            />
+          )}
+          {beladPct > 0 && (
+            <div
+              className="bg-[rgb(45,79,30)]/80 min-w-0 transition-all"
+              style={{ width: `${beladPct}%` }}
+              title="Beladung"
+            />
+          )}
+          {personenPct > 0 && (
+            <div
+              className="bg-accent-orange min-w-0 transition-all"
+              style={{ width: `${personenPct}%` }}
+              title="Personen"
+            />
+          )}
+          {anbautenPct > 0 && (
+            <div
+              className="bg-violet-400 min-w-0 transition-all"
+              style={{ width: `${anbautenPct}%` }}
+              title="Anbauten"
+            />
+          )}
           <div
             className={cn(
               'min-w-0 transition-all',
@@ -426,64 +485,23 @@ function TransportWeightCard({
           />
         </div>
 
-        <div className="sm:hidden space-y-2 text-sm">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="h-2.5 w-2.5 rounded-full bg-amber-200 shrink-0" />
-              <span className="text-muted-foreground">Fest installiert</span>
+        <div className="space-y-2 text-sm">
+          {legendRows.map((row) => (
+            <div key={row.key} className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className={cn('h-2.5 w-2.5 rounded-full shrink-0', row.dotClass)} />
+                <span className="text-muted-foreground truncate">{row.label}</span>
+              </div>
+              <span className={cn('font-medium tabular-nums shrink-0', row.valueClass)}>
+                {row.value}
+              </span>
             </div>
-            <span className="font-medium tabular-nums">{formatWeight(festInstalliert, 0)}</span>
-          </div>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="h-2.5 w-2.5 rounded-full bg-[rgb(45,79,30)]/80 shrink-0" />
-              <span className="text-muted-foreground">Beladung</span>
-            </div>
-            <span className="font-medium tabular-nums">{formatWeight(beladung, 0)}</span>
-          </div>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className={cn('h-2.5 w-2.5 rounded-full shrink-0', reserveDotClass)} />
-              <span className="text-muted-foreground">Reserve</span>
-            </div>
-            <span className={cn('font-semibold tabular-nums', reserveColorClass)}>
-              {formatWeight(reserve, 0)}
-            </span>
-          </div>
-        </div>
-
-        <div className="hidden sm:block relative h-14">
-          {festInstalliert > 0 && (
-            <WeightSegmentLabel
-              dotClass="bg-amber-200"
-              label="Fest installiert"
-              value={formatWeight(festInstalliert, 0)}
-              align="left"
-            />
+          ))}
+          {stuetzlastLimit != null && stuetzlastLimit > 0 && (
+            <p className="text-xs text-muted-foreground pt-1">
+              Stützlast-Limit (Kapazität): {formatWeight(stuetzlastLimit, 0)}
+            </p>
           )}
-          {beladPct >= 8 && (
-            <WeightSegmentLabel
-              dotClass="bg-[rgb(45,79,30)]/80"
-              label="Beladung"
-              value={formatWeight(beladung, 0)}
-              style={{ left: `${beladLabelLeft}%` }}
-            />
-          )}
-          {beladPct < 8 && beladung > 0 && (
-            <WeightSegmentLabel
-              dotClass="bg-[rgb(45,79,30)]/80"
-              label="Beladung"
-              value={formatWeight(beladung, 0)}
-              style={{ left: `${beladLabelLeft}%` }}
-            />
-          )}
-          <WeightSegmentLabel
-            dotClass={reserveDotClass}
-            label="Reserve"
-            value={formatWeight(reserve, 0)}
-            valueClass={cn('font-semibold', reserveColorClass)}
-            align="right"
-          />
         </div>
       </div>
 
