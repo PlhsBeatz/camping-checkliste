@@ -39,8 +39,9 @@ export type WohnwagenResearchResult = {
 }
 
 const SYSTEM = `Du recherchierst technische Daten und den Grundriss zu einem Wohnwagen/Caravan (Europa).
-PRIORITÄT 1: Offizielle Hersteller-Website / PDF-Katalog / technische Daten.
-PRIORITÄT 2: Nur wenn Hersteller nichts liefert – Vergleichsportale.
+
+Maße: Offizielle Hersteller-Website / PDF-Katalog bevorzugen; Vergleichsportale als Ergänzung ok.
+Bilder: DIREKTE Bild-URL (.jpg/.png/.webp) des 2D-Grundrisses/Plattegronds – Hersteller ODER Vergleichsportal (z. B. caravanvergelijker), solange es der echte Grundriss ist. PDF-Links sind KEINE Bild-URLs.
 
 Antworte NUR als JSON:
 {
@@ -54,6 +55,7 @@ Antworte NUR als JSON:
   "laenge_hinweis": string|null,
   "deichsel_im_grundriss": boolean|null,
   "grundriss_bild_url": string|null,
+  "grundriss_bild_urls": string[]|null,
   "source_url": string|null,
   "manufacturer_url": string|null,
   "notes": string|null,
@@ -67,11 +69,11 @@ Maß-Regeln (sehr wichtig):
 - breite_m = Außenbreite.
 - Alle Längen in Metern (z. B. 812 cm → 8.12).
 
-Bild-Regeln (sehr strikt):
-- grundriss_bild_url: NUR direkte URL eines 2D-Grundrisses/Plattegronds (Draufsicht mit Möbeln/Räumen als Linienzeichnung oder Plan).
-- NIEMALS: Innenraumfotos, Außenfotos, Hero-/Lifestyle-Bilder, Galerie, Thumbnails von Fotos.
-- URL/Dateiname sollte Begriffe wie grundriss, plattegrond, floorplan, layout, indeling enthalten – sonst null.
-- Kein HTML als Bild-URL. Lieber null als falsches Foto.
+Bild-Regeln:
+- grundriss_bild_url: beste direkte Bild-URL des Grundrisses/Plattegronds (Draufsicht).
+- grundriss_bild_urls: bis zu 8 weitere direkte Bild-URLs (Alternativen), falls bekannt.
+- Keine Außen-/Innenfotos als beste Wahl. Kein HTML, kein PDF als Bild-URL.
+- Vergleichsportale mit Hosting des Grundriss-Bildes sind erwünscht, wenn der Hersteller nur PDF liefert.
 - deichsel_im_grundriss: true wenn die Deichsel im Grundriss mitgezeichnet ist, false wenn nur der Aufbau, null wenn unklar.
 - source_url / manufacturer_url: Seiten der Quellen.`
 
@@ -80,11 +82,11 @@ const BROWSER_UA =
 
 /** Positive Signale für echten Grundriss/Plattegrond in URL/Text. */
 const FLOORPLAN_RE =
-  /plattegrond|floor[_-]?plan|floorplan|grundriss|grundrissplan|lageplan|indeling|wohnraumplan|aufteilung|floor_plan|site[_-]?plan|layout[_-]?(plan|ww|caravan|wagen)|plan[_-]?(layout|floor)/i
+  /plattegrond|floor[_-]?plan|floorplan|grundriss|grundrissplan|lageplan|indeling|wohnraumplan|aufteilung|floor_plan|site[_-]?plan|\blayout\b|layout[_-]?(plan|ww|caravan|wagen)|plan[_-]?(layout|floor)/i
 
-/** Klare Foto-/Galerie-Signale – ohne Floorplan-Keyword ablehnen. */
+/** Foto-/Galerie-Signale – nur weich abwerten (User wählt manuell). */
 const PHOTO_REJECT_RE =
-  /interieur|interior|binnen(?:kant|kijker)?|innen(?:raum|ansicht|foto)?|außen|aussen|exterior|buiten|outdoor|lifestyle|gallery|galerie|hero|slider|carousel|mood|detailfoto|close[_-]?up|wohnraumfoto|schla[^/]*foto|badfoto|kueche|küche|kitchen|bedroom|bathroom|living|sitzgruppe|dinette|panorama|360|video|thumb(?!.*(?:grundriss|plattegrond|floor))/i
+  /interieur|interior|binnen(?:kant|kijker)?|innen(?:raum|ansicht|foto)?|außen|aussen|exterior|buiten|outdoor|lifestyle|gallery|galerie|hero|slider|carousel|mood|detailfoto|close[_-]?up|wohnraumfoto|schla[^/]*foto|badfoto|kueche|küche|kitchen|bedroom|bathroom|living|sitzgruppe|dinette|panorama|360|video/i
 
 function asNum(v: unknown): number | null {
   if (v == null || v === '') return null
@@ -144,19 +146,27 @@ function scoreImageCandidate(url: string, modelHint: string, hersteller: string)
   const floor = hasFloorplanSignal(lower)
   const photo = hasPhotoRejectSignal(lower)
 
-  // Foto ohne Grundriss-Signal: hart verwerfen
-  if (photo && !floor) return -200
-
-  let score = scoreSourceUrl(url, hersteller)
-  if (floor) score += 120
-  else score -= 40 // ohne Keyword deutlich abwerten
+  // Domains nur leicht gewichten – Vergleichsportale dürfen gute Grundrisse liefern
+  let score = Math.min(40, Math.max(0, scoreSourceUrl(url, hersteller) * 0.25))
+  if (floor) score += 80
   if (/\.(webp|png)$/i.test(lower)) score += 5
   for (const t of modelHint.toLowerCase().split(/[^a-z0-9]+/).filter((x) => x.length >= 2)) {
-    if (lower.includes(t)) score += 6
+    if (lower.includes(t)) score += 8
   }
-  // „foto“ allein oft Galerie – nur ohne Floorplan bestrafen
-  if (/\bfoto\b|\bphoto\b|\bimage\b/i.test(lower) && !floor) score -= 40
+  if (photo && !floor) score -= 50
+  else if (/\bfoto\b|\bphoto\b/i.test(lower) && !floor) score -= 30
+  if (/\.pdf(\?|$)/i.test(lower)) score -= 100
   return score
+}
+
+function asUrlList(v: unknown): string[] {
+  if (!Array.isArray(v)) return []
+  const out: string[] = []
+  for (const item of v) {
+    const s = asStr(item)
+    if (s && !out.includes(s)) out.push(s)
+  }
+  return out
 }
 
 /**
@@ -358,9 +368,6 @@ async function discoverViaWordpressMedia(
         const url = item.source_url?.trim()
         if (!url) return null
         const label = `${item.alt_text ?? ''} ${item.title?.rendered ?? ''} ${url}`
-        if (hasPhotoRejectSignal(label) && !hasFloorplanSignal(label)) return null
-        // WP-Medien ohne Grundriss-Hinweis in Titel/Alt/URL überspringen
-        if (!hasFloorplanSignal(label)) return null
         return {
           url,
           score: scoreImageCandidate(label, `${hersteller} ${modell}`, hersteller),
@@ -387,6 +394,8 @@ const MAX_FLOORPLAN_CANDIDATES = 8
 /** Sammelt bis zu 8 Bild-Kandidaten zur manuellen Auswahl (nicht automatisch speichern). */
 export async function collectFloorplanCandidates(opts: {
   imageUrl: string | null
+  /** Extra KI-Vorschläge (Reihenfolge beibehalten) */
+  imageUrls?: string[]
   sourceUrl: string | null
   manufacturerUrl: string | null
   hersteller: string
@@ -397,16 +406,23 @@ export async function collectFloorplanCandidates(opts: {
   const seedUrls: string[] = []
   const found: FloorplanCandidate[] = []
   const seenFinal = new Set<string>()
+  const aiSeedSet = new Set<string>()
 
-  const prefer = [opts.imageUrl, opts.manufacturerUrl, opts.sourceUrl].filter(
-    (u): u is string => !!u
-  )
-  prefer.sort((a, b) => scoreSourceUrl(b, opts.hersteller) - scoreSourceUrl(a, opts.hersteller))
-  for (const u of prefer) {
+  // KI-URLs zuerst (früher oft der richtige Grundriss, auch von Vergleichsportalen)
+  for (const u of [opts.imageUrl, ...(opts.imageUrls ?? [])].filter((x): x is string => !!x)) {
+    if (/\.pdf(\?|$)/i.test(u)) continue
+    if (!seedUrls.includes(u)) {
+      seedUrls.push(u)
+      aiSeedSet.add(u.split('?')[0] ?? u)
+    }
+  }
+  for (const u of [opts.sourceUrl, opts.manufacturerUrl].filter((x): x is string => !!x)) {
+    if (/\.pdf(\?|$)/i.test(u)) continue
     if (!seedUrls.includes(u)) seedUrls.push(u)
   }
 
-  for (const page of [opts.manufacturerUrl, opts.sourceUrl].filter((u): u is string => !!u)) {
+  for (const page of [opts.sourceUrl, opts.manufacturerUrl].filter((u): u is string => !!u)) {
+    if (/\.pdf(\?|$)/i.test(page)) continue
     const media = await discoverViaWordpressMedia(page, opts.hersteller, opts.modell)
     for (const u of media) {
       if (!seedUrls.includes(u)) seedUrls.push(u)
@@ -420,49 +436,65 @@ export async function collectFloorplanCandidates(opts: {
   }
 
   const errors: string[] = []
-  const ranked = [...seedUrls].sort(
-    (a, b) =>
-      scoreImageCandidate(b, modelHint, opts.hersteller) -
-      scoreImageCandidate(a, modelHint, opts.hersteller)
-  )
+  // KI-Seeds behalten Priorität; Rest nach Score
+  const ranked = [
+    ...seedUrls.filter((u) => aiSeedSet.has(u.split('?')[0] ?? u)),
+    ...seedUrls
+      .filter((u) => !aiSeedSet.has(u.split('?')[0] ?? u))
+      .sort(
+        (a, b) =>
+          scoreImageCandidate(b, modelHint, opts.hersteller) -
+          scoreImageCandidate(a, modelHint, opts.hersteller)
+      ),
+  ]
 
   const pushCandidate = (url: string, score: number, hint: string) => {
     const key = url.split('?')[0] ?? url
     if (seenFinal.has(key)) return
-    if (hasPhotoRejectSignal(url) && !hasFloorplanSignal(url)) return
-    if (score < -50) return
+    if (score < -80) return
     seenFinal.add(key)
     found.push({ url, score, hint })
   }
 
-  for (const candidate of ranked.slice(0, 20)) {
+  for (const candidate of ranked.slice(0, 22)) {
     if (found.length >= MAX_FLOORPLAN_CANDIDATES) break
     if (tried.includes(candidate)) continue
     tried.push(candidate)
-    if (hasPhotoRejectSignal(candidate) && !hasFloorplanSignal(candidate)) {
-      errors.push(`URL als Foto übersprungen: ${candidate}`)
+    if (/\.pdf(\?|$)/i.test(candidate)) {
+      errors.push(`PDF übersprungen: ${candidate}`)
       continue
     }
-    const referer = opts.manufacturerUrl || opts.sourceUrl || undefined
+    const isAiSeed = aiSeedSet.has(candidate.split('?')[0] ?? candidate)
+    const referer = opts.sourceUrl || opts.manufacturerUrl || undefined
     const fetched = await fetchUrl(candidate, { referer })
 
     if (fetched.kind === 'image') {
       const score = scoreImageCandidate(fetched.finalUrl, modelHint, opts.hersteller)
-      const likelihood = await estimateFloorplanLikelihood(fetched.bytes, fetched.mime)
       const floor = hasFloorplanSignal(fetched.finalUrl)
-      // Für manuelle Auswahl: großzügiger – User entscheidet
-      if (floor || likelihood >= 0.4 || score >= 80) {
+      // KI-Vorschlag und früherer Schwellwert (~60) – User wählt manuell
+      if (isAiSeed || floor || score >= 50) {
+        let likelihood = 0.5
+        try {
+          likelihood = await estimateFloorplanLikelihood(fetched.bytes, fetched.mime)
+        } catch {
+          /* ignore */
+        }
+        // Innenfotos mit sehr niedrigem Raster nur behalten wenn KI oder starkes Keyword
+        if (!isAiSeed && !floor && likelihood < 0.28 && score < 70) {
+          errors.push(`Bild unwahrscheinlich: ${fetched.finalUrl}`)
+          continue
+        }
         pushCandidate(
           fetched.finalUrl,
-          score + Math.round(likelihood * 40),
-          floor
-            ? `Grundriss-URL · Raster ${likelihood.toFixed(2)}`
-            : likelihood >= 0.4
-              ? `Möglicher Plan · Raster ${likelihood.toFixed(2)}`
+          (isAiSeed ? score + 40 : score) + Math.round(likelihood * 30),
+          isAiSeed
+            ? 'KI-Vorschlag'
+            : floor
+              ? `Grundriss-URL`
               : `Kandidat · Score ${score}`
         )
       } else {
-        errors.push(`Bild unwahrscheinlich: ${fetched.finalUrl}`)
+        errors.push(`Bild Score zu niedrig: ${fetched.finalUrl}`)
       }
       continue
     }
@@ -474,11 +506,9 @@ export async function collectFloorplanCandidates(opts: {
           score: scoreImageCandidate(url, modelHint, opts.hersteller),
         }))
         .sort((a, b) => b.score - a.score)
-      const preferred = fromHtml.filter((h) => hasFloorplanSignal(h.url))
-      const soft = fromHtml.filter(
-        (h) => !hasFloorplanSignal(h.url) && !hasPhotoRejectSignal(h.url) && h.score >= 60
-      )
-      for (const hit of [...preferred, ...soft].slice(0, 14)) {
+      // Wie früher: Top-Treffer ab Score ~50, Keywords bevorzugen
+      const preferred = fromHtml.filter((h) => hasFloorplanSignal(h.url) || h.score >= 50)
+      for (const hit of preferred.slice(0, 12)) {
         if (found.length >= MAX_FLOORPLAN_CANDIDATES) break
         if (tried.includes(hit.url)) continue
         tried.push(hit.url)
@@ -487,17 +517,11 @@ export async function collectFloorplanCandidates(opts: {
           if (img.kind === 'error') errors.push(img.detail)
           continue
         }
-        const likelihood = await estimateFloorplanLikelihood(img.bytes, img.mime)
-        const floor = hasFloorplanSignal(img.finalUrl)
-        if (floor || likelihood >= 0.35 || hit.score >= 90) {
-          pushCandidate(
-            img.finalUrl,
-            hit.score + Math.round(likelihood * 40),
-            floor
-              ? `Aus Seite · Grundriss-URL`
-              : `Aus Seite · Raster ${likelihood.toFixed(2)}`
-          )
-        }
+        pushCandidate(
+          img.finalUrl,
+          hit.score + (hasFloorplanSignal(img.finalUrl) ? 20 : 0),
+          hasFloorplanSignal(img.finalUrl) ? 'Aus Seite · Grundriss' : 'Aus Seite'
+        )
       }
       continue
     }
@@ -505,7 +529,13 @@ export async function collectFloorplanCandidates(opts: {
     if (fetched.kind === 'error') errors.push(fetched.detail)
   }
 
-  found.sort((a, b) => b.score - a.score)
+  // KI-Vorschläge oben halten, danach Score
+  found.sort((a, b) => {
+    const aAi = a.hint.startsWith('KI-Vorschlag') ? 1 : 0
+    const bAi = b.hint.startsWith('KI-Vorschlag') ? 1 : 0
+    if (aAi !== bAi) return bAi - aAi
+    return b.score - a.score
+  })
   const top = found.slice(0, MAX_FLOORPLAN_CANDIDATES)
   return {
     candidates: top,
@@ -614,15 +644,15 @@ export async function researchAndUpsertWohnwagenKatalog(
   const domains = herstellerDomainsFor(hersteller)
   const domainHint =
     domains.length > 0
-      ? ` Hersteller-Domains bevorzugen: ${domains.join(', ')}.`
-      : ' Offizielle Hersteller-Website bevorzugen.'
+      ? ` Maße bevorzugt von: ${domains.join(', ')}.`
+      : ' Maße bevorzugt von der Hersteller-Website.'
 
   const ai = await chatJson({
     apiKey: input.apiKey,
     system: SYSTEM,
-    user: `Finde Maße (Gesamtlänge MIT Deichsel UND Aufbaulänge OHNE Deichsel, Breite) und ein Grundriss-Bild für: ${hersteller} ${modell}${yearHint}.${domainHint}
-Beispiel LMC Vivo 522 K: Gesamtlänge 8,12 m, Aufbaulänge außen 6,79 m, Breite 2,52 m – bitte analog für dieses Modell belegen.
-grundriss_bild_url: nur 2D-Plattegrond/Grundriss (Draufsicht), nie Innenraum- oder Außenfoto. Dateiname/URL möglichst mit grundriss|plattegrond|floorplan. Wenn unsicher → null.`,
+    user: `Finde Maße (Gesamtlänge MIT Deichsel UND Aufbaulänge OHNE Deichsel, Breite) und direkte Grundriss-Bild-URLs für: ${hersteller} ${modell}${yearHint}.${domainHint}
+Beispiel LMC Vivo 522 K: Gesamtlänge 8,12 m, Aufbaulänge außen 6,79 m, Breite 2,52 m.
+grundriss_bild_url / grundriss_bild_urls: direkte .jpg/.png/.webp des 2D-Grundrisses – auch von Vergleichsportalen, wenn der Hersteller nur PDF/Katalog hat. Kein PDF als Bild-URL.`,
     plugins: [{ id: 'web' }],
     trigger: 'explicit',
     title: 'Camping Packliste Wohnwagen-Katalog',
@@ -666,8 +696,6 @@ grundriss_bild_url: nur 2D-Plattegrond/Grundriss (Draufsicht), nie Innenraum- od
   }
 
   const massHinweisParts = [
-    asStr(j.laenge_hinweis),
-    asStr(j.notes),
     gesamt != null && aufbau != null
       ? `Deichsel-Anteil ca. ${(gesamt - aufbau).toFixed(2)} m`
       : null,
@@ -694,6 +722,7 @@ grundriss_bild_url: nur 2D-Plattegrond/Grundriss (Draufsicht), nie Innenraum- od
   )
 
   const aiImageUrl = asStr(j.grundriss_bild_url)
+  const aiImageUrls = asUrlList(j.grundriss_bild_urls)
   const sourceUrl = asStr(j.source_url)
   const manufacturerUrl = asStr(j.manufacturer_url)
 
@@ -705,6 +734,7 @@ grundriss_bild_url: nur 2D-Plattegrond/Grundriss (Draufsicht), nie Innenraum- od
   let imageWarning: string | null = null
   const collected = await collectFloorplanCandidates({
     imageUrl: aiImageUrl,
+    imageUrls: aiImageUrls,
     sourceUrl,
     manufacturerUrl,
     hersteller: asStr(j.hersteller) || hersteller,

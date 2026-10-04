@@ -488,8 +488,6 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
       }
       const {
         entry,
-        imageWarning,
-        sourceNotes,
         massKlarheit,
         imageCandidates: candidates = [],
         existingImageUrl,
@@ -512,27 +510,21 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
       setExistingPickUrl(existing)
       setImageCandidates(candidates)
       setKatalogImageUrl(existing)
-      if (existing) {
-        setImagePickSelection('keep')
-      } else if (candidates[0]) {
+      if (candidates[0]) {
         setImagePickSelection(`url:${candidates[0].url}`)
+      } else if (existing) {
+        setImagePickSelection('keep')
       } else {
         setImagePickSelection('skip')
       }
-      const parts = [
-        `Aus Netz: ${entry.hersteller} ${entry.modell}`,
-        massKlarheit || entry.mass_hinweis,
-        candidates.length > 0
-          ? `${candidates.length} Bildvorschlag(e) – bitte das richtige auswählen und übernehmen.`
-          : existing
-            ? 'Bestehendes Bild gefunden – behalten, neu zuschneiden oder Suche ohne Bild lassen.'
-            : 'Keine Bildkandidaten – Maße übernommen, Grundriss ggf. später erneut suchen.',
-        imageWarning && candidates.length === 0 ? imageWarning : null,
-        entry.source_url ? `Quelle: ${entry.source_url}` : null,
-        sourceNotes && sourceNotes !== massKlarheit ? sourceNotes : null,
-        editingVehicle?.id ? 'Maße am Fahrzeug übernommen.' : null,
-      ].filter(Boolean)
-      setKatalogHint(parts.join('\n'))
+      setKatalogHint(
+        [
+          `Aus Netz: ${entry.hersteller} ${entry.modell}`,
+          massKlarheit || entry.mass_hinweis,
+        ]
+          .filter(Boolean)
+          .join('\n')
+      )
       if (editingVehicle?.id) onRefresh()
     } catch {
       setKatalogHint('Netz-Aktualisierung fehlgeschlagen (offline / API?).')
@@ -1713,9 +1705,8 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
                 </div>
               )}
               <p className="text-xs text-muted-foreground">
-                „Aus Netz aktualisieren“ sucht Maße und bis zu 8 Bildvorschläge. Du wählst das
-                richtige Grundriss-Bild; erst dann wird es gespeichert und zugeschnitten. Ohne
-                Maße: manuell eintragen (Rechteck aus Länge×Breite).
+                „Aus Netz aktualisieren“ sucht Maße und bis zu 8 Grundriss-Vorschläge (auch von
+                Vergleichsportalen). Du wählst das richtige Bild; erst dann wird es gespeichert.
               </p>
             </div>
           )}
