@@ -32,6 +32,10 @@ export type WohnwagenResearchResult = {
   imageWarning?: string | null
   sourceNotes?: string | null
   massKlarheit?: string | null
+  /** Bis zu 8 Kandidaten – User wählt in der UI */
+  imageCandidates: FloorplanCandidate[]
+  /** Bereits vorhandenes Katalog-/Fahrzeugbild (URL relativ zur App) */
+  existingImageUrl: string | null
 }
 
 const SYSTEM = `Du recherchierst technische Daten und den Grundriss zu einem Wohnwagen/Caravan (Europa).
@@ -266,34 +270,6 @@ async function estimateFloorplanLikelihood(
   }
 }
 
-async function acceptFloorplanImage(
-  bytes: Uint8Array,
-  mime: string,
-  url: string,
-  score: number
-): Promise<{ ok: true; reason: string } | { ok: false; reason: string }> {
-  const lower = url.toLowerCase()
-  if (hasPhotoRejectSignal(lower) && !hasFloorplanSignal(lower)) {
-    return { ok: false, reason: 'Foto-/Galerie-URL ohne Grundriss-Signal' }
-  }
-  const floorSignal = hasFloorplanSignal(lower)
-  const likelihood = await estimateFloorplanLikelihood(bytes, mime)
-  if (floorSignal && likelihood >= 0.35) {
-    return { ok: true, reason: `Grundriss-Signal + Raster ${likelihood.toFixed(2)}` }
-  }
-  if (floorSignal && likelihood >= 0.22 && score >= 80) {
-    return { ok: true, reason: `Grundriss-URL (Raster ${likelihood.toFixed(2)})` }
-  }
-  // Ohne Keyword nur bei sehr plan-typischem Raster
-  if (!floorSignal && likelihood >= 0.62 && score >= 100) {
-    return { ok: true, reason: `Raster wirkt wie Plan (${likelihood.toFixed(2)})` }
-  }
-  return {
-    ok: false,
-    reason: `Kein Grundriss (Signal=${floorSignal}, Raster=${likelihood.toFixed(2)}, Score=${score})`,
-  }
-}
-
 type FetchResult =
   | { kind: 'image'; bytes: Uint8Array; mime: string; finalUrl: string }
   | { kind: 'html'; text: string; finalUrl: string }
@@ -399,61 +375,72 @@ async function discoverViaWordpressMedia(
   }
 }
 
-async function resolveFloorplanImage(opts: {
+export type FloorplanCandidate = {
+  url: string
+  score: number
+  /** Kurzhinweis für die UI */
+  hint: string
+}
+
+const MAX_FLOORPLAN_CANDIDATES = 8
+
+/** Sammelt bis zu 8 Bild-Kandidaten zur manuellen Auswahl (nicht automatisch speichern). */
+export async function collectFloorplanCandidates(opts: {
   imageUrl: string | null
   sourceUrl: string | null
   manufacturerUrl: string | null
   hersteller: string
   modell: string
-}): Promise<{ image: { bytes: Uint8Array; mime: string; usedUrl: string } | null; detail: string }> {
+}): Promise<{ candidates: FloorplanCandidate[]; detail: string }> {
   const modelHint = `${opts.hersteller} ${opts.modell}`
   const tried: string[] = []
-  const candidates: string[] = []
+  const seedUrls: string[] = []
+  const found: FloorplanCandidate[] = []
+  const seenFinal = new Set<string>()
 
-  // Hersteller zuerst
-  const prefer = [opts.manufacturerUrl, opts.imageUrl, opts.sourceUrl].filter(
+  const prefer = [opts.imageUrl, opts.manufacturerUrl, opts.sourceUrl].filter(
     (u): u is string => !!u
   )
   prefer.sort((a, b) => scoreSourceUrl(b, opts.hersteller) - scoreSourceUrl(a, opts.hersteller))
   for (const u of prefer) {
-    if (!candidates.includes(u)) candidates.push(u)
+    if (!seedUrls.includes(u)) seedUrls.push(u)
   }
 
   for (const page of [opts.manufacturerUrl, opts.sourceUrl].filter((u): u is string => !!u)) {
     const media = await discoverViaWordpressMedia(page, opts.hersteller, opts.modell)
     for (const u of media) {
-      if (!candidates.includes(u)) candidates.push(u)
+      if (!seedUrls.includes(u)) seedUrls.push(u)
     }
   }
 
-  // Hersteller-Domains zusätzlich als Startseiten-Hints (nur wenn noch nichts)
-  if (candidates.length === 0) {
+  if (seedUrls.length === 0) {
     for (const d of herstellerDomainsFor(opts.hersteller)) {
-      candidates.push(`https://www.${d}/`)
+      seedUrls.push(`https://www.${d}/`)
     }
   }
 
   const errors: string[] = []
-  let bestCandidate: {
-    bytes: Uint8Array
-    mime: string
-    usedUrl: string
-    score: number
-    reason: string
-  } | null = null
-
-  const ranked = [...candidates].sort(
+  const ranked = [...seedUrls].sort(
     (a, b) =>
       scoreImageCandidate(b, modelHint, opts.hersteller) -
       scoreImageCandidate(a, modelHint, opts.hersteller)
   )
 
-  for (const candidate of ranked.slice(0, 16)) {
+  const pushCandidate = (url: string, score: number, hint: string) => {
+    const key = url.split('?')[0] ?? url
+    if (seenFinal.has(key)) return
+    if (hasPhotoRejectSignal(url) && !hasFloorplanSignal(url)) return
+    if (score < -50) return
+    seenFinal.add(key)
+    found.push({ url, score, hint })
+  }
+
+  for (const candidate of ranked.slice(0, 20)) {
+    if (found.length >= MAX_FLOORPLAN_CANDIDATES) break
     if (tried.includes(candidate)) continue
     tried.push(candidate)
-    // Offensichtliche Foto-URLs gar nicht erst laden
     if (hasPhotoRejectSignal(candidate) && !hasFloorplanSignal(candidate)) {
-      errors.push(`URL als Foto verworfen: ${candidate}`)
+      errors.push(`URL als Foto übersprungen: ${candidate}`)
       continue
     }
     const referer = opts.manufacturerUrl || opts.sourceUrl || undefined
@@ -461,28 +448,22 @@ async function resolveFloorplanImage(opts: {
 
     if (fetched.kind === 'image') {
       const score = scoreImageCandidate(fetched.finalUrl, modelHint, opts.hersteller)
-      const verdict = await acceptFloorplanImage(
-        fetched.bytes,
-        fetched.mime,
-        fetched.finalUrl,
-        score
-      )
-      if (verdict.ok) {
-        return {
-          image: { bytes: fetched.bytes, mime: fetched.mime, usedUrl: fetched.finalUrl },
-          detail: `Grundriss geladen (${fetched.mime}) – ${verdict.reason}`,
-        }
+      const likelihood = await estimateFloorplanLikelihood(fetched.bytes, fetched.mime)
+      const floor = hasFloorplanSignal(fetched.finalUrl)
+      // Für manuelle Auswahl: großzügiger – User entscheidet
+      if (floor || likelihood >= 0.4 || score >= 80) {
+        pushCandidate(
+          fetched.finalUrl,
+          score + Math.round(likelihood * 40),
+          floor
+            ? `Grundriss-URL · Raster ${likelihood.toFixed(2)}`
+            : likelihood >= 0.4
+              ? `Möglicher Plan · Raster ${likelihood.toFixed(2)}`
+              : `Kandidat · Score ${score}`
+        )
+      } else {
+        errors.push(`Bild unwahrscheinlich: ${fetched.finalUrl}`)
       }
-      if (score > (bestCandidate?.score ?? -999) && hasFloorplanSignal(fetched.finalUrl)) {
-        bestCandidate = {
-          bytes: fetched.bytes,
-          mime: fetched.mime,
-          usedUrl: fetched.finalUrl,
-          score,
-          reason: verdict.reason,
-        }
-      }
-      errors.push(`Bild verworfen: ${verdict.reason} · ${fetched.finalUrl}`)
       continue
     }
 
@@ -493,11 +474,12 @@ async function resolveFloorplanImage(opts: {
           score: scoreImageCandidate(url, modelHint, opts.hersteller),
         }))
         .sort((a, b) => b.score - a.score)
-      // Bevorzuge URLs mit Grundriss-Signal
-      const preferred = fromHtml.filter((h) => hasFloorplanSignal(h.url) && h.score >= 40)
-      const fallback = fromHtml.filter((h) => h.score >= 120 && !hasPhotoRejectSignal(h.url))
-      const htmlHits = [...preferred, ...fallback].slice(0, 12)
-      for (const hit of htmlHits) {
+      const preferred = fromHtml.filter((h) => hasFloorplanSignal(h.url))
+      const soft = fromHtml.filter(
+        (h) => !hasFloorplanSignal(h.url) && !hasPhotoRejectSignal(h.url) && h.score >= 60
+      )
+      for (const hit of [...preferred, ...soft].slice(0, 14)) {
+        if (found.length >= MAX_FLOORPLAN_CANDIDATES) break
         if (tried.includes(hit.url)) continue
         tried.push(hit.url)
         const img = await fetchUrl(hit.url, { referer: fetched.finalUrl })
@@ -505,44 +487,81 @@ async function resolveFloorplanImage(opts: {
           if (img.kind === 'error') errors.push(img.detail)
           continue
         }
-        const verdict = await acceptFloorplanImage(
-          img.bytes,
-          img.mime,
-          img.finalUrl,
-          hit.score
-        )
-        if (verdict.ok) {
-          return {
-            image: { bytes: img.bytes, mime: img.mime, usedUrl: img.finalUrl },
-            detail: `Grundriss aus HTML – ${verdict.reason}`,
-          }
+        const likelihood = await estimateFloorplanLikelihood(img.bytes, img.mime)
+        const floor = hasFloorplanSignal(img.finalUrl)
+        if (floor || likelihood >= 0.35 || hit.score >= 90) {
+          pushCandidate(
+            img.finalUrl,
+            hit.score + Math.round(likelihood * 40),
+            floor
+              ? `Aus Seite · Grundriss-URL`
+              : `Aus Seite · Raster ${likelihood.toFixed(2)}`
+          )
         }
-        errors.push(`HTML-Bild verworfen: ${verdict.reason} · ${img.finalUrl}`)
       }
-      errors.push(`HTML ohne brauchbaren Grundriss: ${candidate}`)
       continue
     }
 
     if (fetched.kind === 'error') errors.push(fetched.detail)
   }
 
-  // Nur als letzter Ausweg: URL mit Floorplan-Signal, auch wenn Raster unsicher
-  if (bestCandidate && bestCandidate.score >= 100) {
+  found.sort((a, b) => b.score - a.score)
+  const top = found.slice(0, MAX_FLOORPLAN_CANDIDATES)
+  return {
+    candidates: top,
+    detail:
+      top.length > 0
+        ? `${top.length} Bildkandidat(en) zur Auswahl`
+        : errors.slice(0, 3).join(' · ') ||
+          'Keine Bildkandidaten gefunden – bitte manuell prüfen oder später erneut suchen',
+  }
+}
+
+/** Ein gewähltes Bild laden, verarbeiten und in R2 legen. */
+export async function fetchProcessAndStoreFloorplan(opts: {
+  imageUrl: string
+  katalogId: string
+  bucket: R2Bucket
+  referer?: string | null
+}): Promise<{
+  r2Key: string
+  contentType: string
+  sourceUrl: string
+  warning: string | null
+}> {
+  const fetched = await fetchUrl(opts.imageUrl, { referer: opts.referer })
+  if (fetched.kind !== 'image') {
+    throw new Error(
+      fetched.kind === 'error'
+        ? fetched.detail
+        : 'URL lieferte kein Bild (HTML?). Bitte direkte Bild-URL wählen.'
+    )
+  }
+  const processed = await processGrundrissImage(fetched.bytes, fetched.mime)
+  if (processed.ok) {
+    const r2Key = buildWohnwagenKatalogImageKey(opts.katalogId, processed.mime)
+    await opts.bucket.put(r2Key, processed.data, {
+      httpMetadata: { contentType: processed.mime },
+    })
     return {
-      image: {
-        bytes: bestCandidate.bytes,
-        mime: bestCandidate.mime,
-        usedUrl: bestCandidate.usedUrl,
-      },
-      detail: `Grundriss-URL mit unsicherem Raster – bitte prüfen (${bestCandidate.reason})`,
+      r2Key,
+      contentType: processed.mime,
+      sourceUrl: fetched.finalUrl,
+      warning: processed.cropped
+        ? 'Weißer Rand automatisch beschnitten.'
+        : null,
     }
   }
-
+  const origMime = fetched.mime || 'image/jpeg'
+  const r2Key = buildWohnwagenKatalogImageKey(opts.katalogId, origMime)
+  await opts.bucket.put(r2Key, fetched.bytes, {
+    httpMetadata: { contentType: origMime },
+  })
   return {
-    image: null,
-    detail:
-      errors.slice(0, 4).join(' · ') ||
-      'Kein herunterladbares Hersteller-Grundrissbild gefunden (Innen-/Außenfotos werden verworfen)',
+    r2Key,
+    contentType: origMime,
+    sourceUrl: fetched.finalUrl,
+    warning: `Als Original gespeichert (${processed.reason})`,
   }
 }
 
@@ -674,55 +693,25 @@ grundriss_bild_url: nur 2D-Plattegrond/Grundriss (Draufsicht), nie Innenraum- od
     input.baujahr ?? asNum(j.baujahr_von)
   )
 
-  let r2Key: string | null = null
-  let contentType: string | null = null
-  let imageWarning: string | null = null
-  let storedImageUrl = asStr(j.grundriss_bild_url)
+  const aiImageUrl = asStr(j.grundriss_bild_url)
   const sourceUrl = asStr(j.source_url)
   const manufacturerUrl = asStr(j.manufacturer_url)
 
-  if (input.bucket) {
-    const resolved = await resolveFloorplanImage({
-      imageUrl: storedImageUrl,
-      sourceUrl,
-      manufacturerUrl,
-      hersteller: asStr(j.hersteller) || hersteller,
-      modell: asStr(j.modell) || modell,
-    })
-    if (!resolved.image) {
-      imageWarning = `Grundriss-Bild konnte nicht gespeichert werden: ${resolved.detail}`
-    } else {
-      const processed = await processGrundrissImage(resolved.image.bytes, resolved.image.mime)
-      if (processed.ok) {
-        r2Key = buildWohnwagenKatalogImageKey(katalogId, processed.mime)
-        await input.bucket.put(r2Key, processed.data, {
-          httpMetadata: { contentType: processed.mime },
-        })
-        contentType = processed.mime
-        storedImageUrl = resolved.image.usedUrl
-        imageWarning = processed.cropped
-          ? 'Grundriss-Bild gespeichert (weißer Rand automatisch beschnitten).'
-          : null
-      } else {
-        // Original speichern statt Bild komplett zu verwerfen (Workers-CPU/Codec-Fehler)
-        const origMime = resolved.image.mime || 'image/jpeg'
-        r2Key = buildWohnwagenKatalogImageKey(katalogId, origMime)
-        await input.bucket.put(r2Key, resolved.image.bytes, {
-          httpMetadata: { contentType: origMime },
-        })
-        contentType = origMime
-        storedImageUrl = resolved.image.usedUrl
-        imageWarning = `Bild als Original gespeichert (Verarbeitung: ${processed.reason})`
-      }
-      if (resolved.detail.includes('unsicher')) {
-        imageWarning = (imageWarning ? `${imageWarning} ` : '') + resolved.detail
-      }
-    }
-  } else if (storedImageUrl || sourceUrl || manufacturerUrl) {
-    imageWarning = 'Grundriss-Bild gefunden, aber R2 nicht verfügbar (lokal?)'
-  } else {
-    imageWarning = 'Kein Grundriss-Bild in der Recherche gefunden'
-  }
+  // Bestehenden Katalogeintrag lesen (Bild nicht überschreiben, bis User wählt)
+  const { getWohnwagenKatalogById } = await import('@/lib/wohnwagen-katalog-db')
+  const previous = await getWohnwagenKatalogById(input.db, katalogId)
+
+  let imageCandidates: FloorplanCandidate[] = []
+  let imageWarning: string | null = null
+  const collected = await collectFloorplanCandidates({
+    imageUrl: aiImageUrl,
+    sourceUrl,
+    manufacturerUrl,
+    hersteller: asStr(j.hersteller) || hersteller,
+    modell: asStr(j.modell) || modell,
+  })
+  imageCandidates = collected.candidates
+  imageWarning = collected.detail
 
   const confidence = asNum(j.confidence)
   const preferredSource =
@@ -731,6 +720,7 @@ grundriss_bild_url: nur 2D-Plattegrond/Grundriss (Draufsicht), nie Innenraum- od
       ? manufacturerUrl
       : sourceUrl ?? manufacturerUrl
 
+  // Maße speichern – vorhandenes R2-Bild beibehalten (COALESCE im Upsert)
   const entry = await upsertWohnwagenKatalogEntry(input.db, {
     id: katalogId,
     hersteller: asStr(j.hersteller) || hersteller,
@@ -745,9 +735,9 @@ grundriss_bild_url: nur 2D-Plattegrond/Grundriss (Draufsicht), nie Innenraum- od
     mass_hinweis: massKlarheit,
     grundriss_json: null,
     source_url: preferredSource,
-    grundriss_bild_url: storedImageUrl,
-    r2_object_key: r2Key,
-    content_type: contentType,
+    grundriss_bild_url: previous?.grundriss_bild_url ?? aiImageUrl,
+    r2_object_key: null, // nicht löschen – COALESCE behält Altbestand
+    content_type: null,
     notes:
       [
         massKlarheit,
@@ -757,17 +747,30 @@ grundriss_bild_url: nur 2D-Plattegrond/Grundriss (Draufsicht), nie Innenraum- od
         .join(' · ') || null,
   })
 
-  let imageApplied = false
+  // Maße am Fahrzeug übernehmen, Bild unverändert (User wählt separat)
+  let transportExistingImageUrl: string | null = null
   if (input.applyToTransportId) {
-    await applyKatalogImageToTransport(input.db, input.applyToTransportId, entry)
-    imageApplied = !!entry.r2_object_key
+    await applyKatalogImageToTransport(input.db, input.applyToTransportId, {
+      ...entry,
+      r2_object_key: null,
+      content_type: null,
+    })
+    const { getTransportVehicleById } = await import('@/lib/db')
+    const vehicle = await getTransportVehicleById(input.db, input.applyToTransportId)
+    if (vehicle?.grundriss_bild_r2_key) {
+      transportExistingImageUrl = `/api/transport-vehicles/${encodeURIComponent(input.applyToTransportId)}/grundriss-image`
+    }
   }
 
   return {
     entry,
-    imageApplied,
+    imageApplied: false,
     imageWarning,
     sourceNotes: entry.notes ?? null,
     massKlarheit,
+    imageCandidates,
+    existingImageUrl: entry.r2_object_key
+      ? `/api/transport-vehicles/katalog/${encodeURIComponent(entry.id)}/image`
+      : transportExistingImageUrl,
   }
 }

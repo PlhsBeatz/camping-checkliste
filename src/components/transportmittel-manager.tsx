@@ -364,6 +364,13 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
   const [katalogLoading, setKatalogLoading] = useState(false)
   const [katalogNetLoading, setKatalogNetLoading] = useState(false)
   const [katalogImageUrl, setKatalogImageUrl] = useState<string | null>(null)
+  const [katalogId, setKatalogId] = useState<string | null>(null)
+  const [imageCandidates, setImageCandidates] = useState<
+    Array<{ url: string; score: number; hint: string }>
+  >([])
+  const [existingPickUrl, setExistingPickUrl] = useState<string | null>(null)
+  const [imagePickSelection, setImagePickSelection] = useState<string | null>(null)
+  const [imageApplyLoading, setImageApplyLoading] = useState(false)
   const festgewichtLoadedRef = useRef(false)
 
   const anbauMode = isAnbau(form.fahrzeugtyp)
@@ -387,6 +394,7 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
       if (form.baujahr.trim()) params.set('baujahr', form.baujahr.trim())
       const res = await fetch(`/api/transport-vehicles/katalog-lookup?${params}`)
       const data = (await res.json()) as ApiResponse<{
+        id: string
         laenge_m: number
         breite_m: number
         hersteller: string
@@ -404,9 +412,18 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
         laengeM: String(data.data!.laenge_m),
         breiteM: String(data.data!.breite_m),
       }))
+      setKatalogId(data.data.id)
+      clearImagePicker()
       setKatalogImageUrl(data.data.imageUrl ?? null)
       setKatalogHint(
-        `Aus lokalem Katalog: ${data.data.hersteller} ${data.data.modell} (${data.data.laenge_m}×${data.data.breite_m} m)`
+        [
+          `Aus lokalem Katalog: ${data.data.hersteller} ${data.data.modell} (${data.data.laenge_m}×${data.data.breite_m} m)`,
+          data.data.imageUrl
+            ? 'Bestehendes Bild geladen – bei Bedarf „Bild anpassen“.'
+            : null,
+        ]
+          .filter(Boolean)
+          .join('\n')
       )
     } catch {
       setKatalogHint('Katalog-Lookup fehlgeschlagen (offline?).')
@@ -415,7 +432,13 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
     }
   }
 
-  /** OpenRouter-Websuche → Katalog + optional R2-Grundriss-Bild */
+  const clearImagePicker = () => {
+    setImageCandidates([])
+    setExistingPickUrl(null)
+    setImagePickSelection(null)
+  }
+
+  /** OpenRouter-Websuche → Maße + Bildkandidaten zur Auswahl */
   const refreshKatalogFromNet = async () => {
     if (!grundrissMode) return
     const hersteller = form.hersteller.trim()
@@ -426,6 +449,7 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
     }
     setKatalogNetLoading(true)
     setKatalogHint(null)
+    clearImagePicker()
     try {
       const res = await fetch('/api/transport-vehicles/katalog-refresh', {
         method: 'POST',
@@ -439,6 +463,7 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
       })
       const data = (await res.json()) as ApiResponse<{
         entry: {
+          id: string
           hersteller: string
           modell: string
           laenge_m: number
@@ -453,12 +478,23 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
         imageWarning?: string | null
         sourceNotes?: string | null
         massKlarheit?: string | null
+        imageCandidates?: Array<{ url: string; score: number; hint: string }>
+        existingImageUrl?: string | null
+        katalogId?: string
       }>
       if (!data.success || !data.data) {
         setKatalogHint(data.error ?? 'Netz-Aktualisierung fehlgeschlagen')
         return
       }
-      const { entry, imageUrl, imageWarning, sourceNotes, massKlarheit } = data.data
+      const {
+        entry,
+        imageWarning,
+        sourceNotes,
+        massKlarheit,
+        imageCandidates: candidates = [],
+        existingImageUrl,
+        katalogId: kid,
+      } = data.data
       const placeLen =
         entry.laenge_aufbau_m ?? entry.laenge_m ?? entry.laenge_gesamt_m ?? null
       setForm((prev) => ({
@@ -469,15 +505,32 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
           prev.baujahr.trim() ||
           (entry.baujahr_von != null ? String(entry.baujahr_von) : prev.baujahr),
       }))
-      setKatalogImageUrl(imageUrl ? `${imageUrl}?t=${Date.now()}` : null)
+      setKatalogId(kid ?? entry.id)
+      const existing = existingImageUrl
+        ? `${existingImageUrl}${existingImageUrl.includes('?') ? '&' : '?'}t=${Date.now()}`
+        : null
+      setExistingPickUrl(existing)
+      setImageCandidates(candidates)
+      setKatalogImageUrl(existing)
+      if (existing) {
+        setImagePickSelection('keep')
+      } else if (candidates[0]) {
+        setImagePickSelection(`url:${candidates[0].url}`)
+      } else {
+        setImagePickSelection('skip')
+      }
       const parts = [
         `Aus Netz: ${entry.hersteller} ${entry.modell}`,
         massKlarheit || entry.mass_hinweis,
-        imageUrl ? 'Grundriss-Bild gespeichert (Rand möglichst beschnitten)' : null,
-        imageWarning,
+        candidates.length > 0
+          ? `${candidates.length} Bildvorschlag(e) – bitte das richtige auswählen und übernehmen.`
+          : existing
+            ? 'Bestehendes Bild gefunden – behalten, neu zuschneiden oder Suche ohne Bild lassen.'
+            : 'Keine Bildkandidaten – Maße übernommen, Grundriss ggf. später erneut suchen.',
+        imageWarning && candidates.length === 0 ? imageWarning : null,
         entry.source_url ? `Quelle: ${entry.source_url}` : null,
         sourceNotes && sourceNotes !== massKlarheit ? sourceNotes : null,
-        editingVehicle?.id ? 'Am Fahrzeug übernommen.' : null,
+        editingVehicle?.id ? 'Maße am Fahrzeug übernommen.' : null,
       ].filter(Boolean)
       setKatalogHint(parts.join('\n'))
       if (editingVehicle?.id) onRefresh()
@@ -485,6 +538,104 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
       setKatalogHint('Netz-Aktualisierung fehlgeschlagen (offline / API?).')
     } finally {
       setKatalogNetLoading(false)
+    }
+  }
+
+  const applySelectedGrundrissImage = async () => {
+    if (!katalogId || !imagePickSelection) return
+    setImageApplyLoading(true)
+    setKatalogHint(null)
+    try {
+      let mode: 'url' | 'keep' | 'reprocess-existing' | 'skip' = 'skip'
+      let imageUrl: string | null = null
+      if (imagePickSelection === 'keep') mode = 'keep'
+      else if (imagePickSelection === 'reprocess') mode = 'reprocess-existing'
+      else if (imagePickSelection === 'skip') mode = 'skip'
+      else if (imagePickSelection.startsWith('url:')) {
+        mode = 'url'
+        imageUrl = imagePickSelection.slice(4)
+      }
+
+      const res = await fetch('/api/transport-vehicles/katalog-apply-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          katalogId,
+          applyToTransportId: editingVehicle?.id ?? null,
+          mode,
+          imageUrl,
+        }),
+      })
+      const data = (await res.json()) as ApiResponse<{
+        imageUrl: string | null
+        warning?: string | null
+        kept?: boolean
+        skipped?: boolean
+      }>
+      if (!data.success || !data.data) {
+        setKatalogHint(data.error ?? 'Bildübernahme fehlgeschlagen')
+        return
+      }
+      if (data.data.skipped) {
+        clearImagePicker()
+        setKatalogHint('Ohne neues Bild belassen.')
+        return
+      }
+      const nextUrl = data.data.imageUrl
+        ? `${data.data.imageUrl}${data.data.imageUrl.includes('?') ? '&' : '?'}t=${Date.now()}`
+        : null
+      setKatalogImageUrl(nextUrl)
+      clearImagePicker()
+      setKatalogHint(
+        [
+          data.data.kept
+            ? 'Bestehendes Grundriss-Bild behalten.'
+            : 'Grundriss-Bild übernommen und verarbeitet.',
+          data.data.warning,
+          editingVehicle?.id ? 'Am Fahrzeug gespeichert.' : null,
+        ]
+          .filter(Boolean)
+          .join('\n')
+      )
+      if (editingVehicle?.id) onRefresh()
+    } catch {
+      setKatalogHint('Bildübernahme fehlgeschlagen.')
+    } finally {
+      setImageApplyLoading(false)
+    }
+  }
+
+  /** Bestehendes Bild ohne Netzsuche anpassen (zuschneiden / behalten). */
+  const openExistingImageAdjust = async () => {
+    if (!katalogImageUrl) return
+    let kid = katalogId
+    if (!kid) {
+      const hersteller = form.hersteller.trim()
+      const modell = form.modell.trim()
+      if (hersteller && modell) {
+        try {
+          const params = new URLSearchParams({ hersteller, modell })
+          if (form.baujahr.trim()) params.set('baujahr', form.baujahr.trim())
+          const res = await fetch(`/api/transport-vehicles/katalog-lookup?${params}`)
+          const data = (await res.json()) as ApiResponse<{ id: string } | null>
+          if (data.success && data.data?.id) {
+            kid = data.data.id
+            setKatalogId(kid)
+          }
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+    setExistingPickUrl(katalogImageUrl)
+    setImageCandidates([])
+    setImagePickSelection('keep')
+    if (!kid) {
+      setKatalogHint(
+        'Kein Katalogeintrag gefunden. Bitte zuerst „Aus Katalog vorschlagen“ oder „Aus Netz aktualisieren“.'
+      )
+    } else {
+      setKatalogHint('Bestehendes Bild: behalten oder neu zuschneiden.')
     }
   }
   const formIsActive = isTransportActiveOn(
@@ -1018,6 +1169,8 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
       urlaubStandard: !!vehicle.urlaub_standard,
     })
     setKatalogHint(null)
+    setKatalogId(null)
+    clearImagePicker()
     setKatalogImageUrl(
       vehicle.grundriss_bild_r2_key
         ? `/api/transport-vehicles/${encodeURIComponent(vehicle.id)}/grundriss-image`
@@ -1035,6 +1188,8 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
     setManuellEntries([])
     festgewichtLoadedRef.current = true
     setKatalogHint(null)
+    setKatalogId(null)
+    clearImagePicker()
     setKatalogImageUrl(null)
     setShowDialog(true)
   }
@@ -1069,6 +1224,8 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
       urlaubStandard: !!vehicle.urlaub_standard,
     })
     setKatalogHint(null)
+    setKatalogId(null)
+    clearImagePicker()
     setKatalogImageUrl(null)
     setTauschdatum(swap)
     festgewichtLoadedRef.current = true
@@ -1444,8 +1601,100 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
               {katalogHint && (
                 <p className="text-xs text-muted-foreground whitespace-pre-wrap">{katalogHint}</p>
               )}
-              {katalogImageUrl && (
-                <div className="rounded-md border border-border bg-muted/40 p-2">
+
+              {(existingPickUrl || imageCandidates.length > 0) && (
+                <div className="rounded-md border border-border bg-muted/30 p-3 space-y-3">
+                  <p className="text-sm font-medium">Grundriss wählen</p>
+                  <p className="text-xs text-muted-foreground">
+                    Bitte das richtige Bild auswählen. Erst nach „Bild übernehmen“ wird es
+                    gespeichert und zugeschnitten.
+                  </p>
+                  <RadioGroup
+                    value={imagePickSelection ?? undefined}
+                    onValueChange={setImagePickSelection}
+                    className="gap-3"
+                  >
+                    {existingPickUrl && (
+                      <div className="space-y-2 rounded-md border border-border bg-background p-2">
+                        <p className="text-xs text-muted-foreground">Aktuelles Bild</p>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={existingPickUrl}
+                          alt="Aktueller Grundriss"
+                          className="max-h-36 w-auto max-w-full object-contain mx-auto"
+                        />
+                        <label className="flex items-center gap-2 text-sm cursor-pointer">
+                          <RadioGroupItem value="keep" />
+                          Bestehendes Bild behalten
+                        </label>
+                        <label className="flex items-center gap-2 text-sm cursor-pointer">
+                          <RadioGroupItem value="reprocess" />
+                          Bestehendes Bild neu zuschneiden
+                        </label>
+                      </div>
+                    )}
+                    {imageCandidates.length > 0 && (
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                        {imageCandidates.map((c) => {
+                          const value = `url:${c.url}`
+                          const previewSrc = `/api/transport-vehicles/katalog-image-proxy?url=${encodeURIComponent(c.url)}`
+                          return (
+                            <label
+                              key={c.url}
+                              className={cn(
+                                'flex flex-col gap-1 rounded-md border p-1.5 cursor-pointer transition-colors',
+                                imagePickSelection === value
+                                  ? 'border-primary bg-primary/5'
+                                  : 'border-border bg-background hover:border-primary/40'
+                              )}
+                            >
+                              <div className="flex items-center gap-1.5 px-0.5">
+                                <RadioGroupItem value={value} />
+                                <span className="text-[10px] text-muted-foreground line-clamp-2 leading-tight">
+                                  {c.hint}
+                                </span>
+                              </div>
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={previewSrc}
+                                alt="Grundriss-Kandidat"
+                                className="h-24 w-full object-contain bg-muted/40 rounded"
+                                loading="lazy"
+                              />
+                            </label>
+                          )
+                        })}
+                      </div>
+                    )}
+                    <label className="flex items-center gap-2 text-sm cursor-pointer">
+                      <RadioGroupItem value="skip" />
+                      Kein Bild übernehmen
+                    </label>
+                  </RadioGroup>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={!imagePickSelection || imageApplyLoading || !katalogId}
+                      onClick={() => void applySelectedGrundrissImage()}
+                    >
+                      {imageApplyLoading ? 'Verarbeite…' : 'Bild übernehmen'}
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      disabled={imageApplyLoading}
+                      onClick={() => clearImagePicker()}
+                    >
+                      Auswahl schließen
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {katalogImageUrl && !existingPickUrl && imageCandidates.length === 0 && (
+                <div className="rounded-md border border-border bg-muted/40 p-2 space-y-2">
                   <p className="text-xs text-muted-foreground mb-1">Grundriss-Bild</p>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
@@ -1453,12 +1702,20 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
                     alt="Wohnwagen-Grundriss"
                     className="max-h-48 w-auto max-w-full object-contain mx-auto"
                   />
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => void openExistingImageAdjust()}
+                  >
+                    Bild anpassen
+                  </Button>
                 </div>
               )}
               <p className="text-xs text-muted-foreground">
-                „Aus Netz aktualisieren“ bevorzugt die Hersteller-Website, speichert Maße mit
-                Klarheit (Gesamt/Aufbau/Deichsel) und beschneidet weiße Ränder am Grundriss-Bild.
-                Ohne Maße: manuell eintragen (Rechteck aus Länge×Breite).
+                „Aus Netz aktualisieren“ sucht Maße und bis zu 8 Bildvorschläge. Du wählst das
+                richtige Grundriss-Bild; erst dann wird es gespeichert und zugeschnitten. Ohne
+                Maße: manuell eintragen (Rechteck aus Länge×Breite).
               </p>
             </div>
           )}

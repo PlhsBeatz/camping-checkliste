@@ -184,6 +184,60 @@ export async function upsertWohnwagenKatalogEntry(
   return saved
 }
 
+/** Grundriss-Bild am Transportmittel setzen (überschreibt vorhandenes). */
+export async function setTransportGrundrissImage(
+  db: D1Database,
+  transportId: string,
+  opts: { r2Key: string; contentType: string }
+): Promise<boolean> {
+  try {
+    await db
+      .prepare(
+        `UPDATE transportmittel SET
+          grundriss_bild_r2_key = ?,
+          grundriss_bild_content_type = ?
+         WHERE id = ?`
+      )
+      .bind(opts.r2Key, opts.contentType, transportId)
+      .run()
+    return true
+  } catch (error) {
+    console.error('Error setting transport grundriss image:', error)
+    return false
+  }
+}
+
+/** Katalog-R2-Key + Metadaten am Eintrag setzen (überschreibt). */
+export async function setKatalogGrundrissImage(
+  db: D1Database,
+  katalogId: string,
+  opts: { r2Key: string; contentType: string; sourceUrl?: string | null }
+): Promise<boolean> {
+  try {
+    await db
+      .prepare(
+        `UPDATE wohnwagen_katalog SET
+          r2_object_key = ?,
+          content_type = ?,
+          grundriss_bild_url = COALESCE(?, grundriss_bild_url),
+          refreshed_at = ?
+         WHERE id = ?`
+      )
+      .bind(
+        opts.r2Key,
+        opts.contentType,
+        opts.sourceUrl ?? null,
+        new Date().toISOString(),
+        katalogId
+      )
+      .run()
+    return true
+  } catch (error) {
+    console.error('Error setting katalog grundriss image:', error)
+    return false
+  }
+}
+
 /** Maße + optional Bild-Verweis auf Transportmittel schreiben. */
 export async function applyKatalogImageToTransport(
   db: D1Database,

@@ -6,18 +6,26 @@ import {
   type WohnwagenKatalogEntry,
 } from '@/lib/db'
 import { requireAuth, requireAdmin } from '@/lib/api-auth'
-import { researchAndUpsertWohnwagenKatalog } from '@/lib/wohnwagen-katalog-research'
+import {
+  researchAndUpsertWohnwagenKatalog,
+  type FloorplanCandidate,
+} from '@/lib/wohnwagen-katalog-research'
 
 export type KatalogRefreshResponse = {
   entry: WohnwagenKatalogEntry
+  /** Vorhandenes Bild (noch nicht durch User-Wahl ersetzt) */
   imageUrl: string | null
   imageApplied: boolean
   imageWarning?: string | null
   sourceNotes?: string | null
   massKlarheit?: string | null
+  /** Bis zu 8 Kandidaten zur manuellen Auswahl */
+  imageCandidates: FloorplanCandidate[]
+  existingImageUrl: string | null
+  katalogId: string
 }
 
-/** POST /api/transport-vehicles/katalog-refresh – Netz-Recherche Maße + Grundriss-Bild */
+/** POST /api/transport-vehicles/katalog-refresh – Netz-Recherche Maße + Bildkandidaten */
 export async function POST(request: NextRequest) {
   try {
     const auth = await requireAuth(request)
@@ -68,17 +76,17 @@ export async function POST(request: NextRequest) {
       applyToTransportId: body.applyToTransportId?.trim() || null,
     })
 
-    const imageUrl = result.entry.r2_object_key
-      ? `/api/transport-vehicles/katalog/${encodeURIComponent(result.entry.id)}/image`
-      : null
-
+    const existingImageUrl = result.existingImageUrl
     const data: KatalogRefreshResponse = {
       entry: result.entry,
-      imageUrl,
-      imageApplied: result.imageApplied,
+      imageUrl: existingImageUrl,
+      imageApplied: false,
       imageWarning: result.imageWarning,
       sourceNotes: result.sourceNotes,
       massKlarheit: result.massKlarheit,
+      imageCandidates: result.imageCandidates,
+      existingImageUrl,
+      katalogId: result.entry.id,
     }
 
     return NextResponse.json({ success: true, data })
