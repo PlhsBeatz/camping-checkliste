@@ -40,7 +40,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       status: 200,
       headers: {
         'Content-Type': contentType,
-        'Cache-Control': 'private, max-age=86400',
+        // Nach Bildwechsel sonst oft noch das alte Bild aus dem Browser-Cache
+        'Cache-Control': 'private, no-store',
       },
     })
   } catch (error: unknown) {

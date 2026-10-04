@@ -649,6 +649,7 @@ export async function fetchProcessAndStoreFloorplan(opts: {
     await opts.bucket.put(r2Key, processed.data, {
       httpMetadata: { contentType: processed.mime },
     })
+    await deleteStaleKatalogImages(opts.bucket, opts.katalogId, r2Key)
     return {
       r2Key,
       contentType: processed.mime,
@@ -663,6 +664,7 @@ export async function fetchProcessAndStoreFloorplan(opts: {
   await opts.bucket.put(r2Key, fetched.bytes, {
     httpMetadata: { contentType: origMime },
   })
+  await deleteStaleKatalogImages(opts.bucket, opts.katalogId, r2Key)
   return {
     r2Key,
     contentType: origMime,
@@ -673,7 +675,28 @@ export async function fetchProcessAndStoreFloorplan(opts: {
 
 export function buildWohnwagenKatalogImageKey(katalogId: string, contentType: string): string {
   const ext = contentType.includes('png') ? 'png' : contentType.includes('webp') ? 'webp' : 'jpg'
-  return `wwk/${katalogId}/grundriss.${ext}`
+  // Versionierter Key – sonst überschreibt put denselben Pfad und Clients/Caches zeigen oft noch das alte Bild
+  const stamp = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`
+  return `wwk/${katalogId}/grundriss-${stamp}.${ext}`
+}
+
+/** Alte Katalog-Bilder unter dem Prefix entfernen (nach erfolgreichem Put). */
+export async function deleteStaleKatalogImages(
+  bucket: R2Bucket,
+  katalogId: string,
+  keepKey: string
+): Promise<void> {
+  try {
+    const prefix = `wwk/${katalogId}/`
+    const listed = await bucket.list({ prefix })
+    for (const obj of listed.objects) {
+      if (obj.key && obj.key !== keepKey) {
+        await bucket.delete(obj.key)
+      }
+    }
+  } catch (error) {
+    console.warn('Could not prune old katalog images:', error)
+  }
 }
 
 function buildMassKlarheit(opts: {

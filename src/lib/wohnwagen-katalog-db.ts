@@ -191,7 +191,7 @@ export async function setTransportGrundrissImage(
   opts: { r2Key: string; contentType: string }
 ): Promise<boolean> {
   try {
-    await db
+    const result = await db
       .prepare(
         `UPDATE transportmittel SET
           grundriss_bild_r2_key = ?,
@@ -200,6 +200,11 @@ export async function setTransportGrundrissImage(
       )
       .bind(opts.r2Key, opts.contentType, transportId)
       .run()
+    const changes = Number(result.meta?.changes ?? 0)
+    if (changes < 1) {
+      console.error('Transport grundriss update affected 0 rows:', transportId)
+      return false
+    }
     return true
   } catch (error) {
     console.error('Error setting transport grundriss image:', error)
@@ -214,12 +219,12 @@ export async function setKatalogGrundrissImage(
   opts: { r2Key: string; contentType: string; sourceUrl?: string | null }
 ): Promise<boolean> {
   try {
-    await db
+    const result = await db
       .prepare(
         `UPDATE wohnwagen_katalog SET
           r2_object_key = ?,
           content_type = ?,
-          grundriss_bild_url = COALESCE(?, grundriss_bild_url),
+          grundriss_bild_url = ?,
           refreshed_at = ?
          WHERE id = ?`
       )
@@ -231,6 +236,11 @@ export async function setKatalogGrundrissImage(
         katalogId
       )
       .run()
+    const changes = Number(result.meta?.changes ?? 0)
+    if (changes < 1) {
+      console.error('Katalog grundriss update affected 0 rows:', katalogId)
+      return false
+    }
     return true
   } catch (error) {
     console.error('Error setting katalog grundriss image:', error)

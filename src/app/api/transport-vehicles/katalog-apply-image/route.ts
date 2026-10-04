@@ -15,20 +15,54 @@ import {
 } from '@/lib/wohnwagen-katalog-db'
 import {
   buildWohnwagenKatalogImageKey,
+  deleteStaleKatalogImages,
   fetchProcessAndStoreFloorplan,
 } from '@/lib/wohnwagen-katalog-research'
 import { processGrundrissImage } from '@/lib/grundriss-image-process'
 
+function imageResponseUrl(opts: {
+  katalogId: string
+  transportId: string | null
+}): string {
+  const t = Date.now()
+  if (opts.transportId) {
+    return `/api/transport-vehicles/${encodeURIComponent(opts.transportId)}/grundriss-image?t=${t}`
+  }
+  return `/api/transport-vehicles/katalog/${encodeURIComponent(opts.katalogId)}/image?t=${t}`
+}
+
+async function persistImageKeys(opts: {
+  db: Awaited<ReturnType<typeof getDB>>
+  katalogId: string
+  transportId: string | null
+  r2Key: string
+  contentType: string
+  sourceUrl?: string | null
+}): Promise<void> {
+  const katalogOk = await setKatalogGrundrissImage(opts.db, opts.katalogId, {
+    r2Key: opts.r2Key,
+    contentType: opts.contentType,
+    sourceUrl: opts.sourceUrl ?? null,
+  })
+  if (!katalogOk) {
+    throw new Error('Katalog-Bild konnte nicht gespeichert werden')
+  }
+  if (opts.transportId) {
+    const transportOk = await setTransportGrundrissImage(opts.db, opts.transportId, {
+      r2Key: opts.r2Key,
+      contentType: opts.contentType,
+    })
+    if (!transportOk) {
+      throw new Error(
+        'Bild im Katalog gespeichert, aber Fahrzeug-Bild konnte nicht überschrieben werden'
+      )
+    }
+  }
+}
+
 /**
  * POST /api/transport-vehicles/katalog-apply-image
- * User-gewähltes Bild verarbeiten und speichern.
- *
- * body: {
- *   katalogId: string
- *   applyToTransportId?: string | null
- *   mode: 'url' | 'keep' | 'reprocess-existing' | 'skip' | 'clear'
- *   imageUrl?: string  // bei mode=url
- * }
+ * User-gewähltes Bild verarbeiten und speichern (überschreibt vorhandenes).
  */
 export async function POST(request: NextRequest) {
   try {
@@ -70,7 +104,6 @@ export async function POST(request: NextRequest) {
     }
 
     if (mode === 'skip') {
-      // Nur Auswahl schließen – gespeichertes Bild bleibt unverändert
       return NextResponse.json({
         success: true,
         data: {
@@ -88,7 +121,14 @@ export async function POST(request: NextRequest) {
       if (transportId) {
         await clearTransportGrundrissImage(db, transportId)
       }
-      // Optional: R2-Objekt belassen (orphan ok) – Keys aus DB entfernt
+      try {
+        const listed = await bucket.list({ prefix: `wwk/${katalogId}/` })
+        for (const obj of listed.objects) {
+          if (obj.key) await bucket.delete(obj.key)
+        }
+      } catch {
+        /* orphan ok */
+      }
       return NextResponse.json({
         success: true,
         data: {
@@ -103,17 +143,18 @@ export async function POST(request: NextRequest) {
 
     if (mode === 'keep') {
       const r2Key = entry.r2_object_key
-      let contentType = entry.content_type || 'image/webp'
+      const contentType = entry.content_type || 'image/webp'
       if (!r2Key && transportId) {
         const vehicle = await getTransportVehicleById(db, transportId)
         if (vehicle?.grundriss_bild_r2_key) {
           return NextResponse.json({
             success: true,
             data: {
-              imageUrl: `/api/transport-vehicles/${encodeURIComponent(transportId)}/grundriss-image?t=${Date.now()}`,
+              imageUrl: imageResponseUrl({ katalogId, transportId }),
               warning: null as string | null,
               kept: true,
               skipped: false,
+              cleared: false,
             },
           })
         }
@@ -125,15 +166,22 @@ export async function POST(request: NextRequest) {
         )
       }
       if (transportId) {
-        await setTransportGrundrissImage(db, transportId, { r2Key, contentType })
+        const ok = await setTransportGrundrissImage(db, transportId, { r2Key, contentType })
+        if (!ok) {
+          return NextResponse.json(
+            { success: false, error: 'Fahrzeug-Bild konnte nicht aktualisiert werden' },
+            { status: 500 }
+          )
+        }
       }
       return NextResponse.json({
         success: true,
         data: {
-          imageUrl: `/api/transport-vehicles/katalog/${encodeURIComponent(katalogId)}/image?t=${Date.now()}`,
+          imageUrl: imageResponseUrl({ katalogId, transportId }),
           warning: null as string | null,
           kept: true,
           skipped: false,
+          cleared: false,
         },
       })
     }
@@ -177,26 +225,25 @@ export async function POST(request: NextRequest) {
       await bucket.put(r2Key, processed.data, {
         httpMetadata: { contentType: processed.mime },
       })
-      await setKatalogGrundrissImage(db, katalogId, {
+      await deleteStaleKatalogImages(bucket, katalogId, r2Key)
+      await persistImageKeys({
+        db,
+        katalogId,
+        transportId,
         r2Key,
         contentType: processed.mime,
         sourceUrl: entry.grundriss_bild_url,
       })
-      if (transportId) {
-        await setTransportGrundrissImage(db, transportId, {
-          r2Key,
-          contentType: processed.mime,
-        })
-      }
       return NextResponse.json({
         success: true,
         data: {
-          imageUrl: `/api/transport-vehicles/katalog/${encodeURIComponent(katalogId)}/image?t=${Date.now()}`,
+          imageUrl: imageResponseUrl({ katalogId, transportId }),
           warning: processed.cropped
             ? 'Bestehendes Bild neu zugeschnitten.'
             : 'Bestehendes Bild neu gespeichert.',
           kept: false,
           skipped: false,
+          cleared: false,
         },
       })
     }
@@ -210,31 +257,38 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    let referer = entry.source_url
+    if (!referer || /\.pdf(\?|$)/i.test(referer)) {
+      try {
+        referer = new URL(imageUrl).origin + '/'
+      } catch {
+        referer = 'https://caravanvergelijker.nl/'
+      }
+    }
+
     const stored = await fetchProcessAndStoreFloorplan({
       imageUrl,
       katalogId,
       bucket,
-      referer: entry.source_url,
+      referer,
     })
-    await setKatalogGrundrissImage(db, katalogId, {
+    await persistImageKeys({
+      db,
+      katalogId,
+      transportId,
       r2Key: stored.r2Key,
       contentType: stored.contentType,
       sourceUrl: stored.sourceUrl,
     })
-    if (transportId) {
-      await setTransportGrundrissImage(db, transportId, {
-        r2Key: stored.r2Key,
-        contentType: stored.contentType,
-      })
-    }
 
     return NextResponse.json({
       success: true,
       data: {
-        imageUrl: `/api/transport-vehicles/katalog/${encodeURIComponent(katalogId)}/image?t=${Date.now()}`,
+        imageUrl: imageResponseUrl({ katalogId, transportId }),
         warning: stored.warning,
         kept: false,
         skipped: false,
+        cleared: false,
       },
     })
   } catch (error: unknown) {

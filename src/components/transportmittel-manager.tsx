@@ -578,22 +578,23 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
       if (data.data.cleared) {
         clearImagePicker()
         setKatalogImageUrl(null)
+        setExistingPickUrl(null)
         setKatalogHint('Grundriss-Bild gelöscht.')
         if (editingVehicle?.id) onRefresh()
         return
       }
       const nextUrl = data.data.imageUrl
-        ? `${data.data.imageUrl}${data.data.imageUrl.includes('?') ? '&' : '?'}t=${Date.now()}`
+        ? `${data.data.imageUrl}${data.data.imageUrl.includes('?') ? '&' : '?'}v=${Date.now()}`
         : null
       setKatalogImageUrl(nextUrl)
       clearImagePicker()
+      setExistingPickUrl(null)
       setKatalogHint(
         [
           data.data.kept
             ? 'Bestehendes Grundriss-Bild behalten.'
-            : 'Grundriss-Bild übernommen und verarbeitet.',
+            : 'Grundriss-Bild übernommen und am Fahrzeug überschrieben.',
           data.data.warning,
-          editingVehicle?.id ? 'Am Fahrzeug gespeichert.' : null,
         ]
           .filter(Boolean)
           .join('\n')
@@ -1174,7 +1175,7 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
     clearImagePicker()
     setKatalogImageUrl(
       vehicle.grundriss_bild_r2_key
-        ? `/api/transport-vehicles/${encodeURIComponent(vehicle.id)}/grundriss-image`
+        ? `/api/transport-vehicles/${encodeURIComponent(vehicle.id)}/grundriss-image?t=${Date.now()}`
         : null
     )
     setShowDialog(true)
@@ -1642,6 +1643,7 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
                           return (
                             <label
                               key={c.url}
+                              onClick={() => setImagePickSelection(value)}
                               className={cn(
                                 'flex flex-col gap-1 rounded-md border p-1.5 cursor-pointer transition-colors',
                                 imagePickSelection === value
