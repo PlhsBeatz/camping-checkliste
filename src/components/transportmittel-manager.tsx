@@ -538,11 +538,12 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
     setImageApplyLoading(true)
     setKatalogHint(null)
     try {
-      let mode: 'url' | 'keep' | 'reprocess-existing' | 'skip' = 'skip'
+      let mode: 'url' | 'keep' | 'reprocess-existing' | 'skip' | 'clear' = 'skip'
       let imageUrl: string | null = null
       if (imagePickSelection === 'keep') mode = 'keep'
       else if (imagePickSelection === 'reprocess') mode = 'reprocess-existing'
       else if (imagePickSelection === 'skip') mode = 'skip'
+      else if (imagePickSelection === 'clear') mode = 'clear'
       else if (imagePickSelection.startsWith('url:')) {
         mode = 'url'
         imageUrl = imagePickSelection.slice(4)
@@ -563,6 +564,7 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
         warning?: string | null
         kept?: boolean
         skipped?: boolean
+        cleared?: boolean
       }>
       if (!data.success || !data.data) {
         setKatalogHint(data.error ?? 'Bildübernahme fehlgeschlagen')
@@ -570,7 +572,14 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
       }
       if (data.data.skipped) {
         clearImagePicker()
-        setKatalogHint('Ohne neues Bild belassen.')
+        setKatalogHint('Auswahl geschlossen – gespeichertes Bild unverändert.')
+        return
+      }
+      if (data.data.cleared) {
+        clearImagePicker()
+        setKatalogImageUrl(null)
+        setKatalogHint('Grundriss-Bild gelöscht.')
+        if (editingVehicle?.id) onRefresh()
         return
       }
       const nextUrl = data.data.imageUrl
@@ -1658,11 +1667,23 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
                         })}
                       </div>
                     )}
+                    {existingPickUrl && (
+                      <label className="flex items-center gap-2 text-sm cursor-pointer text-destructive">
+                        <RadioGroupItem value="clear" />
+                        Gespeichertes Bild löschen
+                      </label>
+                    )}
                     <label className="flex items-center gap-2 text-sm cursor-pointer">
                       <RadioGroupItem value="skip" />
-                      Kein Bild übernehmen
+                      Abbrechen (Bild unverändert lassen)
                     </label>
                   </RadioGroup>
+                  {imageCandidates.length === 0 && (
+                    <p className="text-xs text-amber-700 dark:text-amber-400">
+                      Keine neuen Bildvorschläge gefunden. Du kannst das alte Bild löschen und die
+                      Suche erneut starten – oder Hersteller/Modell prüfen.
+                    </p>
+                  )}
                   <div className="flex flex-wrap gap-2">
                     <Button
                       type="button"
@@ -1670,7 +1691,13 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
                       disabled={!imagePickSelection || imageApplyLoading || !katalogId}
                       onClick={() => void applySelectedGrundrissImage()}
                     >
-                      {imageApplyLoading ? 'Verarbeite…' : 'Bild übernehmen'}
+                      {imageApplyLoading
+                        ? 'Verarbeite…'
+                        : imagePickSelection === 'clear'
+                          ? 'Bild löschen'
+                          : imagePickSelection === 'skip'
+                            ? 'Schließen'
+                            : 'Bild übernehmen'}
                     </Button>
                     <Button
                       type="button"
@@ -1694,14 +1721,29 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
                     alt="Wohnwagen-Grundriss"
                     className="max-h-48 w-auto max-w-full object-contain mx-auto"
                   />
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={() => void openExistingImageAdjust()}
-                  >
-                    Bild anpassen
-                  </Button>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => void openExistingImageAdjust()}
+                    >
+                      Bild anpassen
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={!katalogId || imageApplyLoading}
+                      onClick={() => {
+                        setExistingPickUrl(katalogImageUrl)
+                        setImageCandidates([])
+                        setImagePickSelection('clear')
+                      }}
+                    >
+                      Bild löschen
+                    </Button>
+                  </div>
                 </div>
               )}
               <p className="text-xs text-muted-foreground">

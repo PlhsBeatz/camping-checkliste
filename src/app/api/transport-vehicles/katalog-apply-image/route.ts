@@ -7,6 +7,8 @@ import {
 } from '@/lib/db'
 import { requireAuth, requireAdmin } from '@/lib/api-auth'
 import {
+  clearKatalogGrundrissImage,
+  clearTransportGrundrissImage,
   getWohnwagenKatalogById,
   setKatalogGrundrissImage,
   setTransportGrundrissImage,
@@ -24,7 +26,7 @@ import { processGrundrissImage } from '@/lib/grundriss-image-process'
  * body: {
  *   katalogId: string
  *   applyToTransportId?: string | null
- *   mode: 'url' | 'keep' | 'reprocess-existing' | 'skip'
+ *   mode: 'url' | 'keep' | 'reprocess-existing' | 'skip' | 'clear'
  *   imageUrl?: string  // bei mode=url
  * }
  */
@@ -38,7 +40,7 @@ export async function POST(request: NextRequest) {
     const body = (await request.json()) as {
       katalogId?: string
       applyToTransportId?: string | null
-      mode?: 'url' | 'keep' | 'reprocess-existing' | 'skip'
+      mode?: 'url' | 'keep' | 'reprocess-existing' | 'skip' | 'clear'
       imageUrl?: string | null
     }
 
@@ -68,9 +70,34 @@ export async function POST(request: NextRequest) {
     }
 
     if (mode === 'skip') {
+      // Nur Auswahl schließen – gespeichertes Bild bleibt unverändert
       return NextResponse.json({
         success: true,
-        data: { imageUrl: null, warning: null as string | null, kept: true, skipped: true },
+        data: {
+          imageUrl: null,
+          warning: null as string | null,
+          kept: true,
+          skipped: true,
+          cleared: false,
+        },
+      })
+    }
+
+    if (mode === 'clear') {
+      await clearKatalogGrundrissImage(db, katalogId)
+      if (transportId) {
+        await clearTransportGrundrissImage(db, transportId)
+      }
+      // Optional: R2-Objekt belassen (orphan ok) – Keys aus DB entfernt
+      return NextResponse.json({
+        success: true,
+        data: {
+          imageUrl: null,
+          warning: 'Gespeichertes Grundriss-Bild entfernt.',
+          kept: false,
+          skipped: false,
+          cleared: true,
+        },
       })
     }
 

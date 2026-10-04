@@ -238,6 +238,52 @@ export async function setKatalogGrundrissImage(
   }
 }
 
+/** Grundriss-Bild am Transportmittel entfernen. */
+export async function clearTransportGrundrissImage(
+  db: D1Database,
+  transportId: string
+): Promise<boolean> {
+  try {
+    await db
+      .prepare(
+        `UPDATE transportmittel SET
+          grundriss_bild_r2_key = NULL,
+          grundriss_bild_content_type = NULL
+         WHERE id = ?`
+      )
+      .bind(transportId)
+      .run()
+    return true
+  } catch (error) {
+    console.error('Error clearing transport grundriss image:', error)
+    return false
+  }
+}
+
+/** Grundriss-Bild am Katalogeintrag entfernen. */
+export async function clearKatalogGrundrissImage(
+  db: D1Database,
+  katalogId: string
+): Promise<boolean> {
+  try {
+    await db
+      .prepare(
+        `UPDATE wohnwagen_katalog SET
+          r2_object_key = NULL,
+          content_type = NULL,
+          grundriss_bild_url = NULL,
+          refreshed_at = ?
+         WHERE id = ?`
+      )
+      .bind(new Date().toISOString(), katalogId)
+      .run()
+    return true
+  } catch (error) {
+    console.error('Error clearing katalog grundriss image:', error)
+    return false
+  }
+}
+
 /** Maße + optional Bild-Verweis auf Transportmittel schreiben. */
 export async function applyKatalogImageToTransport(
   db: D1Database,

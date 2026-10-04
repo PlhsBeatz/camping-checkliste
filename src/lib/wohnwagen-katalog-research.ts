@@ -352,34 +352,79 @@ async function discoverViaWordpressMedia(
   try {
     const origin = new URL(sourceUrl).origin
     const q = `${hersteller} ${modell}`.trim()
-    const api = `${origin}/wp-json/wp/v2/media?search=${encodeURIComponent(q)}&per_page=20`
-    const res = await fetch(api, {
-      headers: { Accept: 'application/json', 'User-Agent': BROWSER_UA },
-    })
-    if (!res.ok) return []
-    const data = (await res.json()) as Array<{
-      source_url?: string
-      alt_text?: string
-      title?: { rendered?: string }
-    }>
-    if (!Array.isArray(data)) return []
-    return data
-      .map((item) => {
+    const queries = [q, `${q} plattegrond`, `${q} grundriss`]
+    const found: Array<{ url: string; score: number }> = []
+    const seen = new Set<string>()
+    for (const search of queries) {
+      const api = `${origin}/wp-json/wp/v2/media?search=${encodeURIComponent(search)}&per_page=20`
+      const res = await fetch(api, {
+        headers: { Accept: 'application/json', 'User-Agent': BROWSER_UA },
+      })
+      if (!res.ok) continue
+      const data = (await res.json()) as Array<{
+        source_url?: string
+        alt_text?: string
+        title?: { rendered?: string }
+      }>
+      if (!Array.isArray(data)) continue
+      for (const item of data) {
         const url = item.source_url?.trim()
-        if (!url) return null
+        if (!url || seen.has(url)) continue
+        seen.add(url)
         const label = `${item.alt_text ?? ''} ${item.title?.rendered ?? ''} ${url}`
-        return {
+        found.push({
           url,
           score: scoreImageCandidate(label, `${hersteller} ${modell}`, hersteller),
-        }
-      })
-      .filter((x): x is { url: string; score: number } => !!x)
+        })
+      }
+    }
+    return found
       .sort((a, b) => b.score - a.score)
-      .filter((s) => s.score >= 40)
+      .filter((s) => s.score >= 30 || hasFloorplanSignal(s.url))
       .map((s) => s.url)
   } catch {
     return []
   }
+}
+
+/** Bekannte Portale, die oft echte Plattegrond-Bilder hosten (WP-Medien-API). */
+const COMPARISON_PORTAL_ORIGINS = [
+  'https://caravanvergelijker.nl',
+  'https://www.caravanvergelijker.nl',
+]
+
+function modelSlug(hersteller: string, modell: string): string {
+  return `${hersteller} ${modell}`
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+}
+
+/** Produktseiten-URLs zum Scrapen, wenn die KI nur Hersteller-PDFs liefert. */
+function buildComparisonPortalPageSeeds(
+  hersteller: string,
+  modell: string,
+  baujahr?: number | null
+): string[] {
+  const slug = modelSlug(hersteller, modell)
+  if (!slug) return []
+  const years: number[] = []
+  if (baujahr != null && Number.isFinite(baujahr)) {
+    const y = Math.round(baujahr)
+    years.push(y, y + 1, y - 1, y + 2)
+  } else {
+    years.push(2022, 2023, 2021, 2024)
+  }
+  const urls: string[] = []
+  for (const origin of COMPARISON_PORTAL_ORIGINS) {
+    for (const y of years) {
+      urls.push(`${origin}/de-vergelijker/${slug}-${y}/`)
+    }
+    urls.push(`${origin}/de-vergelijker/${slug}/`)
+  }
+  return urls
 }
 
 export type FloorplanCandidate = {
@@ -400,6 +445,7 @@ export async function collectFloorplanCandidates(opts: {
   manufacturerUrl: string | null
   hersteller: string
   modell: string
+  baujahr?: number | null
 }): Promise<{ candidates: FloorplanCandidate[]; detail: string }> {
   const modelHint = `${opts.hersteller} ${opts.modell}`
   const tried: string[] = []
@@ -421,10 +467,40 @@ export async function collectFloorplanCandidates(opts: {
     if (!seedUrls.includes(u)) seedUrls.push(u)
   }
 
-  for (const page of [opts.sourceUrl, opts.manufacturerUrl].filter((u): u is string => !!u)) {
-    if (/\.pdf(\?|$)/i.test(page)) continue
-    const media = await discoverViaWordpressMedia(page, opts.hersteller, opts.modell)
+  // Immer Vergleichsportale abfragen – Hersteller liefert oft nur PDF/Katalog
+  const mediaOrigins = [
+    ...COMPARISON_PORTAL_ORIGINS,
+    ...[opts.sourceUrl, opts.manufacturerUrl].filter(
+      (u): u is string => !!u && !/\.pdf(\?|$)/i.test(u)
+    ),
+  ]
+  const seenOrigins = new Set<string>()
+  let portalMediaCount = 0
+  for (const page of mediaOrigins) {
+    let origin: string
+    try {
+      origin = new URL(page).origin
+    } catch {
+      continue
+    }
+    if (seenOrigins.has(origin)) continue
+    seenOrigins.add(origin)
+    const media = await discoverViaWordpressMedia(origin + '/', opts.hersteller, opts.modell)
     for (const u of media) {
+      if (!seedUrls.includes(u)) {
+        seedUrls.push(u)
+        portalMediaCount++
+      }
+    }
+  }
+
+  // Produktseiten nur als Fallback (Seiten laden Bilder oft per JS – WP-API ist besser)
+  if (portalMediaCount < 2) {
+    for (const u of buildComparisonPortalPageSeeds(
+      opts.hersteller,
+      opts.modell,
+      opts.baujahr
+    )) {
       if (!seedUrls.includes(u)) seedUrls.push(u)
     }
   }
@@ -739,6 +815,7 @@ grundriss_bild_url / grundriss_bild_urls: direkte .jpg/.png/.webp des 2D-Grundri
     manufacturerUrl,
     hersteller: asStr(j.hersteller) || hersteller,
     modell: asStr(j.modell) || modell,
+    baujahr: input.baujahr ?? asNum(j.baujahr_von),
   })
   imageCandidates = collected.candidates
   imageWarning = collected.detail
