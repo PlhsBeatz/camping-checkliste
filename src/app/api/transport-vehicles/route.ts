@@ -67,6 +67,24 @@ function parseTransportBody(body: Record<string, unknown>): TransportVehicleInpu
     fahrzeugtyp: fahrzeugtyp ?? null,
     hersteller: typeof body.hersteller === 'string' ? body.hersteller : null,
     modell: typeof body.modell === 'string' ? body.modell : null,
+    baujahr:
+      body.baujahr != null && body.baujahr !== ''
+        ? Number(body.baujahr)
+        : null,
+    laengeM:
+      body.laengeM != null || body.laenge_m != null
+        ? Number(body.laengeM ?? body.laenge_m)
+        : null,
+    breiteM:
+      body.breiteM != null || body.breite_m != null
+        ? Number(body.breiteM ?? body.breite_m)
+        : null,
+    grundrissJson:
+      typeof body.grundrissJson === 'string'
+        ? body.grundrissJson
+        : typeof body.grundriss_json === 'string'
+          ? body.grundriss_json
+          : null,
     maxStuetzlast:
       maxStuetzlast != null && Number.isFinite(maxStuetzlast) && maxStuetzlast > 0
         ? maxStuetzlast

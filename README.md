@@ -24,7 +24,8 @@ Die App richtet sich an alle, die vor der Fahrt nicht nur eine statische Liste b
 
 ### Tools
 
-- **Sonnenausrichtung** (`/tools/sonnen-ausrichtung`) — Orientierung für Stellplatz/Aufstellung (Kompass/Himmelsrichtung, Sonnenstand).
+- **Sonnenausrichtung** (`/tools/sonnen-ausrichtung`) — Orientierung für Stellplatz/Aufstellung (Kompass, Sonnenstand). Optional: Esri-Satellitenbild (Toggle, Offline-Tile-Cache), Planungsmodus pro Campingplatz-Aufenthalt mit Stellplatz-Pin, virtuelles Wohnwagen-Platzieren (Maße am Transportmittel). Ausblick: Vorzelt, Schattenberechnung.
+- **Wohnwagen-Katalog** — lokaler Seed + „Aus Netz aktualisieren“ (OpenRouter-Websuche → Maße + Grundriss-Bild in R2/`wohnwagen_katalog`).
 - **Checklisten** (`/tools/checklisten`) — Zusätzliche, frei konfigurierbare Checklisten neben der Haupt-Packliste.
 
 ### Konfiguration (typisch Administrator)

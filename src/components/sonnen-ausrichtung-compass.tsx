@@ -5,10 +5,18 @@ import * as SunCalc from 'suncalc'
 import { format } from 'date-fns'
 import { de } from 'date-fns/locale'
 
-/** SunCalc azimuth is from South (0=South). Convert to compass degrees (0=North). */
+/** SunCalc-Azimut: 0 = Süd, positiv westwärts → Kompassgrad (0 = Nord). */
 function suncalcAzimuthToCompass(azimuthRad: number): number {
   const deg = (azimuthRad * 180) / Math.PI
-  return (deg + 180) % 360
+  return (((deg + 180) % 360) + 360) % 360
+}
+
+function sameCalendarDay(a: Date, b: Date): boolean {
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  )
 }
 
 interface SunData {
@@ -27,10 +35,13 @@ interface SunData {
 function computeSunData(
   lat: number,
   lng: number,
-  date: Date
+  /** Kalendertag (Mitte des Tages) für Auf-/Untergang/Mittag */
+  day: Date,
+  /** Echte Uhrzeit für „Sonne jetzt“; null = kein Live-Stand (anderer Tag) */
+  liveNow: Date | null
 ): SunData | null {
   try {
-    const times = SunCalc.getTimes(date, lat, lng)
+    const times = SunCalc.getTimes(day, lat, lng)
     const sunrise = times.sunrise
     const sunset = times.sunset
     const solarNoon = times.solarNoon
@@ -44,7 +55,7 @@ function computeSunData(
         sunsetAzimuth: 0,
         solarNoonAzimuth: 180,
         currentAzimuth: 0,
-        currentAltitude: 0,
+        currentAltitude: -1,
         isPolarDay: true,
         isPolarNight: false,
       }
@@ -52,26 +63,30 @@ function computeSunData(
 
     const sunrisePos = SunCalc.getPosition(sunrise, lat, lng)
     const sunsetPos = SunCalc.getPosition(sunset, lat, lng)
-    const solarNoonPos = SunCalc.getPosition(solarNoon ?? date, lat, lng)
-    const currentPos = SunCalc.getPosition(date, lat, lng)
+    const solarNoonPos = SunCalc.getPosition(solarNoon ?? day, lat, lng)
+    const currentPos = liveNow
+      ? SunCalc.getPosition(liveNow, lat, lng)
+      : solarNoonPos
 
     const sunriseAzimuth = suncalcAzimuthToCompass(sunrisePos.azimuth)
     const sunsetAzimuth = suncalcAzimuthToCompass(sunsetPos.azimuth)
     const solarNoonAzimuth = suncalcAzimuthToCompass(solarNoonPos.azimuth)
     const currentAzimuth = suncalcAzimuthToCompass(currentPos.azimuth)
 
-    const isPolarDay = sunrise.getTime() === sunset.getTime() && currentPos.altitude > 0
-    const isPolarNight = sunrise.getTime() === sunset.getTime() && currentPos.altitude <= 0
+    const isPolarDay =
+      sunrise.getTime() === sunset.getTime() && currentPos.altitude > 0
+    const isPolarNight =
+      sunrise.getTime() === sunset.getTime() && currentPos.altitude <= 0
 
     return {
       sunrise,
       sunset,
-      solarNoon: solarNoon ?? new Date(),
+      solarNoon: solarNoon ?? day,
       sunriseAzimuth,
       sunsetAzimuth,
       solarNoonAzimuth,
       currentAzimuth,
-      currentAltitude: currentPos.altitude,
+      currentAltitude: liveNow ? currentPos.altitude : -1,
       isPolarDay,
       isPolarNight,
     }
@@ -116,20 +131,29 @@ interface SonnenAusrichtungCompassProps {
 export function SonnenAusrichtungCompass({
   lat,
   lng,
-  date: _date,
+  date,
   deviceHeading,
 }: SonnenAusrichtungCompassProps) {
   const [sunData, setSunData] = useState<SunData | null>(null)
 
   const updateSunData = useCallback(() => {
-    setSunData(computeSunData(lat, lng, new Date()))
-  }, [lat, lng])
+    const now = new Date()
+    const day = date ? new Date(date) : new Date(now)
+    day.setHours(12, 0, 0, 0)
+    // Live-Sonnenstand nur Vor Ort oder wenn Planungsdatum = heute
+    const liveNow = !date || sameCalendarDay(day, now) ? now : null
+    setSunData(computeSunData(lat, lng, day, liveNow))
+  }, [lat, lng, date])
 
   useEffect(() => {
     updateSunData()
-    const interval = setInterval(updateSunData, 60000)
+    const day = date ? new Date(date) : new Date()
+    if (date) day.setHours(12, 0, 0, 0)
+    const live = !date || sameCalendarDay(day, new Date())
+    if (!live) return
+    const interval = setInterval(updateSunData, 30000)
     return () => clearInterval(interval)
-  }, [updateSunData])
+  }, [updateSunData, date])
 
   if (!sunData) return null
 

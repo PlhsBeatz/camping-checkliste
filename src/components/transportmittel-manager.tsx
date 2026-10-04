@@ -58,6 +58,7 @@ import {
   isGezogen,
   isTransportActiveOn,
   isZugfaehig,
+  supportsGrundriss,
   type Fahrzeugtyp,
 } from '@/lib/transport-types'
 import { todayInAppTimezone } from '@/lib/app-timezone'
@@ -234,6 +235,9 @@ type FormState = {
   icon: TransportIconKey
   hersteller: string
   modell: string
+  baujahr: string
+  laengeM: string
+  breiteM: string
   zulGesamtgewicht: string
   eigengewicht: string
   maxStuetzlast: string
@@ -251,6 +255,9 @@ const emptyForm = (defaultGruppeId = ''): FormState => ({
   icon: 'car',
   hersteller: '',
   modell: '',
+  baujahr: '',
+  laengeM: '',
+  breiteM: '',
   zulGesamtgewicht: '',
   eigengewicht: '',
   maxStuetzlast: '',
@@ -353,12 +360,133 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
   const [gruppen, setGruppen] = useState<MitreisendenGruppe[]>([])
   const [personWeights, setPersonWeights] = useState<Record<string, string>>({})
   const [showWeiterePersonen, setShowWeiterePersonen] = useState(false)
+  const [katalogHint, setKatalogHint] = useState<string | null>(null)
+  const [katalogLoading, setKatalogLoading] = useState(false)
+  const [katalogNetLoading, setKatalogNetLoading] = useState(false)
+  const [katalogImageUrl, setKatalogImageUrl] = useState<string | null>(null)
   const festgewichtLoadedRef = useRef(false)
 
   const anbauMode = isAnbau(form.fahrzeugtyp)
   const zugfaehigMode = isZugfaehig(form.fahrzeugtyp)
   const showStuetzlast = zugfaehigMode || isGezogen(form.fahrzeugtyp)
+  const grundrissMode = supportsGrundriss(form.fahrzeugtyp)
   const traegerOptions = vehicles.filter((v) => isZugfaehig(v.fahrzeugtyp))
+
+  const applyKatalogLookup = async () => {
+    if (!grundrissMode) return
+    const hersteller = form.hersteller.trim()
+    const modell = form.modell.trim()
+    if (!hersteller || !modell) {
+      setKatalogHint('Bitte Hersteller und Modell eingeben.')
+      return
+    }
+    setKatalogLoading(true)
+    setKatalogHint(null)
+    try {
+      const params = new URLSearchParams({ hersteller, modell })
+      if (form.baujahr.trim()) params.set('baujahr', form.baujahr.trim())
+      const res = await fetch(`/api/transport-vehicles/katalog-lookup?${params}`)
+      const data = (await res.json()) as ApiResponse<{
+        laenge_m: number
+        breite_m: number
+        hersteller: string
+        modell: string
+        imageUrl?: string | null
+      } | null>
+      if (!data.success || !data.data) {
+        setKatalogHint(
+          'Kein lokaler Katalog-Treffer – „Aus Netz aktualisieren“ oder Maße manuell.'
+        )
+        return
+      }
+      setForm((prev) => ({
+        ...prev,
+        laengeM: String(data.data!.laenge_m),
+        breiteM: String(data.data!.breite_m),
+      }))
+      setKatalogImageUrl(data.data.imageUrl ?? null)
+      setKatalogHint(
+        `Aus lokalem Katalog: ${data.data.hersteller} ${data.data.modell} (${data.data.laenge_m}×${data.data.breite_m} m)`
+      )
+    } catch {
+      setKatalogHint('Katalog-Lookup fehlgeschlagen (offline?).')
+    } finally {
+      setKatalogLoading(false)
+    }
+  }
+
+  /** OpenRouter-Websuche → Katalog + optional R2-Grundriss-Bild */
+  const refreshKatalogFromNet = async () => {
+    if (!grundrissMode) return
+    const hersteller = form.hersteller.trim()
+    const modell = form.modell.trim()
+    if (!hersteller || !modell) {
+      setKatalogHint('Bitte Hersteller und Modell eingeben.')
+      return
+    }
+    setKatalogNetLoading(true)
+    setKatalogHint(null)
+    try {
+      const res = await fetch('/api/transport-vehicles/katalog-refresh', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          hersteller,
+          modell,
+          baujahr: form.baujahr.trim() ? Number(form.baujahr.trim()) : null,
+          applyToTransportId: editingVehicle?.id ?? null,
+        }),
+      })
+      const data = (await res.json()) as ApiResponse<{
+        entry: {
+          hersteller: string
+          modell: string
+          laenge_m: number
+          breite_m: number
+          laenge_gesamt_m?: number | null
+          laenge_aufbau_m?: number | null
+          baujahr_von?: number | null
+          source_url?: string | null
+          mass_hinweis?: string | null
+        }
+        imageUrl: string | null
+        imageWarning?: string | null
+        sourceNotes?: string | null
+        massKlarheit?: string | null
+      }>
+      if (!data.success || !data.data) {
+        setKatalogHint(data.error ?? 'Netz-Aktualisierung fehlgeschlagen')
+        return
+      }
+      const { entry, imageUrl, imageWarning, sourceNotes, massKlarheit } = data.data
+      const placeLen =
+        entry.laenge_aufbau_m ?? entry.laenge_m ?? entry.laenge_gesamt_m ?? null
+      setForm((prev) => ({
+        ...prev,
+        laengeM: placeLen != null ? String(placeLen) : prev.laengeM,
+        breiteM: String(entry.breite_m),
+        baujahr:
+          prev.baujahr.trim() ||
+          (entry.baujahr_von != null ? String(entry.baujahr_von) : prev.baujahr),
+      }))
+      setKatalogImageUrl(imageUrl ? `${imageUrl}?t=${Date.now()}` : null)
+      const parts = [
+        `Aus Netz: ${entry.hersteller} ${entry.modell}`,
+        massKlarheit || entry.mass_hinweis,
+        imageUrl ? 'Grundriss-Bild gespeichert (Rand möglichst beschnitten)' : null,
+        imageWarning,
+        entry.source_url ? `Quelle: ${entry.source_url}` : null,
+        sourceNotes && sourceNotes !== massKlarheit ? sourceNotes : null,
+        editingVehicle?.id ? 'Am Fahrzeug übernommen.' : null,
+      ].filter(Boolean)
+      setKatalogHint(parts.join('\n'))
+      if (editingVehicle?.id) onRefresh()
+    } catch {
+      setKatalogHint('Netz-Aktualisierung fehlgeschlagen (offline / API?).')
+    } finally {
+      setKatalogNetLoading(false)
+    }
+  }
   const formIsActive = isTransportActiveOn(
     { aktiv_von: form.aktivVon || null, aktiv_bis: form.aktivBis || null },
     todayInAppTimezone()
@@ -543,6 +671,9 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
           fahrzeugtyp: form.fahrzeugtyp,
           hersteller: form.hersteller.trim() || null,
           modell: form.modell.trim() || null,
+          baujahr: null,
+          laengeM: null,
+          breiteM: null,
           icon: form.icon || iconKeyFromFahrzeugtyp(form.fahrzeugtyp),
           eigengewicht: eigen,
           maxTraglast: trag,
@@ -560,12 +691,32 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
     const zul = parseWeightInput(form.zulGesamtgewicht)
     if (zul === null || zul <= 0) return { error: 'Zulässiges Gesamtgewicht muss größer als 0 sein' }
     const stuetz = parseWeightInput(form.maxStuetzlast)
+    const baujahrRaw = form.baujahr.trim() ? Number(form.baujahr.trim()) : null
+    const laengeRaw = form.laengeM.trim() ? Number(form.laengeM.replace(',', '.')) : null
+    const breiteRaw = form.breiteM.trim() ? Number(form.breiteM.replace(',', '.')) : null
+    if (supportsGrundriss(form.fahrzeugtyp)) {
+      if (laengeRaw != null && (!Number.isFinite(laengeRaw) || laengeRaw <= 0 || laengeRaw > 15)) {
+        return { error: 'Länge muss zwischen 0 und 15 m liegen' }
+      }
+      if (breiteRaw != null && (!Number.isFinite(breiteRaw) || breiteRaw <= 0 || breiteRaw > 15)) {
+        return { error: 'Breite muss zwischen 0 und 15 m liegen' }
+      }
+      if ((laengeRaw == null) !== (breiteRaw == null)) {
+        return { error: 'Länge und Breite bitte beide angeben oder beide leer lassen' }
+      }
+    }
     return {
       payload: {
         name,
         fahrzeugtyp: form.fahrzeugtyp,
         hersteller: form.hersteller.trim() || null,
         modell: form.modell.trim() || null,
+        baujahr:
+          supportsGrundriss(form.fahrzeugtyp) && baujahrRaw != null && Number.isFinite(baujahrRaw)
+            ? baujahrRaw
+            : null,
+        laengeM: supportsGrundriss(form.fahrzeugtyp) ? laengeRaw : null,
+        breiteM: supportsGrundriss(form.fahrzeugtyp) ? breiteRaw : null,
         icon: form.icon || iconKeyFromFahrzeugtyp(form.fahrzeugtyp),
         eigengewicht: eigen,
         zulGesamtgewicht: zul,
@@ -848,6 +999,9 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
       ),
       hersteller: vehicle.hersteller ?? '',
       modell: vehicle.modell ?? '',
+      baujahr: vehicle.baujahr != null ? String(vehicle.baujahr) : '',
+      laengeM: vehicle.laenge_m != null ? String(vehicle.laenge_m) : '',
+      breiteM: vehicle.breite_m != null ? String(vehicle.breite_m) : '',
       zulGesamtgewicht: String(vehicle.zul_gesamtgewicht),
       eigengewicht: String(vehicle.eigengewicht),
       maxStuetzlast: vehicle.max_stuetzlast != null ? String(vehicle.max_stuetzlast) : '',
@@ -863,6 +1017,12 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
       gruppeId: vehicle.gruppe_id ?? defaultGruppeId,
       urlaubStandard: !!vehicle.urlaub_standard,
     })
+    setKatalogHint(null)
+    setKatalogImageUrl(
+      vehicle.grundriss_bild_r2_key
+        ? `/api/transport-vehicles/${encodeURIComponent(vehicle.id)}/grundriss-image`
+        : null
+    )
     setShowDialog(true)
   }
 
@@ -874,6 +1034,8 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
     setForm({ ...emptyForm(defaultGruppeId), aktivVon: today })
     setManuellEntries([])
     festgewichtLoadedRef.current = true
+    setKatalogHint(null)
+    setKatalogImageUrl(null)
     setShowDialog(true)
   }
 
@@ -892,6 +1054,9 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
       ),
       hersteller: vehicle.hersteller ?? '',
       modell: vehicle.modell ?? '',
+      baujahr: vehicle.baujahr != null ? String(vehicle.baujahr) : '',
+      laengeM: vehicle.laenge_m != null ? String(vehicle.laenge_m) : '',
+      breiteM: vehicle.breite_m != null ? String(vehicle.breite_m) : '',
       zulGesamtgewicht: String(vehicle.zul_gesamtgewicht),
       eigengewicht: String(vehicle.eigengewicht),
       maxStuetzlast: vehicle.max_stuetzlast != null ? String(vehicle.max_stuetzlast) : '',
@@ -903,6 +1068,8 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
       gruppeId: vehicle.gruppe_id ?? defaultGruppeId,
       urlaubStandard: !!vehicle.urlaub_standard,
     })
+    setKatalogHint(null)
+    setKatalogImageUrl(null)
     setTauschdatum(swap)
     festgewichtLoadedRef.current = true
     setShowDialog(true)
@@ -1214,6 +1381,87 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
               />
             </div>
           </div>
+
+          {grundrissMode && (
+            <div className="space-y-3 rounded-lg border border-border p-3">
+              <p className="text-sm font-medium text-brand-heading">
+                Maße für Sonnenausrichtung (optional)
+              </p>
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <Label>Baujahr</Label>
+                  <Input
+                    inputMode="numeric"
+                    value={form.baujahr}
+                    onChange={(e) => setForm({ ...form, baujahr: e.target.value })}
+                    placeholder="z.B. 2021"
+                  />
+                </div>
+                <div>
+                  <Label>Länge Aufbau (m)</Label>
+                  <Input
+                    inputMode="decimal"
+                    value={form.laengeM}
+                    onChange={(e) => setForm({ ...form, laengeM: e.target.value })}
+                    placeholder="ohne Deichsel, z.B. 6.79"
+                  />
+                </div>
+                <div>
+                  <Label>Breite (m)</Label>
+                  <Input
+                    inputMode="decimal"
+                    value={form.breiteM}
+                    onChange={(e) => setForm({ ...form, breiteM: e.target.value })}
+                    placeholder="z.B. 2.52"
+                  />
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Für die virtuelle Platzierung zählt die <strong>Aufbaulänge</strong> (Karosserie ohne
+                Deichsel). „Aus Netz aktualisieren“ speichert zusätzlich Gesamtlänge und
+                Maßhinweise, wenn gefunden.
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={katalogLoading || katalogNetLoading}
+                  onClick={() => void applyKatalogLookup()}
+                >
+                  Aus Katalog vorschlagen
+                </Button>
+                <Button
+                  type="button"
+                  variant="default"
+                  size="sm"
+                  disabled={katalogLoading || katalogNetLoading}
+                  onClick={() => void refreshKatalogFromNet()}
+                >
+                  {katalogNetLoading ? 'Suche im Netz…' : 'Aus Netz aktualisieren'}
+                </Button>
+              </div>
+              {katalogHint && (
+                <p className="text-xs text-muted-foreground whitespace-pre-wrap">{katalogHint}</p>
+              )}
+              {katalogImageUrl && (
+                <div className="rounded-md border border-border bg-muted/40 p-2">
+                  <p className="text-xs text-muted-foreground mb-1">Grundriss-Bild</p>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={katalogImageUrl}
+                    alt="Wohnwagen-Grundriss"
+                    className="max-h-48 w-auto max-w-full object-contain mx-auto"
+                  />
+                </div>
+              )}
+              <p className="text-xs text-muted-foreground">
+                „Aus Netz aktualisieren“ bevorzugt die Hersteller-Website, speichert Maße mit
+                Klarheit (Gesamt/Aufbau/Deichsel) und beschneidet weiße Ränder am Grundriss-Bild.
+                Ohne Maße: manuell eintragen (Rechteck aus Länge×Breite).
+              </p>
+            </div>
+          )}
 
           {anbauMode ? (
             <>

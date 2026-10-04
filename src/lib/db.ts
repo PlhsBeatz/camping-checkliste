@@ -31,6 +31,7 @@ import {
   isTransportActiveOn,
   isZugfaehig,
   resolveVacationPackTransportId,
+  supportsGrundriss,
   vacationActivityDate,
   zulGesamtgewichtForAnbau,
   type Fahrzeugtyp,
@@ -224,6 +225,25 @@ export interface TransportVehicle {
   gruppe_name?: string | null
   /** Bei Urlauben der zugehörigen Haushalte standardmäßig vorauswählen */
   urlaub_standard?: boolean
+  /** Baujahr (optional, für Katalog-Lookup) */
+  baujahr?: number | null
+  /** Legacy/Fallback-Länge in Metern (Platzierung: siehe laenge_aufbau_m / laenge_gesamt_m) */
+  laenge_m?: number | null
+  /** Außenbreite in Metern (optional, Wohnwagen-Platzierung) */
+  breite_m?: number | null
+  /** Gesamtlänge inkl. Deichsel (m) */
+  laenge_gesamt_m?: number | null
+  /** Aufbaulänge außen ohne Deichsel (m) – bevorzugt für Platzierungs-Rechteck */
+  laenge_aufbau_m?: number | null
+  /** 1 = Deichsel im Grundriss-Bild enthalten, 0 = nicht, null = unbekannt */
+  deichsel_im_bild?: number | null
+  /** Freitext zur Maß-/Skalierungsklarheit */
+  mass_hinweis?: string | null
+  /** Polygon in Metern relativ zur Fahrzeugmitte, JSON `[[x,y],…]` */
+  grundriss_json?: string | null
+  /** R2-Key für Grundriss-Bild (optional, aus Netz-Katalog) */
+  grundriss_bild_r2_key?: string | null
+  grundriss_bild_content_type?: string | null
   created_at: string
 }
 
@@ -245,6 +265,31 @@ export type TransportVehicleInput = {
   /** Haushalt; fehlt → Standard-Haushalt */
   gruppeId?: string | null
   urlaubStandard?: boolean
+  baujahr?: number | null
+  laengeM?: number | null
+  breiteM?: number | null
+  grundrissJson?: string | null
+}
+
+export interface WohnwagenKatalogEntry {
+  id: string
+  hersteller: string
+  modell: string
+  baujahr_von?: number | null
+  baujahr_bis?: number | null
+  laenge_m: number
+  breite_m: number
+  laenge_gesamt_m?: number | null
+  laenge_aufbau_m?: number | null
+  deichsel_im_bild?: number | null
+  mass_hinweis?: string | null
+  grundriss_json?: string | null
+  source_url?: string | null
+  grundriss_bild_url?: string | null
+  r2_object_key?: string | null
+  content_type?: string | null
+  refreshed_at?: string | null
+  notes?: string | null
 }
 
 export interface TransportVehicleFestgewichtManuell {
@@ -450,6 +495,11 @@ export interface VacationCampingStay {
   buchung_abreise_extra_tag?: number | null
   /** Tatsächliches Abreisedatum laut Buchung (wenn extra_tag). */
   buchung_end_datum?: string | null
+  /** Optionaler Stellplatz-Pin (Sonnenausrichtung) */
+  stellplatz_lat?: number | null
+  stellplatz_lng?: number | null
+  /** Gespeicherte Wohnwagen-Drehung in Grad (0 = Nord) */
+  wohnwagen_heading_deg?: number | null
   created_at: string
   campingplatz: Campingplatz
 }
@@ -2515,7 +2565,47 @@ interface TransportVehicleRow {
   gruppe_id?: string | null
   gruppe_name?: string | null
   urlaub_standard?: number | boolean | null
+  baujahr?: number | null
+  laenge_m?: number | null
+  breite_m?: number | null
+  laenge_gesamt_m?: number | null
+  laenge_aufbau_m?: number | null
+  deichsel_im_bild?: number | null
+  mass_hinweis?: string | null
+  grundriss_json?: string | null
+  grundriss_bild_r2_key?: string | null
+  grundriss_bild_content_type?: string | null
   created_at: string
+}
+
+function normalizeOptionalPositiveMeters(value: number | null | undefined): number | null {
+  if (value == null || value === ('' as unknown as number)) return null
+  const n = Number(value)
+  if (!Number.isFinite(n) || n <= 0 || n > 15) return null
+  return Math.round(n * 1000) / 1000
+}
+
+function normalizeOptionalBaujahr(value: number | null | undefined): number | null {
+  if (value == null) return null
+  const n = Math.round(Number(value))
+  if (!Number.isFinite(n) || n < 1950 || n > 2100) return null
+  return n
+}
+
+function normalizeOptionalGrundrissJson(value: string | null | undefined): string | null {
+  const raw = typeof value === 'string' ? value.trim() : ''
+  if (!raw) return null
+  try {
+    const parsed = JSON.parse(raw) as unknown
+    if (!Array.isArray(parsed) || parsed.length < 3) return null
+    for (const pt of parsed) {
+      if (!Array.isArray(pt) || pt.length < 2) return null
+      if (!Number.isFinite(Number(pt[0])) || !Number.isFinite(Number(pt[1]))) return null
+    }
+    return JSON.stringify(parsed)
+  } catch {
+    return null
+  }
 }
 
 function mapTransportVehicleRow(row: TransportVehicleRow): TransportVehicle {
@@ -2542,6 +2632,16 @@ function mapTransportVehicleRow(row: TransportVehicleRow): TransportVehicle {
     gruppe_id: row.gruppe_id ?? null,
     gruppe_name: row.gruppe_name ?? null,
     urlaub_standard: !!(row.urlaub_standard ?? 0),
+    baujahr: row.baujahr != null ? Number(row.baujahr) : null,
+    laenge_m: row.laenge_m != null ? Number(row.laenge_m) : null,
+    breite_m: row.breite_m != null ? Number(row.breite_m) : null,
+    laenge_gesamt_m: row.laenge_gesamt_m != null ? Number(row.laenge_gesamt_m) : null,
+    laenge_aufbau_m: row.laenge_aufbau_m != null ? Number(row.laenge_aufbau_m) : null,
+    deichsel_im_bild: row.deichsel_im_bild != null ? Number(row.deichsel_im_bild) : null,
+    mass_hinweis: row.mass_hinweis != null ? String(row.mass_hinweis) : null,
+    grundriss_json: row.grundriss_json ?? null,
+    grundriss_bild_r2_key: row.grundriss_bild_r2_key ?? null,
+    grundriss_bild_content_type: row.grundriss_bild_content_type ?? null,
     created_at: row.created_at,
   }
 }
@@ -2563,6 +2663,10 @@ function normalizeTransportInput(input: TransportVehicleInput): {
   traegerTransportId: string | null
   gruppeId: string | null
   urlaubStandard: boolean
+  baujahr: number | null
+  laengeM: number | null
+  breiteM: number | null
+  grundrissJson: string | null
 } {
   const name = input.name.trim()
   const fahrzeugtyp: Fahrzeugtyp = isFahrzeugtyp(input.fahrzeugtyp)
@@ -2585,6 +2689,7 @@ function normalizeTransportInput(input: TransportVehicleInput): {
     ? input.traegerTransportId?.trim() || null
     : null
   const gruppeId = input.gruppeId?.trim() || null
+  const withGrundriss = supportsGrundriss(fahrzeugtyp)
   return {
     name,
     icon,
@@ -2605,6 +2710,10 @@ function normalizeTransportInput(input: TransportVehicleInput): {
     traegerTransportId,
     gruppeId,
     urlaubStandard: !!input.urlaubStandard,
+    baujahr: withGrundriss ? normalizeOptionalBaujahr(input.baujahr) : null,
+    laengeM: withGrundriss ? normalizeOptionalPositiveMeters(input.laengeM) : null,
+    breiteM: withGrundriss ? normalizeOptionalPositiveMeters(input.breiteM) : null,
+    grundrissJson: withGrundriss ? normalizeOptionalGrundrissJson(input.grundrissJson) : null,
   }
 }
 
@@ -2672,35 +2781,78 @@ export async function createTransportVehicle(
   try {
     // gruppeId bereits vom Caller geprüft → direkt nutzen; sonst Default-Haushalt
     const gruppeId = n.gruppeId || (await resolveDefaultGruppeId(db, true))
-    await db
-      .prepare(
-        `INSERT INTO transportmittel (
-          id, name, icon, zul_gesamtgewicht, eigengewicht, fest_installiert_mitrechnen,
-          fahrzeugtyp, hersteller, modell, max_stuetzlast, max_traglast,
-          aktiv_von, aktiv_bis, ersetzt_durch_id, traeger_transport_id, gruppe_id, urlaub_standard
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-      )
-      .bind(
-        id,
-        n.name,
-        n.icon,
-        n.zulGesamtgewicht,
-        n.eigengewicht,
-        n.festInstalliertMitrechnen ? 1 : 0,
-        n.fahrzeugtyp,
-        n.hersteller,
-        n.modell,
-        n.maxStuetzlast,
-        n.maxTraglast,
-        n.aktivVon,
-        n.aktivBis,
-        n.ersetztDurchId,
-        n.traegerTransportId,
-        gruppeId,
-        n.urlaubStandard ? 1 : 0
-      )
-      .run()
-    return id
+    try {
+      await db
+        .prepare(
+          `INSERT INTO transportmittel (
+            id, name, icon, zul_gesamtgewicht, eigengewicht, fest_installiert_mitrechnen,
+            fahrzeugtyp, hersteller, modell, max_stuetzlast, max_traglast,
+            aktiv_von, aktiv_bis, ersetzt_durch_id, traeger_transport_id, gruppe_id, urlaub_standard,
+            baujahr, laenge_m, breite_m, grundriss_json
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        )
+        .bind(
+          id,
+          n.name,
+          n.icon,
+          n.zulGesamtgewicht,
+          n.eigengewicht,
+          n.festInstalliertMitrechnen ? 1 : 0,
+          n.fahrzeugtyp,
+          n.hersteller,
+          n.modell,
+          n.maxStuetzlast,
+          n.maxTraglast,
+          n.aktivVon,
+          n.aktivBis,
+          n.ersetztDurchId,
+          n.traegerTransportId,
+          gruppeId,
+          n.urlaubStandard ? 1 : 0,
+          n.baujahr,
+          n.laengeM,
+          n.breiteM,
+          n.grundrissJson
+        )
+        .run()
+      return id
+    } catch (error) {
+      // Fallback ohne Maße-Spalten (Migration 0068 noch nicht angewendet)
+      try {
+        await db
+          .prepare(
+            `INSERT INTO transportmittel (
+              id, name, icon, zul_gesamtgewicht, eigengewicht, fest_installiert_mitrechnen,
+              fahrzeugtyp, hersteller, modell, max_stuetzlast, max_traglast,
+              aktiv_von, aktiv_bis, ersetzt_durch_id, traeger_transport_id, gruppe_id, urlaub_standard
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          )
+          .bind(
+            id,
+            n.name,
+            n.icon,
+            n.zulGesamtgewicht,
+            n.eigengewicht,
+            n.festInstalliertMitrechnen ? 1 : 0,
+            n.fahrzeugtyp,
+            n.hersteller,
+            n.modell,
+            n.maxStuetzlast,
+            n.maxTraglast,
+            n.aktivVon,
+            n.aktivBis,
+            n.ersetztDurchId,
+            n.traegerTransportId,
+            gruppeId,
+            n.urlaubStandard ? 1 : 0
+          )
+          .run()
+        return id
+      } catch (fallbackError) {
+        console.error('Error creating transport vehicle:', fallbackError || error)
+        return null
+      }
+    }
   } catch (error) {
     console.error('Error creating transport vehicle:', error)
     return null
@@ -2732,36 +2884,73 @@ export async function updateTransportVehicle(
   const n = normalizeTransportInput(input)
   try {
     const gruppeId = n.gruppeId || (await resolveDefaultGruppeId(db, true))
-    await db
-      .prepare(
-        `UPDATE transportmittel SET
-          name = ?, icon = ?, zul_gesamtgewicht = ?, eigengewicht = ?, fest_installiert_mitrechnen = ?,
-          fahrzeugtyp = ?, hersteller = ?, modell = ?, max_stuetzlast = ?, max_traglast = ?,
-          aktiv_von = ?, aktiv_bis = ?, ersetzt_durch_id = ?, traeger_transport_id = ?, gruppe_id = ?,
-          urlaub_standard = ?
-        WHERE id = ?`
-      )
-      .bind(
-        n.name,
-        n.icon,
-        n.zulGesamtgewicht,
-        n.eigengewicht,
-        n.festInstalliertMitrechnen ? 1 : 0,
-        n.fahrzeugtyp,
-        n.hersteller,
-        n.modell,
-        n.maxStuetzlast,
-        n.maxTraglast,
-        n.aktivVon,
-        n.aktivBis,
-        n.ersetztDurchId,
-        n.traegerTransportId,
-        gruppeId,
-        n.urlaubStandard ? 1 : 0,
-        id
-      )
-      .run()
-    return true
+    try {
+      await db
+        .prepare(
+          `UPDATE transportmittel SET
+            name = ?, icon = ?, zul_gesamtgewicht = ?, eigengewicht = ?, fest_installiert_mitrechnen = ?,
+            fahrzeugtyp = ?, hersteller = ?, modell = ?, max_stuetzlast = ?, max_traglast = ?,
+            aktiv_von = ?, aktiv_bis = ?, ersetzt_durch_id = ?, traeger_transport_id = ?, gruppe_id = ?,
+            urlaub_standard = ?, baujahr = ?, laenge_m = ?, breite_m = ?, grundriss_json = ?
+          WHERE id = ?`
+        )
+        .bind(
+          n.name,
+          n.icon,
+          n.zulGesamtgewicht,
+          n.eigengewicht,
+          n.festInstalliertMitrechnen ? 1 : 0,
+          n.fahrzeugtyp,
+          n.hersteller,
+          n.modell,
+          n.maxStuetzlast,
+          n.maxTraglast,
+          n.aktivVon,
+          n.aktivBis,
+          n.ersetztDurchId,
+          n.traegerTransportId,
+          gruppeId,
+          n.urlaubStandard ? 1 : 0,
+          n.baujahr,
+          n.laengeM,
+          n.breiteM,
+          n.grundrissJson,
+          id
+        )
+        .run()
+      return true
+    } catch {
+      await db
+        .prepare(
+          `UPDATE transportmittel SET
+            name = ?, icon = ?, zul_gesamtgewicht = ?, eigengewicht = ?, fest_installiert_mitrechnen = ?,
+            fahrzeugtyp = ?, hersteller = ?, modell = ?, max_stuetzlast = ?, max_traglast = ?,
+            aktiv_von = ?, aktiv_bis = ?, ersetzt_durch_id = ?, traeger_transport_id = ?, gruppe_id = ?,
+            urlaub_standard = ?
+          WHERE id = ?`
+        )
+        .bind(
+          n.name,
+          n.icon,
+          n.zulGesamtgewicht,
+          n.eigengewicht,
+          n.festInstalliertMitrechnen ? 1 : 0,
+          n.fahrzeugtyp,
+          n.hersteller,
+          n.modell,
+          n.maxStuetzlast,
+          n.maxTraglast,
+          n.aktivVon,
+          n.aktivBis,
+          n.ersetztDurchId,
+          n.traegerTransportId,
+          gruppeId,
+          n.urlaubStandard ? 1 : 0,
+          id
+        )
+        .run()
+      return true
+    }
   } catch (error) {
     console.error('Error updating transport vehicle:', error)
     return false
@@ -7117,6 +7306,19 @@ function mapVacationCampingStayRow(
       withBookingFields && row.stay_buchung_end_datum != null
         ? String(row.stay_buchung_end_datum)
         : null,
+    stellplatz_lat:
+      row.stay_stellplatz_lat != null && Number.isFinite(Number(row.stay_stellplatz_lat))
+        ? Number(row.stay_stellplatz_lat)
+        : null,
+    stellplatz_lng:
+      row.stay_stellplatz_lng != null && Number.isFinite(Number(row.stay_stellplatz_lng))
+        ? Number(row.stay_stellplatz_lng)
+        : null,
+    wohnwagen_heading_deg:
+      row.stay_wohnwagen_heading_deg != null &&
+      Number.isFinite(Number(row.stay_wohnwagen_heading_deg))
+        ? Number(row.stay_wohnwagen_heading_deg)
+        : null,
     created_at: String(row.stay_created_at || ''),
     campingplatz: mapCampingplatzRow(row),
   }
@@ -7167,9 +7369,20 @@ export async function getCampingStaysForVacations(
          uc.buchung_abreise_extra_tag AS stay_buchung_abreise_extra_tag,
          uc.buchung_end_datum AS stay_buchung_end_datum`
 
-  for (const withBooking of [true, false]) {
+  const stellplatzSelect = `,
+         uc.stellplatz_lat AS stay_stellplatz_lat, uc.stellplatz_lng AS stay_stellplatz_lng,
+         uc.wohnwagen_heading_deg AS stay_wohnwagen_heading_deg`
+
+  const selectVariants = [
+    baseSelect + bookingSelect + stellplatzSelect,
+    baseSelect + bookingSelect,
+    baseSelect,
+  ]
+
+  for (let i = 0; i < selectVariants.length; i++) {
+    const select = selectVariants[i]
+    const withBooking = i < 2
     try {
-      const select = withBooking ? baseSelect + bookingSelect : baseSelect
       const result = await db
         .prepare(select + batchJoin)
         .bind(...vacationIds)
@@ -7182,17 +7395,155 @@ export async function getCampingStaysForVacations(
       }
       return grouped
     } catch (error) {
-      if (!withBooking) {
+      if (i === selectVariants.length - 1) {
         console.error('Error batch fetching camping stays:', error)
         return grouped
       }
       console.warn(
-        'Batch camping stays query without booking columns (Migration 0049 fehlt?) – Fallback wird versucht:',
+        'Batch camping stays query fallback (fehlende Spalten?) – nächste Variante wird versucht:',
         error
       )
     }
   }
   return grouped
+}
+
+export type StayStellplatzFields = {
+  stellplatz_lat?: number | null
+  stellplatz_lng?: number | null
+  wohnwagen_heading_deg?: number | null
+}
+
+/** Stellplatz-Pin / Wohnwagen-Heading für Sonnenausrichtung speichern. */
+export async function updateCampingStayStellplatz(
+  db: D1Database,
+  stayId: string,
+  fields: StayStellplatzFields
+): Promise<boolean> {
+  try {
+    const lat =
+      fields.stellplatz_lat != null && Number.isFinite(fields.stellplatz_lat)
+        ? Number(fields.stellplatz_lat)
+        : null
+    const lng =
+      fields.stellplatz_lng != null && Number.isFinite(fields.stellplatz_lng)
+        ? Number(fields.stellplatz_lng)
+        : null
+    if ((lat == null) !== (lng == null)) return false
+    if (lat != null && (lat < -90 || lat > 90 || lng! < -180 || lng! > 180)) return false
+
+    let heading =
+      fields.wohnwagen_heading_deg != null && Number.isFinite(fields.wohnwagen_heading_deg)
+        ? Number(fields.wohnwagen_heading_deg)
+        : null
+    if (heading != null) {
+      heading = ((heading % 360) + 360) % 360
+    }
+
+    await db
+      .prepare(
+        `UPDATE urlaub_campingplaetze SET
+          stellplatz_lat = ?, stellplatz_lng = ?, wohnwagen_heading_deg = ?
+         WHERE id = ?`
+      )
+      .bind(lat, lng, heading, stayId)
+      .run()
+    return true
+  } catch (error) {
+    console.error('Error updating stay stellplatz:', error)
+    return false
+  }
+}
+
+function normalizeKatalogLookupText(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
+    .replace(/['']/g, '')
+    .replace(/\s+/g, ' ')
+}
+
+/** Best-effort Wohnwagen-Katalog-Lookup nach Hersteller/Modell[/Baujahr]. */
+export async function lookupWohnwagenKatalog(
+  db: D1Database,
+  hersteller: string,
+  modell: string,
+  baujahr?: number | null
+): Promise<WohnwagenKatalogEntry | null> {
+  const h = hersteller.trim()
+  const m = modell.trim()
+  if (!h || !m) return null
+  try {
+    let rows: Record<string, unknown>[] = []
+    try {
+      const result = await db.prepare(`SELECT * FROM wohnwagen_katalog`).all<Record<string, unknown>>()
+      rows = result.results ?? []
+    } catch {
+      const result = await db
+        .prepare(
+          `SELECT id, hersteller, modell, baujahr_von, baujahr_bis, laenge_m, breite_m, grundriss_json
+           FROM wohnwagen_katalog`
+        )
+        .all<Record<string, unknown>>()
+      rows = result.results ?? []
+    }
+    if (rows.length === 0) return null
+
+    const nh = normalizeKatalogLookupText(h)
+    const nm = normalizeKatalogLookupText(m)
+    const year =
+      baujahr != null && Number.isFinite(baujahr) ? Math.round(Number(baujahr)) : null
+
+    type Scored = { score: number; row: Record<string, unknown> }
+    const scored: Scored[] = []
+    for (const row of rows) {
+      const rh = normalizeKatalogLookupText(String(row.hersteller ?? ''))
+      const rm = normalizeKatalogLookupText(String(row.modell ?? ''))
+      let score = 0
+      if (rh === nh) score += 40
+      else if (rh.includes(nh) || nh.includes(rh)) score += 25
+      else continue
+
+      if (rm === nm) score += 50
+      else if (rm.includes(nm) || nm.includes(rm)) score += 30
+      else continue
+
+      if (year != null) {
+        const von = row.baujahr_von != null ? Number(row.baujahr_von) : null
+        const bis = row.baujahr_bis != null ? Number(row.baujahr_bis) : null
+        if (von != null && bis != null && year >= von && year <= bis) score += 20
+        else if (von != null && bis == null && year >= von) score += 10
+        else if (bis != null && von == null && year <= bis) score += 10
+      }
+      scored.push({ score, row })
+    }
+    scored.sort((a, b) => b.score - a.score)
+    const best = scored[0]
+    if (!best || best.score < 55) return null
+    return {
+      id: String(best.row.id),
+      hersteller: String(best.row.hersteller),
+      modell: String(best.row.modell),
+      baujahr_von: best.row.baujahr_von != null ? Number(best.row.baujahr_von) : null,
+      baujahr_bis: best.row.baujahr_bis != null ? Number(best.row.baujahr_bis) : null,
+      laenge_m: Number(best.row.laenge_m),
+      breite_m: Number(best.row.breite_m),
+      grundriss_json:
+        best.row.grundriss_json != null ? String(best.row.grundriss_json) : null,
+      source_url: best.row.source_url != null ? String(best.row.source_url) : null,
+      grundriss_bild_url:
+        best.row.grundriss_bild_url != null ? String(best.row.grundriss_bild_url) : null,
+      r2_object_key: best.row.r2_object_key != null ? String(best.row.r2_object_key) : null,
+      content_type: best.row.content_type != null ? String(best.row.content_type) : null,
+      refreshed_at: best.row.refreshed_at != null ? String(best.row.refreshed_at) : null,
+      notes: best.row.notes != null ? String(best.row.notes) : null,
+    }
+  } catch (error) {
+    console.error('Error looking up wohnwagen katalog:', error)
+    return null
+  }
 }
 
 export type RestzahlungAttentionStay = {

@@ -308,6 +308,11 @@ export function CampingStayBookingPanel({
             </a>
           </Button>
         )}
+        <Button type="button" variant="outline" size="sm" className="h-7 text-xs" asChild>
+          <a href={`/tools/sonnen-ausrichtung?mode=planung&stayId=${encodeURIComponent(stay.id)}`}>
+            Sonnen-Vorschau
+          </a>
+        </Button>
         {stay.platznummer && (
           <Button
             type="button"

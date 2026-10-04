@@ -432,3 +432,13 @@ gmp-place-autocomplete::part(prediction-item) {
     box-shadow: 0 0 0 3px rgb(45 79 30 / 0.55);
   }
 }
+
+/* Sonnenausrichtung: Leaflet DivIcons ohne Default-Rahmen */
+.sonnen-map-sun-label,
+.sonnen-map-north-marker,
+.sonnen-caravan-image,
+.sonnen-caravan-drag,
+.sonnen-stellplatz-pin {
+  background: transparent !important;
+  border: none !important;
+}

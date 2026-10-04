@@ -41,9 +41,15 @@ export const FAHRZEUGTYP_LABELS: Record<Fahrzeugtyp, string> = {
 export const ZUGFAEHIGE_TYPEN: readonly Fahrzeugtyp[] = ['auto', 'wohnmobil', 'kastenwagen']
 export const GEZOGENE_TYPEN: readonly Fahrzeugtyp[] = ['wohnwagen', 'faltcaravan', 'anhaenger']
 export const ANBAU_TYPEN: readonly Fahrzeugtyp[] = ['dachbox', 'hecktraeger']
+/** Typen mit optionalem Grundriss / Außenmaßen (Sonnenausrichtung) */
+export const GRUNDRISS_TYPEN: readonly Fahrzeugtyp[] = ['wohnwagen', 'faltcaravan']
 
 export function isFahrzeugtyp(value: string | null | undefined): value is Fahrzeugtyp {
   return !!value && (FAHRZEUGTYPEN as readonly string[]).includes(value)
+}
+
+export function supportsGrundriss(typ: string | null | undefined): boolean {
+  return isFahrzeugtyp(typ) && (GRUNDRISS_TYPEN as readonly string[]).includes(typ)
 }
 
 export function isZugfaehig(typ: string | null | undefined): boolean {

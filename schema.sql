@@ -28,12 +28,44 @@ CREATE TABLE IF NOT EXISTS transportmittel (
     traeger_transport_id TEXT,
     gruppe_id TEXT,
     urlaub_standard INTEGER NOT NULL DEFAULT 0,
+    baujahr INTEGER,
+    laenge_m REAL,
+    breite_m REAL,
+    laenge_gesamt_m REAL,
+    laenge_aufbau_m REAL,
+    deichsel_im_bild INTEGER,
+    mass_hinweis TEXT,
+    grundriss_json TEXT,
+    grundriss_bild_r2_key TEXT,
+    grundriss_bild_content_type TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
     CHECK (zul_gesamtgewicht > 0),
     CHECK (eigengewicht >= 0),
     FOREIGN KEY (ersetzt_durch_id) REFERENCES transportmittel(id) ON DELETE SET NULL,
     FOREIGN KEY (traeger_transport_id) REFERENCES transportmittel(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS wohnwagen_katalog (
+    id TEXT PRIMARY KEY,
+    hersteller TEXT NOT NULL,
+    modell TEXT NOT NULL,
+    baujahr_von INTEGER,
+    baujahr_bis INTEGER,
+    laenge_m REAL NOT NULL,
+    breite_m REAL NOT NULL,
+    laenge_gesamt_m REAL,
+    laenge_aufbau_m REAL,
+    deichsel_im_bild INTEGER,
+    mass_hinweis TEXT,
+    grundriss_json TEXT,
+    source_url TEXT,
+    grundriss_bild_url TEXT,
+    r2_object_key TEXT,
+    content_type TEXT,
+    refreshed_at TEXT,
+    notes TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE TABLE IF NOT EXISTS transportmittel_festgewicht_manuell (
