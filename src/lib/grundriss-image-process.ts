@@ -24,11 +24,36 @@ export type GrundrissProcessResult =
   | {
       ok: true
       data: Uint8Array
-      mime: 'image/webp'
+      mime: 'image/webp' | 'image/jpeg' | 'image/png'
       cropped: boolean
+      /** true = unverändert durchgereicht (z. B. WebP ohne WASM im Worker) */
+      passthrough?: boolean
       crop: { left: number; top: number; right: number; bottom: number; srcW: number; srcH: number }
     }
   | { ok: false; reason: string }
+
+function mimeForKind(kind: 'jpeg' | 'png' | 'webp'): 'image/jpeg' | 'image/png' | 'image/webp' {
+  if (kind === 'png') return 'image/png'
+  if (kind === 'webp') return 'image/webp'
+  return 'image/jpeg'
+}
+
+/** Wenn Decode/Encode (WASM) scheitert: Original als Erfolg durchreichen. */
+function passthroughOriginal(
+  input: Uint8Array,
+  mimeHint?: string
+): Extract<GrundrissProcessResult, { ok: true }> | null {
+  const kind = detectKind(input, mimeHint)
+  if (!kind) return null
+  return {
+    ok: true,
+    data: input,
+    mime: mimeForKind(kind),
+    cropped: false,
+    passthrough: true,
+    crop: { left: 0, top: 0, right: 0, bottom: 0, srcW: 0, srcH: 0 },
+  }
+}
 
 function detectKind(buf: Uint8Array, mimeHint?: string): 'jpeg' | 'png' | 'webp' | null {
   if (buf.byteLength >= 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return 'jpeg'
@@ -110,14 +135,19 @@ async function decodeToRgba(
     const png = PNG.sync.read(Buffer.from(input))
     return { rgba: new Uint8ClampedArray(png.data), w: png.width, h: png.height }
   }
-  const webpCopy = new Uint8Array(input.byteLength)
-  webpCopy.set(input)
-  const ab = webpCopy.buffer.slice(
-    webpCopy.byteOffset,
-    webpCopy.byteOffset + webpCopy.byteLength
-  ) as ArrayBuffer
-  const img = await webpDecode(ab)
-  return { rgba: new Uint8ClampedArray(img.data), w: img.width, h: img.height }
+  // WebP-WASM fehlt im Worker oft komplett → Caller macht Passthrough
+  try {
+    const webpCopy = new Uint8Array(input.byteLength)
+    webpCopy.set(input)
+    const ab = webpCopy.buffer.slice(
+      webpCopy.byteOffset,
+      webpCopy.byteOffset + webpCopy.byteLength
+    ) as ArrayBuffer
+    const img = await webpDecode(ab)
+    return { rgba: new Uint8ClampedArray(img.data), w: img.width, h: img.height }
+  } catch {
+    return null
+  }
 }
 
 function isBackground(r: number, g: number, b: number, a: number): boolean {
@@ -231,10 +261,14 @@ export async function processGrundrissImage(
   input: Uint8Array,
   mimeHint?: string
 ): Promise<GrundrissProcessResult> {
+  const kind = detectKind(input, mimeHint)
+
   try {
     const decoded = await decodeToRgba(input, mimeHint)
     if (!decoded) {
-      // Letzter Versuch: nur skalieren/WebP wie Campingfotos
+      // WebP/JPEG-WASM oft ohne Binary im Worker – Original behalten statt Fehlerflut
+      const pass = passthroughOriginal(input, mimeHint)
+      if (pass) return pass
       const fallback = await optimizeCampingPhotoToWebp(input, mimeHint)
       if (fallback.ok) {
         return {
@@ -294,16 +328,34 @@ export async function processGrundrissImage(
       )
     }
 
-    const ab = await webpEncode(makeImageData(workRgba, tw, th), { quality: WEBP_QUALITY })
-    return {
-      ok: true,
-      data: new Uint8Array(ab),
-      mime: 'image/webp',
-      cropped,
-      crop: cropMeta,
+    try {
+      const ab = await webpEncode(makeImageData(workRgba, tw, th), { quality: WEBP_QUALITY })
+      return {
+        ok: true,
+        data: new Uint8Array(ab),
+        mime: 'image/webp',
+        cropped,
+        crop: cropMeta,
+      }
+    } catch {
+      // Encode-WASM fehlt: wenn schon WebP und kein Crop nötig → Original
+      if (kind === 'webp' && !cropped) {
+        const pass = passthroughOriginal(input, mimeHint)
+        if (pass) return pass
+      }
+      // PNG als verlustfreier Fallback nach Crop/Skalierung
+      const png = new PNG({ width: tw, height: th })
+      png.data = Buffer.from(workRgba)
+      const pngBuf = PNG.sync.write(png)
+      return {
+        ok: true,
+        data: new Uint8Array(pngBuf),
+        mime: 'image/png',
+        cropped,
+        crop: cropMeta,
+      }
     }
   } catch (e) {
-    // Bewährter Fallback ohne Crop (gleiche Pipeline wie Campingfotos)
     try {
       const fallback = await optimizeCampingPhotoToWebp(input, mimeHint)
       if (fallback.ok) {
@@ -315,15 +367,12 @@ export async function processGrundrissImage(
           crop: { left: 0, top: 0, right: 0, bottom: 0, srcW: 0, srcH: 0 },
         }
       }
-      const msg = e instanceof Error ? e.message : String(e)
-      return {
-        ok: false,
-        reason: `${msg} · Fallback: ${fallback.reason}`,
-      }
-    } catch (e2) {
-      const msg = e instanceof Error ? e.message : String(e)
-      const msg2 = e2 instanceof Error ? e2.message : String(e2)
-      return { ok: false, reason: `${msg} · Fallback: ${msg2}` }
+    } catch {
+      /* ignore */
     }
+    const pass = passthroughOriginal(input, mimeHint)
+    if (pass) return pass
+    const msg = e instanceof Error ? e.message : String(e)
+    return { ok: false, reason: msg }
   }
 }

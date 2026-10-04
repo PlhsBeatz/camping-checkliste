@@ -579,8 +579,9 @@ function SonnenAusrichtungContent() {
       grundrissJson: selectedVehicle.grundriss_json,
     })
     if (!outline) return null
+    // R2-Key im Query: nach Bildwechsel neuer Key → Browser lädt nicht das gecachte Altbild
     const imageUrl = selectedVehicle.grundriss_bild_r2_key
-      ? `/api/transport-vehicles/${encodeURIComponent(selectedVehicle.id)}/grundriss-image`
+      ? `/api/transport-vehicles/${encodeURIComponent(selectedVehicle.id)}/grundriss-image?k=${encodeURIComponent(selectedVehicle.grundriss_bild_r2_key)}`
       : null
     return {
       outline,

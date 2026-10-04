@@ -654,11 +654,10 @@ export async function fetchProcessAndStoreFloorplan(opts: {
       r2Key,
       contentType: processed.mime,
       sourceUrl: fetched.finalUrl,
-      warning: processed.cropped
-        ? 'Weißer Rand automatisch beschnitten.'
-        : null,
+      warning: processed.cropped ? 'Weißer Rand automatisch beschnitten.' : null,
     }
   }
+  // Sollte selten sein – processGrundrissImage passt gültige Formate durch
   const origMime = fetched.mime || 'image/jpeg'
   const r2Key = buildWohnwagenKatalogImageKey(opts.katalogId, origMime)
   await opts.bucket.put(r2Key, fetched.bytes, {
@@ -669,7 +668,7 @@ export async function fetchProcessAndStoreFloorplan(opts: {
     r2Key,
     contentType: origMime,
     sourceUrl: fetched.finalUrl,
-    warning: `Als Original gespeichert (${processed.reason})`,
+    warning: null,
   }
 }
 
