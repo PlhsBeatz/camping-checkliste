@@ -63,17 +63,24 @@ Maß-Regeln (sehr wichtig):
 - breite_m = Außenbreite.
 - Alle Längen in Metern (z. B. 812 cm → 8.12).
 
-Bild-Regeln:
-- grundriss_bild_url: DIREKTE Bild-URL (.jpg/.png/.webp) des Grundrisses/Plattegronds vom Hersteller, wenn möglich.
-- Keine Außen-/Innenfotos. Kein HTML, wenn Direktbild bekannt.
+Bild-Regeln (sehr strikt):
+- grundriss_bild_url: NUR direkte URL eines 2D-Grundrisses/Plattegronds (Draufsicht mit Möbeln/Räumen als Linienzeichnung oder Plan).
+- NIEMALS: Innenraumfotos, Außenfotos, Hero-/Lifestyle-Bilder, Galerie, Thumbnails von Fotos.
+- URL/Dateiname sollte Begriffe wie grundriss, plattegrond, floorplan, layout, indeling enthalten – sonst null.
+- Kein HTML als Bild-URL. Lieber null als falsches Foto.
 - deichsel_im_grundriss: true wenn die Deichsel im Grundriss mitgezeichnet ist, false wenn nur der Aufbau, null wenn unklar.
 - source_url / manufacturer_url: Seiten der Quellen.`
 
 const BROWSER_UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
 
+/** Positive Signale für echten Grundriss/Plattegrond in URL/Text. */
 const FLOORPLAN_RE =
-  /plattegrond|floorplan|floor[_-]?plan|grundriss|lageplan|layout|indeling|floor_plan/i
+  /plattegrond|floor[_-]?plan|floorplan|grundriss|grundrissplan|lageplan|indeling|wohnraumplan|aufteilung|floor_plan|site[_-]?plan|layout[_-]?(plan|ww|caravan|wagen)|plan[_-]?(layout|floor)/i
+
+/** Klare Foto-/Galerie-Signale – ohne Floorplan-Keyword ablehnen. */
+const PHOTO_REJECT_RE =
+  /interieur|interior|binnen(?:kant|kijker)?|innen(?:raum|ansicht|foto)?|außen|aussen|exterior|buiten|outdoor|lifestyle|gallery|galerie|hero|slider|carousel|mood|detailfoto|close[_-]?up|wohnraumfoto|schla[^/]*foto|badfoto|kueche|küche|kitchen|bedroom|bathroom|living|sitzgruppe|dinette|panorama|360|video|thumb(?!.*(?:grundriss|plattegrond|floor))/i
 
 function asNum(v: unknown): number | null {
   if (v == null || v === '') return null
@@ -120,18 +127,171 @@ function absolutizeUrl(href: string, base: string): string | null {
   }
 }
 
+function hasFloorplanSignal(text: string): boolean {
+  return FLOORPLAN_RE.test(text)
+}
+
+function hasPhotoRejectSignal(text: string): boolean {
+  return PHOTO_REJECT_RE.test(text)
+}
+
 function scoreImageCandidate(url: string, modelHint: string, hersteller: string): number {
-  let score = scoreSourceUrl(url, hersteller)
   const lower = url.toLowerCase()
-  if (FLOORPLAN_RE.test(lower)) score += 80
+  const floor = hasFloorplanSignal(lower)
+  const photo = hasPhotoRejectSignal(lower)
+
+  // Foto ohne Grundriss-Signal: hart verwerfen
+  if (photo && !floor) return -200
+
+  let score = scoreSourceUrl(url, hersteller)
+  if (floor) score += 120
+  else score -= 40 // ohne Keyword deutlich abwerten
   if (/\.(webp|png)$/i.test(lower)) score += 5
   for (const t of modelHint.toLowerCase().split(/[^a-z0-9]+/).filter((x) => x.length >= 2)) {
-    if (lower.includes(t)) score += 8
+    if (lower.includes(t)) score += 6
   }
-  if (/buiten|exterior|interieur|binnen|innen|foto/i.test(lower) && !FLOORPLAN_RE.test(lower)) {
-    score -= 50
-  }
+  // „foto“ allein oft Galerie – nur ohne Floorplan bestrafen
+  if (/\bfoto\b|\bphoto\b|\bimage\b/i.test(lower) && !floor) score -= 40
   return score
+}
+
+/**
+ * Grobe Raster-Heuristik: Grundrisse sind meist hell/weiß mit Linien, Innenfotos bunt.
+ * Liefert 0…1; <0.45 = eher Foto.
+ */
+async function estimateFloorplanLikelihood(
+  bytes: Uint8Array,
+  mime: string
+): Promise<number> {
+  try {
+    const { PNG } = await import('pngjs')
+    const { Buffer } = await import('node:buffer')
+    const jpegDecodeWasm = (await import('@jsquash/jpeg/decode')).default
+    const { decode: decodeJpegJs } = await import('jpeg-js')
+    const webpDecode = (await import('@jsquash/webp/decode')).default
+
+    let rgba: Uint8ClampedArray
+    let w: number
+    let h: number
+    const isJpegMagic = bytes[0] === 0xff && bytes[1] === 0xd8
+    const isPngMagic =
+      bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47
+    const isWebpMagic =
+      bytes.byteLength >= 12 &&
+      bytes[0] === 0x52 &&
+      bytes[8] === 0x57 &&
+      bytes[9] === 0x45 &&
+      bytes[10] === 0x42 &&
+      bytes[11] === 0x50
+    const kind = isPngMagic
+      ? 'png'
+      : isWebpMagic
+        ? 'webp'
+        : isJpegMagic || mime.includes('jpeg') || mime.includes('jpg')
+          ? 'jpeg'
+          : mime.includes('png')
+            ? 'png'
+            : mime.includes('webp')
+              ? 'webp'
+              : null
+    if (!kind) return 0.3
+
+    if (kind === 'png') {
+      const png = PNG.sync.read(Buffer.from(bytes))
+      rgba = new Uint8ClampedArray(png.data)
+      w = png.width
+      h = png.height
+    } else if (kind === 'webp') {
+      const copy = new Uint8Array(bytes.byteLength)
+      copy.set(bytes)
+      const ab = copy.buffer.slice(copy.byteOffset, copy.byteOffset + copy.byteLength) as ArrayBuffer
+      const img = await webpDecode(ab)
+      rgba = new Uint8ClampedArray(img.data)
+      w = img.width
+      h = img.height
+    } else {
+      try {
+        const copy = new Uint8Array(bytes.byteLength)
+        copy.set(bytes)
+        const ab = copy.buffer.slice(copy.byteOffset, copy.byteOffset + copy.byteLength) as ArrayBuffer
+        const img = await jpegDecodeWasm(ab)
+        rgba = new Uint8ClampedArray(img.data)
+        w = img.width
+        h = img.height
+      } catch {
+        const raw = decodeJpegJs(bytes, { useTArray: true, formatAsRGBA: true })
+        rgba = new Uint8ClampedArray(raw.data)
+        w = raw.width
+        h = raw.height
+      }
+    }
+
+    if (w < 40 || h < 40) return 0.2
+    const step = Math.max(1, Math.floor(Math.sqrt((w * h) / 2500)))
+    let light = 0
+    let dark = 0
+    let colorful = 0
+    let n = 0
+    for (let y = 0; y < h; y += step) {
+      for (let x = 0; x < w; x += step) {
+        const i = (y * w + x) * 4
+        const r = rgba[i]!
+        const g = rgba[i + 1]!
+        const b = rgba[i + 2]!
+        const a = rgba[i + 3]!
+        if (a < 20) {
+          light++
+          n++
+          continue
+        }
+        const max = Math.max(r, g, b)
+        const min = Math.min(r, g, b)
+        const luma = 0.299 * r + 0.587 * g + 0.114 * b
+        const sat = max - min
+        n++
+        if (luma >= 230 && sat <= 28) light++
+        else if (luma <= 70) dark++
+        if (sat > 45 && luma > 35 && luma < 220) colorful++
+      }
+    }
+    if (n < 50) return 0.3
+    const lightR = light / n
+    const darkR = dark / n
+    const colorR = colorful / n
+    if (colorR > 0.32) return Math.max(0, 0.25 - (colorR - 0.32))
+    if (lightR < 0.32) return 0.15 + lightR * 0.4
+    return Math.min(1, lightR * 0.75 + Math.min(darkR, 0.15) * 1.5 + (1 - colorR) * 0.2)
+  } catch {
+    return 0.35
+  }
+}
+
+async function acceptFloorplanImage(
+  bytes: Uint8Array,
+  mime: string,
+  url: string,
+  score: number
+): Promise<{ ok: true; reason: string } | { ok: false; reason: string }> {
+  const lower = url.toLowerCase()
+  if (hasPhotoRejectSignal(lower) && !hasFloorplanSignal(lower)) {
+    return { ok: false, reason: 'Foto-/Galerie-URL ohne Grundriss-Signal' }
+  }
+  const floorSignal = hasFloorplanSignal(lower)
+  const likelihood = await estimateFloorplanLikelihood(bytes, mime)
+  if (floorSignal && likelihood >= 0.35) {
+    return { ok: true, reason: `Grundriss-Signal + Raster ${likelihood.toFixed(2)}` }
+  }
+  if (floorSignal && likelihood >= 0.22 && score >= 80) {
+    return { ok: true, reason: `Grundriss-URL (Raster ${likelihood.toFixed(2)})` }
+  }
+  // Ohne Keyword nur bei sehr plan-typischem Raster
+  if (!floorSignal && likelihood >= 0.62 && score >= 100) {
+    return { ok: true, reason: `Raster wirkt wie Plan (${likelihood.toFixed(2)})` }
+  }
+  return {
+    ok: false,
+    reason: `Kein Grundriss (Signal=${floorSignal}, Raster=${likelihood.toFixed(2)}, Score=${score})`,
+  }
 }
 
 type FetchResult =
@@ -222,6 +382,9 @@ async function discoverViaWordpressMedia(
         const url = item.source_url?.trim()
         if (!url) return null
         const label = `${item.alt_text ?? ''} ${item.title?.rendered ?? ''} ${url}`
+        if (hasPhotoRejectSignal(label) && !hasFloorplanSignal(label)) return null
+        // WP-Medien ohne Grundriss-Hinweis in Titel/Alt/URL überspringen
+        if (!hasFloorplanSignal(label)) return null
         return {
           url,
           score: scoreImageCandidate(label, `${hersteller} ${modell}`, hersteller),
@@ -271,7 +434,13 @@ async function resolveFloorplanImage(opts: {
   }
 
   const errors: string[] = []
-  let bestWeak: { bytes: Uint8Array; mime: string; usedUrl: string; score: number } | null = null
+  let bestCandidate: {
+    bytes: Uint8Array
+    mime: string
+    usedUrl: string
+    score: number
+    reason: string
+  } | null = null
 
   const ranked = [...candidates].sort(
     (a, b) =>
@@ -279,29 +448,41 @@ async function resolveFloorplanImage(opts: {
       scoreImageCandidate(a, modelHint, opts.hersteller)
   )
 
-  for (const candidate of ranked.slice(0, 14)) {
+  for (const candidate of ranked.slice(0, 16)) {
     if (tried.includes(candidate)) continue
     tried.push(candidate)
+    // Offensichtliche Foto-URLs gar nicht erst laden
+    if (hasPhotoRejectSignal(candidate) && !hasFloorplanSignal(candidate)) {
+      errors.push(`URL als Foto verworfen: ${candidate}`)
+      continue
+    }
     const referer = opts.manufacturerUrl || opts.sourceUrl || undefined
     const fetched = await fetchUrl(candidate, { referer })
 
     if (fetched.kind === 'image') {
       const score = scoreImageCandidate(fetched.finalUrl, modelHint, opts.hersteller)
-      if (score >= 60 || FLOORPLAN_RE.test(fetched.finalUrl)) {
+      const verdict = await acceptFloorplanImage(
+        fetched.bytes,
+        fetched.mime,
+        fetched.finalUrl,
+        score
+      )
+      if (verdict.ok) {
         return {
           image: { bytes: fetched.bytes, mime: fetched.mime, usedUrl: fetched.finalUrl },
-          detail: `Bild geladen (${fetched.mime})`,
+          detail: `Grundriss geladen (${fetched.mime}) – ${verdict.reason}`,
         }
       }
-      if (!bestWeak || score > bestWeak.score) {
-        bestWeak = {
+      if (score > (bestCandidate?.score ?? -999) && hasFloorplanSignal(fetched.finalUrl)) {
+        bestCandidate = {
           bytes: fetched.bytes,
           mime: fetched.mime,
           usedUrl: fetched.finalUrl,
           score,
+          reason: verdict.reason,
         }
       }
-      errors.push(`Bild verworfen (Score ${score}, kein klarer Grundriss): ${fetched.finalUrl}`)
+      errors.push(`Bild verworfen: ${verdict.reason} · ${fetched.finalUrl}`)
       continue
     }
 
@@ -312,18 +493,31 @@ async function resolveFloorplanImage(opts: {
           score: scoreImageCandidate(url, modelHint, opts.hersteller),
         }))
         .sort((a, b) => b.score - a.score)
-      for (const hit of fromHtml.slice(0, 10)) {
-        if (hit.score < 50) continue
+      // Bevorzuge URLs mit Grundriss-Signal
+      const preferred = fromHtml.filter((h) => hasFloorplanSignal(h.url) && h.score >= 40)
+      const fallback = fromHtml.filter((h) => h.score >= 120 && !hasPhotoRejectSignal(h.url))
+      const htmlHits = [...preferred, ...fallback].slice(0, 12)
+      for (const hit of htmlHits) {
         if (tried.includes(hit.url)) continue
         tried.push(hit.url)
         const img = await fetchUrl(hit.url, { referer: fetched.finalUrl })
-        if (img.kind === 'image') {
+        if (img.kind !== 'image') {
+          if (img.kind === 'error') errors.push(img.detail)
+          continue
+        }
+        const verdict = await acceptFloorplanImage(
+          img.bytes,
+          img.mime,
+          img.finalUrl,
+          hit.score
+        )
+        if (verdict.ok) {
           return {
             image: { bytes: img.bytes, mime: img.mime, usedUrl: img.finalUrl },
-            detail: 'Bild aus Hersteller-/Quell-HTML',
+            detail: `Grundriss aus HTML – ${verdict.reason}`,
           }
         }
-        if (img.kind === 'error') errors.push(img.detail)
+        errors.push(`HTML-Bild verworfen: ${verdict.reason} · ${img.finalUrl}`)
       }
       errors.push(`HTML ohne brauchbaren Grundriss: ${candidate}`)
       continue
@@ -332,22 +526,23 @@ async function resolveFloorplanImage(opts: {
     if (fetched.kind === 'error') errors.push(fetched.detail)
   }
 
-  if (bestWeak && bestWeak.score >= 30) {
+  // Nur als letzter Ausweg: URL mit Floorplan-Signal, auch wenn Raster unsicher
+  if (bestCandidate && bestCandidate.score >= 100) {
     return {
       image: {
-        bytes: bestWeak.bytes,
-        mime: bestWeak.mime,
-        usedUrl: bestWeak.usedUrl,
+        bytes: bestCandidate.bytes,
+        mime: bestCandidate.mime,
+        usedUrl: bestCandidate.usedUrl,
       },
-      detail: `Bild mit unsicherem Score (${bestWeak.score}) – bitte prüfen`,
+      detail: `Grundriss-URL mit unsicherem Raster – bitte prüfen (${bestCandidate.reason})`,
     }
   }
 
   return {
     image: null,
     detail:
-      errors.slice(0, 3).join(' · ') ||
-      'Kein herunterladbares Hersteller-Grundrissbild gefunden',
+      errors.slice(0, 4).join(' · ') ||
+      'Kein herunterladbares Hersteller-Grundrissbild gefunden (Innen-/Außenfotos werden verworfen)',
   }
 }
 
@@ -408,7 +603,7 @@ export async function researchAndUpsertWohnwagenKatalog(
     system: SYSTEM,
     user: `Finde Maße (Gesamtlänge MIT Deichsel UND Aufbaulänge OHNE Deichsel, Breite) und ein Grundriss-Bild für: ${hersteller} ${modell}${yearHint}.${domainHint}
 Beispiel LMC Vivo 522 K: Gesamtlänge 8,12 m, Aufbaulänge außen 6,79 m, Breite 2,52 m – bitte analog für dieses Modell belegen.
-Liefere wenn möglich eine direkte Bild-URL vom Hersteller (grundriss/plattegrond), nicht nur Vergleichsportale.`,
+grundriss_bild_url: nur 2D-Plattegrond/Grundriss (Draufsicht), nie Innenraum- oder Außenfoto. Dateiname/URL möglichst mit grundriss|plattegrond|floorplan. Wenn unsicher → null.`,
     plugins: [{ id: 'web' }],
     trigger: 'explicit',
     title: 'Camping Packliste Wohnwagen-Katalog',
