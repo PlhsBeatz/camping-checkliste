@@ -35,6 +35,16 @@ const customRuntimeCaching: RuntimeCaching[] = [
         ['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method)),
     handler: new NetworkOnly(),
   },
+  /**
+   * Esri-Satellitenkacheln: nicht über SW-Image-Caches (CORS/opaque bricht mobil oft).
+   * Direktes Netz – die App cacht optional selbst in Cache Storage.
+   */
+  {
+    matcher: ({ url }) =>
+      /(^|\.)arcgisonline\.com$/i.test(url.hostname) ||
+      /(^|\.)arcgis\.com$/i.test(url.hostname),
+    handler: new NetworkOnly(),
+  },
   {
     matcher: ({ url }) => url.pathname.startsWith('/icons/'),
     handler: new StaleWhileRevalidate({

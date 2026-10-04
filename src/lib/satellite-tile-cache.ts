@@ -4,7 +4,7 @@ import {
   satelliteTileUrl,
 } from '@/lib/satellite-tiles'
 
-const CACHE_NAME = 'camping-satellite-tiles-v1'
+const CACHE_NAME = 'camping-satellite-tiles-v2'
 /** Obergrenze grob ~40 MB (bei ~25 KB/Tile) */
 const MAX_TILES = 1600
 
@@ -81,10 +81,19 @@ export async function loadSatelliteTile(url: string): Promise<Response | null> {
   }
 
   try {
-    const res = await fetch(url, { mode: 'cors', credentials: 'omit' })
+    // no-cors liefert opaque Response → Cache möglich, Blob aber nicht lesbar.
+    // Deshalb cors versuchen; scheitert (mobil/SW) → null, Aufrufer nutzt img.src.
+    const res = await fetch(url, {
+      mode: 'cors',
+      credentials: 'omit',
+      // SW soll diese Requests möglichst nicht umschreiben
+      cache: 'no-store',
+    })
     if (!res.ok) return null
+    // Vor Cache-Put klonen – Original für Aufrufer behalten
+    const forCaller = res.clone()
     await putCachedSatelliteTile(url, res)
-    return (await getCachedSatelliteTile(url)) ?? res
+    return forCaller
   } catch {
     return null
   }

@@ -1,7 +1,8 @@
 /** Esri World Imagery – Satellitenkacheln für Sonnenausrichtung (Attribution Pflicht). */
 
+/** Aktueller Esri-Endpunkt (services.*); server.* leitet teils um und kann mobil scheitern. */
 export const ESRI_WORLD_IMAGERY_URL =
-  'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
+  'https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
 
 export const ESRI_WORLD_IMAGERY_ATTRIBUTION =
   'Tiles &copy; Esri — Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community'

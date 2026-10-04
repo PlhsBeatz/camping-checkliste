@@ -17,7 +17,7 @@ import {
   SATELLITE_MIN_ZOOM,
   type SonnenBasemap,
 } from '@/lib/satellite-tiles'
-import { loadSatelliteTile } from '@/lib/satellite-tile-cache'
+import { getCachedSatelliteTile, loadSatelliteTile } from '@/lib/satellite-tile-cache'
 import {
   normalizeHeadingDeg,
   caravanOutlineToLatLngs,
@@ -136,32 +136,71 @@ function createCachedSatelliteLayer(
       const img = document.createElement('img')
       img.alt = ''
       img.setAttribute('role', 'presentation')
+      // Kein crossOrigin: auf iOS/Android scheitern Esri-Kacheln sonst oft an CORS,
+      // obwohl <img src> ohne CORS-Attribute zuverlässig lädt.
       const url = this.getTileUrl(coords)
+
+      const ok = () => {
+        onStatus(true)
+        done(undefined, img)
+      }
+      const fail = (detail: string) => {
+        onStatus(false, detail)
+        done(new Error(detail), img)
+      }
+
+      const showBlob = async (res: Response) => {
+        const blob = await res.blob()
+        const objectUrl = URL.createObjectURL(blob)
+        img.onload = () => {
+          URL.revokeObjectURL(objectUrl)
+          ok()
+        }
+        img.onerror = () => {
+          URL.revokeObjectURL(objectUrl)
+          fail('Satelliten-Kachel fehlerhaft')
+        }
+        img.src = objectUrl
+      }
 
       void (async () => {
         try {
-          const res = await loadSatelliteTile(url)
-          if (!res) {
-            onStatus(false, 'Satellitenbild offline nicht im Cache')
-            done(new Error('tile unavailable'), img)
+          const offline =
+            typeof navigator !== 'undefined' && navigator.onLine === false
+
+          if (offline) {
+            const cached = await getCachedSatelliteTile(url)
+            if (!cached) {
+              fail('Satellitenbild offline nicht im Cache')
+              return
+            }
+            await showBlob(cached)
             return
           }
-          const blob = await res.blob()
-          const objectUrl = URL.createObjectURL(blob)
+
+          // Online: direkt laden (wie OSM/Leaflet) – mobil am zuverlässigsten
           img.onload = () => {
-            URL.revokeObjectURL(objectUrl)
-            onStatus(true)
-            done(undefined, img)
+            ok()
+            // Cache nur im Hintergrund für Offline (darf scheitern)
+            void loadSatelliteTile(url).catch(() => {})
           }
           img.onerror = () => {
-            URL.revokeObjectURL(objectUrl)
-            onStatus(false, 'Satelliten-Kachel fehlerhaft')
-            done(new Error('tile load error'), img)
+            void (async () => {
+              try {
+                const res = await loadSatelliteTile(url)
+                if (res) {
+                  await showBlob(res)
+                  return
+                }
+              } catch {
+                /* ignore */
+              }
+              fail('Satellitenbild nicht ladbar')
+            })()
           }
-          img.src = objectUrl
+          img.src = url
         } catch {
-          onStatus(false, 'Satellitenbild nicht ladbar')
-          done(new Error('tile fetch error'), img)
+          fail('Satellitenbild nicht ladbar')
         }
       })()
 
@@ -174,7 +213,6 @@ function createCachedSatelliteLayer(
     minZoom: SATELLITE_MIN_ZOOM,
     maxZoom: SATELLITE_MAX_ZOOM,
     maxNativeZoom: SATELLITE_MAX_NATIVE_ZOOM,
-    crossOrigin: true,
   })
 }
 
