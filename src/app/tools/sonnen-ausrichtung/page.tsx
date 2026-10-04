@@ -25,6 +25,7 @@ import {
   RotateCcw,
   ChevronRight,
   Move,
+  ExternalLink,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
@@ -49,6 +50,7 @@ import {
 } from '@/lib/caravan-geometry'
 import { resolvePlacementLengthM } from '@/lib/wohnwagen-hersteller'
 import { supportsGrundriss } from '@/lib/transport-types'
+import { buildPlatzplanUrl } from '@/lib/platzplan-url'
 import type { ApiResponse } from '@/lib/api-types'
 import type { TransportVehicle, Vacation, VacationCampingStay } from '@/lib/db'
 import { CalendarDatePicker } from '@/components/ui/calendar-date-picker'
@@ -461,6 +463,13 @@ function SonnenAusrichtungContent() {
     () => stays.find((s) => s.id === selectedStayId) ?? null,
     [stays, selectedStayId]
   )
+  const selectedPlatzplanUrl = useMemo(
+    () =>
+      selectedStay
+        ? buildPlatzplanUrl(selectedStay.campingplatz, selectedStay.platznummer)
+        : null,
+    [selectedStay]
+  )
 
   const selectedVacation = useMemo(
     () => vacations.find((v) => v.id === selectedVacationId) ?? null,
@@ -848,6 +857,38 @@ function SonnenAusrichtungContent() {
                         ))}
                       </SelectContent>
                     </Select>
+                    {selectedStay && (
+                      <div className="mt-2 flex flex-wrap items-center gap-2 rounded-md border border-border bg-muted/30 px-2.5 py-2">
+                        <div className="min-w-0 flex-1 text-sm">
+                          <span className="text-muted-foreground">Gebuchter Platz:</span>{' '}
+                          {selectedStay.platznummer?.trim() ? (
+                            <strong className="text-foreground">
+                              {selectedStay.platznummer.trim()}
+                            </strong>
+                          ) : (
+                            <span className="text-muted-foreground">nicht hinterlegt</span>
+                          )}
+                          {selectedStay.campingplatz.platzplan_hinweis?.trim() && (
+                            <p className="mt-0.5 text-xs text-muted-foreground line-clamp-2">
+                              {selectedStay.campingplatz.platzplan_hinweis.trim()}
+                            </p>
+                          )}
+                        </div>
+                        {selectedPlatzplanUrl && (
+                          <Button type="button" size="sm" variant="outline" asChild>
+                            <a
+                              href={selectedPlatzplanUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                            >
+                              <MapIcon className="h-3.5 w-3.5 mr-1" />
+                              Platzplan
+                              <ExternalLink className="h-3 w-3 ml-1 opacity-70" />
+                            </a>
+                          </Button>
+                        )}
+                      </div>
+                    )}
                   </div>
                   <div>
                     <Label>Datum (Sonnenstand)</Label>
