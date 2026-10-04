@@ -1,20 +1,24 @@
 /**
- * Grundriss-Bilder: Dekodieren, weißen/hellen Rand automatisch beschneiden, WebP speichern.
- * Ziel: nur die tatsächliche Grundriss-Silhouette ohne Katalog-Rand/Weißraum.
+ * Grundriss-Bilder: Dekodieren, weißen/hellen Rand beschneiden, WebP speichern.
+ * Cloudflare-Workers-tauglich (pngjs / @jsquash / jpeg-js) – analog camping-photo-optimize.
  */
+import { Buffer } from 'node:buffer'
 import { PNG } from 'pngjs'
 import jpegDecodeWasm from '@jsquash/jpeg/decode'
 import { decode as decodeJpegJs } from 'jpeg-js'
 import webpDecode from '@jsquash/webp/decode'
 import webpEncode from '@jsquash/webp/encode'
+import { optimizeCampingPhotoToWebp } from '@/lib/camping-photo-optimize'
 
 const MAX_EDGE = 1600
 const WEBP_QUALITY = 88
 /** Pixel gilt als „Hintergrund“, wenn fast weiß/transparent */
 const BG_LUMA_MIN = 245
 const BG_ALPHA_MAX = 16
-/** Zusätzlicher Innenabstand nach Bounding-Box (px), damit Linien nicht abschneiden */
+/** Zusätzlicher Innenabstand nach Bounding-Box (px) */
 const CROP_PAD = 4
+/** Ab dieser Megapixelzahl nach Decode nur noch skalieren (kein teurer Crop-Scan) */
+const MAX_CROP_MEGAPIXELS = 6
 
 export type GrundrissProcessResult =
   | {
@@ -57,22 +61,41 @@ function detectKind(buf: Uint8Array, mimeHint?: string): 'jpeg' | 'png' | 'webp'
   return null
 }
 
+/** MozJPEG-WASM scheitert oft im Worker-Bundle → jpeg-js mit RGBA. */
 async function decodeJpegToRgba(
   input: Uint8Array
 ): Promise<{ rgba: Uint8ClampedArray; w: number; h: number }> {
+  const wasmIn = new Uint8Array(input.byteLength)
+  wasmIn.set(input)
+  const wasmAb = wasmIn.buffer.slice(
+    wasmIn.byteOffset,
+    wasmIn.byteOffset + wasmIn.byteLength
+  ) as ArrayBuffer
+  let wasmErr: unknown
   try {
-    const copy = new Uint8Array(input.byteLength)
-    copy.set(input)
-    const ab = copy.buffer.slice(copy.byteOffset, copy.byteOffset + copy.byteLength)
-    const img = await jpegDecodeWasm(ab)
-    return { rgba: new Uint8ClampedArray(img.data), w: img.width, h: img.height }
-  } catch {
-    const decoded = decodeJpegJs(input, { useTArray: true })
+    const img = await jpegDecodeWasm(wasmAb)
     return {
-      rgba: new Uint8ClampedArray(decoded.data),
-      w: decoded.width,
-      h: decoded.height,
+      rgba: new Uint8ClampedArray(img.data),
+      w: img.width,
+      h: img.height,
     }
+  } catch (e) {
+    wasmErr = e
+  }
+  try {
+    const raw = decodeJpegJs(input, {
+      useTArray: true,
+      formatAsRGBA: true,
+    })
+    return {
+      rgba: new Uint8ClampedArray(raw.data),
+      w: raw.width,
+      h: raw.height,
+    }
+  } catch (jsErr) {
+    const w = wasmErr instanceof Error ? wasmErr.message : String(wasmErr)
+    const j = jsErr instanceof Error ? jsErr.message : String(jsErr)
+    throw new Error(`JPEG-Dekodierung: WASM („${w}“); Fallback jpeg-js („${j}“).`)
   }
 }
 
@@ -89,21 +112,23 @@ async function decodeToRgba(
   }
   const webpCopy = new Uint8Array(input.byteLength)
   webpCopy.set(input)
-  const ab = webpCopy.buffer.slice(webpCopy.byteOffset, webpCopy.byteOffset + webpCopy.byteLength)
+  const ab = webpCopy.buffer.slice(
+    webpCopy.byteOffset,
+    webpCopy.byteOffset + webpCopy.byteLength
+  ) as ArrayBuffer
   const img = await webpDecode(ab)
   return { rgba: new Uint8ClampedArray(img.data), w: img.width, h: img.height }
 }
 
 function isBackground(r: number, g: number, b: number, a: number): boolean {
   if (a <= BG_ALPHA_MAX) return true
-  // Helligkeit + geringe Sättigung (weiße/graue Katalogränder)
   const max = Math.max(r, g, b)
   const min = Math.min(r, g, b)
   const luma = 0.299 * r + 0.587 * g + 0.114 * b
   return luma >= BG_LUMA_MIN && max - min <= 18
 }
 
-/** Bounding-Box des nicht-weißen Inhalts (Grundriss-Linien/Flächen). */
+/** Bounding-Box des nicht-weißen Inhalts. */
 export function findContentBounds(
   rgba: Uint8ClampedArray,
   w: number,
@@ -199,7 +224,8 @@ function makeImageData(rgba: Uint8ClampedArray, width: number, height: number): 
 }
 
 /**
- * Grundriss verarbeiten: Rand abschneiden (wenn sinnvoll), auf max. Kante skalieren, WebP.
+ * Grundriss verarbeiten: zuerst skalieren (CPU), dann Rand abschneiden, WebP.
+ * Bei Fehlern im Crop-Pfad: Fallback über die bewährte Campingfoto-Optimierung (ohne Crop).
  */
 export async function processGrundrissImage(
   input: Uint8Array,
@@ -208,42 +234,67 @@ export async function processGrundrissImage(
   try {
     const decoded = await decodeToRgba(input, mimeHint)
     if (!decoded) {
-      return { ok: false, reason: 'Unbekanntes Bildformat' }
+      // Letzter Versuch: nur skalieren/WebP wie Campingfotos
+      const fallback = await optimizeCampingPhotoToWebp(input, mimeHint)
+      if (fallback.ok) {
+        return {
+          ok: true,
+          data: fallback.data,
+          mime: 'image/webp',
+          cropped: false,
+          crop: { left: 0, top: 0, right: 0, bottom: 0, srcW: 0, srcH: 0 },
+        }
+      }
+      return { ok: false, reason: `Unbekanntes Bildformat (${fallback.reason})` }
     }
-    const { rgba, w: srcW, h: srcH } = decoded
+
+    const { rgba: srcRgba, w: srcW, h: srcH } = decoded
     if (srcW < 8 || srcH < 8) {
       return { ok: false, reason: 'Bild zu klein' }
     }
 
-    const bounds = findContentBounds(rgba, srcW, srcH)
-    let work = { rgba, w: srcW, h: srcH }
-    let cropped = false
-    let cropMeta = { left: 0, top: 0, right: srcW - 1, bottom: srcH - 1, srcW, srcH }
-
-    if (bounds) {
-      const contentW = bounds.right - bounds.left + 1
-      const contentH = bounds.bottom - bounds.top + 1
-      const areaRatio = (contentW * contentH) / (srcW * srcH)
-      // Nur croppen, wenn spürbarer Rand (Inhalt < ~92 % der Fläche)
-      if (areaRatio < 0.92) {
-        work = cropRgba(rgba, srcW, srcH, bounds)
-        cropped = true
-        cropMeta = { ...bounds, srcW, srcH }
-      }
-    }
-
-    let { rgba: pixels, w: tw, h: th } = work
+    // Zuerst skalieren – Crop auf kleinerem Raster spart Worker-CPU
+    let workRgba = srcRgba
+    let tw = srcW
+    let th = srcH
     const maxEdge = Math.max(tw, th)
     if (maxEdge > MAX_EDGE) {
       const s = MAX_EDGE / maxEdge
       const nw = Math.max(1, Math.round(tw * s))
       const nh = Math.max(1, Math.round(th * s))
-      pixels = bilinearResize(pixels, tw, th, nw, nh)
+      workRgba = bilinearResize(workRgba, tw, th, nw, nh)
       tw = nw
       th = nh
     }
 
-    const ab = await webpEncode(makeImageData(pixels, tw, th), { quality: WEBP_QUALITY })
+    let cropped = false
+    let cropMeta = { left: 0, top: 0, right: tw - 1, bottom: th - 1, srcW, srcH }
+    const megapixels = (tw * th) / 1_000_000
+    if (megapixels <= MAX_CROP_MEGAPIXELS) {
+      const bounds = findContentBounds(workRgba, tw, th)
+      if (bounds) {
+        const contentW = bounds.right - bounds.left + 1
+        const contentH = bounds.bottom - bounds.top + 1
+        const areaRatio = (contentW * contentH) / (tw * th)
+        if (areaRatio < 0.92) {
+          const croppedImg = cropRgba(workRgba, tw, th, bounds)
+          workRgba = croppedImg.rgba
+          tw = croppedImg.w
+          th = croppedImg.h
+          cropped = true
+          cropMeta = { ...bounds, srcW, srcH }
+        }
+      }
+    }
+
+    const expected = tw * th * 4
+    if (workRgba.length < expected) {
+      throw new Error(
+        `RGBA-Puffer zu kurz (${workRgba.length} < ${expected}) – vermutlich RGB statt RGBA`
+      )
+    }
+
+    const ab = await webpEncode(makeImageData(workRgba, tw, th), { quality: WEBP_QUALITY })
     return {
       ok: true,
       data: new Uint8Array(ab),
@@ -252,6 +303,27 @@ export async function processGrundrissImage(
       crop: cropMeta,
     }
   } catch (e) {
-    return { ok: false, reason: e instanceof Error ? e.message : String(e) }
+    // Bewährter Fallback ohne Crop (gleiche Pipeline wie Campingfotos)
+    try {
+      const fallback = await optimizeCampingPhotoToWebp(input, mimeHint)
+      if (fallback.ok) {
+        return {
+          ok: true,
+          data: fallback.data,
+          mime: 'image/webp',
+          cropped: false,
+          crop: { left: 0, top: 0, right: 0, bottom: 0, srcW: 0, srcH: 0 },
+        }
+      }
+      const msg = e instanceof Error ? e.message : String(e)
+      return {
+        ok: false,
+        reason: `${msg} · Fallback: ${fallback.reason}`,
+      }
+    } catch (e2) {
+      const msg = e instanceof Error ? e.message : String(e)
+      const msg2 = e2 instanceof Error ? e2.message : String(e2)
+      return { ok: false, reason: `${msg} · Fallback: ${msg2}` }
+    }
   }
 }

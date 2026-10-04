@@ -498,9 +498,7 @@ Liefere wenn möglich eine direkte Bild-URL vom Hersteller (grundriss/plattegron
       imageWarning = `Grundriss-Bild konnte nicht gespeichert werden: ${resolved.detail}`
     } else {
       const processed = await processGrundrissImage(resolved.image.bytes, resolved.image.mime)
-      if (!processed.ok) {
-        imageWarning = `Bild geladen, Verarbeitung fehlgeschlagen: ${processed.reason}`
-      } else {
+      if (processed.ok) {
         r2Key = buildWohnwagenKatalogImageKey(katalogId, processed.mime)
         await input.bucket.put(r2Key, processed.data, {
           httpMetadata: { contentType: processed.mime },
@@ -510,9 +508,19 @@ Liefere wenn möglich eine direkte Bild-URL vom Hersteller (grundriss/plattegron
         imageWarning = processed.cropped
           ? 'Grundriss-Bild gespeichert (weißer Rand automatisch beschnitten).'
           : null
-        if (resolved.detail.includes('unsicher')) {
-          imageWarning = (imageWarning ? `${imageWarning} ` : '') + resolved.detail
-        }
+      } else {
+        // Original speichern statt Bild komplett zu verwerfen (Workers-CPU/Codec-Fehler)
+        const origMime = resolved.image.mime || 'image/jpeg'
+        r2Key = buildWohnwagenKatalogImageKey(katalogId, origMime)
+        await input.bucket.put(r2Key, resolved.image.bytes, {
+          httpMetadata: { contentType: origMime },
+        })
+        contentType = origMime
+        storedImageUrl = resolved.image.usedUrl
+        imageWarning = `Bild als Original gespeichert (Verarbeitung: ${processed.reason})`
+      }
+      if (resolved.detail.includes('unsicher')) {
+        imageWarning = (imageWarning ? `${imageWarning} ` : '') + resolved.detail
       }
     }
   } else if (storedImageUrl || sourceUrl || manufacturerUrl) {
