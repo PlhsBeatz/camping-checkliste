@@ -23,6 +23,7 @@ import {
   caravanOutlineToLatLngs,
   type MeterPoint,
 } from '@/lib/caravan-geometry'
+import { shortestAngleDiff } from '@/lib/device-compass-heading'
 import { cn } from '@/lib/utils'
 
 export type SonnenMapMode = 'vor-ort' | 'planung'
@@ -465,7 +466,10 @@ export function SonnenAusrichtungMap({
   const caravanPolyRef = useRef<L.Polygon | null>(null)
   const caravanMarkerRef = useRef<L.Marker | null>(null)
   const sunLayerRef = useRef<L.LayerGroup | null>(null)
+  /** Kontinuierliche Heading-Summe für CSS-rotate (kein 0/360-Sprung) */
+  const unwrappedHeadingRef = useRef<number | null>(null)
   const [mapReady, setMapReady] = useState(false)
+  const [mapRotationDeg, setMapRotationDeg] = useState(0)
   const [zoomTick, setZoomTick] = useState(0)
   const [nowTick, setNowTick] = useState(() => Date.now())
   /** naturalWidth/Height des Grundriss-Bildes für korrekte Orientierung */
@@ -616,13 +620,30 @@ export function SonnenAusrichtungMap({
 
   /**
    * Live-Ansicht: gesamten Karten-Container um die Viewport-Mitte drehen.
-   * Nicht mapPane – Leaflet schreibt dort translate3d fürs Panning; rotate()
-   * überschriebe das und drehte um die linke obere Ecke (graue Flächen).
+   * Nicht mapPane – Leaflet schreibt dort translate3d fürs Panning.
    * Wrapper √2 größer, damit rotierte Ecken die Viewport-Fläche füllen.
+   * Rotation kontinuierlich (shortestAngleDiff), ohne CSS-Transition –
+   * sonst Springen beim Nord-Übergang 359°→0°.
    */
   const headingUp =
     mode === 'vor-ort' && deviceHeading != null && Number.isFinite(deviceHeading)
   const expandForRotation = mode === 'vor-ort'
+
+  useEffect(() => {
+    if (!headingUp || deviceHeading == null) {
+      unwrappedHeadingRef.current = null
+      setMapRotationDeg(0)
+      return
+    }
+    const prev = unwrappedHeadingRef.current
+    if (prev == null) {
+      unwrappedHeadingRef.current = deviceHeading
+    } else {
+      unwrappedHeadingRef.current =
+        prev + shortestAngleDiff(prev, deviceHeading)
+    }
+    setMapRotationDeg(-unwrappedHeadingRef.current)
+  }, [headingUp, deviceHeading])
 
   useEffect(() => {
     const map = mapRef.current
@@ -844,7 +865,9 @@ export function SonnenAusrichtungMap({
       dash?: string
     ) => {
       // genug Platz für die Pill am Linienende
-      const edgeM = distanceToMapEdgeMeters(map, origin.lat, origin.lng, az, 56)
+      let edgeM = distanceToMapEdgeMeters(map, origin.lat, origin.lng, az, 56)
+      // Live: Karte ist √2 vergrößert – Labels an den sichtbaren Viewport-Rand
+      if (expandForRotation) edgeM *= 1 / Math.SQRT2
       const meters = Math.max(8, edgeM)
       const end = offsetByCompassMeters(origin.lat, origin.lng, az, meters)
       const latlngs: [number, number][] = [
@@ -887,10 +910,9 @@ export function SonnenAusrichtungMap({
     }
 
     // Nord: nur kleiner Pfeil + N, nah am Zentrum
-    const northM = Math.min(
-      28,
-      distanceToMapEdgeMeters(map, origin.lat, origin.lng, 0, 16) * 0.18
-    )
+    let northEdge = distanceToMapEdgeMeters(map, origin.lat, origin.lng, 0, 16)
+    if (expandForRotation) northEdge *= 1 / Math.SQRT2
+    const northM = Math.min(28, northEdge * 0.18)
     const northPos = offsetByCompassMeters(origin.lat, origin.lng, 0, Math.max(12, northM))
     L.marker(northPos, {
       icon: northMarkerIcon(labelScale),
@@ -923,7 +945,7 @@ export function SonnenAusrichtungMap({
     if (sun.currentLabel && sun.currentAlt > -0.1 && !sun.isPolarNight) {
       addRay(sun.currentAz, BRAND_ORANGE, 'now', sun.currentLabel, 3)
     }
-  }, [sun, pin, center, mapReady, zoomTick])
+  }, [sun, pin, center, mapReady, zoomTick, expandForRotation])
 
   return (
     <div
@@ -939,9 +961,8 @@ export function SonnenAusrichtungMap({
           width: expandForRotation ? '141.4214%' : '100%',
           height: expandForRotation ? '141.4214%' : '100%',
           transform: headingUp
-            ? `translate(-50%, -50%) rotate(${-deviceHeading!}deg)`
+            ? `translate(-50%, -50%) rotate(${mapRotationDeg}deg)`
             : 'translate(-50%, -50%)',
-          transition: headingUp ? 'transform 80ms linear' : undefined,
         }}
       >
         <div ref={containerRef} className="h-full w-full bg-muted" />

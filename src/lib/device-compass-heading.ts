@@ -15,6 +15,14 @@ export function normalizeHeadingDeg(deg: number): number {
   return ((deg % 360) + 360) % 360
 }
 
+/** Kürzeste Winkeldifferenz (robust gegen 0°/360°-Sprünge, kein JS-%-Bug). */
+export function shortestAngleDiff(from: number, to: number): number {
+  let diff = to - from
+  while (diff > 180) diff -= 360
+  while (diff < -180) diff += 360
+  return diff
+}
+
 /**
  * Kompass-Heading aus absolutem alpha (0–360°), typische Web-/W3C-Konvention
  * für flaches Gerät in Portrait: heading = 360° − alpha.

@@ -31,6 +31,7 @@ import { cn } from '@/lib/utils'
 import {
   extractCompassHeadingDeg,
   normalizeHeadingDeg,
+  shortestAngleDiff,
   type DeviceOrientationEventWithWebkit,
 } from '@/lib/device-compass-heading'
 import { getCachedLastPosition, getCachedTransportVehicles } from '@/lib/offline-sync'
@@ -57,14 +58,6 @@ import type { ApiResponse } from '@/lib/api-types'
 import type { TransportVehicle, Vacation, VacationCampingStay } from '@/lib/db'
 import { CalendarDatePicker } from '@/components/ui/calendar-date-picker'
 import { todayInAppTimezone } from '@/lib/app-timezone'
-/** Kürzeste Winkeldifferenz (robust gegen 0°/360°-Sprünge, kein JS-%-Bug) */
-function shortestAngleDiff(from: number, to: number): number {
-  let diff = to - from
-  while (diff > 180) diff -= 360
-  while (diff < -180) diff += 360
-  return diff
-}
-
 type ToolMode = 'vor-ort' | 'planung'
 
 /** Aktiver Urlaub (heute im Zeitraum) oder nächster kommender. */
@@ -328,6 +321,13 @@ function SonnenAusrichtungContent() {
     }
   }, [compassEnabled])
 
+  // Kompass liefert bereits Werte → Banner aus, Zustand als aktiviert führen
+  useEffect(() => {
+    if (deviceHeading == null) return
+    setCompassEnabled(true)
+    setCompassPermissionNeeded(false)
+  }, [deviceHeading])
+
   useEffect(() => {
     if (showNavSidebar) {
       document.body.style.overflow = 'hidden'
@@ -584,13 +584,12 @@ function SonnenAusrichtungContent() {
   )
 
   const showCaravanSelect =
-    displayMode === 'karte' && caravanVehicles.length > 1
+    mode === 'planung' && displayMode === 'karte' && caravanVehicles.length > 1
 
   const caravanOverlay = useMemo(() => {
-    const place =
-      pin ??
-      (mode === 'planung' ? planCenter : null) ??
-      (mode === 'vor-ort' ? position : null)
+    // Live (GPS): kein Wohnwagen auf der Karte / keine Stellplatz-Bedienung
+    if (mode !== 'planung') return null
+    const place = pin ?? planCenter
     if (!place || !selectedVehicle) return null
     const placeLen = resolvePlacementLengthM(selectedVehicle)
     const lengthM = placeLen.lengthM ?? selectedVehicle.laenge_m
@@ -612,7 +611,7 @@ function SonnenAusrichtungContent() {
       widthM: selectedVehicle.breite_m ?? null,
       imageUrl,
     }
-  }, [pin, planCenter, mode, position, selectedVehicle, caravanHeading])
+  }, [pin, planCenter, mode, selectedVehicle, caravanHeading])
 
   const saveStellplatz = useCallback(
     async (next: {
@@ -1074,7 +1073,10 @@ function SonnenAusrichtungContent() {
             </div>
           )}
 
-          {displayMode === 'karte' && (showCaravanSelect || (caravanOverlay && isCoarsePointer)) && (
+          {mode === 'planung' &&
+            displayMode === 'karte' &&
+            (showCaravanSelect ||
+              (isCoarsePointer && (caravanOverlay || !!selectedStayId))) && (
             <div className="flex flex-wrap items-end gap-2">
               {showCaravanSelect && (
                 <div className="min-w-[12rem] flex-1 space-y-1">
@@ -1103,7 +1105,7 @@ function SonnenAusrichtungContent() {
                   </Select>
                 </div>
               )}
-              {caravanOverlay && isCoarsePointer && (
+              {isCoarsePointer && (caravanOverlay || !!selectedStayId) && (
                 <Button
                   type="button"
                   size="sm"
@@ -1118,7 +1120,8 @@ function SonnenAusrichtungContent() {
             </div>
           )}
 
-          {displayMode === 'karte' &&
+          {mode === 'planung' &&
+            displayMode === 'karte' &&
             selectedVehicle &&
             !resolveCaravanOutline({
               laengeM: resolvePlacementLengthM(selectedVehicle).lengthM,
@@ -1133,7 +1136,10 @@ function SonnenAusrichtungContent() {
               </p>
             )}
 
-          {mode === 'vor-ort' && compassPermissionNeeded && (
+          {mode === 'vor-ort' &&
+            compassPermissionNeeded &&
+            !compassEnabled &&
+            deviceHeading == null && (
             <div className="rounded-lg bg-blue-50 border border-blue-200 p-4 text-blue-800">
               <p className="font-medium">Kompass aktivieren</p>
               <p className="text-sm mt-1">
@@ -1191,15 +1197,16 @@ function SonnenAusrichtungContent() {
                   void placeCaravanWithAutoOrient(lat, lng)
                 }}
                 onMapClick={(lat, lng) => {
-                  if (caravanMoveMode) return
                   if (mode !== 'planung' || !selectedStayId) return
+                  // Smartphone: nur im Verschieben-Modus (Tipp oder Drag)
+                  if (isCoarsePointer && !caravanMoveMode) return
                   void placeCaravanWithAutoOrient(lat, lng)
                 }}
                 onSatelliteUnavailable={handleSatelliteUnavailable}
                 onSatelliteAvailable={handleSatelliteAvailable}
               />
 
-              {caravanOverlay && (
+              {mode === 'planung' && caravanOverlay && (
                 <div className="space-y-2">
                   <div className="flex flex-wrap items-center gap-3">
                   <Label className="shrink-0 text-sm">Drehen</Label>
