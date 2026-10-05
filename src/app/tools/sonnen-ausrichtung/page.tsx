@@ -51,11 +51,11 @@ import {
 import { resolvePlacementLengthM } from '@/lib/wohnwagen-hersteller'
 import { supportsGrundriss } from '@/lib/transport-types'
 import { buildPlatzplanUrl } from '@/lib/platzplan-url'
+import { estimatePitchOrientation } from '@/lib/pitch-orientation'
 import type { ApiResponse } from '@/lib/api-types'
 import type { TransportVehicle, Vacation, VacationCampingStay } from '@/lib/db'
 import { CalendarDatePicker } from '@/components/ui/calendar-date-picker'
 import { todayInAppTimezone } from '@/lib/app-timezone'
-
 /** Kürzeste Winkeldifferenz (robust gegen 0°/360°-Sprünge, kein JS-%-Bug) */
 function shortestAngleDiff(from: number, to: number): number {
   let diff = to - from
@@ -132,6 +132,10 @@ function SonnenAusrichtungContent() {
   const [displayMode, setDisplayMode] = useState<SonnenDisplayMode>('karte')
   const [basemap, setBasemap] = useState<SonnenBasemap>('satellite')
   const [satelliteHint, setSatelliteHint] = useState<string | null>(null)
+  const [orientHint, setOrientHint] = useState<string | null>(null)
+  const [orientHintTone, setOrientHintTone] = useState<'info' | 'ok' | 'warn'>('info')
+  const [orientBusy, setOrientBusy] = useState(false)
+  const orientHintTimerRef = useRef<number | null>(null)
 
   const [vacations, setVacations] = useState<Vacation[]>([])
   const [selectedVacationId, setSelectedVacationId] = useState<string>('')
@@ -379,7 +383,7 @@ function SonnenAusrichtungContent() {
   }, [])
 
   // Default-Urlaub einmalig setzen (aktiv oder nächster)
-  // Ohne laufenden Urlaub: Ansicht „Planung“ (sonst „Vor Ort“)
+  // Ohne laufenden Urlaub: Ansicht „Planung“ (sonst „Live (GPS)“)
   useEffect(() => {
     if (vacations.length === 0) return
     const today = todayInAppTimezone()
@@ -513,10 +517,17 @@ function SonnenAusrichtungContent() {
 
   const mapCenter = mode === 'vor-ort' ? position : planCenter
 
-  // Prefetch tiles when planning center known
+  // Leichter Offline-Prefetch (nur native Zoomstufen) – verzögert, damit die sichtbare Karte Vorrang hat
   useEffect(() => {
     if (!mapCenter || basemap !== 'satellite' || displayMode !== 'karte') return
-    void prefetchSatelliteAround(mapCenter.lat, mapCenter.lng).catch(() => {})
+    const t = window.setTimeout(() => {
+      void prefetchSatelliteAround(mapCenter.lat, mapCenter.lng, {
+        minZoom: 17,
+        maxZoom: 19,
+        radiusTiles: 1,
+      }).catch(() => {})
+    }, 2500)
+    return () => window.clearTimeout(t)
   }, [mapCenter?.lat, mapCenter?.lng, basemap, displayMode, mapCenter])
 
   // Transportmittel des gewählten Urlaubs (für Wohnwagen-Filter)
@@ -680,15 +691,115 @@ function SonnenAusrichtungContent() {
     if (next === 'osm') setSatelliteHint(null)
   }
 
-  const centerSourceLabel = useMemo(() => {
-    if (mode === 'vor-ort') {
-      if (position) return 'Live-GPS'
-      return 'kein GPS'
+  const handleSatelliteUnavailable = useCallback((reason: string) => {
+    setSatelliteHint(reason)
+  }, [])
+  const handleSatelliteAvailable = useCallback(() => {
+    setSatelliteHint(null)
+  }, [])
+
+  const showOrientHint = useCallback(
+    (message: string, tone: 'info' | 'ok' | 'warn' = 'info', clearMs = 9000) => {
+      setOrientHint(message)
+      setOrientHintTone(tone)
+      if (orientHintTimerRef.current != null) {
+        window.clearTimeout(orientHintTimerRef.current)
+      }
+      if (clearMs > 0) {
+        orientHintTimerRef.current = window.setTimeout(() => {
+          setOrientHint(null)
+          orientHintTimerRef.current = null
+        }, clearMs)
+      }
+    },
+    []
+  )
+
+  const formatOrientSuccess = (estimated: {
+    headingDeg: number
+    confidence: number
+    source?: string
+    detail?: string
+  }) => {
+    const srcLabel =
+      estimated.source === 'osm'
+        ? 'OSM-Wege/Hecken'
+        : estimated.source === 'map'
+          ? 'Kartenlinien'
+          : estimated.source === 'satellite'
+            ? 'Satellit'
+            : estimated.source === 'merged'
+              ? estimated.detail === 'osm+map' || estimated.detail?.includes('osm')
+                ? 'OSM + Bild'
+                : 'Karte + Satellit'
+              : 'Umgebung'
+    return `Ausgerichtet auf ${Math.round(estimated.headingDeg)}° (${srcLabel}, ${Math.round(estimated.confidence * 100)} % klar). Bei Bedarf mit 90°-Buttons nachjustieren.`
+  }
+
+  /** Beim Positionieren: Parzellen-Linien erkennen und Deichsel zur Zufahrt ausrichten. */
+  const placeCaravanWithAutoOrient = useCallback(
+    async (lat: number, lng: number) => {
+      setPin({ lat, lng })
+      if (!selectedStayId) return
+      setOrientBusy(true)
+      showOrientHint('Parzellen-Ausrichtung wird erkannt (OSM + Karte + Satellit)…', 'info', 0)
+      let heading: number | undefined
+      try {
+        const estimated = await estimatePitchOrientation({ lat, lng, zoom: 19 })
+        if (estimated && estimated.confidence >= 0.2) {
+          heading = estimated.headingDeg
+          setCaravanHeading(heading)
+          showOrientHint(formatOrientSuccess(estimated), 'ok')
+        } else {
+          showOrientHint(
+            'Keine klare Richtung gefunden – bitte manuell drehen (Auto erneut versuchen).',
+            'warn'
+          )
+        }
+      } catch {
+        showOrientHint('Ausrichtung fehlgeschlagen – bitte manuell drehen.', 'warn')
+      } finally {
+        setOrientBusy(false)
+      }
+      await saveStellplatz(
+        heading != null ? { pin: { lat, lng }, heading } : { pin: { lat, lng } }
+      )
+    },
+    [selectedStayId, saveStellplatz, showOrientHint]
+  )
+
+  /** Manuell erneut erkennen (z. B. wenn Auto beim Verschieben nichts tat). */
+  const detectOrientationHere = useCallback(async () => {
+    if (!pin) {
+      showOrientHint('Zuerst Wohnwagen auf der Karte platzieren.', 'warn')
+      return
     }
-    if (pin) return 'Stellplatz-Pin'
-    if (planCenter) return 'Campingplatz-Koordinaten'
-    return 'keine Koordinaten'
-  }, [mode, position, pin, planCenter])
+    setOrientBusy(true)
+    showOrientHint('Parzellen-Ausrichtung wird erkannt (OSM + Karte + Satellit)…', 'info', 0)
+    try {
+      const estimated = await estimatePitchOrientation({
+        lat: pin.lat,
+        lng: pin.lng,
+        zoom: 19,
+      })
+      if (estimated && estimated.confidence >= 0.2) {
+        setCaravanHeading(estimated.headingDeg)
+        if (selectedStayId) {
+          await saveStellplatz({ heading: estimated.headingDeg })
+        }
+        showOrientHint(formatOrientSuccess(estimated), 'ok')
+      } else {
+        showOrientHint(
+          'Keine klare Richtung gefunden – bitte manuell drehen.',
+          'warn'
+        )
+      }
+    } catch {
+      showOrientHint('Ausrichtung fehlgeschlagen – bitte manuell drehen.', 'warn')
+    } finally {
+      setOrientBusy(false)
+    }
+  }, [pin, selectedStayId, saveStellplatz, showOrientHint])
 
   const planDateObj = useMemo(() => {
     const d = new Date(planDate + 'T12:00:00')
@@ -739,7 +850,7 @@ function SonnenAusrichtungContent() {
                 router.replace('/tools/sonnen-ausrichtung', { scroll: false })
               }}
             >
-              Vor Ort
+              Live (GPS)
             </Button>
             <Button
               type="button"
@@ -779,12 +890,9 @@ function SonnenAusrichtungContent() {
             </div>
           </div>
 
-          <p className="text-xs text-muted-foreground">
-            Zentrum: {centerSourceLabel}
-            {satelliteHint && displayMode === 'karte' && basemap === 'satellite'
-              ? ` · ${satelliteHint}`
-              : ''}
-          </p>
+          {satelliteHint && displayMode === 'karte' && basemap === 'satellite' && (
+            <p className="text-xs text-muted-foreground">{satelliteHint}</p>
+          )}
 
           {mode === 'planung' && (
             <>
@@ -1035,22 +1143,20 @@ function SonnenAusrichtungContent() {
                 lockMapPan={caravanMoveMode}
                 heightClassName="h-[420px] md:h-[580px]"
                 onCaravanMove={(lat, lng) => {
-                  setPin({ lat, lng })
-                  if (selectedStayId) {
-                    void saveStellplatz({ pin: { lat, lng } })
-                  }
+                  void placeCaravanWithAutoOrient(lat, lng)
                 }}
                 onMapClick={(lat, lng) => {
                   if (caravanMoveMode) return
                   if (mode !== 'planung' || !selectedStayId) return
-                  void saveStellplatz({ pin: { lat, lng } })
+                  void placeCaravanWithAutoOrient(lat, lng)
                 }}
-                onSatelliteUnavailable={(reason) => setSatelliteHint(reason)}
-                onSatelliteAvailable={() => setSatelliteHint(null)}
+                onSatelliteUnavailable={handleSatelliteUnavailable}
+                onSatelliteAvailable={handleSatelliteAvailable}
               />
 
               {caravanOverlay && (
-                <div className="flex items-center gap-3">
+                <div className="space-y-2">
+                  <div className="flex flex-wrap items-center gap-3">
                   <Label className="shrink-0 text-sm">Drehen</Label>
                   <input
                     type="range"
@@ -1064,7 +1170,7 @@ function SonnenAusrichtungContent() {
                     onTouchEnd={() => {
                       if (selectedStayId) void saveStellplatz({ heading: caravanHeading })
                     }}
-                    className="flex-1 accent-[rgb(45,79,30)]"
+                    className="flex-1 min-w-[8rem] accent-[rgb(45,79,30)]"
                   />
                   <span className="tabular-nums text-sm w-10 text-right">
                     {Math.round(caravanHeading)}°
@@ -1100,7 +1206,36 @@ function SonnenAusrichtungContent() {
                     >
                       <RotateCw className="h-4 w-4" />
                     </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-8"
+                      disabled={!pin || orientBusy}
+                      onClick={() => void detectOrientationHere()}
+                      title="Ausrichtung anhand OSM-Wege, Karte und Satellit erkennen"
+                    >
+                      {orientBusy ? 'Erkenne…' : 'Auto'}
+                    </Button>
                   </div>
+                  </div>
+                  {orientHint && (
+                    <p
+                      className={cn(
+                        'rounded-md px-2.5 py-1.5 text-xs leading-snug',
+                        orientHintTone === 'ok' &&
+                          'bg-emerald-500/10 text-emerald-800 dark:text-emerald-200',
+                        orientHintTone === 'warn' &&
+                          'bg-amber-500/15 text-amber-900 dark:text-amber-100',
+                        orientHintTone === 'info' &&
+                          'bg-muted text-muted-foreground'
+                      )}
+                      role="status"
+                      aria-live="polite"
+                    >
+                      {orientHint}
+                    </p>
+                  )}
                 </div>
               )}
 

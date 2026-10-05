@@ -36,6 +36,21 @@ export async function requireAuth(
   return { session, userContext }
 }
 
+/**
+ * Nur JWT-Session prüfen – ohne D1.
+ * Für häufige, lesende Proxys (Kacheln, Overpass), damit Free-Tier
+ * CPU/Subrequests nicht pro Aufruf an der DB hängen.
+ */
+export async function requireSession(
+  request: NextRequest
+): Promise<{ session: NonNullable<Awaited<ReturnType<typeof getSession>>> } | NextResponse> {
+  const session = await getSession(request)
+  if (!session) {
+    return NextResponse.json({ error: 'Nicht angemeldet' }, { status: 401 })
+  }
+  return { session }
+}
+
 /** Haushalt-Admin oder System-Admin */
 export function requireAdmin(userContext: UserContext): NextResponse | null {
   if (!isAdminRole(userContext.role)) {

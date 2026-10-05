@@ -1,4 +1,5 @@
 import {
+  SATELLITE_MAX_NATIVE_ZOOM,
   SATELLITE_MAX_ZOOM,
   SATELLITE_MIN_ZOOM,
   satelliteTileUrl,
@@ -99,15 +100,19 @@ export async function loadSatelliteTile(url: string): Promise<Response | null> {
   }
 }
 
-/** Prefetch um ein Zentrum herum (begrenzte Zoomstufen + Radius in Tiles). */
+/** Prefetch um ein Zentrum herum (nur native Esri-Zoomstufen, stark begrenzt). */
 export async function prefetchSatelliteAround(
   lat: number,
   lng: number,
   opts?: { minZoom?: number; maxZoom?: number; radiusTiles?: number }
 ): Promise<{ fetched: number; cached: number; failed: number }> {
-  const minZ = opts?.minZoom ?? Math.max(SATELLITE_MIN_ZOOM, 16)
-  const maxZ = opts?.maxZoom ?? SATELLITE_MAX_ZOOM
-  const radius = opts?.radiusTiles ?? 2
+  // Nie über maxNativeZoom hinaus – Esri liefert dort 404 und erzeugt Last/Fehler
+  const minZ = opts?.minZoom ?? Math.max(SATELLITE_MIN_ZOOM, 17)
+  const maxZ = Math.min(
+    opts?.maxZoom ?? SATELLITE_MAX_NATIVE_ZOOM,
+    SATELLITE_MAX_NATIVE_ZOOM
+  )
+  const radius = opts?.radiusTiles ?? 1
   let fetched = 0
   let cached = 0
   let failed = 0

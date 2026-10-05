@@ -17,7 +17,7 @@ import {
   SATELLITE_MIN_ZOOM,
   type SonnenBasemap,
 } from '@/lib/satellite-tiles'
-import { getCachedSatelliteTile, loadSatelliteTile } from '@/lib/satellite-tile-cache'
+import { getCachedSatelliteTile } from '@/lib/satellite-tile-cache'
 import {
   normalizeHeadingDeg,
   caravanOutlineToLatLngs,
@@ -131,6 +131,29 @@ function distanceToMapEdgeMeters(
 function createCachedSatelliteLayer(
   onStatus: (ok: boolean, detail?: string) => void
 ): L.TileLayer {
+  let okCount = 0
+  let failCount = 0
+  let lastReportedOk: boolean | null = null
+
+  const report = (ok: boolean, detail?: string) => {
+    // Nicht bei jeder einzelnen Kachel den Parent re-rendern – sonst Layer-Destroy-Loop
+    if (ok) {
+      okCount++
+      failCount = 0
+      if (lastReportedOk === true) return
+      lastReportedOk = true
+      onStatus(true)
+      return
+    }
+    failCount++
+    // Erst melden, wenn mehrere Kacheln scheitern (vereinzelte Fehler sind normal)
+    if (okCount > 0 && failCount < 8) return
+    if (lastReportedOk === false) return
+    if (failCount < 4) return
+    lastReportedOk = false
+    onStatus(false, detail)
+  }
+
   const CachedLayer = L.TileLayer.extend({
     createTile(this: L.TileLayer, coords: L.Coords, done: L.DoneCallback) {
       const img = document.createElement('img')
@@ -141,11 +164,11 @@ function createCachedSatelliteLayer(
       const url = this.getTileUrl(coords)
 
       const ok = () => {
-        onStatus(true)
+        report(true)
         done(undefined, img)
       }
       const fail = (detail: string) => {
-        onStatus(false, detail)
+        report(false, detail)
         done(new Error(detail), img)
       }
 
@@ -178,26 +201,9 @@ function createCachedSatelliteLayer(
             return
           }
 
-          // Online: direkt laden (wie OSM/Leaflet) – mobil am zuverlässigsten
-          img.onload = () => {
-            ok()
-            // Cache nur im Hintergrund für Offline (darf scheitern)
-            void loadSatelliteTile(url).catch(() => {})
-          }
-          img.onerror = () => {
-            void (async () => {
-              try {
-                const res = await loadSatelliteTile(url)
-                if (res) {
-                  await showBlob(res)
-                  return
-                }
-              } catch {
-                /* ignore */
-              }
-              fail('Satellitenbild nicht ladbar')
-            })()
-          }
+          // Online: nur <img src> – kein paralleles CORS-fetch (spart Bandbreite/CPU auf Mobil)
+          img.onload = () => ok()
+          img.onerror = () => fail('Satellitenbild nicht ladbar')
           img.src = url
         } catch {
           fail('Satellitenbild nicht ladbar')
@@ -213,6 +219,10 @@ function createCachedSatelliteLayer(
     minZoom: SATELLITE_MIN_ZOOM,
     maxZoom: SATELLITE_MAX_ZOOM,
     maxNativeZoom: SATELLITE_MAX_NATIVE_ZOOM,
+    // Weniger Tile-Churn beim Zoomen/Pannen (mobil)
+    updateWhenZooming: false,
+    keepBuffer: 2,
+    detectRetina: false,
   })
 }
 
@@ -468,6 +478,10 @@ export function SonnenAusrichtungMap({
     h: number
   } | null>(null)
   const statusRef = useRef<{ ok: boolean; detail?: string }>({ ok: true })
+  const onSatelliteUnavailableRef = useRef(onSatelliteUnavailable)
+  onSatelliteUnavailableRef.current = onSatelliteUnavailable
+  const onSatelliteAvailableRef = useRef(onSatelliteAvailable)
+  onSatelliteAvailableRef.current = onSatelliteAvailable
 
   const onMapClickRef = useRef(onMapClick)
   onMapClickRef.current = onMapClick
@@ -551,7 +565,7 @@ export function SonnenAusrichtungMap({
     }
   }, [caravan?.imageUrl])
 
-  // Basemap: Satellit oder OSM
+  // Basemap: Satellit oder OSM – Callbacks bewusst per Ref, sonst Layer-Recreate-Loop
   useEffect(() => {
     const map = mapRef.current
     if (!map || !mapReady) return
@@ -561,12 +575,16 @@ export function SonnenAusrichtungMap({
       layerRef.current = null
     }
 
+    statusRef.current = { ok: true }
+
     if (basemap === 'satellite') {
       const layer = createCachedSatelliteLayer((ok, detail) => {
         const prev = statusRef.current
         statusRef.current = { ok, detail }
-        if (ok && !prev.ok) onSatelliteAvailable?.()
-        if (!ok && prev.ok) onSatelliteUnavailable?.(detail ?? 'Satellitenbild nicht verfügbar')
+        if (ok && !prev.ok) onSatelliteAvailableRef.current?.()
+        if (!ok && prev.ok) {
+          onSatelliteUnavailableRef.current?.(detail ?? 'Satellitenbild nicht verfügbar')
+        }
       })
       layer.addTo(map)
       layerRef.current = layer
@@ -579,11 +597,11 @@ export function SonnenAusrichtungMap({
       if (map.getZoom() > OSM_MAX_ZOOM + 1) {
         map.setZoom(OSM_MAX_ZOOM)
       }
-      onSatelliteAvailable?.()
+      onSatelliteAvailableRef.current?.()
     }
-  }, [basemap, mapReady, onSatelliteAvailable, onSatelliteUnavailable])
+  }, [basemap, mapReady])
 
-  // Center (Zoom beibehalten)
+  // Center (Zoom beibehalten) – ohne animate, sonst graues Aufblitzen beim Layer-Aufbau
   useEffect(() => {
     const map = mapRef.current
     if (!map || !mapReady) return
@@ -591,7 +609,7 @@ export function SonnenAusrichtungMap({
     map.setView(
       [center.lat, center.lng],
       Number.isFinite(z) ? z : SATELLITE_DEFAULT_ZOOM,
-      { animate: true }
+      { animate: false }
     )
   }, [center.lat, center.lng, mapReady])
 
