@@ -465,7 +465,6 @@ export function SonnenAusrichtungMap({
   const caravanPolyRef = useRef<L.Polygon | null>(null)
   const caravanMarkerRef = useRef<L.Marker | null>(null)
   const sunLayerRef = useRef<L.LayerGroup | null>(null)
-  const rotatePaneRef = useRef<HTMLElement | null>(null)
   const [mapReady, setMapReady] = useState(false)
   const [zoomTick, setZoomTick] = useState(0)
   const [nowTick, setNowTick] = useState(() => Date.now())
@@ -511,9 +510,13 @@ export function SonnenAusrichtungMap({
     }).setView([center.lat, center.lng], SATELLITE_DEFAULT_ZOOM)
 
     mapRef.current = map
-    rotatePaneRef.current = map.getPane('mapPane') ?? null
     sunLayerRef.current = L.layerGroup().addTo(map)
     setMapReady(true)
+
+    // Nach Layout: Größe korrekt messen (wichtig bei rotiertem/vergrößertem Wrapper)
+    requestAnimationFrame(() => {
+      map.invalidateSize({ animate: false })
+    })
 
     map.on('click', (e: L.LeafletMouseEvent) => {
       onMapClickRef.current?.(e.latlng.lat, e.latlng.lng)
@@ -611,19 +614,24 @@ export function SonnenAusrichtungMap({
     )
   }, [center.lat, center.lng, mapReady])
 
-  // Device heading rotation (vor Ort)
+  /**
+   * Live-Ansicht: gesamten Karten-Container um die Viewport-Mitte drehen.
+   * Nicht mapPane – Leaflet schreibt dort translate3d fürs Panning; rotate()
+   * überschriebe das und drehte um die linke obere Ecke (graue Flächen).
+   * Wrapper √2 größer, damit rotierte Ecken die Viewport-Fläche füllen.
+   */
+  const headingUp =
+    mode === 'vor-ort' && deviceHeading != null && Number.isFinite(deviceHeading)
+  const expandForRotation = mode === 'vor-ort'
+
   useEffect(() => {
-    const pane = rotatePaneRef.current
-    if (!pane) return
-    if (mode === 'vor-ort' && deviceHeading != null) {
-      pane.style.transformOrigin = 'center center'
-      pane.style.transition = 'transform 80ms linear'
-      pane.style.transform = `rotate(${-deviceHeading}deg)`
-    } else {
-      pane.style.transform = ''
-      pane.style.transition = ''
-    }
-  }, [mode, deviceHeading, mapReady])
+    const map = mapRef.current
+    if (!map || !mapReady) return
+    const id = window.requestAnimationFrame(() => {
+      map.invalidateSize({ animate: false })
+    })
+    return () => window.cancelAnimationFrame(id)
+  }, [mapReady, expandForRotation])
 
   // Karten-Pan nur im expliziten Verschieben-Modus sperren (Smartphone)
   useEffect(() => {
@@ -921,10 +929,23 @@ export function SonnenAusrichtungMap({
     <div
       className={cn(
         'relative w-full overflow-hidden rounded-xl border border-border',
+        heightClassName,
         className
       )}
     >
-      <div ref={containerRef} className={cn('z-0 w-full bg-muted', heightClassName)} />
+      <div
+        className="absolute left-1/2 top-1/2 will-change-transform"
+        style={{
+          width: expandForRotation ? '141.4214%' : '100%',
+          height: expandForRotation ? '141.4214%' : '100%',
+          transform: headingUp
+            ? `translate(-50%, -50%) rotate(${-deviceHeading!}deg)`
+            : 'translate(-50%, -50%)',
+          transition: headingUp ? 'transform 80ms linear' : undefined,
+        }}
+      >
+        <div ref={containerRef} className="h-full w-full bg-muted" />
+      </div>
 
       {lockMapPan && (
         <div className="pointer-events-none absolute inset-x-0 bottom-2 z-[500] flex justify-center px-3">

@@ -52,6 +52,7 @@ import { resolvePlacementLengthM } from '@/lib/wohnwagen-hersteller'
 import { supportsGrundriss } from '@/lib/transport-types'
 import { buildPlatzplanUrl } from '@/lib/platzplan-url'
 import { estimatePitchOrientation } from '@/lib/pitch-orientation'
+import { haversineDistanceKm } from '@/lib/routes'
 import type { ApiResponse } from '@/lib/api-types'
 import type { TransportVehicle, Vacation, VacationCampingStay } from '@/lib/db'
 import { CalendarDatePicker } from '@/components/ui/calendar-date-picker'
@@ -736,11 +737,29 @@ function SonnenAusrichtungContent() {
     return `Ausgerichtet auf ${Math.round(estimated.headingDeg)}° (${srcLabel}, ${Math.round(estimated.confidence * 100)} % klar). Bei Bedarf mit 90°-Buttons nachjustieren.`
   }
 
-  /** Beim Positionieren: Parzellen-Linien erkennen und Deichsel zur Zufahrt ausrichten. */
+  /** Beim Positionieren: Parzellen-Linien erkennen und Deichsel zur Zufahrt ausrichten.
+   * Kleine Verschiebungen (<10 m) behalten die bestehende Ausrichtung. */
   const placeCaravanWithAutoOrient = useCallback(
     async (lat: number, lng: number) => {
+      const prev = pin
+      const movedM =
+        prev != null
+          ? haversineDistanceKm({
+              lat1: prev.lat,
+              lng1: prev.lng,
+              lat2: lat,
+              lng2: lng,
+            }) * 1000
+          : Number.POSITIVE_INFINITY
+
       setPin({ lat, lng })
       if (!selectedStayId) return
+
+      if (prev != null && movedM < 10) {
+        await saveStellplatz({ pin: { lat, lng }, heading: caravanHeading })
+        return
+      }
+
       setOrientBusy(true)
       showOrientHint('Parzellen-Ausrichtung wird erkannt (OSM + Karte + Satellit)…', 'info', 0)
       let heading: number | undefined
@@ -765,7 +784,7 @@ function SonnenAusrichtungContent() {
         heading != null ? { pin: { lat, lng }, heading } : { pin: { lat, lng } }
       )
     },
-    [selectedStayId, saveStellplatz, showOrientHint]
+    [selectedStayId, saveStellplatz, showOrientHint, pin, caravanHeading]
   )
 
   /** Manuell erneut erkennen (z. B. wenn Auto beim Verschieben nichts tat). */
