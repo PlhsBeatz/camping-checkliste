@@ -96,36 +96,58 @@ function metersPerPixelAt(map: L.Map, lat: number, lng: number): number {
 }
 
 /**
- * Entfernung vom Ursprung bis zum Kartenrand in Kompassrichtung (Meter).
- * Labels etwas einrücken, damit sie sichtbar bleiben.
+ * Entfernung vom Ursprung bis zum sichtbaren Kartenrand in Kompassrichtung (Meter).
+ * `visibleScale` < 1: bei Live-Rotation ist der Leaflet-Container √2 größer als der Viewport.
  */
 function distanceToMapEdgeMeters(
   map: L.Map,
   originLat: number,
   originLng: number,
   compassDeg: number,
-  insetPx = 28
+  insetPx = 28,
+  visibleScale = 1
 ): number {
   const origin = L.latLng(originLat, originLng)
   const size = map.getSize()
+  if (size.x < 8 || size.y < 8) {
+    // Layout noch nicht fertig – sinnvolle Mindestlänge statt unsichtbarer 8-m-Striche
+    return 40
+  }
+
   const originPt = map.latLngToContainerPoint(origin)
+  const centerPt = L.point(size.x / 2, size.y / 2)
+  const visHalfX = (size.x * visibleScale) / 2
+  const visHalfY = (size.y * visibleScale) / 2
+  const minX = centerPt.x - visHalfX + insetPx
+  const maxX = centerPt.x + visHalfX - insetPx
+  const minY = centerPt.y - visHalfY + insetPx
+  const maxY = centerPt.y + visHalfY - insetPx
+
   const rad = (compassDeg * Math.PI) / 180
   // Bildschirm: +x = Ost, +y = Süd; Kompass 0 = Nord = −y
   const dirX = Math.sin(rad)
   const dirY = -Math.cos(rad)
 
   let t = Number.POSITIVE_INFINITY
-  if (dirX > 1e-9) t = Math.min(t, (size.x - insetPx - originPt.x) / dirX)
-  else if (dirX < -1e-9) t = Math.min(t, (insetPx - originPt.x) / dirX)
-  if (dirY > 1e-9) t = Math.min(t, (size.y - insetPx - originPt.y) / dirY)
-  else if (dirY < -1e-9) t = Math.min(t, (insetPx - originPt.y) / dirY)
+  if (dirX > 1e-9) t = Math.min(t, (maxX - originPt.x) / dirX)
+  else if (dirX < -1e-9) t = Math.min(t, (minX - originPt.x) / dirX)
+  if (dirY > 1e-9) t = Math.min(t, (maxY - originPt.y) / dirY)
+  else if (dirY < -1e-9) t = Math.min(t, (minY - originPt.y) / dirY)
 
+  const fallback = Math.min(visHalfX, visHalfY) - insetPx
   if (!Number.isFinite(t) || t <= 4) {
-    t = Math.min(size.x, size.y) / 2 - insetPx
+    t = Math.max(24, fallback)
+  } else {
+    // Labels klar innerhalb des Viewports halten
+    t = Math.max(24, Math.min(t, fallback * 1.05))
   }
 
   const edgePt = L.point(originPt.x + dirX * t, originPt.y + dirY * t)
-  return map.distance(origin, map.containerPointToLatLng(edgePt))
+  const meters = map.distance(origin, map.containerPointToLatLng(edgePt))
+  // Mindestens ~25 % der kürzeren Viewport-Seite in Metern
+  const mpp = metersPerPixelAt(map, originLat, originLng)
+  const minMeters = Math.max(20, Math.min(visHalfX, visHalfY) * 0.45 * mpp)
+  return Math.max(minMeters, meters)
 }
 
 function createCachedSatelliteLayer(
@@ -270,21 +292,24 @@ function computeSunOverlay(
     const showLive = !date || sameCalendarDay(day, now)
     const nowPos = showLive ? SunCalc.getPosition(now, lat, lng) : null
 
+    const isValidTime = (d: Date | null | undefined): d is Date =>
+      !!d && !Number.isNaN(d.getTime())
+
     const isPolar =
-      !sunrise ||
-      !sunset ||
+      !isValidTime(sunrise) ||
+      !isValidTime(sunset) ||
       sunrise.getTime() === sunset.getTime()
     const refAlt = nowPos?.altitude ?? SunCalc.getPosition(solarNoon ?? day, lat, lng).altitude
     const isPolarDay = isPolar && refAlt > 0
     const isPolarNight = isPolar && refAlt <= 0
 
-    const sunriseAz = sunrise
+    const sunriseAz = isValidTime(sunrise)
       ? suncalcAzimuthToCompass(SunCalc.getPosition(sunrise, lat, lng).azimuth)
       : 0
-    const sunsetAz = sunset
+    const sunsetAz = isValidTime(sunset)
       ? suncalcAzimuthToCompass(SunCalc.getPosition(sunset, lat, lng).azimuth)
       : 0
-    const noonAz = solarNoon
+    const noonAz = isValidTime(solarNoon)
       ? suncalcAzimuthToCompass(SunCalc.getPosition(solarNoon, lat, lng).azimuth)
       : 180
     const currentAz = nowPos ? suncalcAzimuthToCompass(nowPos.azimuth) : noonAz
@@ -295,9 +320,9 @@ function computeSunOverlay(
       sunsetAz,
       currentAz,
       currentAlt: nowPos ? nowPos.altitude : -1,
-      sunriseLabel: sunrise && !isPolar ? format(sunrise, 'HH:mm') : '—',
-      noonLabel: solarNoon ? format(solarNoon, 'HH:mm') : '—',
-      sunsetLabel: sunset && !isPolar ? format(sunset, 'HH:mm') : '—',
+      sunriseLabel: isValidTime(sunrise) && !isPolar ? format(sunrise, 'HH:mm') : '—',
+      noonLabel: isValidTime(solarNoon) ? format(solarNoon, 'HH:mm') : '—',
+      sunsetLabel: isValidTime(sunset) && !isPolar ? format(sunset, 'HH:mm') : '—',
       currentLabel: nowPos ? `Jetzt ${format(now, 'HH:mm')}` : null,
       isPolarDay: !!isPolarDay,
       isPolarNight: !!isPolarNight,
@@ -514,12 +539,18 @@ export function SonnenAusrichtungMap({
     }).setView([center.lat, center.lng], SATELLITE_DEFAULT_ZOOM)
 
     mapRef.current = map
-    sunLayerRef.current = L.layerGroup().addTo(map)
+    if (!map.getPane('sunPane')) {
+      const sunPane = map.createPane('sunPane')
+      sunPane.style.zIndex = '650'
+      sunPane.style.pointerEvents = 'none'
+    }
+    sunLayerRef.current = L.layerGroup([], { pane: 'sunPane' }).addTo(map)
     setMapReady(true)
 
     // Nach Layout: Größe korrekt messen (wichtig bei rotiertem/vergrößertem Wrapper)
     requestAnimationFrame(() => {
       map.invalidateSize({ animate: false })
+      setZoomTick((z) => z + 1)
     })
 
     map.on('click', (e: L.LeafletMouseEvent) => {
@@ -650,6 +681,7 @@ export function SonnenAusrichtungMap({
     if (!map || !mapReady) return
     const id = window.requestAnimationFrame(() => {
       map.invalidateSize({ animate: false })
+      setZoomTick((z) => z + 1)
     })
     return () => window.cancelAnimationFrame(id)
   }, [mapReady, expandForRotation])
@@ -864,11 +896,18 @@ export function SonnenAusrichtungMap({
       weight = 2,
       dash?: string
     ) => {
-      // genug Platz für die Pill am Linienende
-      let edgeM = distanceToMapEdgeMeters(map, origin.lat, origin.lng, az, 56)
-      // Live: Karte ist √2 vergrößert – Labels an den sichtbaren Viewport-Rand
-      if (expandForRotation) edgeM *= 1 / Math.SQRT2
-      const meters = Math.max(8, edgeM)
+      // Live: Container √2 größer – gegen sichtbaren Viewport rechnen, Labels innen
+      const visibleScale = expandForRotation ? 1 / Math.SQRT2 : 1
+      const insetPx = expandForRotation ? 64 : 56
+      const edgeM = distanceToMapEdgeMeters(
+        map,
+        origin.lat,
+        origin.lng,
+        az,
+        insetPx,
+        visibleScale
+      )
+      const meters = Math.max(24, edgeM)
       const end = offsetByCompassMeters(origin.lat, origin.lng, az, meters)
       const latlngs: [number, number][] = [
         [origin.lat, origin.lng],
@@ -905,13 +944,20 @@ export function SonnenAusrichtungMap({
       L.marker(end, {
         icon: sunLabelIcon(kind, text, labelScale),
         interactive: false,
-        zIndexOffset: 500,
+        zIndexOffset: 600,
       }).addTo(group)
     }
 
     // Nord: nur kleiner Pfeil + N, nah am Zentrum
-    let northEdge = distanceToMapEdgeMeters(map, origin.lat, origin.lng, 0, 16)
-    if (expandForRotation) northEdge *= 1 / Math.SQRT2
+    const northVisible = expandForRotation ? 1 / Math.SQRT2 : 1
+    const northEdge = distanceToMapEdgeMeters(
+      map,
+      origin.lat,
+      origin.lng,
+      0,
+      16,
+      northVisible
+    )
     const northM = Math.min(28, northEdge * 0.18)
     const northPos = offsetByCompassMeters(origin.lat, origin.lng, 0, Math.max(12, northM))
     L.marker(northPos, {
@@ -920,23 +966,30 @@ export function SonnenAusrichtungMap({
       zIndexOffset: 480,
     }).addTo(group)
 
+    // Auf-/Untergang immer zeichnen, sobald Azimut berechenbar (nicht nur „nicht polar“)
+    const hasRiseSet =
+      Number.isFinite(sun.sunriseAz) &&
+      Number.isFinite(sun.sunsetAz) &&
+      sun.sunriseLabel !== '—' &&
+      sun.sunsetLabel !== '—'
+
     if (!sun.isPolarNight) {
-      if (!sun.isPolarDay) {
+      if (hasRiseSet && !sun.isPolarDay) {
         addRay(
           sun.sunriseAz,
           BRAND_GREEN,
           'sunrise',
           `Aufgang ${sun.sunriseLabel}`,
-          2.25,
-          '5 4'
+          2.5,
+          '6 5'
         )
         addRay(
           sun.sunsetAz,
           BRAND_GREEN,
           'sunset',
           `Untergang ${sun.sunsetLabel}`,
-          2.25,
-          '5 4'
+          2.5,
+          '6 5'
         )
       }
       addRay(sun.noonAz, BRAND_ORANGE, 'noon', `Mittag ${sun.noonLabel}`, 2.5)
