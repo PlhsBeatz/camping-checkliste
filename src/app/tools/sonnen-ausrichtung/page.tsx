@@ -1027,8 +1027,7 @@ function SonnenAusrichtungContent() {
                     </Button>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Tippe auf die Karte, um den Stellplatz-Pin zu setzen. Wohnwagen per
-                    „Verschieben“ ziehen.
+                    Tippe auf die Karte, um den Stellplatz-Pin zu setzen.
                   </p>
                   <Button
                     type="button"
@@ -1130,11 +1129,38 @@ function SonnenAusrichtungContent() {
 
           {mapCenter && displayMode === 'karte' && (
             <div className="space-y-3">
+              <div className="flex justify-end">
+                <div className="flex overflow-hidden rounded-md border border-border bg-background shadow-sm">
+                  <button
+                    type="button"
+                    onClick={() => setBasemapPersisted('satellite')}
+                    className={cn(
+                      'px-2.5 py-1.5 text-xs font-medium transition-colors',
+                      basemap === 'satellite'
+                        ? 'bg-[rgb(45,79,30)] text-white'
+                        : 'text-foreground hover:bg-muted'
+                    )}
+                  >
+                    Satellit
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBasemapPersisted('osm')}
+                    className={cn(
+                      'px-2.5 py-1.5 text-xs font-medium transition-colors border-l border-border',
+                      basemap === 'osm'
+                        ? 'bg-[rgb(45,79,30)] text-white'
+                        : 'text-foreground hover:bg-muted'
+                    )}
+                  >
+                    Karte
+                  </button>
+                </div>
+              </div>
               <SonnenAusrichtungMap
                 center={mapCenter}
                 mode={mode}
                 basemap={basemap}
-                onBasemapChange={setBasemapPersisted}
                 deviceHeading={mode === 'vor-ort' ? smoothedHeading : null}
                 date={mode === 'planung' ? planDateObj : undefined}
                 pin={pin}
@@ -1237,13 +1263,6 @@ function SonnenAusrichtungContent() {
                     </p>
                   )}
                 </div>
-              )}
-
-              {caravanOverlay && isCoarsePointer && !caravanMoveMode && (
-                <p className="text-xs text-muted-foreground">
-                  Am Smartphone: „Verschieben“ tippen, dann den Wohnwagen ziehen — die Karte
-                  bleibt dabei fixiert, damit Finger und Karten-Pan sich nicht beißen.
-                </p>
               )}
             </div>
           )}

@@ -31,7 +31,6 @@ export type SonnenAusrichtungMapProps = {
   center: { lat: number; lng: number }
   mode: SonnenMapMode
   basemap: SonnenBasemap
-  onBasemapChange?: (basemap: SonnenBasemap) => void
   onSatelliteUnavailable?: (reason: string) => void
   onSatelliteAvailable?: () => void
   /** Vor Ort: Karte mit Geräteheading drehen (oben = Gerätevorne) */
@@ -446,7 +445,6 @@ export function SonnenAusrichtungMap({
   center,
   mode,
   basemap,
-  onBasemapChange,
   onSatelliteUnavailable,
   onSatelliteAvailable,
   deviceHeading = null,
@@ -927,34 +925,6 @@ export function SonnenAusrichtungMap({
       )}
     >
       <div ref={containerRef} className={cn('z-0 w-full bg-muted', heightClassName)} />
-
-      {/* Basemap-Umschalter oben rechts */}
-      <div className="absolute right-2 top-2 z-[500] flex overflow-hidden rounded-md border border-border bg-background/95 shadow-sm">
-        <button
-          type="button"
-          onClick={() => onBasemapChange?.('satellite')}
-          className={cn(
-            'px-2.5 py-1.5 text-xs font-medium transition-colors',
-            basemap === 'satellite'
-              ? 'bg-[rgb(45,79,30)] text-white'
-              : 'text-foreground hover:bg-muted'
-          )}
-        >
-          Satellit
-        </button>
-        <button
-          type="button"
-          onClick={() => onBasemapChange?.('osm')}
-          className={cn(
-            'px-2.5 py-1.5 text-xs font-medium transition-colors border-l border-border',
-            basemap === 'osm'
-              ? 'bg-[rgb(45,79,30)] text-white'
-              : 'text-foreground hover:bg-muted'
-          )}
-        >
-          Karte
-        </button>
-      </div>
 
       {lockMapPan && (
         <div className="pointer-events-none absolute inset-x-0 bottom-2 z-[500] flex justify-center px-3">
