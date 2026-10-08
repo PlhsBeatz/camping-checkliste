@@ -13,6 +13,8 @@ export { PackingSyncDO }
 const PACKING_SYNC_WS_PATH = '/api/packing-sync/ws'
 const EQUIPMENT_ITEMS_PATH = '/api/equipment-items'
 const EQUIPMENT_BY_TAGS_PATH = '/api/equipment-by-tags'
+const PITCH_ORIENTATION_PATH = '/api/pitch-orientation'
+const MAP_TILES_PREFIX = '/api/map-tiles/'
 /** Cache-TTL in Sekunden – reduziert Worker-Aufrufe bei Equipment-Abfragen (500+ Einträge) */
 const EQUIPMENT_CACHE_TTL = 300
 
@@ -29,6 +31,37 @@ function isCachedEquipmentRequest(request: Request, url: URL): boolean {
 /** Cache-Key ohne Cookie/Auth – Daten sind haushaltsweit, nicht nutzerspezifisch */
 function equipmentCacheKey(url: URL): Request {
   return new Request(url.toString(), { method: 'GET' })
+}
+
+/** Früher Edge-Cache für Sonnenausrichtung – spart OpenNext-CPU (Error 1102). */
+function pitchOrientationCacheKey(url: URL): Request | null {
+  const lat = Number(url.searchParams.get('lat'))
+  const lng = Number(url.searchParams.get('lng'))
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null
+  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null
+  const rLat = lat.toFixed(4)
+  const rLng = lng.toFixed(4)
+  return new Request(
+    `https://camping-checkliste.pitch-cache/${rLat}/${rLng}`,
+    { method: 'GET' }
+  )
+}
+
+function mapTileCacheKey(url: URL): Request | null {
+  // /api/map-tiles/:source/:z/:x/:y
+  const parts = url.pathname.split('/')
+  // ['', 'api', 'map-tiles', source, z, x, y]
+  if (parts.length < 7) return null
+  const source = parts[3]
+  const z = parts[4]
+  const x = parts[5]
+  const y = parts[6]
+  if (source !== 'satellite' && source !== 'osm') return null
+  if (!z || !x || !y) return null
+  return new Request(
+    `https://camping-checkliste.tile-cache/${source}/${z}/${x}/${y}`,
+    { method: 'GET' }
+  )
 }
 
 interface WorkerEnv {
@@ -61,10 +94,37 @@ export default {
       return stub.fetch(request)
     }
 
+    // Cloudflare-spezifisch: caches.default (nicht im Standard CacheStorage-Typ)
+    const cache = (caches as unknown as { default: Cache }).default
+
+    // Sonnenausrichtung: Cache-HIT vor OpenNext (sonst oft Error 1102 durch Framework-CPU)
+    if (request.method === 'GET' && url.pathname === PITCH_ORIENTATION_PATH) {
+      const pitchKey = pitchOrientationCacheKey(url)
+      if (pitchKey) {
+        const cached = await cache.match(pitchKey)
+        if (cached) {
+          const headers = new Headers(cached.headers)
+          headers.set('X-Pitch-Cache', 'HIT')
+          return new Response(cached.body, { status: cached.status, headers })
+        }
+      }
+    }
+
+    // Kachel-Proxy: Cache-HIT vor OpenNext
+    if (request.method === 'GET' && url.pathname.startsWith(MAP_TILES_PREFIX)) {
+      const tileKey = mapTileCacheKey(url)
+      if (tileKey) {
+        const cached = await cache.match(tileKey)
+        if (cached) {
+          const headers = new Headers(cached.headers)
+          headers.set('X-Tile-Cache', 'HIT')
+          return new Response(cached.body, { status: cached.status, headers })
+        }
+      }
+    }
+
     // Equipment-API cachen (reduziert Worker-Ressourcen, Error 1102)
     if (isCachedEquipmentRequest(request, url)) {
-      // Cloudflare-spezifisch: caches.default (nicht im Standard CacheStorage-Typ)
-      const cache = (caches as unknown as { default: Cache }).default
       const cacheKey = equipmentCacheKey(url)
       const cached = await cache.match(cacheKey)
       if (cached) {

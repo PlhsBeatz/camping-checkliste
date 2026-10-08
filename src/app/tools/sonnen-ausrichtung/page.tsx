@@ -760,7 +760,7 @@ function SonnenAusrichtungContent() {
       }
 
       setOrientBusy(true)
-      showOrientHint('Parzellen-Ausrichtung wird erkannt (OSM + Karte + Satellit)…', 'info', 0)
+      showOrientHint('Parzellen-Ausrichtung wird erkannt (OSM, ggf. Satellit)…', 'info', 0)
       let heading: number | undefined
       try {
         const estimated = await estimatePitchOrientation({ lat, lng, zoom: 19 })
@@ -793,7 +793,7 @@ function SonnenAusrichtungContent() {
       return
     }
     setOrientBusy(true)
-    showOrientHint('Parzellen-Ausrichtung wird erkannt (OSM + Karte + Satellit)…', 'info', 0)
+    showOrientHint('Parzellen-Ausrichtung wird erkannt (OSM, ggf. Satellit)…', 'info', 0)
     try {
       const estimated = await estimatePitchOrientation({
         lat: pin.lat,

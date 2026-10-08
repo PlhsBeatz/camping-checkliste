@@ -17,7 +17,7 @@ import { normalizeHeadingDeg } from '@/lib/caravan-geometry'
 import type { PitchOrientationResult } from '@/lib/pitch-orientation-types'
 import {
   estimateOrientationFromOsmWays,
-  type OsmOverpassResponse,
+  fetchPitchOverpassElements,
 } from '@/lib/pitch-orientation-osm'
 
 export type { PitchOrientationResult } from '@/lib/pitch-orientation-types'
@@ -88,11 +88,12 @@ async function fetchTileRgba(
   x: number,
   y: number
 ): Promise<TileRgba | null> {
-  const viaProxy = await loadTileViaFetch(proxiedTileUrl(source, z, x, y))
-  if (viaProxy) return viaProxy
+  // Direkt zuerst – spart Worker-Invocations (Free: ~10 ms CPU / Request)
   const direct =
     source === 'satellite' ? satelliteTileUrl(z, x, y) : osmTileUrl(z, x, y)
-  return loadTileViaFetch(direct)
+  const viaDirect = await loadTileViaFetch(direct)
+  if (viaDirect) return viaDirect
+  return loadTileViaFetch(proxiedTileUrl(source, z, x, y))
 }
 
 function pixelDirToCompass(dx: number, dy: number): number {
@@ -377,29 +378,41 @@ async function estimateFromRaster(opts: {
   const t = latLngToTile(opts.lat, opts.lng, z)
   const maxIndex = 2 ** z - 1
 
-  // Free-Tier: nur Nachbarn laden, wenn der Pin nah am Kachelrand liegt
+  // Free-Tier: max. 1 Nachbar-Kachel (nur bei Randlage), nie volle 3×3
   const fx = t.xf - t.x
   const fy = t.yf - t.y
-  const edge = 0.28
+  const edge = 0.22
   const offsets: Array<[number, number]> = [[0, 0]]
   if (fx < edge) offsets.push([-1, 0])
-  if (fx > 1 - edge) offsets.push([1, 0])
+  else if (fx > 1 - edge) offsets.push([1, 0])
   if (fy < edge) offsets.push([0, -1])
-  if (fy > 1 - edge) offsets.push([0, 1])
-  if (fx < edge && fy < edge) offsets.push([-1, -1])
-  if (fx > 1 - edge && fy < edge) offsets.push([1, -1])
-  if (fx < edge && fy > 1 - edge) offsets.push([-1, 1])
-  if (fx > 1 - edge && fy > 1 - edge) offsets.push([1, 1])
+  else if (fy > 1 - edge) offsets.push([0, 1])
+  // Diagonale nur wenn wirklich in der Ecke und noch Budget
+  if (offsets.length < 3) {
+    if (fx < edge && fy < edge) offsets.push([-1, -1])
+    else if (fx > 1 - edge && fy < edge) offsets.push([1, -1])
+    else if (fx < edge && fy > 1 - edge) offsets.push([-1, 1])
+    else if (fx > 1 - edge && fy > 1 - edge) offsets.push([1, 1])
+  }
 
-  const loaded = await Promise.all(
-    offsets.map(async ([dx, dy]) => {
-      const tx = Math.min(maxIndex, Math.max(0, t.x + dx))
-      const ty = Math.min(maxIndex, Math.max(0, t.y + dy))
-      const tile = await fetchTileRgba(opts.source, z, tx, ty)
-      if (!tile) return null
-      return { tx, ty, rgba: tile.data, w: tile.w, h: tile.h }
-    })
-  )
+  // Sequentiell statt Promise.all: weniger parallele Proxy-Hits bei CORS-Fail
+  const loaded: Array<{
+    tx: number
+    ty: number
+    rgba: Uint8ClampedArray
+    w: number
+    h: number
+  } | null> = []
+  for (const [dx, dy] of offsets) {
+    const tx = Math.min(maxIndex, Math.max(0, t.x + dx))
+    const ty = Math.min(maxIndex, Math.max(0, t.y + dy))
+    const tile = await fetchTileRgba(opts.source, z, tx, ty)
+    if (!tile) {
+      loaded.push(null)
+      continue
+    }
+    loaded.push({ tx, ty, rgba: tile.data, w: tile.w, h: tile.h })
+  }
 
   const tiles: Array<{
     tx: number
@@ -428,22 +441,34 @@ async function estimateFromOsmApi(
   lat: number,
   lng: number
 ): Promise<PitchOrientationResult | null> {
+  // 1) Overpass im Browser – kein Worker-CPU für JSON/Geometrie
+  try {
+    const elements = await fetchPitchOverpassElements(lat, lng, 40, {
+      timeoutMs: 8_000,
+    })
+    if (elements) {
+      if (elements.length === 0) return null
+      const local = estimateOrientationFromOsmWays(lat, lng, elements, 40)
+      if (local) return local
+      return null
+    }
+  } catch {
+    // Fallback auf Server
+  }
+
+  // 2) Server nur wenn Client-Overpass komplett scheitert (CORS/Netz)
   try {
     const res = await fetch(
       `/api/pitch-orientation?lat=${encodeURIComponent(String(lat))}&lng=${encodeURIComponent(String(lng))}`,
-      { credentials: 'same-origin', cache: 'no-store' }
+      { credentials: 'same-origin', cache: 'default' }
     )
     if (!res.ok) return null
     const data = (await res.json()) as {
       ok?: boolean
       result?: PitchOrientationResult | null
-      elements?: OsmOverpassResponse['elements']
     }
     if (data.result && typeof data.result.headingDeg === 'number') {
       return { ...data.result, source: data.result.source ?? 'osm' }
-    }
-    if (data.elements?.length) {
-      return estimateOrientationFromOsmWays(lat, lng, data.elements)
     }
     return null
   } catch {
@@ -509,7 +534,8 @@ function mergeResults(
  * Analysiert Umgebung um lat/lng und liefert Bug-Richtung
  * (Tür rechts vom Bug zur Zufahrt).
  *
- * Free-Tier: gestaffelt – OSM zuerst (1 Request), Raster nur bei Bedarf.
+ * Free-Tier: OSM im Browser, Satellit nur bei schwachem OSM.
+ * Keine OSM-Kartenkacheln mehr (zusätzliche Worker-/CORS-Last ohne Mehrwert).
  */
 export async function estimatePitchOrientation(opts: {
   lat: number
@@ -529,22 +555,8 @@ export async function estimatePitchOrientation(opts: {
     zoom: z,
     source: 'satellite',
   })
-  const afterSat = mergeResults(
-    [osm, satellite].filter((r): r is PitchOrientationResult => r != null)
-  )
-  if (afterSat && afterSat.confidence >= 0.4) {
-    return afterSat
-  }
-
-  // Kartenkacheln nur als letzte Stufe (zusätzliche Worker-Requests)
-  const map = await estimateFromRaster({
-    lat: opts.lat,
-    lng: opts.lng,
-    zoom: Math.min(z, 18),
-    source: 'osm',
-  })
 
   return mergeResults(
-    [osm, satellite, map].filter((r): r is PitchOrientationResult => r != null)
+    [osm, satellite].filter((r): r is PitchOrientationResult => r != null)
   )
 }

@@ -6,8 +6,10 @@ import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { ResponsiveModal } from '@/components/ui/responsive-modal'
 import { cn } from '@/lib/utils'
+import { usePackingSync } from '@/hooks/use-packing-sync'
 import {
   conflictsForPackingList,
+  filterActiveXorIgnoredGroupIds,
   formatOptionLabel,
   replacementAfterRemoving,
   suggestedKeepOptionIndex,
@@ -42,6 +44,48 @@ function writeLocalIgnored(vacationId: string, ids: string[]) {
     window.localStorage.setItem(`${IGNORE_STORAGE_PREFIX}${vacationId}`, JSON.stringify([...new Set(ids)]))
   } catch {
     /* Quota / privater Modus */
+  }
+}
+
+async function fetchServerIgnored(vacationId: string): Promise<string[] | null> {
+  try {
+    const res = await fetch(
+      `/api/packing-alternatives/xor-ignore?vacationId=${encodeURIComponent(vacationId)}`,
+      { cache: 'no-store' }
+    )
+    if (!res.ok) return null
+    const json = (await res.json()) as {
+      success?: boolean
+      data?: { ignoredGroupIds?: string[] }
+    }
+    if (json.success === false) return null
+    return json.data?.ignoredGroupIds ?? []
+  } catch {
+    return null
+  }
+}
+
+async function postXorIgnore(vacationId: string, gruppeId: string): Promise<void> {
+  const res = await fetch('/api/packing-alternatives/xor-ignore', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ vacationId, gruppeId }),
+  })
+  const json = (await res.json()) as { success?: boolean; error?: string }
+  if (!res.ok || json.success === false) {
+    throw new Error(json.error ?? 'Ignorieren fehlgeschlagen')
+  }
+}
+
+async function deleteXorIgnore(vacationId: string, gruppeId: string): Promise<void> {
+  const res = await fetch('/api/packing-alternatives/xor-ignore', {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ vacationId, gruppeId }),
+  })
+  const json = (await res.json()) as { success?: boolean; error?: string }
+  if (!res.ok || json.success === false) {
+    throw new Error(json.error ?? 'Ignorieren konnte nicht zurückgesetzt werden')
   }
 }
 
@@ -81,6 +125,50 @@ export function PackingXorBanner({
   onRemoveRef.current = onRemoveGegenstandIds
   const onDismissRef = useRef(onDismissReplacement)
   onDismissRef.current = onDismissReplacement
+  const pruneInFlightRef = useRef<Set<string>>(new Set())
+  const groupsRef = useRef(groups)
+  groupsRef.current = groups
+  const groupsReadyRef = useRef(groupsReady)
+  groupsReadyRef.current = groupsReady
+  const packedIdsRef = useRef(packedGegenstandIds)
+  packedIdsRef.current = packedGegenstandIds
+
+  const applyIgnoredFromServer = (vacation: string, server: string[], local: string[]) => {
+    let merged = [...new Set([...local, ...server])]
+    const canFilter = groupsReadyRef.current
+    // Nur Bestätigungen behalten, die beim aktuellen Packstand noch gelten –
+    // verhindert, dass Sync eine schon ungültige Bestätigung wieder einspielt.
+    if (canFilter) {
+      const { active, stale } = filterActiveXorIgnoredGroupIds(
+        groupsRef.current,
+        packedIdsRef.current,
+        merged
+      )
+      merged = active
+      for (const gruppeId of stale) {
+        if (!server.includes(gruppeId) || pruneInFlightRef.current.has(gruppeId)) continue
+        pruneInFlightRef.current.add(gruppeId)
+        void deleteXorIgnore(vacation, gruppeId)
+          .catch(() => {
+            /* Offline: Server-Prune beim nächsten GET */
+          })
+          .finally(() => {
+            pruneInFlightRef.current.delete(gruppeId)
+          })
+      }
+    }
+    setIgnoredIds(merged)
+    writeLocalIgnored(vacation, merged)
+    // Erst nach Filter auf Server spiegeln – sonst können veraltete lokale IDs
+    // ein gerade gelaufenes DELETE wieder überschreiben.
+    if (!canFilter) return
+    const missingOnServer = merged.filter((id) => !server.includes(id))
+    for (const gruppeId of missingOnServer) {
+      void postXorIgnore(vacation, gruppeId).catch(() => {
+        /* Offline / Fehler: lokal bleibt gespeichert */
+      })
+    }
+  }
 
   useEffect(() => {
     if (!vacationId) {
@@ -123,39 +211,49 @@ export function PackingXorBanner({
     const local = readLocalIgnored(vacationId)
     setIgnoredIds(local)
     void (async () => {
-      try {
-        const res = await fetch(
-          `/api/packing-alternatives/xor-ignore?vacationId=${encodeURIComponent(vacationId)}`,
-          { cache: 'no-store' }
-        )
-        const json = (await res.json()) as {
-          success?: boolean
-          data?: { ignoredGroupIds?: string[] }
-        }
-        const server = json.data?.ignoredGroupIds ?? []
-        if (cancelled) return
+      const server = await fetchServerIgnored(vacationId)
+      if (cancelled) return
+      if (server) {
+        // Ohne Gruppen noch nicht auf Server spiegeln (siehe Effect unten).
         const merged = [...new Set([...local, ...server])]
         setIgnoredIds(merged)
         writeLocalIgnored(vacationId, merged)
-        const missingOnServer = local.filter((id) => !server.includes(id))
-        for (const gruppeId of missingOnServer) {
-          void fetch('/api/packing-alternatives/xor-ignore', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ vacationId, gruppeId }),
-          })
-        }
-      } catch {
-        /* Offline: lokale Liste reicht */
-      } finally {
-        if (!cancelled) setIgnoredReady(true)
       }
+      setIgnoredReady(true)
     })()
 
     return () => {
       cancelled = true
     }
   }, [vacationId])
+
+  usePackingSync(vacationId, () => {
+    if (!vacationId) return
+    void (async () => {
+      const server = await fetchServerIgnored(vacationId)
+      if (!server) return
+      applyIgnoredFromServer(vacationId, server, readLocalIgnored(vacationId))
+    })()
+  })
+
+  // Mit geladenen Gruppen: Packstand prüfen, Stale löschen, Offline-Bestätigungen syncen.
+  useEffect(() => {
+    if (!vacationId || !groupsReady || !ignoredReady) return
+    void (async () => {
+      const server = await fetchServerIgnored(vacationId)
+      if (!server) {
+        const { active } = filterActiveXorIgnoredGroupIds(
+          groupsRef.current,
+          packedIdsRef.current,
+          readLocalIgnored(vacationId)
+        )
+        setIgnoredIds(active)
+        writeLocalIgnored(vacationId, active)
+        return
+      }
+      applyIgnoredFromServer(vacationId, server, readLocalIgnored(vacationId))
+    })()
+  }, [vacationId, groupsReady, ignoredReady])
 
   const packedKey = packedGegenstandIds.join('|')
   const packedIdsStable = useMemo(
@@ -182,6 +280,32 @@ export function PackingXorBanner({
     prevPackedRef.current = new Set(packedIdsStable)
   }, [packedIdsStable])
 
+  /** Bestätigung entfällt, sobald nicht mehr beide Seiten auf der Liste sind. */
+  useEffect(() => {
+    if (!vacationId || !groupsReady || !ignoredReady) return
+    const { active, stale } = filterActiveXorIgnoredGroupIds(
+      groups,
+      packedIdsStable,
+      ignoredIds
+    )
+    if (stale.length === 0) return
+
+    setIgnoredIds(active)
+    writeLocalIgnored(vacationId, active)
+
+    for (const gruppeId of stale) {
+      if (pruneInFlightRef.current.has(gruppeId)) continue
+      pruneInFlightRef.current.add(gruppeId)
+      void deleteXorIgnore(vacationId, gruppeId)
+        .catch(() => {
+          /* Offline: Server-Prune beim nächsten GET */
+        })
+        .finally(() => {
+          pruneInFlightRef.current.delete(gruppeId)
+        })
+    }
+  }, [vacationId, groupsReady, ignoredReady, groups, packedIdsStable, ignoredIds])
+
   const ignoredSet = useMemo(() => new Set(ignoredIds), [ignoredIds])
 
   const pending = useMemo(() => {
@@ -197,6 +321,29 @@ export function PackingXorBanner({
     ? replacementAfterRemoving(groups, packedIdsStable, justRemoved.id, justRemoved.was)
     : null
   const showReplacement = !!replacement && replacement.suggest.length > 0
+
+  /** Offene Queue an neue Ignorier-/Skip-Liste anpassen (z. B. Partner hat bestätigt). */
+  useEffect(() => {
+    if (queue.length === 0) return
+    setQueue((prev) => {
+      const next = prev.filter(
+        (c) => !ignoredSet.has(c.group_id) && !sessionSkipped.has(c.group_id)
+      )
+      if (next.length === prev.length) return prev
+      return next
+    })
+  }, [ignoredSet, sessionSkipped, queue.length])
+
+  useEffect(() => {
+    if (queue.length === 0) {
+      if (resolverOpen) setResolverOpen(false)
+      if (index !== 0) setIndex(0)
+      return
+    }
+    if (index >= queue.length) {
+      setIndex(Math.max(0, queue.length - 1))
+    }
+  }, [queue, index, resolverOpen])
 
   useEffect(() => {
     if (!vacationId || !groupsReady || !ignoredReady || showReplacement) return
@@ -315,28 +462,33 @@ export function PackingXorBanner({
   const ignoreCurrent = async () => {
     if (!vacationId || !current || resolving || !canKeepAll) return
     const gruppeId = current.group_id
-    const fromIndex = index
+    const previousIgnored = ignoredIds
+    const previousQueue = queue
+    const previousIndex = index
     const nextIgnored = [...new Set([...ignoredIds, gruppeId])]
     setIgnoredIds(nextIgnored)
     writeLocalIgnored(vacationId, nextIgnored)
+    // Sofort aus der Queue nehmen (Index nicht mit goToNextOrClose verschieben –
+    // sonst kollidiert das mit dem Filter-Effect, wenn Sync parallel aktualisiert).
+    setQueue((prev) => prev.filter((c) => c.group_id !== gruppeId))
     setResolving(true)
     setResolveError(null)
     try {
-      const res = await fetch('/api/packing-alternatives/xor-ignore', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ vacationId, gruppeId }),
-      })
-      const json = (await res.json()) as { success?: boolean; error?: string }
-      if (!res.ok || json.success === false) {
-        throw new Error(json.error ?? 'Ignorieren fehlgeschlagen')
-      }
+      await postXorIgnore(vacationId, gruppeId)
     } catch (error) {
       console.error('XOR ignorieren:', error)
-      /* Lokal bleibt gespeichert, damit der Hinweis auf diesem Gerät nicht wiederkommt. */
+      setIgnoredIds(previousIgnored)
+      writeLocalIgnored(vacationId, previousIgnored)
+      setQueue(previousQueue)
+      setIndex(previousIndex)
+      setResolverOpen(true)
+      setResolveError(
+        error instanceof Error
+          ? error.message
+          : 'Die Bestätigung konnte nicht gespeichert werden. Bitte erneut versuchen.'
+      )
     } finally {
       setResolving(false)
-      goToNextOrClose(fromIndex)
     }
   }
 

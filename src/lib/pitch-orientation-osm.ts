@@ -161,6 +161,12 @@ function snapToAxis(heading: number, lineDeg: number): number {
   return da <= db ? a : b
 }
 
+/** Free-Tier: große Campingplätze sonst zu viele Segmente (CPU). */
+const MAX_WAYS = 48
+const MAX_SEGMENTS = 220
+/** Overpass-Antworten darüber nicht parsen (Worker ~10 ms CPU). */
+export const OVERPASS_MAX_BYTES = 220_000
+
 /**
  * Schätzt Ausrichtung aus Overpass-Elementen.
  * Längsachse ∥ Hecken/Zufahrt; Tür (rechts vom Bug) zur Zufahrt.
@@ -169,7 +175,7 @@ export function estimateOrientationFromOsmWays(
   lat: number,
   lng: number,
   elements: OsmWayGeom[],
-  radiusM = 50
+  radiusM = 40
 ): PitchOrientationResult | null {
   const accessBins = new Float64Array(180)
   const boundaryBins = new Float64Array(180)
@@ -179,20 +185,45 @@ export function estimateOrientationFromOsmWays(
     closestLng: number
   } | null = null
 
+  // Nächste relevante Ways zuerst – Rest verwerfen (CPU-Budget)
+  const ranked: Array<{ el: OsmWayGeom; distHint: number }> = []
   for (const el of elements) {
     const geom = el.geometry
     if (!geom || geom.length < 2) continue
+    if (!isAccessWay(el.tags) && !isBoundaryWay(el.tags)) continue
+    let distHint = Number.POSITIVE_INFINITY
+    // Wenige Stützpunkte reichen für die Vorauswahl
+    const step = Math.max(1, Math.floor(geom.length / 6))
+    for (let i = 0; i < geom.length; i += step) {
+      const p = geom[i]!
+      distHint = Math.min(distHint, metersBetween(lat, lng, p.lat, p.lon))
+    }
+    if (distHint > radiusM + 15) continue
+    ranked.push({ el, distHint })
+  }
+  ranked.sort((a, b) => a.distHint - b.distHint)
+  const limited = ranked.slice(0, MAX_WAYS)
+
+  let segments = 0
+  for (const { el } of limited) {
+    if (segments >= MAX_SEGMENTS) break
+    const geom = el.geometry!
     const access = isAccessWay(el.tags)
     const boundary = isBoundaryWay(el.tags)
-    if (!access && !boundary) continue
 
-    for (let i = 0; i < geom.length - 1; i++) {
+    // Dichte Polylinien ausdünnen (Hecken mit vielen Nodes)
+    const stride =
+      geom.length > 40 ? 3 : geom.length > 24 ? 2 : 1
+
+    for (let i = 0; i < geom.length - 1; i += stride) {
+      if (segments >= MAX_SEGMENTS) break
       const a = geom[i]!
-      const b = geom[i + 1]!
+      const b = geom[Math.min(i + stride, geom.length - 1)]!
       const lengthM = metersBetween(a.lat, a.lon, b.lat, b.lon)
       if (lengthM < 0.4) continue
       const closest = distPointToSegmentM(lat, lng, a.lat, a.lon, b.lat, b.lon)
       if (closest.distM > radiusM) continue
+      segments++
 
       const lineBearing = bearingDeg(a.lat, a.lon, b.lat, b.lon) % 180
       const bin = Math.floor(lineBearing) % 180
@@ -293,11 +324,12 @@ export function estimateOrientationFromOsmWays(
 export function buildPitchOverpassQuery(
   lat: number,
   lng: number,
-  radiusM = 55
+  radiusM = 40
 ): string {
   const r = Math.round(radiusM)
+  // maxsize: hält Antworten klein genug für Workers Free (~10 ms CPU beim Parsen)
   return `
-[out:json][timeout:12];
+[out:json][timeout:8][maxsize:262144];
 (
   way(around:${r},${lat},${lng})["highway"~"^(service|path|footway|track|residential|unclassified|living_street|pedestrian|cycleway)$"];
   way(around:${r},${lat},${lng})["barrier"~"^(hedge|fence|wall|retaining_wall|kerb)$"];
@@ -311,3 +343,53 @@ export const OVERPASS_ENDPOINTS = [
   'https://overpass-api.de/api/interpreter',
   'https://overpass.kumi.systems/api/interpreter',
 ] as const
+
+/** ~11 m-Raster für Edge-Cache-Keys */
+export function pitchOrientationCacheGrid(
+  lat: number,
+  lng: number
+): { lat: string; lng: string } {
+  return { lat: lat.toFixed(4), lng: lng.toFixed(4) }
+}
+
+/**
+ * Overpass laden (Browser oder Worker).
+ * Bei zu großer Antwort: null (Caller fällt auf Satellit zurück).
+ */
+export async function fetchPitchOverpassElements(
+  lat: number,
+  lng: number,
+  radiusM = 40,
+  opts?: { timeoutMs?: number; maxBytes?: number }
+): Promise<OsmWayGeom[] | null> {
+  const query = buildPitchOverpassQuery(lat, lng, radiusM)
+  const timeoutMs = opts?.timeoutMs ?? 8_000
+  const maxBytes = opts?.maxBytes ?? OVERPASS_MAX_BYTES
+
+  for (const endpoint of OVERPASS_ENDPOINTS) {
+    try {
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
+          Accept: 'application/json',
+        },
+        body: `data=${encodeURIComponent(query)}`,
+        signal: AbortSignal.timeout(timeoutMs),
+      })
+      if (!res.ok) continue
+
+      const lenHeader = res.headers.get('content-length')
+      if (lenHeader && Number(lenHeader) > maxBytes) continue
+
+      const text = await res.text()
+      if (!text || text.length > maxBytes) continue
+
+      const data = JSON.parse(text) as OsmOverpassResponse
+      return data.elements ?? []
+    } catch {
+      // nächsten Endpoint versuchen
+    }
+  }
+  return null
+}

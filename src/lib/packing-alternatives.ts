@@ -383,3 +383,84 @@ export async function ignoreXorGroupForPackliste(
     return false
   }
 }
+
+export async function clearXorIgnoreForPackliste(
+  db: D1Database,
+  packlisteId: string,
+  gruppeId: string
+): Promise<boolean> {
+  if (!packlisteId || !gruppeId) return false
+  try {
+    await db
+      .prepare('DELETE FROM packliste_xor_ignoriert WHERE packliste_id = ? AND gruppe_id = ?')
+      .bind(packlisteId, gruppeId)
+      .run()
+    return true
+  } catch (error) {
+    console.error('clearXorIgnoreForPackliste:', error)
+    return false
+  }
+}
+
+/**
+ * Entfernt „beides behalten“-Bestätigungen, sobald nicht mehr mindestens zwei
+ * Seiten der Gruppe auf der Packliste liegen (oder die Gruppe fehlt).
+ */
+export async function pruneXorIgnoresForPackliste(
+  db: D1Database,
+  packlisteId: string,
+  groups: AlternativeGroup[],
+  packedGegenstandIds: string[]
+): Promise<string[]> {
+  if (!packlisteId) return []
+  const ignored = await listXorIgnoredGroupIds(db, packlisteId)
+  if (ignored.length === 0) return []
+
+  const packed = new Set(packedGegenstandIds)
+  const byId = new Map(groups.map((g) => [g.id, g]))
+  const stillValid: string[] = []
+  const toClear: string[] = []
+
+  for (const gruppeId of ignored) {
+    const g = byId.get(gruppeId)
+    if (!g || optionsOnList(g, packed).length < 2) {
+      toClear.push(gruppeId)
+    } else {
+      stillValid.push(gruppeId)
+    }
+  }
+
+  if (toClear.length > 0) {
+    try {
+      const stmts = toClear.map((gruppeId) =>
+        db
+          .prepare('DELETE FROM packliste_xor_ignoriert WHERE packliste_id = ? AND gruppe_id = ?')
+          .bind(packlisteId, gruppeId)
+      )
+      await db.batch(stmts)
+    } catch (error) {
+      console.error('pruneXorIgnoresForPackliste:', error)
+      return ignored
+    }
+  }
+
+  return stillValid
+}
+
+/** Client-seitig: welche Ignorier-IDs bei aktuellem Packstand noch gelten. */
+export function filterActiveXorIgnoredGroupIds(
+  groups: AlternativeGroup[],
+  packedGegenstandIds: string[],
+  ignoredGroupIds: string[]
+): { active: string[]; stale: string[] } {
+  const packed = new Set(packedGegenstandIds)
+  const byId = new Map(groups.map((g) => [g.id, g]))
+  const active: string[] = []
+  const stale: string[] = []
+  for (const gruppeId of ignoredGroupIds) {
+    const g = byId.get(gruppeId)
+    if (!g || optionsOnList(g, packed).length < 2) stale.push(gruppeId)
+    else active.push(gruppeId)
+  }
+  return { active, stale }
+}

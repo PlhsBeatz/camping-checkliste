@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireSession } from '@/lib/api-auth'
+import { getEdgeCache } from '@/lib/edge-cache'
 import {
   DE_OSM_TILE_URL,
   SATELLITE_MAX_NATIVE_ZOOM,
@@ -37,10 +37,11 @@ function tileCacheKey(source: TileSource, z: number, x: number, y: number): Requ
 /**
  * GET /api/map-tiles/:source/:z/:x/:y
  * Proxy für Esri-/OSM-Kacheln (CORS-frei für Canvas).
- * Free-Tier: JWT-only Auth, Edge-Cache, kein D1.
+ * Free-Tier: öffentliche Kacheln, Edge-Cache, kein D1/JWT in der Route
+ * (Middleware prüft Session). Client bevorzugt Direkt-URLs.
  */
 export async function GET(
-  request: NextRequest,
+  _request: NextRequest,
   context: { params: Promise<{ source: string; z: string; x: string; y: string }> }
 ) {
   try {
@@ -65,20 +66,19 @@ export async function GET(
     }
 
     const cacheKey = tileCacheKey(source, z, x, y)
-    try {
-      const cached = await caches.default.match(cacheKey)
-      if (cached) {
-        // Cache-Treffer: Auth überspringen (Kacheln sind öffentlich)
-        const headers = new Headers(cached.headers)
-        headers.set('X-Tile-Cache', 'HIT')
-        return new NextResponse(cached.body, { status: cached.status, headers })
+    const edgeCache = getEdgeCache()
+    if (edgeCache) {
+      try {
+        const cached = await edgeCache.match(cacheKey)
+        if (cached) {
+          const headers = new Headers(cached.headers)
+          headers.set('X-Tile-Cache', 'HIT')
+          return new NextResponse(cached.body, { status: cached.status, headers })
+        }
+      } catch {
+        // ignore
       }
-    } catch {
-      // Cache API nicht verfügbar (lokal) – weiter ohne Cache
     }
-
-    const auth = await requireSession(request)
-    if (auth instanceof NextResponse) return auth
 
     const upstream = resolveUpstream(source, z, x, y)
     const res = await fetch(upstream, {
@@ -95,9 +95,9 @@ export async function GET(
       )
     }
 
-    const buf = await res.arrayBuffer()
+    // Body streamen statt voll zu puffern – weniger Memory/CPU
     const contentType = res.headers.get('content-type') || 'image/jpeg'
-    const out = new NextResponse(buf, {
+    const out = new NextResponse(res.body, {
       status: 200,
       headers: {
         'Content-Type': contentType,
@@ -106,10 +106,12 @@ export async function GET(
       },
     })
 
-    try {
-      await caches.default.put(cacheKey, out.clone())
-    } catch {
-      // ignore
+    if (edgeCache) {
+      try {
+        await edgeCache.put(cacheKey, out.clone())
+      } catch {
+        // ignore
+      }
     }
 
     return out

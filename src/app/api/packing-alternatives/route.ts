@@ -8,7 +8,7 @@ import {
   createAlternativeGroup,
   deleteAlternativeGroup,
   listAlternativeGroups,
-  listXorIgnoredGroupIds,
+  pruneXorIgnoresForPackliste,
   replacementAfterRemoving,
 } from '@/lib/packing-alternatives'
 
@@ -40,7 +40,9 @@ export async function GET(request: NextRequest) {
     const items = await getPackingItems(db, vacationId)
     const packedIds = items.map((i) => i.gegenstand_id).filter((id): id is string => !!id)
     const packlisteId = await getPacklisteId(db, vacationId)
-    const ignoredGroupIds = packlisteId ? await listXorIgnoredGroupIds(db, packlisteId) : []
+    const ignoredGroupIds = packlisteId
+      ? await pruneXorIgnoresForPackliste(db, packlisteId, groups, packedIds)
+      : []
     const ignored = new Set(ignoredGroupIds)
     const conflicts = conflictsForPackingList(groups, packedIds).filter(
       (c) => !ignored.has(c.group_id)
