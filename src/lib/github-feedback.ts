@@ -97,6 +97,8 @@ async function githubFetch(
       Authorization: `Bearer ${token}`,
       'X-GitHub-Api-Version': '2022-11-28',
       'Content-Type': 'application/json',
+      // GitHub REST API verlangt User-Agent (403 sonst)
+      'User-Agent': 'CampCheck-PWA',
       ...(init?.headers ?? {}),
     },
   })
