@@ -216,16 +216,15 @@ export type TripStatusPayload = {
   }
 }
 
-export function buildTripStatusPayload(
+export function buildTripStatusPayloadFromProgress(
   vacation: Vacation,
-  items: PackingItem[],
+  progress: Pick<PackingProgress, 'percent' | 'complete' | 'packed' | 'total' | 'open_items_count'>,
   now = new Date()
 ): TripStatusPayload {
   const departure_date = getDepartureDate(vacation)
   const today = todayInAppTimezone(now)
   const departure = normalizeCalendarDate(departure_date)
   const days_until_departure = differenceCalendarDays(departure, today)
-  const progress = computePackingProgress(items, departure_date, now)
   const phase = getTripPhase(vacation, 3, now)
 
   return {
@@ -253,4 +252,14 @@ export function buildTripStatusPayload(
       open_items_count: progress.open_items_count,
     },
   }
+}
+
+export function buildTripStatusPayload(
+  vacation: Vacation,
+  items: PackingItem[],
+  now = new Date()
+): TripStatusPayload {
+  const departure_date = getDepartureDate(vacation)
+  const progress = computePackingProgress(items, departure_date, now)
+  return buildTripStatusPayloadFromProgress(vacation, progress, now)
 }

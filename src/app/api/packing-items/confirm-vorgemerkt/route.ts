@@ -73,8 +73,35 @@ export async function POST(request: NextRequest) {
 
     if (vacationId) {
       const cfEnv = (await getCloudflareContext({ async: true })).env as unknown as CloudflareEnv
-      await notifyPackingSyncChange(cfEnv, vacationId)
-      await notifyIntegrationChange(cfEnv, vacationId)
+      // Bestätigung: Vorgemerkt → echt gepackt (Fortschritt +1)
+      if (mitreisenderId) {
+        await notifyPackingSyncChange(cfEnv, vacationId, {
+          type: 'packing-patch',
+          patches: [
+            {
+              op: 'mitreisender-gepackt',
+              id: packingItemId,
+              mitreisenderId,
+              gepackt: true,
+              gepackt_vorgemerkt: false,
+            },
+          ],
+        })
+      } else {
+        await notifyPackingSyncChange(cfEnv, vacationId, {
+          type: 'packing-patch',
+          patches: [
+            {
+              op: 'item-gepackt',
+              id: packingItemId,
+              gepackt: true,
+              gepackt_vorgemerkt: false,
+              gepackt_vorgemerkt_durch: null,
+            },
+          ],
+        })
+      }
+      await notifyIntegrationChange(cfEnv, vacationId, { packedDelta: 1 })
     }
 
     return NextResponse.json({ success: true })

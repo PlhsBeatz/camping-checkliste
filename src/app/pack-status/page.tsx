@@ -28,8 +28,11 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
 
-/** Nach externem WS-Update: zu häufige Refetches vermeiden. */
-const WS_FETCH_COOLDOWN_MS = 6000
+/**
+ * Nach externem WS-Update: Refetches drosseln.
+ * 20 s – Pack-Status-Aggregationen sind teuer (D1 rows_read); UI darf etwas träger sein.
+ */
+const WS_FETCH_COOLDOWN_MS = 20_000
 
 const findNextVacation = (vacations: Vacation[]): Vacation | null => {
   if (vacations.length === 0) return null

@@ -677,6 +677,13 @@ function resolveRoute(e: SyncQueueEntry): ResolvedRoute | null {
     case 'packing-items-toggle-mitreisender': {
       return { method: 'PUT', url: '/api/packing-items/toggle-mitreisender', body: e.payload }
     }
+    case 'packing-items-toggle-mitreisender-batch': {
+      return {
+        method: 'PUT',
+        url: '/api/packing-items/toggle-mitreisender-batch',
+        body: e.payload,
+      }
+    }
     case 'packing-items-toggle-gruppe': {
       return { method: 'PUT', url: '/api/packing-items/toggle-gruppe', body: e.payload }
     }

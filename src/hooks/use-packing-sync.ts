@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
+import type { PackingSyncMessage } from '@/lib/packing-sync'
 
 /** Broadcasts bündeln (z. B. mehrere Outbox-Syncs nach Reconnect) */
 const SYNC_DEBOUNCE_MS = 280
@@ -8,12 +9,11 @@ const PING_INTERVAL_MS = 30_000
 
 /**
  * WebSocket-Hook für Echtzeit-Sync der Packliste via Durable Object.
- * Verbindet sich mit dem PackingSync-DO und löst onUpdate aus, wenn
- * Änderungen von anderen Clients eintreffen.
+ * `onUpdate` erhält optional die Sync-Nachricht (Delta-Patch oder Full-Reload).
  */
 export function usePackingSync(
   vacationId: string | null,
-  onUpdate: () => void
+  onUpdate: (message?: PackingSyncMessage) => void
 ): void {
   const onUpdateRef = useRef(onUpdate)
   onUpdateRef.current = onUpdate
@@ -30,12 +30,35 @@ export function usePackingSync(
     let pingInterval: ReturnType<typeof setInterval> | null = null
     let reconnectDelay = 3000
     let debounceTimeout: ReturnType<typeof setTimeout> | null = null
+    /** Patches in der Debounce-Fenster sammeln; Full-Reload überschreibt. */
+    let pending: PackingSyncMessage | undefined
 
-    const scheduleUpdate = () => {
+    const flushUpdate = () => {
+      const msg = pending
+      pending = undefined
+      onUpdateRef.current(msg)
+    }
+
+    const scheduleUpdate = (message: PackingSyncMessage) => {
+      if (message.type === 'packing-list-changed') {
+        pending = message
+      } else if (message.type === 'packing-patch') {
+        if (pending?.type === 'packing-list-changed') {
+          // Full-Reload hat Vorrang
+        } else if (pending?.type === 'packing-patch') {
+          pending = {
+            type: 'packing-patch',
+            patches: [...pending.patches, ...message.patches],
+          }
+        } else {
+          pending = message
+        }
+      }
+
       if (debounceTimeout) clearTimeout(debounceTimeout)
       debounceTimeout = setTimeout(() => {
         debounceTimeout = null
-        onUpdateRef.current()
+        flushUpdate()
       }, SYNC_DEBOUNCE_MS)
     }
 
@@ -45,9 +68,9 @@ export function usePackingSync(
         reconnectDelay = 3000
         ws.onmessage = (event) => {
           try {
-            const data = JSON.parse(event.data as string) as { type?: string }
-            if (data?.type === 'packing-list-changed') {
-              scheduleUpdate()
+            const data = JSON.parse(event.data as string) as PackingSyncMessage
+            if (data?.type === 'packing-list-changed' || data?.type === 'packing-patch') {
+              scheduleUpdate(data)
             }
           } catch {
             // Kein JSON – ignorieren
@@ -91,7 +114,7 @@ export function usePackingSync(
 
     return () => {
       clearTimeout(reconnectTimeout)
-       if (pingInterval) {
+      if (pingInterval) {
         clearInterval(pingInterval)
       }
       if (debounceTimeout) clearTimeout(debounceTimeout)

@@ -1,19 +1,42 @@
 import type { D1Database } from '@cloudflare/workers-types'
-import { getVacation, getPackingItems, getVacations, getDB, type CloudflareEnv } from '@/lib/db'
 import {
+  getVacation,
+  getPackingItemsForHub,
+  getVacations,
+  getDB,
+  type CloudflareEnv,
+} from '@/lib/db'
+import {
+  applyIntegrationPackingDelta,
+  getEnabledIntegrationWebhooks,
   getIntegrationVacationState,
   upsertIntegrationVacationState,
   type IntegrationEventType,
+  type IntegrationVacationStateRow,
 } from '@/lib/integration-db'
 import { addCalendarDays, normalizeCalendarDate, todayInAppTimezone } from '@/lib/app-timezone'
 import {
   buildTripStatusPayload,
+  buildTripStatusPayloadFromProgress,
   PROGRESS_THRESHOLDS,
   type TripPhase,
+  type TripStatusPayload,
 } from '@/lib/trip-readiness'
 import { buildCloudEvent, deliverEventToAllWebhooks } from '@/lib/webhooks'
+import {
+  clearIntegrationDebounce,
+  scheduleIntegrationDebounce,
+} from '@/lib/packing-sync'
 
 const DEPARTURE_APPROACHING_DAYS = [3, 1] as const
+
+export type NotifyIntegrationOptions = {
+  /**
+   * Änderung der zählbaren „gepackt“-Slots (±1 pro Person/Gruppe/Pauschal-Item).
+   * Ermöglicht Update ohne Full-Scan. Vorgemerkt-Toggles: weglassen oder 0.
+   */
+  packedDelta?: number
+}
 
 function crossedProgressThreshold(
   prevPercent: number,
@@ -38,11 +61,10 @@ type StateFlags = {
 
 function buildNextState(
   vacationId: string,
-  payload: ReturnType<typeof buildTripStatusPayload>,
-  prev: Awaited<ReturnType<typeof getIntegrationVacationState>>,
+  payload: TripStatusPayload,
   flags: StateFlags,
   lastProgressEventPercent: number | null
-) {
+): Omit<IntegrationVacationStateRow, 'updated_at'> {
   return {
     vacation_id: vacationId,
     percent: payload.packing.percent,
@@ -53,12 +75,14 @@ function buildNextState(
     departure_day_sent: flags.departure_day_sent,
     trip_started_sent: flags.trip_started_sent,
     trip_ended_sent: flags.trip_ended_sent,
+    packed: payload.packing.packed,
+    total: payload.packing.total,
   }
 }
 
 function collectPackingEvents(
-  prev: Awaited<ReturnType<typeof getIntegrationVacationState>>,
-  payload: ReturnType<typeof buildTripStatusPayload>
+  prev: IntegrationVacationStateRow | null,
+  payload: TripStatusPayload
 ): { events: IntegrationEventType[]; lastProgressEventPercent: number | null } {
   const events: IntegrationEventType[] = []
   let lastProgressEventPercent = prev?.last_progress_event_percent ?? null
@@ -86,8 +110,8 @@ function collectPackingEvents(
 }
 
 function collectPhaseEvents(
-  prev: Awaited<ReturnType<typeof getIntegrationVacationState>>,
-  payload: ReturnType<typeof buildTripStatusPayload>,
+  prev: IntegrationVacationStateRow | null,
+  payload: TripStatusPayload,
   flags: StateFlags,
   cronMode: boolean
 ): IntegrationEventType[] {
@@ -126,18 +150,13 @@ function collectPhaseEvents(
   return events
 }
 
-export async function processIntegrationEventsForVacation(
+async function emitEventsForPayload(
   db: D1Database,
   vacationId: string,
+  payload: TripStatusPayload,
+  prev: IntegrationVacationStateRow | null,
   options: { cronMode?: boolean } = {}
 ): Promise<void> {
-  const vacation = await getVacation(db, vacationId)
-  if (!vacation) return
-
-  const items = await getPackingItems(db, vacationId)
-  const payload = buildTripStatusPayload(vacation, items)
-  const prev = await getIntegrationVacationState(db, vacationId)
-
   const flags: StateFlags = {
     departure_approaching_sent: prev?.departure_approaching_sent ?? 0,
     departure_day_sent: prev?.departure_day_sent ?? 0,
@@ -151,13 +170,98 @@ export async function processIntegrationEventsForVacation(
 
   await upsertIntegrationVacationState(
     db,
-    buildNextState(vacationId, payload, prev, flags, lastProgressEventPercent)
+    buildNextState(vacationId, payload, flags, lastProgressEventPercent)
   )
 
   for (const eventType of allEvents) {
     const event = buildCloudEvent(eventType, vacationId, payload)
     await deliverEventToAllWebhooks(db, event)
   }
+}
+
+/**
+ * Voller Recount über Hub-Query (leichter als getPackingItems).
+ * Setzt packed/total für spätere Deltas.
+ */
+async function processIntegrationFullRecount(
+  db: D1Database,
+  vacationId: string,
+  options: { cronMode?: boolean } = {}
+): Promise<void> {
+  const vacation = await getVacation(db, vacationId)
+  if (!vacation) return
+
+  const items = await getPackingItemsForHub(db, vacationId)
+  const payload = buildTripStatusPayload(vacation, items)
+  const prev = await getIntegrationVacationState(db, vacationId)
+  await emitEventsForPayload(db, vacationId, payload, prev, options)
+}
+
+/**
+ * Schneller Pfad: nur Zähler atomar anpassen (kein Packlisten-Scan).
+ * Fallback auf Full-Recount wenn noch keine Zähler existieren.
+ */
+async function processIntegrationDelta(
+  db: D1Database,
+  vacationId: string,
+  packedDelta: number
+): Promise<void> {
+  if (packedDelta === 0) return
+
+  const prevBefore = await getIntegrationVacationState(db, vacationId)
+  if (
+    !prevBefore ||
+    prevBefore.total == null ||
+    prevBefore.total <= 0 ||
+    prevBefore.packed == null
+  ) {
+    await processIntegrationFullRecount(db, vacationId)
+    return
+  }
+
+  const updated = await applyIntegrationPackingDelta(db, vacationId, packedDelta)
+  if (!updated || updated.total == null || updated.packed == null) {
+    await processIntegrationFullRecount(db, vacationId)
+    return
+  }
+
+  const vacation = await getVacation(db, vacationId)
+  if (!vacation) return
+
+  const open_items_count = Math.max(0, updated.total - updated.packed)
+  const payload = buildTripStatusPayloadFromProgress(vacation, {
+    percent: updated.percent,
+    complete: !!updated.complete,
+    packed: updated.packed,
+    total: updated.total,
+    open_items_count,
+  })
+
+  // applyIntegrationPackingDelta hat percent/complete/packed schon geschrieben;
+  // emitEvents aktualisiert phase/flags und liefert Webhooks.
+  await emitEventsForPayload(db, vacationId, payload, prevBefore)
+}
+
+export async function processIntegrationEventsForVacation(
+  db: D1Database,
+  vacationId: string,
+  options: { cronMode?: boolean; packedDelta?: number; skipWebhookCheck?: boolean } = {}
+): Promise<void> {
+  // Ohne Webhooks und außerhalb Cron: kein D1-Aufwand für Trip-Status-Events
+  if (!options.cronMode && !options.skipWebhookCheck) {
+    const webhooks = await getEnabledIntegrationWebhooks(db)
+    if (webhooks.length === 0) return
+  }
+
+  // Netto-Null nach Debounce: nichts tun (kein Full-Recount)
+  if (!options.cronMode && options.packedDelta === 0) return
+
+  if (!options.cronMode && options.packedDelta != null) {
+    await processIntegrationDelta(db, vacationId, options.packedDelta)
+    return
+  }
+
+  await processIntegrationFullRecount(db, vacationId, options)
 }
 
 export async function processIntegrationCron(db: D1Database): Promise<number> {
@@ -177,11 +281,40 @@ export async function processIntegrationCron(db: D1Database): Promise<number> {
 
 export async function notifyIntegrationChange(
   env: CloudflareEnv,
-  vacationId: string
+  vacationId: string,
+  options: NotifyIntegrationOptions = {}
 ): Promise<void> {
   try {
+    // Vorgemerkt ändert den Integrations-Fortschritt nicht
+    if (options.packedDelta === 0) return
+
     const db = await getDB(env)
-    await processIntegrationEventsForVacation(db, vacationId)
+
+    // Früher Abbruch ohne Webhooks (auch vor Debounce-Schedule)
+    const webhooks = await getEnabledIntegrationWebhooks(db)
+    if (webhooks.length === 0) return
+
+    // Toggle-Deltas: im DO bündeln (10 s Ruhe / max. 30 s)
+    if (options.packedDelta != null) {
+      const scheduled = await scheduleIntegrationDebounce(
+        env,
+        vacationId,
+        options.packedDelta
+      )
+      if (!scheduled) {
+        await processIntegrationEventsForVacation(db, vacationId, {
+          packedDelta: options.packedDelta,
+          skipWebhookCheck: true,
+        })
+      }
+      return
+    }
+
+    // Strukturänderung: Pending verwerfen, sofort Full-Recount
+    await clearIntegrationDebounce(env, vacationId)
+    await processIntegrationEventsForVacation(db, vacationId, {
+      skipWebhookCheck: true,
+    })
   } catch (err) {
     console.warn('notifyIntegrationChange failed:', err)
   }

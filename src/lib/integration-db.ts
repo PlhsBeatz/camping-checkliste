@@ -30,6 +30,9 @@ export type IntegrationVacationStateRow = {
   departure_day_sent: number
   trip_started_sent: number
   trip_ended_sent: number
+  /** Denormalisiert: zählbare Pack-Slots (für günstige Toggle-Deltas). */
+  packed: number | null
+  total: number | null
   updated_at: string
 }
 
@@ -268,12 +271,16 @@ export async function getIntegrationVacationState(
   db: D1Database,
   vacationId: string
 ): Promise<IntegrationVacationStateRow | null> {
-  return (
-    (await db
-      .prepare(`SELECT * FROM integration_vacation_state WHERE vacation_id = ?`)
-      .bind(vacationId)
-      .first<IntegrationVacationStateRow>()) ?? null
-  )
+  const row = await db
+    .prepare(`SELECT * FROM integration_vacation_state WHERE vacation_id = ?`)
+    .bind(vacationId)
+    .first<IntegrationVacationStateRow & { packed?: number | null; total?: number | null }>()
+  if (!row) return null
+  return {
+    ...row,
+    packed: row.packed ?? null,
+    total: row.total ?? null,
+  }
 }
 
 export async function upsertIntegrationVacationState(
@@ -284,8 +291,9 @@ export async function upsertIntegrationVacationState(
     .prepare(
       `INSERT INTO integration_vacation_state (
         vacation_id, percent, complete, phase, last_progress_event_percent,
-        departure_approaching_sent, departure_day_sent, trip_started_sent, trip_ended_sent, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+        departure_approaching_sent, departure_day_sent, trip_started_sent, trip_ended_sent,
+        packed, total, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
       ON CONFLICT(vacation_id) DO UPDATE SET
         percent = excluded.percent,
         complete = excluded.complete,
@@ -295,6 +303,8 @@ export async function upsertIntegrationVacationState(
         departure_day_sent = excluded.departure_day_sent,
         trip_started_sent = excluded.trip_started_sent,
         trip_ended_sent = excluded.trip_ended_sent,
+        packed = excluded.packed,
+        total = excluded.total,
         updated_at = datetime('now')`
     )
     .bind(
@@ -306,9 +316,48 @@ export async function upsertIntegrationVacationState(
       state.departure_approaching_sent,
       state.departure_day_sent,
       state.trip_started_sent,
-      state.trip_ended_sent
+      state.trip_ended_sent,
+      state.packed,
+      state.total
     )
     .run()
+}
+
+/**
+ * Atomarer Pack-Zähler-Delta (ohne Full-Scan der Packliste).
+ * Gibt den neuen Zustand zurück, oder null wenn keine Zeile / kein total gesetzt.
+ */
+export async function applyIntegrationPackingDelta(
+  db: D1Database,
+  vacationId: string,
+  packedDelta: number
+): Promise<IntegrationVacationStateRow | null> {
+  if (packedDelta === 0) {
+    return getIntegrationVacationState(db, vacationId)
+  }
+
+  const result = await db
+    .prepare(
+      `UPDATE integration_vacation_state
+       SET
+         packed = MAX(0, MIN(total, COALESCE(packed, 0) + ?)),
+         percent = CASE
+           WHEN total IS NULL OR total <= 0 THEN 0
+           ELSE CAST(ROUND(100.0 * MAX(0, MIN(total, COALESCE(packed, 0) + ?)) / total) AS INTEGER)
+         END,
+         complete = CASE
+           WHEN total IS NULL OR total <= 0 THEN 0
+           WHEN MAX(0, MIN(total, COALESCE(packed, 0) + ?)) >= total THEN 1
+           ELSE 0
+         END,
+         updated_at = datetime('now')
+       WHERE vacation_id = ? AND total IS NOT NULL AND total > 0
+       RETURNING *`
+    )
+    .bind(packedDelta, packedDelta, packedDelta, vacationId)
+    .first<IntegrationVacationStateRow>()
+
+  return result ?? null
 }
 
 export async function logWebhookDelivery(

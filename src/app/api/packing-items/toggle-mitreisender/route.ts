@@ -37,11 +37,13 @@ export async function PUT(request: NextRequest) {
     }
 
     const vacationId = await getVacationIdFromPackingItem(db, packingItemId)
+    let mitreisenderName: string | undefined
     if (vacationId) {
       const mitreisende = await getMitreisendeForVacation(db, vacationId)
-      if (!canAccessVacation(auth.userContext, mitreisende.map(m => m.id))) {
+      if (!canAccessVacation(auth.userContext, mitreisende.map((m) => m.id))) {
         return NextResponse.json({ error: 'Keine Berechtigung' }, { status: 403 })
       }
+      mitreisenderName = mitreisende.find((m) => m.id === mitreisenderId)?.name
     }
 
     const useVorgemerkt = gepacktRequiresParentApproval(auth.userContext)
@@ -58,8 +60,33 @@ export async function PUT(request: NextRequest) {
 
     if (vacationId) {
       const cfEnv = (await getCloudflareContext({ async: true })).env as unknown as CloudflareEnv
-      await notifyPackingSyncChange(cfEnv, vacationId)
-      await notifyIntegrationChange(cfEnv, vacationId)
+      await notifyPackingSyncChange(cfEnv, vacationId, {
+        type: 'packing-patch',
+        patches: [
+          useVorgemerkt
+            ? {
+                op: 'mitreisender-gepackt',
+                id: packingItemId,
+                mitreisenderId,
+                gepackt: false,
+                gepackt_vorgemerkt: gepackt,
+                mitreisenderName,
+              }
+            : {
+                op: 'mitreisender-gepackt',
+                id: packingItemId,
+                mitreisenderId,
+                gepackt,
+                mitreisenderName,
+              },
+        ],
+      })
+      // Vorgemerkt ändert den Integrations-Fortschritt nicht
+      if (!useVorgemerkt) {
+        await notifyIntegrationChange(cfEnv, vacationId, {
+          packedDelta: gepackt ? 1 : -1,
+        })
+      }
     }
 
     return NextResponse.json({ success: true })

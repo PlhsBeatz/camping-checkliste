@@ -296,8 +296,49 @@ export async function PUT(request: NextRequest) {
 
     if (success && vacationId) {
       const cfEnv = (await getCloudflareContext({ async: true })).env as unknown as CloudflareEnv
-      await notifyPackingSyncChange(cfEnv, vacationId)
-      await notifyIntegrationChange(cfEnv, vacationId)
+      const onlyGepacktToggle =
+        gepackt !== undefined &&
+        anzahl === undefined &&
+        bemerkung === undefined &&
+        transport_id === undefined &&
+        gegenstandId === undefined &&
+        was === undefined &&
+        kategorieId === undefined
+
+      if (onlyGepacktToggle) {
+        const useVorgemerkt = gepacktRequiresParentApproval(auth.userContext)
+        await notifyPackingSyncChange(cfEnv, vacationId, {
+          type: 'packing-patch',
+          patches: [
+            useVorgemerkt
+              ? {
+                  op: 'item-gepackt',
+                  id,
+                  gepackt: false,
+                  gepackt_vorgemerkt: gepackt,
+                  gepackt_vorgemerkt_durch: gepackt
+                    ? (auth.userContext.mitreisenderId ?? null)
+                    : null,
+                }
+              : {
+                  op: 'item-gepackt',
+                  id,
+                  gepackt,
+                  ...(gepackt === false
+                    ? { gepackt_vorgemerkt: false, gepackt_vorgemerkt_durch: null }
+                    : {}),
+                },
+          ],
+        })
+        if (!useVorgemerkt) {
+          await notifyIntegrationChange(cfEnv, vacationId, {
+            packedDelta: gepackt ? 1 : -1,
+          })
+        }
+      } else {
+        await notifyPackingSyncChange(cfEnv, vacationId)
+        await notifyIntegrationChange(cfEnv, vacationId)
+      }
     }
 
     return NextResponse.json({ success: true, data: success })

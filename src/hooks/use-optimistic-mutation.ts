@@ -181,6 +181,11 @@ async function defaultSend(opts: MutationOptions): Promise<{ ok: boolean; status
       url = '/api/packing-items/toggle-mitreisender'
       body = opts.payload
       break
+    case 'packing-items-toggle-mitreisender-batch':
+      method = 'PUT'
+      url = '/api/packing-items/toggle-mitreisender-batch'
+      body = opts.payload
+      break
     case 'packing-items-toggle-gruppe':
       method = 'PUT'
       url = '/api/packing-items/toggle-gruppe'

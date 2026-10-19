@@ -107,6 +107,8 @@ import {
 } from '@/lib/packing-delete-undo'
 import { usePackingSync } from '@/hooks/use-packing-sync'
 import { useOptimisticMutation } from '@/hooks/use-optimistic-mutation'
+import type { PackingSyncMessage } from '@/lib/packing-sync'
+import { applyPackingSyncPatches } from '@/lib/packing-sync-apply'
 import {
   fetchAndCache,
   getCachedPackingItems,
@@ -912,14 +914,23 @@ function HomeContent() {
     void fetchPackingItemsNowRef.current()
   }, [selectedVacationId])
 
-  // WebSocket für Echtzeit-Sync: gebündelt; nach Reconnect/Refresh kurz pausieren
-  const handlePackingSyncUpdate = useCallback(() => {
-    if (typeof navigator !== 'undefined' && !navigator.onLine) return
-    if (Date.now() < wsRefreshSuppressUntilRef.current) return
-    if (Date.now() - lastPackingFetchAtRef.current < WS_FETCH_COOLDOWN_MS) return
-    if (pendingMutationsRef.current > 0) return
-    schedulePackingRefresh()
-  }, [schedulePackingRefresh])
+  // WebSocket: Delta-Patches lokal mergen (kein D1-Full-Fetch); sonst Full-Reload
+  const handlePackingSyncUpdate = useCallback(
+    (message?: PackingSyncMessage) => {
+      if (typeof navigator !== 'undefined' && !navigator.onLine) return
+      if (Date.now() < wsRefreshSuppressUntilRef.current) return
+      if (pendingMutationsRef.current > 0) return
+
+      if (message?.type === 'packing-patch' && message.patches.length > 0) {
+        setPackingItems((prev) => applyPackingSyncPatches(prev, message.patches))
+        return
+      }
+
+      if (Date.now() - lastPackingFetchAtRef.current < WS_FETCH_COOLDOWN_MS) return
+      schedulePackingRefresh()
+    },
+    [schedulePackingRefresh]
+  )
   usePackingSync(selectedVacationId, handlePackingSyncUpdate)
 
   // Bei Reconnect: Sync über OfflineBanner; hier nur gebündelter Daten-Refresh (kein doppeltes processSyncQueue)
@@ -2510,26 +2521,27 @@ function HomeContent() {
     )
 
     try {
-      for (const update of updates) {
-        await enqueuePackingMutation(
-          packingMitreisenderMutationKey(packingItemId, update.mitreisenderId),
-          async () => {
-            const result = await mutate({
-              table: 'packing-items-toggle-mitreisender',
-              action: 'put',
-              key: `${packingItemId}|${update.mitreisenderId}`,
-              payload: {
-                packingItemId,
-                mitreisenderId: update.mitreisenderId,
-                gepackt: update.newStatus,
-              },
-            })
-            if (!result.ok && !result.queued) {
-              throw new Error('Failed to update mitreisender status')
-            }
+      // Ein Batch-Request statt N Einzel-Toggles (1× Sync + 1× Integration)
+      await enqueuePackingMutation(
+        `packing-mit-batch:${packingItemId}:${updates.map((u) => u.mitreisenderId).sort().join(',')}`,
+        async () => {
+          const result = await mutate({
+            table: 'packing-items-toggle-mitreisender-batch',
+            action: 'put',
+            key: packingItemId,
+            payload: {
+              packingItemId,
+              updates: updates.map((u) => ({
+                mitreisenderId: u.mitreisenderId,
+                gepackt: u.newStatus,
+              })),
+            },
+          })
+          if (!result.ok && !result.queued) {
+            throw new Error('Failed to update mitreisender status')
           }
-        )
-      }
+        }
+      )
     } catch (error) {
       console.error('Failed to toggle multiple mitreisende:', error)
       setPackingItems(prevItems)

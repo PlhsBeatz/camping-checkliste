@@ -227,8 +227,9 @@ export function PackingXorBanner({
     }
   }, [vacationId])
 
-  usePackingSync(vacationId, () => {
-    if (!vacationId) return
+  usePackingSync(vacationId, (msg) => {
+    // Gepackt-Deltas ändern XOR-Ignore nicht – Full-Reload nur bei Strukturänderungen
+    if (!vacationId || msg?.type === 'packing-patch') return
     void (async () => {
       const server = await fetchServerIgnored(vacationId)
       if (!server) return
