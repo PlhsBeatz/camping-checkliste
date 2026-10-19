@@ -7,7 +7,7 @@ import { ChevronDown, ChevronRight } from 'lucide-react'
 import { AppLogo } from '@/components/app-logo'
 import { useAuth } from '@/components/auth-provider'
 import { cn } from '@/lib/utils'
-import { isConfigRoute } from '@/lib/config-navigation'
+import { isSettingsRoute } from '@/lib/settings-navigation'
 import { useAttentionBadge } from '@/hooks/use-attention-badge'
 import { useBookingImportBadge } from '@/components/booking-import-badge-provider'
 import { useSmartSuggestionsBadge } from '@/hooks/use-smart-suggestions-badge'
@@ -19,7 +19,7 @@ interface NavigationSidebarProps {
 
 export function NavigationSidebar({ isOpen, onClose }: NavigationSidebarProps) {
   const pathname = usePathname()
-  const { canAccessConfig, canReadWartung, canReadOptimierung } = useAuth()
+  const { canReadWartung, canReadOptimierung, canAccessConfig } = useAuth()
   const [toolsExpanded, setToolsExpanded] = useState(false)
   const attentionCount = useAttentionBadge()
   const bookingImportCount = useBookingImportBadge()
@@ -207,38 +207,19 @@ export function NavigationSidebar({ isOpen, onClose }: NavigationSidebarProps) {
 
         </nav>
 
-        {canAccessConfig && (
-          <div className="px-3 py-2">
-            <Link
-              href="/konfiguration"
-              onClick={() => onClose()}
-              className={cn(
-                'flex items-center gap-3 w-full px-4 py-3 text-sm font-medium rounded-lg transition-colors',
-                isConfigRoute(pathname)
-                  ? 'bg-[rgb(45,79,30)] text-white'
-                  : navItemIdle
-              )}
-            >
-              <span className="material-icons text-xl">settings</span>
-              <span className="text-xs tracking-wide">KONFIGURATION</span>
-            </Link>
-          </div>
-        )}
-
-        {/* Mein Profil */}
         <div className="px-3 py-2">
           <Link
-            href="/profil"
+            href="/einstellungen"
             onClick={() => onClose()}
             className={cn(
               'flex items-center gap-3 w-full px-4 py-3 text-sm font-medium rounded-lg transition-colors',
-              pathname.startsWith('/profil')
+              isSettingsRoute(pathname)
                 ? 'bg-[rgb(45,79,30)] text-white'
                 : navItemIdle
             )}
           >
-            <span className="material-icons text-xl">person</span>
-            <span className="text-xs tracking-wide">MEIN PROFIL</span>
+            <span className="material-icons text-xl">settings</span>
+            <span className="text-xs tracking-wide">EINSTELLUNGEN</span>
           </Link>
         </div>
       </aside>

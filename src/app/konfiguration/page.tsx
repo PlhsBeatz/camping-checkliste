@@ -1,14 +1,5 @@
-'use client'
+import { redirect } from 'next/navigation'
 
-import { ConfigPageLayout } from '@/components/config-page-layout'
-
-export default function KonfigurationPage() {
-  return (
-    <ConfigPageLayout>
-      <p className="text-sm text-muted-foreground max-w-2xl">
-        Hier verwalten Sie Stammdaten, Personen und Transportmittel. Datensicherung und
-        Integrationen sind nur für System-Administratoren verfügbar.
-      </p>
-    </ConfigPageLayout>
-  )
+export default function KonfigurationRedirectPage() {
+  redirect('/einstellungen')
 }

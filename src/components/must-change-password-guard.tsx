@@ -15,8 +15,14 @@ export function MustChangePasswordGuard({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (loading || !user) return
     if (!user.must_change_password) return
-    if (pathname === '/profil' || pathname?.startsWith('/profil/')) return
-    router.replace('/profil/passwort-aendern')
+    if (
+      pathname === '/einstellungen/passwort-aendern' ||
+      pathname === '/profil/passwort-aendern' ||
+      pathname?.startsWith('/einstellungen/passwort-aendern')
+    ) {
+      return
+    }
+    router.replace('/einstellungen/passwort-aendern')
   }, [user, loading, pathname, router])
 
   return <>{children}</>

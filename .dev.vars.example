@@ -28,3 +28,12 @@ VAPID_SUBJECT=mailto:deine@email.de
 # --- Optional: Admin-Backup mit R2-Bildern (ZIP-Teile) ---
 # Workers Free: nur begrenzte Subrequests pro Aufruf; pro ZIP-Teil werden nur wenige R2-Objekte gelesen (Default 28).
 # EXPORT_R2_BATCH_LIMIT=20
+
+# --- Feedback → GitHub Issues (privates Repo) ---
+# Fine-grained PAT: nur Repo PlhsBeatz/camping-checkliste, Permission Issues: Read and write
+# Labels im Repo anlegen: feedback, roadmap, status:geplant, status:in-arbeit, status:erledigt
+# (+ Standard bug / enhancement)
+# Produktion: npx wrangler secret put GITHUB_TOKEN
+# GITHUB_TOKEN=github_pat_...
+# Optional (Default: PlhsBeatz/camping-checkliste):
+# GITHUB_REPO=PlhsBeatz/camping-checkliste

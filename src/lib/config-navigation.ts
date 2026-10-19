@@ -1,58 +1,20 @@
-export type ConfigNavItem = {
-  label: string
-  href: string
-  /** Nur für System-Admin sichtbar */
-  systemAdminOnly?: boolean
-}
-
-export type ConfigNavGroup = {
-  label: string
-  items: ConfigNavItem[]
-}
-
-export const CONFIG_NAV_GROUPS: ConfigNavGroup[] = [
-  {
-    label: 'Stammdaten',
-    items: [
-      { label: 'Kategorien', href: '/kategorien' },
-      { label: 'Tags', href: '/tags' },
-      { label: 'Personen', href: '/mitreisende' },
-      { label: 'Transportmittel', href: '/transportmittel' },
-      { label: 'Wartungs-Vorlagen', href: '/wartung-vorlagen' },
-      { label: 'Verbrauch-Medien', href: '/verbrauch-medien' },
-    ],
-  },
-  {
-    label: 'System',
-    items: [
-      { label: 'Datensicherung', href: '/datensicherung', systemAdminOnly: true },
-      { label: 'Integrationen', href: '/integrationen', systemAdminOnly: true },
-    ],
-  },
-]
-
-const CONFIG_PATHS = [
-  '/konfiguration',
-  ...CONFIG_NAV_GROUPS.flatMap((group) => group.items.map((item) => item.href)),
-]
-
-export function isConfigRoute(pathname: string): boolean {
-  return CONFIG_PATHS.some(
-    (path) => pathname === path || pathname.startsWith(`${path}/`)
-  )
-}
-
-export function isConfigNavItemActive(pathname: string, href: string): boolean {
-  return pathname === href || pathname.startsWith(`${href}/`)
-}
-
-/** Aktiver Konfigurations-Unterbereich (nicht auf der Übersicht /konfiguration). */
-export function getActiveConfigItem(pathname: string): ConfigNavItem | undefined {
-  return CONFIG_NAV_GROUPS.flatMap((group) => group.items).find((item) =>
-    isConfigNavItemActive(pathname, item.href)
-  )
-}
-
-export function getActiveConfigHref(pathname: string): string | undefined {
-  return getActiveConfigItem(pathname)?.href
-}
+/**
+ * @deprecated Importiere aus `@/lib/settings-navigation`.
+ * Re-Export für bestehende Imports.
+ */
+export {
+  SETTINGS_NAV_GROUPS as CONFIG_NAV_GROUPS,
+  SETTINGS_NAV_GROUPS,
+  isSettingsRoute,
+  isConfigRoute,
+  isSettingsNavItemActive,
+  isConfigNavItemActive,
+  getActiveSettingsItem,
+  getActiveConfigItem,
+  getActiveSettingsHref,
+  getActiveConfigHref,
+  type SettingsNavItem as ConfigNavItem,
+  type SettingsNavGroup as ConfigNavGroup,
+  type SettingsNavItem,
+  type SettingsNavGroup,
+} from '@/lib/settings-navigation'

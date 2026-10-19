@@ -11,17 +11,17 @@ import {
   DrawerDescription,
 } from '@/components/ui/drawer'
 import { ConfigSubnav } from '@/components/config-subnav'
-import { getActiveConfigItem } from '@/lib/config-navigation'
+import { getActiveSettingsItem } from '@/lib/settings-navigation'
 import { cn } from '@/lib/utils'
 
 /**
  * Bereichswechsler für Mobilgeräte als Bottom-Sheet (App-Muster).
- * Nur auf Unterseiten – nicht auf /konfiguration.
+ * Nur auf Unterseiten – nicht auf /einstellungen.
  */
 export function ConfigMobileSectionPicker() {
   const pathname = usePathname()
   const [open, setOpen] = useState(false)
-  const activeItem = getActiveConfigItem(pathname)
+  const activeItem = getActiveSettingsItem(pathname)
 
   if (!activeItem) return null
 
@@ -55,7 +55,7 @@ export function ConfigMobileSectionPicker() {
       <Drawer open={open} onOpenChange={setOpen}>
         <DrawerContent className="max-h-[85vh]">
           <DrawerHeader className="text-left pb-2">
-            <DrawerTitle className="text-brand-heading">Konfiguration</DrawerTitle>
+            <DrawerTitle className="text-brand-heading">Einstellungen</DrawerTitle>
             <DrawerDescription>Bereich wechseln</DrawerDescription>
           </DrawerHeader>
           <div className="overflow-y-auto px-4 pb-8 pt-1">

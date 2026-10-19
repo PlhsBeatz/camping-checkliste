@@ -105,7 +105,7 @@ export default function DatensicherungPage() {
 
   useEffect(() => {
     if (!loading && !canAccessSystemAdmin) {
-      router.replace('/konfiguration')
+      router.replace('/einstellungen')
     }
   }, [loading, canAccessSystemAdmin, router])
 

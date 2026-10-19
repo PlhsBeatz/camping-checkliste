@@ -14,6 +14,8 @@ interface ConfigPageLayoutProps {
   children: ReactNode
   headerActions?: ReactNode
   afterContent?: ReactNode
+  /** Stammdaten/Admin-Seiten: erfordert canAccessConfig */
+  requireConfig?: boolean
   /** Nur System-Admin (z. B. Integrationen) */
   requireSystemAdmin?: boolean
 }
@@ -22,24 +24,40 @@ export function ConfigPageLayout({
   children,
   headerActions,
   afterContent,
+  requireConfig = true,
   requireSystemAdmin = false,
 }: ConfigPageLayoutProps) {
-  const { canAccessConfig, canAccessSystemAdmin, loading } = useAuth()
+  const { user, canAccessConfig, canAccessSystemAdmin, loading } = useAuth()
   const router = useRouter()
   const pathname = usePathname()
   const [showNavSidebar, setShowNavSidebar] = useState(false)
-  const isConfigHub = pathname === '/konfiguration'
+  const isSettingsHub =
+    pathname === '/einstellungen' || pathname === '/konfiguration'
+
+  const needsConfig = requireConfig || requireSystemAdmin
 
   useEffect(() => {
     if (loading) return
-    if (!canAccessConfig) {
-      router.replace('/')
+    if (!user) {
+      router.replace('/login')
+      return
+    }
+    if (needsConfig && !canAccessConfig) {
+      router.replace('/einstellungen')
       return
     }
     if (requireSystemAdmin && !canAccessSystemAdmin) {
-      router.replace('/konfiguration')
+      router.replace('/einstellungen')
     }
-  }, [loading, canAccessConfig, canAccessSystemAdmin, requireSystemAdmin, router])
+  }, [
+    loading,
+    user,
+    needsConfig,
+    canAccessConfig,
+    canAccessSystemAdmin,
+    requireSystemAdmin,
+    router,
+  ])
 
   useEffect(() => {
     if (showNavSidebar) {
@@ -55,7 +73,13 @@ export function ConfigPageLayout({
     }
   }, [showNavSidebar])
 
-  if (loading || !canAccessConfig || (requireSystemAdmin && !canAccessSystemAdmin)) {
+  const blocked =
+    loading ||
+    !user ||
+    (needsConfig && !canAccessConfig) ||
+    (requireSystemAdmin && !canAccessSystemAdmin)
+
+  if (blocked) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <p className="text-muted-foreground text-sm">Wird geladen…</p>
@@ -77,7 +101,6 @@ export function ConfigPageLayout({
         )}
       >
         <div className="container mx-auto p-4 md:p-6 max-w-full flex flex-col gap-4 lg:gap-6">
-          {/* Header über gesamte Breite (inkl. Bereich des Unter-Menüs) */}
           <div className="sticky top-0 z-10 bg-card shadow pb-4 -mx-4 px-4 -mt-4 pt-4 md:-mx-6 md:px-6 md:-mt-6 md:pt-6 space-y-3">
             <div className="flex items-center justify-between gap-4">
               <div className="flex items-center gap-4 min-w-0">
@@ -91,23 +114,22 @@ export function ConfigPageLayout({
                   <Menu className="h-5 w-5" />
                 </Button>
                 <h1 className="text-lg sm:text-xl font-bold tracking-tight text-brand-heading truncate">
-                  Konfiguration
+                  Einstellungen
                 </h1>
               </div>
               {headerActions}
             </div>
 
-            {!isConfigHub && <ConfigMobileSectionPicker />}
+            {!isSettingsHub && <ConfigMobileSectionPicker />}
           </div>
 
           <div className="flex flex-col lg:flex-row lg:gap-6 lg:items-stretch">
-            {/* Desktop: Unter-Menü links unterhalb des Headers */}
             <aside className="hidden lg:flex lg:w-56 xl:w-60 shrink-0 flex-col border-r border-border pr-4 min-h-[calc(100dvh-7rem)]">
               <ConfigSubnav variant="sidebar" className="py-2" />
             </aside>
 
             <div className="flex-1 min-w-0 flex flex-col gap-4 lg:gap-0">
-              {isConfigHub && (
+              {isSettingsHub && (
                 <div className="lg:hidden">
                   <ConfigSubnav variant="mobile" />
                 </div>

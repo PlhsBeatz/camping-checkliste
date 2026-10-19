@@ -125,7 +125,7 @@ export function PushDeviceActivatePrompt({
       {displayError && <p className="text-sm text-destructive">{displayError}</p>}
       <p className="text-xs text-muted-foreground">
         Einstellungen für alle Geräte unter{' '}
-        <Link href="/profil" className="underline underline-offset-2">
+        <Link href="/einstellungen/benachrichtigungen" className="underline underline-offset-2">
           Profil → Benachrichtigungen
         </Link>
         .

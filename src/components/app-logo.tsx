@@ -1,9 +1,10 @@
 'use client'
 
 import { CampingAppIcon } from './camping-app-icon'
+import { formatAppVersionLabel } from '@/lib/app-version'
 
 interface AppLogoProps {
-  /** Wenn true, wird die Version "v 0.3 PRO" angezeigt */
+  /** Wenn true, wird die App-Version angezeigt */
   showVersion?: boolean
   /** Untertitel unter dem Logo (z.B. "Deine Packliste" in der Sidebar) – ersetzt Versionsanzeige */
   bottomText?: string
@@ -55,7 +56,7 @@ export function AppLogo({
         <p className="text-xs text-white/70">{bottomText}</p>
       )}
       {showVersion && !bottomText && (
-        <p className="text-xs text-white/70">v 0.3 PRO</p>
+        <p className="text-xs text-white/70">{formatAppVersionLabel()}</p>
       )}
       {subtitle && (
         <p className="text-sm text-gray-600 mt-1">{subtitle}</p>

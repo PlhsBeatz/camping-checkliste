@@ -652,6 +652,10 @@ export interface CloudflareEnv {
   VAPID_PRIVATE_KEY?: string
   VAPID_SUBJECT?: string
   OPENROUTER_API_KEY?: string
+  /** Fine-grained PAT für Feedback-Issues (Issues R/W) */
+  GITHUB_TOKEN?: string
+  /** owner/repo, Default PlhsBeatz/camping-checkliste */
+  GITHUB_REPO?: string
 }
 
 /**

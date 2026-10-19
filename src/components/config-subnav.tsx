@@ -5,9 +5,9 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useAuth } from '@/components/auth-provider'
 import {
-  CONFIG_NAV_GROUPS,
-  isConfigNavItemActive,
-} from '@/lib/config-navigation'
+  SETTINGS_NAV_GROUPS,
+  isSettingsNavItemActive,
+} from '@/lib/settings-navigation'
 import { cn } from '@/lib/utils'
 
 interface ConfigSubnavProps {
@@ -32,23 +32,31 @@ export function ConfigSubnav({
   onNavigate,
 }: ConfigSubnavProps) {
   const pathname = usePathname()
-  const { canAccessSystemAdmin } = useAuth()
+  const { canAccessConfig, canAccessSystemAdmin } = useAuth()
   const isSidebar = variant === 'sidebar'
 
   const visibleGroups = useMemo(
     () =>
-      CONFIG_NAV_GROUPS.map((group) => ({
-        ...group,
-        items: group.items.filter(
-          (item) => !item.systemAdminOnly || canAccessSystemAdmin
-        ),
-      })).filter((group) => group.items.length > 0),
-    [canAccessSystemAdmin]
+      SETTINGS_NAV_GROUPS.map((group) => {
+        if (group.configOnly && !canAccessConfig) return { ...group, items: [] }
+        if (group.systemAdminOnly && !canAccessSystemAdmin) {
+          return { ...group, items: [] }
+        }
+        return {
+          ...group,
+          items: group.items.filter((item) => {
+            if (item.systemAdminOnly && !canAccessSystemAdmin) return false
+            if (item.configOnly && !canAccessConfig) return false
+            return true
+          }),
+        }
+      }).filter((group) => group.items.length > 0),
+    [canAccessConfig, canAccessSystemAdmin]
   )
 
   return (
     <nav
-      aria-label="Konfiguration"
+      aria-label="Einstellungen"
       className={cn(
         isSidebar ? 'w-full space-y-6' : 'space-y-4',
         className
@@ -67,7 +75,7 @@ export function ConfigSubnav({
           <ConfigGroupHeading label={group.label} />
           <ul className={cn(isSidebar ? 'space-y-1' : 'space-y-2')}>
             {group.items.map((item) => {
-              const active = isConfigNavItemActive(pathname, item.href)
+              const active = isSettingsNavItemActive(pathname, item.href)
               return (
                 <li key={item.href}>
                   <Link
