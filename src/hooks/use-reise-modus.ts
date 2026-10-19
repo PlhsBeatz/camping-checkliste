@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Vacation, VacationCampingStay } from '@/lib/db'
 import { findRelevantVacation, getTripPhase } from '@/lib/trip-readiness'
 import {
@@ -8,7 +8,7 @@ import {
   findActiveSegment,
   isEligibleForRastCapture,
   isOnVacationRoute,
-  isTravelDayToday,
+  isGpsTravelDay,
   type SegmentRoutePolylines,
   type TravelSegment,
 } from '@/lib/travel-segment'
@@ -23,7 +23,8 @@ import {
 
 const STATIONARY_DWELL_MS = 45_000
 const STATIONARY_MAX_SPEED_MS = 1.0
-const STATIONARY_MAX_DRIFT_M = 30
+/** GPS am Rastplatz springt oft 30–60 m. Enger Wert setzt die Verweildauer immer wieder zurück. */
+const STATIONARY_MAX_DRIFT_M = 80
 const POSITION_HISTORY_MAX = 20
 
 export type ReiseModusState = {
@@ -66,7 +67,6 @@ export function useReiseModus(
     []
   )
   const dwellAnchorRef = useRef<{ lat: number; lng: number; since: number } | null>(null)
-  const wakeLockRef = useRef<WakeLockSentinel | null>(null)
 
   const relevantVacation = findRelevantVacation(vacations)
   const tripPhase = relevantVacation ? getTripPhase(relevantVacation) : null
@@ -74,7 +74,7 @@ export function useReiseModus(
     !!relevantVacation &&
     !!tripPhase &&
     (tripPhase === 'on_trip' || tripPhase === 'departure_day') &&
-    isTravelDayToday(relevantVacation)
+    isGpsTravelDay(relevantVacation, stays, homeCoords)
 
   const segments =
     relevantVacation && stays.length > 0
@@ -104,32 +104,6 @@ export function useReiseModus(
     () => isReiseFeatureActive(gpsMode, isTravelContext),
     [gpsMode, isTravelContext]
   )
-
-  const manageWakeLock = useCallback(async (active: boolean) => {
-    if (active && isTravelContext && 'wakeLock' in navigator) {
-      try {
-        wakeLockRef.current = await navigator.wakeLock.request('screen')
-      } catch {
-        /* optional */
-      }
-      return
-    }
-    if (wakeLockRef.current) {
-      try {
-        await wakeLockRef.current.release()
-      } catch {
-        /* ignore */
-      }
-      wakeLockRef.current = null
-    }
-  }, [isTravelContext])
-
-  useEffect(() => {
-    void manageWakeLock(gpsActive)
-    return () => {
-      void manageWakeLock(false)
-    }
-  }, [gpsActive, manageWakeLock])
 
   useEffect(() => {
     if (!gpsActive) {

@@ -7,6 +7,7 @@ import { AuthProvider } from '@/components/auth-provider'
 import { BookingImportBadgeProvider } from '@/components/booking-import-badge-provider'
 import { MustChangePasswordGuard } from '@/components/must-change-password-guard'
 import { OfflineBanner } from '@/components/offline-banner'
+import { ReiseModusProvider } from '@/components/reise-modus-provider'
 import { PushNavigateListener } from '@/components/push-navigate-listener'
 import { Toaster } from '@/components/ui/sonner'
 import './globals.css'
@@ -68,9 +69,11 @@ export default function RootLayout({
             <BookingImportBadgeProvider>
             <OfflineBanner />
             <MustChangePasswordGuard>
-              <div className="w-full max-w-full overflow-x-clip">
-                {children}
-              </div>
+              <ReiseModusProvider>
+                <div className="w-full max-w-full overflow-x-clip">
+                  {children}
+                </div>
+              </ReiseModusProvider>
             </MustChangePasswordGuard>
             <PushNavigateListener />
             <ChunkLoadRecovery />

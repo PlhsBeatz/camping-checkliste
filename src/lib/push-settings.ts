@@ -33,6 +33,14 @@ export const PUSH_NOTIFICATION_OPTIONS = [
     description: 'Erinnerung 30 Tage vor dem Fälligkeitsdatum offener Restzahlungen.',
     adminOnly: false as const,
   },
+  {
+    key: 'verbrauchEndstand' as const,
+    type: 'verbrauch_endstand' as const,
+    label: 'Verbrauchs-Endstände',
+    description:
+      'Erinnerung nach der Heimkehr, wenn Startstände (z. B. Petroleum/Gas) noch ohne Endstand sind.',
+    adminOnly: false as const,
+  },
 ] as const
 
 export type PushPreferenceKey = (typeof PUSH_NOTIFICATION_OPTIONS)[number]['key']
@@ -43,6 +51,7 @@ export type UserPushSettings = {
   optimierungFaelligkeit: boolean
   wartungFaelligkeit: boolean
   restzahlungFaelligkeit: boolean
+  verbrauchEndstand: boolean
 }
 
 export type UserPushSettingsResponse = UserPushSettings & {
@@ -64,6 +73,8 @@ export function isPushTypeEnabled(
       return settings.wartungFaelligkeit
     case 'restzahlung_due':
       return settings.restzahlungFaelligkeit
+    case 'verbrauch_endstand':
+      return settings.verbrauchEndstand
     default:
       return false
   }
@@ -75,4 +86,12 @@ export function canReceivePushAlerts(
   browserSubscribed: boolean
 ): boolean {
   return settings.enabled && settings.rastplatzNearby && browserSubscribed
+}
+
+/** Client: Endstand-Erinnerung bei Heimkehr */
+export function canReceiveVerbrauchEndstandPush(
+  settings: UserPushSettings,
+  browserSubscribed: boolean
+): boolean {
+  return settings.enabled && settings.verbrauchEndstand && browserSubscribed
 }

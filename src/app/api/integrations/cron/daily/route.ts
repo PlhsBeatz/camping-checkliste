@@ -6,6 +6,7 @@ import { processIntegrationCron } from '@/lib/integration-events'
 import { processOptimierungFaelligkeitPush } from '@/lib/optimierung-push-reminders'
 import { processRestzahlungPush } from '@/lib/restzahlung-push-reminders'
 import { processWartungFaelligkeitPush } from '@/lib/wartung-push-reminders'
+import { processVerbrauchEndstandPush } from '@/lib/verbrauch-endstand-push'
 import { refreshPackingPatternsAndSuggestions } from '@/lib/packing-patterns'
 import {
   listCampingplaetzeForPlatzplanResearch,
@@ -34,6 +35,7 @@ export async function GET(request: NextRequest) {
     const optimierungPush = await processOptimierungFaelligkeitPush(db)
     const wartungPush = await processWartungFaelligkeitPush(db)
     const restzahlungPush = await processRestzahlungPush(db)
+    const verbrauchEndstandPush = await processVerbrauchEndstandPush(db)
     const packingPatterns = await refreshPackingPatternsAndSuggestions(db, {
       apiKey: env.OPENROUTER_API_KEY?.trim() ?? null,
     })
@@ -68,6 +70,7 @@ export async function GET(request: NextRequest) {
         optimierung_reminders: optimierungPush,
         wartung_reminders: wartungPush,
         restzahlung_reminders: restzahlungPush,
+        verbrauch_endstand_reminders: verbrauchEndstandPush,
         packing_patterns: packingPatterns,
         platzplan_jobs: platzplanJobs,
         place_update: placeUpdateJobs,

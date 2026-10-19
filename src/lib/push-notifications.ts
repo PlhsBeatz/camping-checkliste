@@ -3,14 +3,17 @@
  * Neue Auslöser/Typen hier ergänzen (Builder + ggf. resolvePushUrl).
  */
 
+import { formatEndstandMediaList } from '@/lib/verbrauch-endstand'
+
 export const PUSH_SCHEMA_VERSION = 1 as const
 
 /** Bekannte Push-Typen – bei neuen Auslösern erweitern */
 export type PushNotificationType =
-  | 'rastplatz_nearby'
-  | 'optimierung_due'
-  | 'wartung_due'
-  | 'restzahlung_due'
+    | 'rastplatz_nearby'
+    | 'optimierung_due'
+    | 'wartung_due'
+    | 'restzahlung_due'
+    | 'verbrauch_endstand'
 
 export type PushNotificationPayload = {
   schema_version: typeof PUSH_SCHEMA_VERSION
@@ -30,6 +33,7 @@ const VALID_TYPES = new Set<string>([
   'optimierung_due',
   'wartung_due',
   'restzahlung_due',
+  'verbrauch_endstand',
 ])
 
 export function isPushNotificationPayload(value: unknown): value is PushNotificationPayload {
@@ -65,6 +69,8 @@ export function resolvePushUrl(payload: PushNotificationPayload): string {
         ? `/urlaube/${encodeURIComponent(urlaubId)}`
         : '/urlaube'
     }
+    case 'verbrauch_endstand':
+      return payload.url?.trim() || '/tools/verbrauch'
     default:
       return '/'
   }
@@ -238,6 +244,28 @@ export function buildRestzahlungDuePush(params: {
       stay_id: params.stayId,
       urlaub_id: params.urlaubId,
       faellig_am: params.faelligAm,
+    },
+  }
+}
+
+/** Push nach Heimkehr: fehlende Verbrauchs-Endstände. */
+export function buildVerbrauchEndstandPush(params: {
+  urlaubId: string
+  urlaubTitel: string
+  mediaNames: string[]
+}): PushNotificationPayload {
+  const media = formatEndstandMediaList(params.mediaNames)
+  const titel = truncateTitel(params.urlaubTitel, 36)
+  return {
+    schema_version: PUSH_SCHEMA_VERSION,
+    type: 'verbrauch_endstand',
+    title: 'Endstände erfassen',
+    body: `${media} von ${titel} noch ohne Endstand`,
+    tag: `verbrauch_endstand:${params.urlaubId}`,
+    url: '/tools/verbrauch',
+    data: {
+      urlaub_id: params.urlaubId,
+      media_count: params.mediaNames.length,
     },
   }
 }

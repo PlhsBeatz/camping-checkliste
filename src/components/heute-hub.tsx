@@ -62,6 +62,7 @@ const KIND_META: Record<AttentionKind, { label: string; icon: string }> = {
   sonnen_ausrichtung: { label: 'Sonne', icon: 'wb_sunny' },
   vorschlag: { label: 'Vorschlag', icon: 'lightbulb' },
   verbrauch_reichweite: { label: 'Verbrauch', icon: 'local_gas_station' },
+  verbrauch_endstand: { label: 'Verbrauch', icon: 'local_gas_station' },
 }
 
 function formatHubDateRange(start: string, end: string): string {

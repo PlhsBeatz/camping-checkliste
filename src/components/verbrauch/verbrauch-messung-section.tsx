@@ -50,6 +50,7 @@ import {
   plannedTempForVacation,
   reichweiteReiseTage,
 } from '@/lib/verbrauch-reichweite'
+import { canEnterVerbrauchEndstand } from '@/lib/verbrauch-endstand'
 
 function formatDate(d: string | null | undefined): string {
   if (!d) return '—'
@@ -65,11 +66,9 @@ function canEnterEndstand(
   vacation: Vacation | undefined,
   messung: VerbrauchMessung
 ): boolean {
-  const endRaw = vacation?.enddatum?.trim() || messung.messdatum_ende
-  if (!endRaw) return false
-  const endYmd = normalizeCalendarDate(endRaw)
-  const today = todayInAppTimezone()
-  return endYmd <= today
+  return canEnterVerbrauchEndstand(
+    vacation?.enddatum?.trim() || messung.messdatum_ende
+  )
 }
 
 /** Vergangene/laufende Urlaube ohne Messung + höchstens der nächste Zukunfts-Urlaub

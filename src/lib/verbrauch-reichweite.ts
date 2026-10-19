@@ -81,19 +81,21 @@ export function reichweiteReiseTage(vacation: {
 }
 
 /**
- * Verfügbare Menge: Startstand der Urlaubs-Messung, sonst Endstand der letzten
- * abgeschlossenen Messung desselben Mediums.
+ * Verfügbare Menge: Startstand der Urlaubs-Messung (+ Auffüllungen bei Abnahme),
+ * sonst Endstand der letzten abgeschlossenen Messung desselben Mediums.
  */
 export function resolveVerfuegbareMenge(
-  mediumSchluessel: string,
+  medium: Pick<VerbrauchMedium, 'schluessel' | 'messmodus'>,
   messungen: VerbrauchMessung[],
   urlaubId: string
 ): number | null {
-  const forMedium = messungen.filter((m) => m.typ === mediumSchluessel)
+  const forMedium = messungen.filter((m) => m.typ === medium.schluessel)
 
   const current = forMedium.find((m) => m.urlaub_id === urlaubId)
   if (current && current.wert_start != null && Number.isFinite(current.wert_start)) {
-    return current.wert_start
+    const auffuellungen =
+      medium.messmodus === 'abnahme' ? (current.auffuellungen_summe ?? 0) : 0
+    return roundDecimals(current.wert_start + auffuellungen, 2)
   }
 
   const completed = forMedium
@@ -309,7 +311,7 @@ export function evaluateReichweite(opts: {
       mediumName: medium.name,
       mediumSchluessel: medium.schluessel,
       title: `${medium.name} reicht`,
-      reason: `Startstand ${vFmt}`,
+      reason: `Vorrat ${vFmt}`,
       risk: null,
     }
   }
@@ -329,7 +331,7 @@ export function evaluateReichweite(opts: {
       mediumName: medium.name,
       mediumSchluessel: medium.schluessel,
       title: `${medium.name}: knapp bei hohem Verbrauch`,
-      reason: `Typisch ~${avgFmt}, bis ${maxFmt} bei hohem Verbrauch · Startstand ${vFmt}`,
+      reason: `Typisch ~${avgFmt}, bis ${maxFmt} bei hohem Verbrauch · Vorrat ${vFmt}`,
       risk: 'Unter ungünstigen Bedingungen könnte die Menge nicht reichen.',
     }
   }
@@ -347,8 +349,8 @@ export function evaluateReichweite(opts: {
     einheit,
     mediumName: medium.name,
     mediumSchluessel: medium.schluessel,
-    title: `${medium.name}: Startstand erhöhen`,
-    reason: `Typisch ~${avgFmt} nötig, bis ${maxFmt} · Startstand ${vFmt}`,
+    title: `${medium.name}: Vorrat erhöhen`,
+    reason: `Typisch ~${avgFmt} nötig, bis ${maxFmt} · Vorrat ${vFmt}`,
     risk: 'Der aktuelle Stand reicht voraussichtlich nicht für die Reisedauer.',
   }
 }

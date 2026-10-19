@@ -504,6 +504,25 @@ export function isTravelDayToday(vacation: Vacation, now = new Date()): boolean 
   return today >= departure && today <= end
 }
 
+/**
+ * Heute eine konkrete Fahrt (Abreise, Platzwechsel, Heimreise).
+ * Standtage am Campingplatz zählen nicht – dort soll kein Rast-Vorschlag kommen.
+ */
+export function isGpsTravelDay(
+  vacation: Vacation,
+  stays: VacationCampingStay[],
+  homeCoords?: { lat: number; lng: number } | null,
+  now = new Date()
+): boolean {
+  if (!isTravelDayToday(vacation, now) || stays.length === 0) return false
+  const today = todayInAppTimezone(now)
+  const segments = buildReiseModusSegments(stays, homeCoords)
+  return segments.some((segment) => {
+    const range = getSegmentTravelDayRange(segment, vacation, stays)
+    return !!range && today >= range.startYmd && today <= range.endYmd
+  })
+}
+
 export type TravelLegPhase = 'next' | 'past' | 'future'
 
 function sortedStays(stays: VacationCampingStay[]): VacationCampingStay[] {
@@ -567,7 +586,9 @@ export function getSegmentTravelDayRange(
       : null
     const firstStay =
       (homeStayId ? sorted.find((s) => s.id === homeStayId) : null) ?? sorted[0]
-    const arrival = normalizeCalendarDate(firstStay?.start_datum)
+    const arrival = firstStay?.start_datum
+      ? normalizeCalendarDate(firstStay.start_datum)
+      : ''
     const departure = normalizeCalendarDate(getDepartureDate(vacation))
     const endYmd = arrival || departure
     const startYmd = departure || arrival
@@ -581,7 +602,7 @@ export function getSegmentTravelDayRange(
   const toStay = stayPairMatch
     ? sorted.find((s) => s.id === stayPairMatch[2])
     : sorted.find((s) => s.campingplatz.id === segment.to.campingplatzId)
-  const arrival = normalizeCalendarDate(toStay?.start_datum)
+  const arrival = toStay?.start_datum ? normalizeCalendarDate(toStay.start_datum) : ''
   if (!arrival) return null
   return { startYmd: arrival, endYmd: arrival }
 }

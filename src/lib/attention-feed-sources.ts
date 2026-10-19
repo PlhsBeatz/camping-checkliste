@@ -10,6 +10,7 @@ import {
   getRestzahlungAttentionStays,
   getUserById,
   getVacations,
+  getOpenVerbrauchEndstandMessungen,
   getVerbrauchClimateStayHints,
   getVerbrauchMedien,
   getVerbrauchMedienAusruestungLinks,
@@ -49,6 +50,10 @@ import {
   reichweiteReiseTage,
   resolveVerfuegbareMenge,
 } from '@/lib/verbrauch-reichweite'
+import {
+  findVacationsForEndstandReminder,
+  formatEndstandMediaList,
+} from '@/lib/verbrauch-endstand'
 
 function packingGegenstandIds(items: PackingItem[]): Set<string> {
   return new Set(
@@ -178,11 +183,7 @@ async function buildVerbrauchReichweiteItems(
   const light = opts.detail === 'light'
 
   for (const medium of relevantMedien) {
-    const verfuegbar = resolveVerfuegbareMenge(
-      medium.schluessel,
-      messungen,
-      opts.vacation.id
-    )
+    const verfuegbar = resolveVerfuegbareMenge(medium, messungen, opts.vacation.id)
     if (verfuegbar == null) continue
 
     const stats = computeVerbrauchRateStats(medium, messungen, {
@@ -219,6 +220,55 @@ async function buildVerbrauchReichweiteItems(
     })
   }
 
+  return items
+}
+
+async function buildVerbrauchEndstandItems(
+  db: D1Database,
+  vacations: Vacation[],
+  opts: { detail: 'full' | 'light' }
+): Promise<NonNullable<AttentionFeedInput['verbrauchEndstandItems']>> {
+  const today = todayInAppTimezone()
+  const candidates = findVacationsForEndstandReminder(vacations, today)
+  if (candidates.length === 0) return []
+
+  const open = await getOpenVerbrauchEndstandMessungen(
+    db,
+    candidates.map((v) => v.id)
+  )
+  if (open.length === 0) return []
+
+  const byUrlaub = new Map<string, typeof open>()
+  for (const m of open) {
+    if (!m.urlaub_id) continue
+    const list = byUrlaub.get(m.urlaub_id) ?? []
+    list.push(m)
+    byUrlaub.set(m.urlaub_id, list)
+  }
+
+  const items: NonNullable<AttentionFeedInput['verbrauchEndstandItems']> = []
+  for (const vacation of candidates) {
+    const messungen = byUrlaub.get(vacation.id)
+    if (!messungen || messungen.length === 0) continue
+    const mediaNames = [...new Set(messungen.map((m) => m.medium_name))]
+    const mediaLabel = formatEndstandMediaList(mediaNames)
+    const end = normalizeCalendarDate(vacation.enddatum)
+    const isLastDay = end === today
+    items.push({
+      key: `verbrauch-endstand:${vacation.id}`,
+      title: 'Endstände erfassen',
+      reason: opts.detail === 'light' ? mediaLabel : `${mediaLabel} · ${vacation.titel}`,
+      risk:
+        opts.detail === 'light'
+          ? null
+          : isLastDay
+            ? 'Am letzten Tag die Endstände für die Verbrauchsstatistik eintragen.'
+            : 'Nach der Rückkehr die Endstände für die Verbrauchsstatistik eintragen.',
+      href: '/tools/verbrauch',
+      score: isLastDay ? 430 : 450,
+      urlaubId: vacation.id,
+    })
+  }
   return items
 }
 
@@ -342,6 +392,10 @@ export async function loadAttentionFeedInput(
     }
   }
 
+  const verbrauchEndstandItems = await buildVerbrauchEndstandItems(db, vacations, {
+    detail: full ? 'full' : 'light',
+  })
+
   return {
     vacations,
     packingItems,
@@ -372,5 +426,6 @@ export async function loadAttentionFeedInput(
       vacationTitel: vacationTitelForSuggestion(s, vacations),
     })),
     verbrauchReichweiteItems,
+    verbrauchEndstandItems,
   }
 }

@@ -505,8 +505,52 @@ export async function getVerbrauchMessungen(
 
 /**
  * Schlanke Messungs-Liste für Hub-Reichweite: nur benötigte Spalten,
- * Zeitfenster + offene Messungen + optional aktueller Urlaub, ohne Ereignisse.
+ * Zeitfenster + offene Messungen + optional aktueller Urlaub.
+ * Auffüllungen nur für offene bzw. den inkludierten Urlaub (Vorrats-Prognose).
  */
+/**
+ * Offene Messungen (Start ohne Ende) für einen oder mehrere Urlaube.
+ * Mit Medium-Namen für Hub-/Push-Texte.
+ */
+export async function getOpenVerbrauchEndstandMessungen(
+  db: D1Database,
+  urlaubIds: string[]
+): Promise<Array<VerbrauchMessung & { medium_name: string }>> {
+  if (urlaubIds.length === 0) return []
+  try {
+    const out: Array<VerbrauchMessung & { medium_name: string }> = []
+    for (let i = 0; i < urlaubIds.length; i += D1_MAX_BIND_PARAMS) {
+      const chunk = urlaubIds.slice(i, i + D1_MAX_BIND_PARAMS)
+      const placeholders = chunk.map(() => '?').join(',')
+      const res = await db
+        .prepare(
+          `SELECT v.id, v.typ, v.urlaub_id, v.equipment_id, v.transport_id,
+                  v.messdatum_start, v.messdatum_ende, v.wert_start, v.wert_ende,
+                  v.einheit, v.verbrauch_gesamt, v.verbrauch_pro_tag, v.notizen, v.created_at,
+                  COALESCE(m.name, v.typ) AS medium_name
+           FROM verbrauch_messungen v
+           LEFT JOIN verbrauch_medien m ON m.schluessel = v.typ
+           WHERE v.urlaub_id IN (${placeholders})
+             AND v.wert_start IS NOT NULL
+             AND v.wert_ende IS NULL
+           ORDER BY COALESCE(m.sort_order, 999), v.typ ASC`
+        )
+        .bind(...chunk)
+        .all<Record<string, unknown>>()
+      for (const row of res.results || []) {
+        out.push({
+          ...mapVerbrauchRow(row),
+          medium_name: String(row.medium_name || row.typ || 'Verbrauch'),
+        })
+      }
+    }
+    return out
+  } catch (error) {
+    console.error('Error getOpenVerbrauchEndstandMessungen:', error)
+    return []
+  }
+}
+
 export async function getVerbrauchMessungenForReichweite(
   db: D1Database,
   opts: { sinceYmd: string; includeUrlaubId?: string }
@@ -531,7 +575,26 @@ export async function getVerbrauchMessungenForReichweite(
       )
       .bind(...binds)
       .all<Record<string, unknown>>()
-    return (res.results || []).map(mapVerbrauchRow)
+    const items = (res.results || []).map(mapVerbrauchRow)
+    const needAuffuellIds = items
+      .filter(
+        (m) =>
+          m.wert_ende == null ||
+          (!!opts.includeUrlaubId && m.urlaub_id === opts.includeUrlaubId)
+      )
+      .map((m) => m.id)
+    if (needAuffuellIds.length === 0) return items
+    const byMessung = await getEreignisseForMessungIds(db, needAuffuellIds)
+    const needSet = new Set(needAuffuellIds)
+    return items.map((m) => {
+      if (!needSet.has(m.id)) return m
+      const ereignisse = byMessung.get(m.id) ?? []
+      return {
+        ...m,
+        ereignisse,
+        auffuellungen_summe: sumAuffuellungen(ereignisse),
+      }
+    })
   } catch (error) {
     console.error('Error getVerbrauchMessungenForReichweite:', error)
     return []

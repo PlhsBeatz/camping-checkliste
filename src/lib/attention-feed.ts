@@ -65,6 +65,7 @@ export type AttentionKind =
   | 'sonnen_ausrichtung'
   | 'vorschlag'
   | 'verbrauch_reichweite'
+  | 'verbrauch_endstand'
 
 export type AttentionItem = {
   key: string
@@ -84,6 +85,16 @@ export type AttentionItem = {
   vacationTitel?: string | null
   /** Nur bei `kind: 'verbrauch_reichweite'`. */
   verbrauchAmpel?: 'eng' | 'kritisch'
+}
+
+export type VerbrauchEndstandAttentionItem = {
+  key: string
+  title: string
+  reason: string
+  risk: string | null
+  href: string
+  score: number
+  urlaubId: string
 }
 
 export type PackingWeightTone = 'low' | 'over'
@@ -189,6 +200,8 @@ export type AttentionFeedInput = {
     score: number
     ampel: 'eng' | 'kritisch'
   }>
+  /** Fehlende Endstände nach Urlaubsende / am letzten Tag. */
+  verbrauchEndstandItems?: VerbrauchEndstandAttentionItem[]
 }
 
 function vacationRef(v: Vacation): AttentionVacationRef {
@@ -945,6 +958,22 @@ export function buildAttentionFeed(input: AttentionFeedInput): AttentionFeed {
       snoozeAllowed: true,
       adminOnly: false,
       verbrauchAmpel: vr.ampel,
+    })
+  }
+
+  for (const ve of input.verbrauchEndstandItems ?? []) {
+    raw.push({
+      key: ve.key,
+      kind: 'verbrauch_endstand',
+      title: ve.title,
+      reason: ve.reason,
+      risk: ve.risk,
+      href: ve.href,
+      score: ve.score,
+      dueYmd: todayYmd,
+      sicherheitsrelevant: false,
+      snoozeAllowed: true,
+      adminOnly: false,
     })
   }
 

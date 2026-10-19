@@ -14,12 +14,15 @@ function parseBody(body: unknown): UserPushSettings | null {
     typeof o.wartungFaelligkeit === 'boolean' ? o.wartungFaelligkeit : true
   const restzahlungFaelligkeit =
     typeof o.restzahlungFaelligkeit === 'boolean' ? o.restzahlungFaelligkeit : true
+  const verbrauchEndstand =
+    typeof o.verbrauchEndstand === 'boolean' ? o.verbrauchEndstand : true
   return {
     enabled: o.enabled,
     rastplatzNearby: o.rastplatzNearby,
     optimierungFaelligkeit: o.optimierungFaelligkeit,
     wartungFaelligkeit,
     restzahlungFaelligkeit,
+    verbrauchEndstand,
   }
 }
 
@@ -32,6 +35,7 @@ function toResponseData(
     optimierungFaelligkeit: settings.optimierungFaelligkeit,
     wartungFaelligkeit: settings.wartungFaelligkeit,
     restzahlungFaelligkeit: settings.restzahlungFaelligkeit,
+    verbrauchEndstand: settings.verbrauchEndstand,
     browserSubscribed: settings.browserSubscribed ?? false,
   }
 }
