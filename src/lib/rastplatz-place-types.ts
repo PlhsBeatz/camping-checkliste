@@ -23,6 +23,9 @@ export const RASTPLATZ_AUTOCOMPLETE_EXPANDED_TYPES = [
   'food_court',
 ] as const
 
+/** Nearby Search: Umkreis in Metern (API-Obergrenze 500). */
+export const RASTPLATZ_NEARBY_RADIUS_M = 500
+
 /** Nearby Search (Server): etwas breiter als Autocomplete-Limit */
 export const RASTPLATZ_NEARBY_INCLUDED_TYPES = [
   'gas_station',

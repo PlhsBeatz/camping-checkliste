@@ -1,12 +1,15 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { ThumbsDown, ThumbsUp, ChevronDown, MapPin, X } from 'lucide-react'
 import type { ApiResponse } from '@/lib/api-types'
 import type { NearbyPlaceResult } from '@/app/api/places/nearby/route'
 import type { Rastplatz, RastplatzBewertung } from '@/lib/db'
 import { RASTPLATZ_MERKMALE } from '@/lib/rastplatz-merkmale'
+import { RASTPLATZ_NEARBY_RADIUS_M } from '@/lib/rastplatz-place-types'
+import { haversineDistanceKm } from '@/lib/routes'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { cacheRastplatz } from '@/lib/offline-db'
@@ -33,22 +36,39 @@ export function ReiseRastPanel({
   const [merkmale, setMerkmale] = useState<string[]>([])
   const [showMerkmale, setShowMerkmale] = useState(false)
   const [showPicker, setShowPicker] = useState(false)
+  const lastFetchRef = useRef<{ lat: number; lng: number; at: number } | null>(null)
 
   const selected = places[selectedIdx] ?? null
 
   const loadNearby = useCallback(async () => {
+    const last = lastFetchRef.current
+    if (last) {
+      const movedKm = haversineDistanceKm({
+        lat1: last.lat,
+        lng1: last.lng,
+        lat2: position.lat,
+        lng2: position.lng,
+      })
+      if (movedKm < 0.15 && Date.now() - last.at < 60_000) return
+    }
     setLoading(true)
     try {
       const res = await fetch('/api/places/nearby', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ lat: position.lat, lng: position.lng }),
+        body: JSON.stringify({
+          lat: position.lat,
+          lng: position.lng,
+          radius: RASTPLATZ_NEARBY_RADIUS_M,
+        }),
       })
       const data = (await res.json()) as ApiResponse<NearbyPlaceResult[]>
+      lastFetchRef.current = { lat: position.lat, lng: position.lng, at: Date.now() }
+      if (res.status === 429) return
       if (data.success && data.data?.length) {
         setPlaces(data.data)
         setSelectedIdx(0)
-      } else {
+      } else if (data.success) {
         setPlaces([])
       }
     } catch {
@@ -59,7 +79,11 @@ export function ReiseRastPanel({
   }, [position.lat, position.lng])
 
   useEffect(() => {
-    if (visible) void loadNearby()
+    if (!visible) {
+      lastFetchRef.current = null
+      return
+    }
+    void loadNearby()
   }, [visible, loadNearby])
 
   const save = async (bewertung: RastplatzBewertung) => {
@@ -108,12 +132,17 @@ export function ReiseRastPanel({
   if (!visible) return null
 
   return (
-    <div className="fixed bottom-4 left-4 right-4 z-50 max-w-md mx-auto">
+    <div className="fixed bottom-[max(1rem,env(safe-area-inset-bottom))] left-4 right-4 z-50 max-w-md mx-auto">
       <div className="bg-card border shadow-lg rounded-xl p-4 space-y-3">
         <div className="flex items-start justify-between gap-2">
-          <div className="flex items-center gap-2 text-sm font-medium">
-            <MapPin className="h-4 w-4 text-primary shrink-0" />
-            Rast erfassen?
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <MapPin className="h-4 w-4 text-primary shrink-0" />
+              Rastplatz hinzufügen?
+            </div>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Du bist an der Strecke angehalten.
+            </p>
           </div>
           <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={onDismiss}>
             <X className="h-4 w-4" />
@@ -157,9 +186,14 @@ export function ReiseRastPanel({
         )}
 
         {!loading && !selected && (
-          <p className="text-sm text-muted-foreground">
-            Kein passender Ort gefunden. Später unter Rastplätze manuell anlegen.
-          </p>
+          <div className="space-y-2">
+            <p className="text-sm text-muted-foreground">
+              Kein passender Ort in der Nähe. Du kannst den Rastplatz auch selbst suchen.
+            </p>
+            <Button variant="outline" size="sm" asChild>
+              <Link href="/rastplaetze">In Rastplätzen suchen</Link>
+            </Button>
+          </div>
         )}
 
         <div className="flex gap-2">

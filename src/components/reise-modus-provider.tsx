@@ -18,10 +18,6 @@ import { ReiseRastPanel } from '@/components/reise-rast-panel'
 import { useReiseModus, type ReiseModusState } from '@/hooks/use-reise-modus'
 import { useReiseRoutePolylines } from '@/hooks/use-reise-route-polylines'
 import { useUserReiseGpsSettings } from '@/hooks/use-user-reise-gps-settings'
-import { useVerbrauchEndstandHomeAlert } from '@/hooks/use-verbrauch-endstand-home-alert'
-import { usePushSubscribe } from '@/hooks/use-push-subscribe'
-import { useUserPushSettings } from '@/hooks/use-user-push-settings'
-import { canReceiveVerbrauchEndstandPush } from '@/lib/push-settings'
 import { toast } from 'sonner'
 
 const ReiseModusContext = createContext<ReiseModusState | null>(null)
@@ -138,20 +134,6 @@ export function ReiseModusProvider({ children }: { children: ReactNode }) {
   )
   const { mode: gpsMode } = useUserReiseGpsSettings()
   const reiseModus = useReiseModus(vacations, stays, homeCoords, gpsMode, polylines)
-  const pushSubscribe = usePushSubscribe()
-  const { settings: pushSettings } = useUserPushSettings(pushSubscribe.subscribed)
-  const endstandPushEnabled =
-    pushSettings != null &&
-    canReceiveVerbrauchEndstandPush(pushSettings, pushSubscribe.subscribed)
-
-  useVerbrauchEndstandHomeAlert({
-    enabled: reiseModus.featureActive && endstandPushEnabled,
-    position: reiseModus.position,
-    homeCoords,
-    activeSegment: reiseModus.activeSegment,
-    vacationId: reiseModus.relevantVacation?.id ?? null,
-    isStationary: reiseModus.isStationary,
-  })
 
   useEffect(() => {
     if (!reiseModus.isStationary) setRastPanelDismissed(false)

@@ -1,9 +1,10 @@
 'use client'
 
 import { Button } from '@/components/ui/button'
-import { ExternalLink, MapPin, ThumbsDown, ThumbsUp } from 'lucide-react'
+import { ExternalLink, LocateFixed, MapPin, ThumbsDown, ThumbsUp } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import type { ApiResponse } from '@/lib/api-types'
+import type { NearbyPlaceResult } from '@/app/api/places/nearby/route'
 import type { Rastplatz, RastplatzBewertung, RastplatzKategorie } from '@/lib/db'
 import { ResponsiveModal } from '@/components/ui/responsive-modal'
 import { Input } from '@/components/ui/input'
@@ -18,7 +19,11 @@ import {
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { RASTPLATZ_MERKMALE } from '@/lib/rastplatz-merkmale'
-import { inferRastplatzKategorieFromGoogleTypes } from '@/lib/rastplatz-place-types'
+import {
+  inferRastplatzKategorieFromGoogleTypes,
+  RASTPLATZ_NEARBY_RADIUS_M,
+} from '@/lib/rastplatz-place-types'
+import { haversineDistanceKm } from '@/lib/routes'
 import { cn } from '@/lib/utils'
 import { openRastplatzInAdac, openRastplatzInGoogleMaps } from '@/lib/maps-export'
 
@@ -82,11 +87,21 @@ export function RastplatzEditModal({
 }: RastplatzEditModalProps) {
   const [isSaving, setIsSaving] = useState(false)
   const [form, setForm] = useState<RastplatzFormState>(createEmptyForm)
+  const [nearbyPlaces, setNearbyPlaces] = useState<NearbyPlaceResult[]>([])
+  const [nearbyOrigin, setNearbyOrigin] = useState<{ lat: number; lng: number } | null>(null)
+  const [nearbyLoading, setNearbyLoading] = useState(false)
+  const [nearbyError, setNearbyError] = useState<string | null>(null)
 
   const initialKey = initialRastplatz?.id ?? prefilled?.name ?? 'new'
 
   useEffect(() => {
-    if (!open) return
+    if (!open) {
+      setNearbyPlaces([])
+      setNearbyOrigin(null)
+      setNearbyError(null)
+      setNearbyLoading(false)
+      return
+    }
     if (initialRastplatz) {
       setForm({
         id: initialRastplatz.id,
@@ -109,6 +124,73 @@ export function RastplatzEditModal({
       setForm(createEmptyForm())
     }
   }, [open, initialKey, initialRastplatz, prefilled])
+
+  const applyNearbyPlace = (place: NearbyPlaceResult) => {
+    setForm((f) => ({
+      ...f,
+      name: place.name,
+      adresse: place.address,
+      ort: place.ort ?? f.ort,
+      land: place.land ?? f.land,
+      bundesland: place.bundesland ?? f.bundesland,
+      lat: place.lat,
+      lng: place.lng,
+      google_place_id: place.placeId,
+      kategorie: place.kategorie,
+    }))
+  }
+
+  const searchNearby = async () => {
+    if (!navigator.geolocation) {
+      setNearbyError('Standort ist auf diesem Gerät nicht verfügbar.')
+      return
+    }
+    setNearbyLoading(true)
+    setNearbyError(null)
+    try {
+      const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          enableHighAccuracy: true,
+          maximumAge: 20_000,
+          timeout: 20_000,
+        })
+      })
+      const origin = { lat: pos.coords.latitude, lng: pos.coords.longitude }
+      setNearbyOrigin(origin)
+      const res = await fetch('/api/places/nearby', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          lat: origin.lat,
+          lng: origin.lng,
+          radius: RASTPLATZ_NEARBY_RADIUS_M,
+        }),
+      })
+      const data = (await res.json()) as ApiResponse<NearbyPlaceResult[]>
+      if (!data.success) {
+        setNearbyPlaces([])
+        setNearbyError(data.error ?? 'Suche in der Nähe fehlgeschlagen.')
+        return
+      }
+      const found = data.data ?? []
+      setNearbyPlaces(found)
+      if (found.length === 0) {
+        setNearbyError('Kein Rastplatz in der Nähe gefunden. Die freie Suche bleibt nutzbar.')
+      } else if (found[0]) {
+        applyNearbyPlace(found[0])
+      }
+    } catch (error: unknown) {
+      const code = typeof error === 'object' && error && 'code' in error ? Number(error.code) : 0
+      setNearbyPlaces([])
+      setNearbyError(
+        code === 1
+          ? 'Standort verweigert. Bitte die freie Suche nutzen oder den Standort erlauben.'
+          : 'Standort oder Suche fehlgeschlagen.'
+      )
+    } finally {
+      setNearbyLoading(false)
+    }
+  }
 
   const toggleMerkmal = (id: string) => {
     setForm((f) => ({
@@ -223,6 +305,64 @@ export function RastplatzEditModal({
             }
           />
         </div>
+
+        {!initialRastplatz && (
+          <div className="space-y-2">
+            <p className="text-xs text-muted-foreground">Oder anhand des aktuellen Standorts:</p>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={nearbyLoading}
+              onClick={() => void searchNearby()}
+            >
+              <LocateFixed className="h-4 w-4 mr-1" />
+              {nearbyLoading ? 'Suche in der Nähe…' : 'In der Nähe suchen'}
+            </Button>
+            {nearbyError && <p className="text-sm text-muted-foreground">{nearbyError}</p>}
+            {nearbyPlaces.length > 0 && (
+              <div className="border rounded-md max-h-40 overflow-y-auto">
+                {nearbyPlaces.map((place, index) => {
+                  const selected = form.google_place_id
+                    ? form.google_place_id === place.placeId
+                    : form.lat === place.lat && form.lng === place.lng
+                  const distanceM =
+                    nearbyOrigin == null
+                      ? null
+                      : Math.round(
+                          haversineDistanceKm({
+                            lat1: nearbyOrigin.lat,
+                            lng1: nearbyOrigin.lng,
+                            lat2: place.lat,
+                            lng2: place.lng,
+                          }) * 1000
+                        )
+                  return (
+                    <button
+                      key={`${place.placeId ?? place.name}-${index}`}
+                      type="button"
+                      className={cn(
+                        'w-full text-left px-3 py-2 text-sm hover:bg-muted border-b last:border-b-0',
+                        selected && 'bg-muted'
+                      )}
+                      onClick={() => applyNearbyPlace(place)}
+                    >
+                      <span className="font-medium block truncate">{place.name}</span>
+                      <span className="text-xs text-muted-foreground block truncate">
+                        {distanceM != null
+                          ? distanceM < 1000
+                            ? `${distanceM} m · `
+                            : `${(distanceM / 1000).toFixed(1)} km · `
+                          : ''}
+                        {place.address}
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )}
 
         <div>
           <Label htmlFor="rp-name">Name</Label>
