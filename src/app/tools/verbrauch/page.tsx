@@ -4,10 +4,10 @@ import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'rea
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuth } from '@/components/auth-provider'
-import { NavigationSidebar } from '@/components/navigation-sidebar'
+import { PageShell } from '@/components/page-shell'
+import { PageHeader } from '@/components/page-header'
 import { Button } from '@/components/ui/button'
-import { Menu } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { BrandSpinner } from '@/components/brand-spinner'
 import type { ApiResponse } from '@/lib/api-types'
 import type { VerbrauchMedium, VerbrauchMessung, Vacation } from '@/lib/db'
 import { VerbrauchMessungSection } from '@/components/verbrauch/verbrauch-messung-section'
@@ -29,7 +29,6 @@ function VerbrauchPageContent() {
   const searchParams = useSearchParams()
   const mediumParam = searchParams.get('medium')?.trim() || ''
   const { canReadWartung, canWriteWartung, canAccessConfig, loading: authLoading } = useAuth()
-  const [showNavSidebar, setShowNavSidebar] = useState(false)
   const [medien, setMedien] = useState<VerbrauchMedium[]>([])
   const [messungen, setMessungen] = useState<VerbrauchMessung[]>([])
   const [vacations, setVacations] = useState<Vacation[]>([])
@@ -69,20 +68,6 @@ function VerbrauchPageContent() {
       router.replace('/')
     }
   }, [authLoading, canReadWartung, router])
-
-  useEffect(() => {
-    if (showNavSidebar) {
-      document.body.style.overflow = 'hidden'
-      document.documentElement.style.overflow = 'hidden'
-    } else {
-      document.body.style.overflow = ''
-      document.documentElement.style.overflow = ''
-    }
-    return () => {
-      document.body.style.overflow = ''
-      document.documentElement.style.overflow = ''
-    }
-  }, [showNavSidebar])
 
   const upsertMessung = useCallback((item: VerbrauchMessung) => {
     setMessungen((prev) => {
@@ -183,68 +168,47 @@ function VerbrauchPageContent() {
   }
 
   return (
-    <div className="min-h-screen flex max-w-full overflow-x-clip">
-      <NavigationSidebar isOpen={showNavSidebar} onClose={() => setShowNavSidebar(false)} />
+    <PageShell containerClassName="space-y-4">
+      <PageHeader title="Verbrauch" />
 
-      <div className={cn('flex-1 transition-all duration-300 min-w-0', 'lg:ml-[280px]')}>
-        <div className="container mx-auto p-4 md:p-6 space-y-4 max-w-full">
-          <div className="sticky top-0 z-30 flex items-center gap-4 bg-card shadow pb-4 -mx-4 px-4 -mt-4 pt-4 md:-mx-6 md:px-6 md:-mt-6 md:pt-6">
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => setShowNavSidebar(true)}
-              className="lg:hidden"
-            >
-              <Menu className="h-5 w-5" />
+      {loading ? (
+        <BrandSpinner label="Wird geladen…" />
+      ) : activeMedien.length === 0 ? (
+        <div className="rounded-lg border border-dashed p-8 text-center space-y-3">
+          <p className="text-muted-foreground">
+            Noch keine Verbrauch-Medien aktiv. Aktiviere sie unter Konfiguration →
+            Verbrauch-Medien.
+          </p>
+          {canAccessConfig && (
+            <Button asChild variant="outline">
+              <Link href="/verbrauch-medien">Zu Verbrauch-Medien</Link>
             </Button>
-            <h1 className="text-lg sm:text-xl font-bold tracking-tight text-brand-heading">
-              Verbrauch
-            </h1>
-          </div>
-
-          {loading ? (
-            <div className="flex flex-col items-center justify-center py-20 gap-4">
-              <div className="animate-spin rounded-full h-12 w-12 border-4 border-[rgb(45,79,30)] border-t-transparent" />
-              <p className="text-muted-foreground animate-pulse">Wird geladen…</p>
-            </div>
-          ) : activeMedien.length === 0 ? (
-            <div className="rounded-lg border border-dashed p-8 text-center space-y-3">
-              <p className="text-muted-foreground">
-                Noch keine Verbrauch-Medien aktiv. Aktiviere sie unter Konfiguration →
-                Verbrauch-Medien.
-              </p>
-              {canAccessConfig && (
-                <Button asChild variant="outline">
-                  <Link href="/verbrauch-medien">Zu Verbrauch-Medien</Link>
-                </Button>
-              )}
-            </div>
-          ) : (
-            <>
-              <VerbrauchUebersichtKarten
-                medien={activeMedien}
-                messungen={messungen}
-                activeSchluessel={activeMediumKey}
-                onSelect={selectMedium}
-              />
-
-              {activeMedium && (
-                <VerbrauchMessungSection
-                  medium={activeMedium}
-                  messungen={messungen}
-                  vacations={vacations}
-                  canAdmin={canWriteWartung}
-                  onMessungCreated={upsertMessung}
-                  onMessungUpdated={upsertMessung}
-                  onMessungDeleted={removeMessung}
-                  onRefresh={() => void load()}
-                />
-              )}
-            </>
           )}
         </div>
-      </div>
-    </div>
+      ) : (
+        <>
+          <VerbrauchUebersichtKarten
+            medien={activeMedien}
+            messungen={messungen}
+            activeSchluessel={activeMediumKey}
+            onSelect={selectMedium}
+          />
+
+          {activeMedium && (
+            <VerbrauchMessungSection
+              medium={activeMedium}
+              messungen={messungen}
+              vacations={vacations}
+              canAdmin={canWriteWartung}
+              onMessungCreated={upsertMessung}
+              onMessungUpdated={upsertMessung}
+              onMessungDeleted={removeMessung}
+              onRefresh={() => void load()}
+            />
+          )}
+        </>
+      )}
+    </PageShell>
   )
 }
 
@@ -253,7 +217,7 @@ export default function VerbrauchPage() {
     <Suspense
       fallback={
         <div className="min-h-screen flex items-center justify-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-4 border-[rgb(45,79,30)] border-t-transparent" />
+          <BrandSpinner bare />
         </div>
       }
     >

@@ -48,12 +48,12 @@ import { cn } from '@/lib/utils'
 
 /** shadcn-Checkbox, dunkelgrün, Zeilen wie „Als Standard markieren“ (h-4 w-4) */
 const EQUIPMENT_DIALOG_ROW_CHECKBOX_CLASS =
-  'h-4 w-4 shrink-0 border-[rgb(45,79,30)] data-[state=checked]:bg-[rgb(45,79,30)] data-[state=checked]:text-white data-[state=checked]:border-[rgb(45,79,30)]'
+  'h-4 w-4 shrink-0 border-primary data-[state=checked]:bg-primary data-[state=checked]:text-white data-[state=checked]:border-primary'
 
 function FormSection({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="space-y-3">
-      <h3 className="text-[11px] font-semibold uppercase tracking-wide text-[rgb(45,79,30)] dark:text-foreground">
+      <h3 className="text-[11px] font-semibold uppercase tracking-wide text-brand-heading dark:text-foreground">
         {title}
       </h3>
       {children}

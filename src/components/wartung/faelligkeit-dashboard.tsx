@@ -19,6 +19,7 @@ import {
 } from '@/lib/faelligkeit-time-groups'
 import { CheckCircle2, History, MoreVertical, Pencil, Trash2 } from 'lucide-react'
 import { BrandEmptyState } from '@/components/brand-empty-state'
+import { ListTile } from '@/components/list-tile'
 import {
   EMPTY_ILLUSTRATION_CLASS,
   MaintenanceEmptyIllustration,
@@ -64,7 +65,7 @@ function FaelligkeitCard({
   const showQuittieren = item.quittierung_erforderlich || item.sicherheitsrelevant
 
   return (
-    <div className="bg-card rounded-xl border border-subtle shadow-sm px-4 py-3 flex items-start justify-between gap-3">
+    <ListTile className="flex items-start justify-between gap-3">
       <div className="flex min-w-0 flex-1 items-start gap-3">
         <FaelligkeitStatusIndicator status={item.ampel_status ?? 'ok'} />
         <div className="min-w-0 flex-1">
@@ -150,7 +151,7 @@ function FaelligkeitCard({
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
-    </div>
+    </ListTile>
   )
 }
 

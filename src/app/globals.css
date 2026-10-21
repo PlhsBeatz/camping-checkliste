@@ -277,11 +277,25 @@ gmp-place-autocomplete::part(prediction-item) {
   }
 
   .text-brand-heading {
-    color: rgb(45, 79, 30);
+    color: hsl(var(--brand-green));
   }
 
   .dark .text-brand-heading {
     color: hsl(var(--brand-green-heading));
+  }
+
+  /* Brand fill – Active-States, FABs, Primary-Flächen (statt raw rgb(45,79,30)) */
+  .bg-brand {
+    background-color: hsl(var(--brand-green));
+  }
+
+  .bg-brand-muted {
+    background-color: hsl(var(--brand-green) / 0.1);
+  }
+
+  .nav-item-active {
+    background-color: hsl(var(--brand-green));
+    color: #fff;
   }
 
   .text-destructive {

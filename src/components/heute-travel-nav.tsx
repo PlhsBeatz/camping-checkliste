@@ -24,7 +24,7 @@ export function HeuteTravelNav({ nav }: { nav: HubTravelNav }) {
       <CardContent className="p-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-start gap-3 min-w-0">
           <span
-            className="material-icons text-xl leading-none text-[rgb(45,79,30)] mt-0.5 shrink-0"
+            className="material-icons text-xl leading-none text-brand-heading mt-0.5 shrink-0"
             aria-hidden
           >
             directions

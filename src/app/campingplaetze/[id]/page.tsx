@@ -5,10 +5,10 @@ import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { Suspense, useCallback, useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { NavigationSidebar } from '@/components/navigation-sidebar'
+import { PageShell } from '@/components/page-shell'
+import { PageHeader } from '@/components/page-header'
+import { BackLink } from '@/components/back-link'
 import {
-  ArrowLeft,
-  Menu,
   MoreVertical,
   Route,
   Globe2,
@@ -93,7 +93,6 @@ export default function CampingplatzDetailPage() {
   const id = typeof params.id === 'string' ? params.id : ''
   const router = useRouter()
   const { user, loading, canAccessConfig } = useAuth()
-  const [showNavSidebar, setShowNavSidebar] = useState(false)
   const [campingplatz, setCampingplatz] = useState<Campingplatz | null>(null)
   const [fotos, setFotos] = useState<CampingplatzFoto[]>([])
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -266,20 +265,6 @@ export default function CampingplatzDetailPage() {
     }
   }, [campingplatz?.id, campingplatz?.lat, campingplatz?.lng, user?.id])
 
-  useEffect(() => {
-    if (showNavSidebar) {
-      document.body.style.overflow = 'hidden'
-      document.documentElement.style.overflow = 'hidden'
-    } else {
-      document.body.style.overflow = ''
-      document.documentElement.style.overflow = ''
-    }
-    return () => {
-      document.body.style.overflow = ''
-      document.documentElement.style.overflow = ''
-    }
-  }, [showNavSidebar])
-
   const openInAdacMaps = async (cp: Campingplatz) => {
     if (cp.lat == null || cp.lng == null) {
       const labelFallback = `${cp.name}, ${cp.ort}, ${cp.land}`
@@ -426,7 +411,7 @@ export default function CampingplatzDetailPage() {
 
   const coverBadge = (
     <span
-      className="pointer-events-none absolute top-2 left-2 inline-flex h-5 w-5 items-center justify-center rounded bg-[rgb(45,79,30)] text-white shadow-sm"
+      className="pointer-events-none absolute top-2 left-2 inline-flex h-5 w-5 items-center justify-center rounded bg-primary text-white shadow-sm"
       aria-label="Standardbild für die Liste"
       title="Standardbild für die Liste"
     >
@@ -435,80 +420,61 @@ export default function CampingplatzDetailPage() {
   )
 
   return (
-    <div className="min-h-screen flex max-w-full overflow-x-clip">
-      <NavigationSidebar isOpen={showNavSidebar} onClose={() => setShowNavSidebar(false)} />
-
-      <div
-        className={cn(
-          'flex-1 flex flex-col min-h-0 min-w-0 transition-all duration-300',
-          'lg:ml-[280px]',
-          'max-md:h-dvh max-md:min-h-dvh'
-        )}
-      >
-        <div className="flex flex-col flex-1 min-h-0 min-w-0 container mx-auto p-4 md:p-6 space-y-6 max-w-full">
-          <div className="sticky top-0 z-10 flex items-center justify-between gap-3 bg-card shadow pb-4 -mx-4 px-4 -mt-4 pt-4 md:-mx-6 md:px-6 md:-mt-6 md:pt-6 md:pb-4">
-            <div className="flex min-w-0 flex-1 items-center gap-4">
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={() => setShowNavSidebar(true)}
-                className="lg:hidden flex-shrink-0"
-              >
-                <Menu className="h-5 w-5" />
-              </Button>
-              <div className="min-w-0">
-                <h1 className="text-xl font-bold text-brand-heading truncate">
-                  {campingplatz?.name ?? 'Campingplatz'}
-                </h1>
-                <p className="text-sm text-muted-foreground truncate">{subtitle}</p>
-              </div>
-            </div>
-            {canAccessConfig && campingplatz && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="h-9 w-9 shrink-0 rounded-full border-0 bg-transparent text-foreground shadow-none hover:bg-neutral-100 focus-visible:ring-2 focus-visible:ring-[rgb(45,79,30)]/30"
-                    aria-label="Weitere Aktionen"
-                  >
-                    <MoreVertical className="h-5 w-5" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="min-w-[10rem]">
-                  <DropdownMenuItem
-                    className="cursor-pointer gap-2"
-                    onClick={() =>
-                      router.replace(
-                        `/campingplaetze/${encodeURIComponent(id)}?bearbeiten=1`,
-                        { scroll: false }
-                      )
-                    }
-                  >
-                    <Pencil className="h-4 w-4" />
-                    Bearbeiten
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    className="cursor-pointer gap-2"
-                    disabled={checkBusy}
-                    onClick={() => void runDataCheck()}
-                  >
-                    <RefreshCw className={cn('h-4 w-4', checkBusy && 'animate-spin')} />
-                    {checkBusy ? 'Prüfe Daten…' : 'Daten prüfen'}
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    className="cursor-pointer gap-2 text-destructive focus:text-destructive"
-                    onClick={() => setDeleteTarget(campingplatz)}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                    Löschen
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
-          </div>
+    <PageShell
+      contentClassName="flex flex-col min-h-0 max-md:h-dvh max-md:min-h-dvh"
+      containerClassName="flex flex-col flex-1 min-h-0 min-w-0 space-y-6"
+    >
+      <PageHeader
+        title={campingplatz?.name ?? 'Campingplatz'}
+        subtitle={subtitle}
+        actions={
+          canAccessConfig && campingplatz ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-9 w-9 shrink-0 rounded-full border-0 bg-transparent text-foreground shadow-none hover:bg-neutral-100 focus-visible:ring-2 focus-visible:ring-primary/30"
+                  aria-label="Weitere Aktionen"
+                >
+                  <MoreVertical className="h-5 w-5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="min-w-[10rem]">
+                <DropdownMenuItem
+                  className="cursor-pointer gap-2"
+                  onClick={() =>
+                    router.replace(
+                      `/campingplaetze/${encodeURIComponent(id)}?bearbeiten=1`,
+                      { scroll: false }
+                    )
+                  }
+                >
+                  <Pencil className="h-4 w-4" />
+                  Bearbeiten
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  className="cursor-pointer gap-2"
+                  disabled={checkBusy}
+                  onClick={() => void runDataCheck()}
+                >
+                  <RefreshCw className={cn('h-4 w-4', checkBusy && 'animate-spin')} />
+                  {checkBusy ? 'Prüfe Daten…' : 'Daten prüfen'}
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  className="cursor-pointer gap-2 text-destructive focus:text-destructive"
+                  onClick={() => setDeleteTarget(campingplatz)}
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Löschen
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : null
+        }
+      />
 
           {loadError && (
             <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-sm">
@@ -522,16 +488,13 @@ export default function CampingplatzDetailPage() {
 
           {campingplatz && (
             <>
-              <div className="hidden flex-wrap gap-2 md:flex">
-                <Button variant="outline" size="sm" className="bg-card hover:bg-neutral-50" asChild>
-                  <Link
-                    href="/campingplaetze"
-                    className="inline-flex items-center gap-2 whitespace-nowrap"
-                  >
-                    <ArrowLeft className="h-4 w-4 shrink-0" />
-                    Zur Liste
-                  </Link>
-                </Button>
+              <div>
+                <BackLink
+                  href="/campingplaetze"
+                  visible="always"
+                  variant="labeled"
+                  label="Zur Liste"
+                />
               </div>
 
               <Card>
@@ -585,7 +548,7 @@ export default function CampingplatzDetailPage() {
                           <button
                             key={f.id}
                             type="button"
-                            className="relative aspect-[4/3] w-full overflow-hidden rounded-xl border bg-muted text-left outline-none ring-offset-2 transition hover:opacity-95 focus-visible:ring-2 focus-visible:ring-[rgb(45,79,30)]"
+                            className="relative aspect-[4/3] w-full overflow-hidden rounded-xl border bg-muted text-left outline-none ring-offset-2 transition hover:opacity-95 focus-visible:ring-2 focus-visible:ring-primary"
                             onClick={() => setLightboxFotoId(f.id)}
                           >
                             <Image
@@ -604,7 +567,7 @@ export default function CampingplatzDetailPage() {
                             href={campingplatz.video_link}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="relative flex aspect-[4/3] w-full flex-col items-center justify-center gap-1 overflow-hidden rounded-xl border border-input bg-muted px-2 text-center outline-none ring-offset-2 transition hover:bg-muted/90 hover:opacity-95 focus-visible:ring-2 focus-visible:ring-[rgb(45,79,30)]"
+                            className="relative flex aspect-[4/3] w-full flex-col items-center justify-center gap-1 overflow-hidden rounded-xl border border-input bg-muted px-2 text-center outline-none ring-offset-2 transition hover:bg-muted/90 hover:opacity-95 focus-visible:ring-2 focus-visible:ring-primary"
                           >
                             <PlayCircle
                               className="h-8 w-8 shrink-0 text-brand-heading sm:h-9 sm:w-9"
@@ -715,8 +678,6 @@ export default function CampingplatzDetailPage() {
               </Card>
             </>
           )}
-        </div>
-      </div>
 
       <PhotoLightbox
         fotos={fotos}
@@ -757,6 +718,6 @@ export default function CampingplatzDetailPage() {
         onConfirm={executeArchive}
         isLoading={deleteBusy}
       />
-    </div>
+    </PageShell>
   )
 }

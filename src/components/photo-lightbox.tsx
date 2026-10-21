@@ -227,7 +227,7 @@ export function PhotoLightbox({
           >
             <button
               type="button"
-              className="absolute right-4 top-4 z-[60] flex h-10 w-10 items-center justify-center rounded-md bg-[rgb(45,79,30)] text-white shadow-md outline-none ring-offset-2 ring-offset-black/90 transition-opacity hover:opacity-95 focus-visible:ring-2 focus-visible:ring-white/70"
+              className="absolute right-4 top-4 z-[60] flex h-10 w-10 items-center justify-center rounded-md bg-primary text-white shadow-md outline-none ring-offset-2 ring-offset-black/90 transition-opacity hover:opacity-95 focus-visible:ring-2 focus-visible:ring-white/70"
               aria-label="Schließen"
               onClick={(e) => {
                 e.stopPropagation()

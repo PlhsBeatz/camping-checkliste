@@ -32,19 +32,19 @@ export function ConfigMobileSectionPicker() {
         onClick={() => setOpen(true)}
         className={cn(
           'w-full flex items-center gap-3 rounded-xl border border-subtle',
-          'bg-muted/40 px-4 py-3 text-left transition-colors active:bg-muted'
+          'bg-card px-4 py-3 text-left shadow-sm transition-colors active:bg-muted'
         )}
         aria-haspopup="dialog"
         aria-expanded={open}
       >
         <span
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[rgb(45,79,30)]/10 text-brand-heading"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-brand-muted text-brand-heading"
           aria-hidden
         >
           <LayoutGrid className="h-5 w-5" />
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block text-xs text-muted-foreground">Aktueller Bereich</span>
+          <span className="block text-xs text-muted-foreground">Bereich wechseln</span>
           <span className="block font-semibold text-brand-heading truncate">
             {activeItem.label}
           </span>
@@ -59,7 +59,7 @@ export function ConfigMobileSectionPicker() {
             <DrawerDescription>Bereich wechseln</DrawerDescription>
           </DrawerHeader>
           <div className="overflow-y-auto px-4 pb-8 pt-1">
-            <ConfigSubnav variant="mobile" onNavigate={() => setOpen(false)} />
+            <ConfigSubnav variant="grouped" onNavigate={() => setOpen(false)} />
           </div>
         </DrawerContent>
       </Drawer>

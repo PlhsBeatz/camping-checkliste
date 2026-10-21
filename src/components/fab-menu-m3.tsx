@@ -74,10 +74,10 @@ export function FabMenuM3({ open, onOpenChange, actions, ariaLabel, className }:
           className={cn(
             'pointer-events-auto flex h-14 min-h-14 w-14 min-w-14 items-center justify-center rounded-full text-white',
             'shadow-[0_4px_8px_3px_rgba(0,0,0,0.15),0_1px_3px_rgba(0,0,0,0.3)]',
-            'bg-[rgb(45,79,30)] transition-[box-shadow,transform] duration-200 ease-out',
+            'bg-primary transition-[box-shadow,transform] duration-200 ease-out',
             'hover:shadow-[0_6px_10px_4px_rgba(0,0,0,0.15),0_2px_3px_rgba(0,0,0,0.3)]',
             'active:scale-[0.96] active:shadow-[0_2px_6px_2px_rgba(0,0,0,0.15),0_1px_2px_rgba(0,0,0,0.3)]',
-            'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[rgb(45,79,30)]'
+            'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary'
           )}
         >
           {open ? (
@@ -125,7 +125,7 @@ export function FabMenuM3({ open, onOpenChange, actions, ariaLabel, className }:
                     'transition-[box-shadow,transform,background-color] duration-200 ease-out',
                     'hover:bg-neutral-50 dark:hover:bg-muted hover:shadow-[0_4px_8px_3px_rgba(0,0,0,0.12)]',
                     'active:scale-[0.98]',
-                    'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[rgb(45,79,30)]',
+                    'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary',
                     'disabled:pointer-events-none disabled:opacity-[0.38]'
                   )}
                 >
@@ -138,7 +138,7 @@ export function FabMenuM3({ open, onOpenChange, actions, ariaLabel, className }:
                     {action.label}
                   </span>
                   <span
-                    className="flex w-10 min-w-10 shrink-0 items-center justify-center border-l border-black/[0.06] dark:border-white/10 bg-[rgb(45,79,30)]/[0.08] dark:bg-[rgb(45,79,30)]/20 text-brand-heading"
+                    className="flex w-10 min-w-10 shrink-0 items-center justify-center border-l border-black/[0.06] dark:border-white/10 bg-primary/10 text-brand-heading"
                     aria-hidden
                   >
                     <span className="flex h-6 w-6 items-center justify-center [&>svg]:h-[22px] [&>svg]:w-[22px]">

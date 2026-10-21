@@ -143,7 +143,7 @@ export function FaelligkeitZuordnungDialog({
                 <div className="space-y-4 p-2">
                   {grouped.map((main) => (
                     <div key={main.mainCategoryId}>
-                      <div className="rounded-t-md bg-[rgb(45,79,30)] px-3 py-1.5 text-sm font-semibold text-white">
+                      <div className="rounded-t-md bg-primary px-3 py-1.5 text-sm font-semibold text-white">
                         {main.mainName}
                       </div>
                       {main.categories.map((cat) => (

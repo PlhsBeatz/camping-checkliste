@@ -1,11 +1,14 @@
 'use client'
 import { useAuth } from '@/components/auth-provider'
 import { Button } from '@/components/ui/button'
-import { NavigationSidebar } from '@/components/navigation-sidebar'
+import { PageShell } from '@/components/page-shell'
+import { PageHeader } from '@/components/page-header'
 import { EquipmentTable } from '@/components/equipment-table'
 import { EquipmentItemFormFields } from '@/components/equipment/equipment-item-form-fields'
 import { EquipmentAddDialog } from '@/components/equipment/equipment-add-dialog'
-import { Plus, Menu, MoreVertical, Trash2 } from 'lucide-react'
+import { MoreVertical, Trash2 } from 'lucide-react'
+import { BrandFab } from '@/components/brand-fab'
+import { BrandSpinner } from '@/components/brand-spinner'
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { EquipmentItem, Category, MainCategory, TransportVehicle, Tag, TagKategorie, Mitreisender, Faelligkeit } from '@/lib/db'
@@ -24,7 +27,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { type CategorySelectScrollTarget } from '@/components/category-select-grouped'
-import { cn, formatWeightForDisplay } from '@/lib/utils'
+import { formatWeightForDisplay } from '@/lib/utils'
 import {
   buildEquipmentApiPayload,
   equipmentItemFromFormValues,
@@ -82,7 +85,6 @@ export default function AusruestungPage() {
   const { canAccessConfig, canReadWartung, canWriteWartung } = useAuth()
   const canEditEquipment = canAccessConfig
   const { mutate } = useOptimisticMutation()
-  const [showNavSidebar, setShowNavSidebar] = useState(false)
   const [equipmentItems, setEquipmentItems] = useState<EquipmentItem[]>([])
   const [categories, setCategories] = useState<CategoryWithMain[]>([])
   const [mainCategories, setMainCategories] = useState<MainCategory[]>([])
@@ -153,21 +155,6 @@ export default function AusruestungPage() {
       prev.kategorie_id ? prev : { ...prev, kategorie_id: addCategorySuggestion.kategorie_id }
     )
   }, [showAddDialog, addCategorySuggestion, formData.kategorie_id])
-
-  // Sidebar offen: Body-Scroll sperren
-  useEffect(() => {
-    if (showNavSidebar) {
-      document.body.style.overflow = 'hidden'
-      document.documentElement.style.overflow = 'hidden'
-    } else {
-      document.body.style.overflow = ''
-      document.documentElement.style.overflow = ''
-    }
-    return () => {
-      document.body.style.overflow = ''
-      document.documentElement.style.overflow = ''
-    }
-  }, [showNavSidebar])
 
   // Fetch Equipment Items
   useEffect(() => {
@@ -729,124 +716,86 @@ export default function AusruestungPage() {
     ? groupsForGegenstand(alternativeGroups, editingItem.id)
     : []
 
+  const headerActions = (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="h-9 w-9 shrink-0 rounded-full border-0 bg-transparent text-foreground shadow-none hover:bg-neutral-100 focus-visible:ring-2 focus-visible:ring-primary/30"
+          aria-label="Weitere Aktionen"
+        >
+          <MoreVertical className="h-5 w-5" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="z-40 min-w-[10rem]">
+        <DropdownMenuItem
+          className="cursor-pointer"
+          onSelect={() => {
+            setShowAlternativeGroupsDialog(true)
+            void loadAlternativeGroups()
+          }}
+        >
+          Entweder-oder-Gruppen
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+
   return (
-    <div className="min-h-screen flex max-w-full overflow-x-clip">
-      {/* Navigation Sidebar */}
-      <NavigationSidebar
-        isOpen={showNavSidebar}
-        onClose={() => setShowNavSidebar(false)}
-      />
+    <PageShell
+      contentClassName="flex flex-col min-h-0 h-dvh"
+      containerClassName="flex flex-col flex-1 min-h-0 min-w-0"
+    >
+      <PageHeader title="Ausrüstung" actions={headerActions} />
 
-      {/* Main Content Area - Flex-Layout: dynamische Höhe bis zum unteren Rand.
-          h-dvh auf allen Bildschirmgrößen, damit der interne Tabellen-Scroll-Container greift
-          und Sticky-Header funktionieren (statt Page-Scroll). */}
-      <div className={cn(
-        "flex-1 flex flex-col min-h-0 min-w-0 transition-all duration-300",
-        "lg:ml-[280px]",
-        "h-dvh min-h-dvh"
-      )}>
-        <div className="flex flex-col flex-1 min-h-0 min-w-0 container mx-auto p-4 md:p-6 max-w-full">
-          {/* Header - Sticky */}
-          <div className="sticky top-0 z-[30] flex-shrink-0 flex items-center justify-between bg-card shadow pb-4 -mx-4 px-4 -mt-4 pt-4 md:-mx-6 md:px-6 md:-mt-6 md:pt-6">
-            <div className="flex items-center gap-4">
-              {/* Mobile Menu Toggle */}
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={() => setShowNavSidebar(true)}
-                className="lg:hidden"
-              >
-                <Menu className="h-5 w-5" />
-              </Button>
-              
-              <div>
-                <h1 className="text-lg sm:text-xl font-bold tracking-tight text-brand-heading">
-                  Ausrüstung
-                </h1>
-              </div>
-            </div>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="h-9 w-9 shrink-0 rounded-full border-0 bg-transparent text-foreground shadow-none hover:bg-neutral-100 focus-visible:ring-2 focus-visible:ring-[rgb(45,79,30)]/30"
-                  aria-label="Weitere Aktionen"
-                >
-                  <MoreVertical className="h-5 w-5" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="z-40 min-w-[10rem]">
-                <DropdownMenuItem
-                  className="cursor-pointer"
-                  onSelect={() => {
-                    setShowAlternativeGroupsDialog(true)
-                    void loadAlternativeGroups()
-                  }}
-                >
-                  Entweder-oder-Gruppen
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-
-          {/* Equipment Table - füllt verfügbaren Platz, horizontales Scrollen in der Tabelle */}
-          <div className="flex-1 min-h-0 min-w-0 mt-4 md:mt-6 overflow-hidden">
-              {isLoading ? (
-                <div className="flex flex-col items-center justify-center py-20 gap-4">
-                  <div className="animate-spin rounded-full h-12 w-12 border-4 border-[rgb(45,79,30)] border-t-transparent"></div>
-                  <p className="text-muted-foreground animate-pulse">Ausrüstung wird geladen...</p>
-                </div>
-              ) : (
-                <EquipmentTable
-                  equipmentItems={equipmentItems}
-                  categories={categories}
-                  mainCategories={mainCategories}
-                  transportVehicles={transportVehicles}
-                  tags={tags}
-                  onEdit={handleEditEquipment}
-                  onDelete={handleDeleteEquipment}
-                  onReplace={canEditEquipment ? handleReplaceEquipment : undefined}
-                  onAddFaelligkeit={
-                    canWriteWartung
-                      ? (item) => {
-                          const faelligkeitId = faelligkeitIdMap.get(item.id)
-                          if (faelligkeitId) {
-                            router.push(
-                              `/tools/wartung?bearbeiten=${encodeURIComponent(faelligkeitId)}`
-                            )
-                          } else {
-                            router.push(
-                              `/tools/wartung?neu=1&equipment=${encodeURIComponent(item.id)}`
-                            )
-                          }
-                        }
-                      : undefined
+      {/* Equipment Table - füllt verfügbaren Platz, horizontales Scrollen in der Tabelle */}
+      <div className="flex-1 min-h-0 min-w-0 mt-4 md:mt-6 overflow-hidden">
+        {isLoading ? (
+          <BrandSpinner label="Ausrüstung wird geladen..." />
+        ) : (
+          <EquipmentTable
+            equipmentItems={equipmentItems}
+            categories={categories}
+            mainCategories={mainCategories}
+            transportVehicles={transportVehicles}
+            tags={tags}
+            onEdit={handleEditEquipment}
+            onDelete={handleDeleteEquipment}
+            onReplace={canEditEquipment ? handleReplaceEquipment : undefined}
+            onAddFaelligkeit={
+              canWriteWartung
+                ? (item) => {
+                    const faelligkeitId = faelligkeitIdMap.get(item.id)
+                    if (faelligkeitId) {
+                      router.push(
+                        `/tools/wartung?bearbeiten=${encodeURIComponent(faelligkeitId)}`
+                      )
+                    } else {
+                      router.push(
+                        `/tools/wartung?neu=1&equipment=${encodeURIComponent(item.id)}`
+                      )
+                    }
                   }
-                  onVisibleSectionChange={handleEquipmentVisibleSection}
-                  readOnly={!canEditEquipment}
-                  dynamicHeight
-                  faelligkeitAmpelByEquipmentId={canReadWartung ? faelligkeitAmpelMap : undefined}
-                  faelligkeitIdByEquipmentId={canReadWartung ? faelligkeitIdMap : undefined}
-                />
-              )}
-          </div>
-
-          {/* FAB: Neuer Gegenstand – nur für Admin */}
-          {canEditEquipment && (
-          <div className="fixed bottom-6 right-6 z-30">
-            <Button
-              size="icon"
-              onClick={handleAddEquipment}
-              className="h-14 w-14 rounded-full shadow-lg hover:shadow-xl transition-shadow bg-[rgb(45,79,30)] hover:bg-[rgb(45,79,30)]/90 text-white aspect-square p-0"
-            >
-              <Plus className="h-6 w-6" strokeWidth={2.5} />
-            </Button>
-          </div>
-          )}
-        </div>
+                : undefined
+            }
+            onVisibleSectionChange={handleEquipmentVisibleSection}
+            readOnly={!canEditEquipment}
+            dynamicHeight
+            faelligkeitAmpelByEquipmentId={canReadWartung ? faelligkeitAmpelMap : undefined}
+            faelligkeitIdByEquipmentId={canReadWartung ? faelligkeitIdMap : undefined}
+          />
+        )}
       </div>
+
+      {/* FAB: Neuer Gegenstand – nur für Admin */}
+      {canEditEquipment && (
+        <BrandFab
+          onClick={handleAddEquipment}
+          aria-label="Gegenstand hinzufügen"
+        />
+      )}
 
       <EquipmentAddDialog
         open={showAddDialog}
@@ -1115,6 +1064,6 @@ export default function AusruestungPage() {
           }
         }}
       />
-    </div>
+    </PageShell>
   )
 }

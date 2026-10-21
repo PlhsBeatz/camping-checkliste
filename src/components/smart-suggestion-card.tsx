@@ -94,7 +94,7 @@ export function SmartSuggestionCard({
         )}
 
         {vacationName && (
-          <div className="rounded-lg border border-[rgb(45,79,30)]/20 bg-[rgb(237,242,233)] dark:bg-[rgb(38,48,34)] px-3 py-2">
+          <div className="rounded-lg border border-primary/20 bg-[rgb(237,242,233)] dark:bg-[rgb(38,48,34)] px-3 py-2">
             <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Packliste</p>
             <p className="text-sm font-medium text-brand-heading">{vacationName}</p>
           </div>
@@ -125,13 +125,13 @@ export function SmartSuggestionCard({
                       className={cn(
                         'relative flex items-start gap-2 sm:gap-3 rounded-[10px] border px-3 py-2.5 cursor-pointer select-none transition-colors min-w-0 max-w-full',
                         selected
-                          ? 'border-[rgb(45,79,30)]/40 bg-[rgb(237,242,233)] dark:bg-[rgb(38,48,34)]'
+                          ? 'border-primary/40 bg-[rgb(237,242,233)] dark:bg-[rgb(38,48,34)]'
                           : 'border-subtle dark:border-white/10 bg-card hover:shadow-md'
                       )}
                     >
                       {selected && (
                         <span
-                          className="pointer-events-none absolute inset-y-0 left-0 w-1 rounded-l-[10px] bg-[rgb(45,79,30)]"
+                          className="pointer-events-none absolute inset-y-0 left-0 w-1 rounded-l-[10px] bg-primary"
                           aria-hidden
                         />
                       )}
@@ -139,15 +139,15 @@ export function SmartSuggestionCard({
                         className={cn(
                           'mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2',
                           selected
-                            ? 'border-[rgb(45,79,30)] bg-[rgb(45,79,30)] text-white'
-                            : 'border-[rgb(45,79,30)]/45 bg-card'
+                            ? 'border-primary bg-primary text-white'
+                            : 'border-primary/45 bg-card'
                         )}
                         aria-hidden
                       >
                         {selected ? (
                           <Check className="h-3.5 w-3.5" strokeWidth={3} />
                         ) : (
-                          <span className="h-2 w-2 rounded-full bg-[rgb(45,79,30)]/30" />
+                          <span className="h-2 w-2 rounded-full bg-primary/30" />
                         )}
                       </span>
                       <div className="min-w-0 flex-1 overflow-hidden">

@@ -541,7 +541,7 @@ export function AddSingleItemDialog({
           <Button
             onClick={handleSubmit}
             disabled={isSaving}
-            className="flex-1 bg-[rgb(45,79,30)] hover:bg-[rgb(45,79,30)]/90"
+            className="flex-1 bg-primary hover:bg-primary/90"
           >
             {isSaving ? 'Speichert...' : 'Speichern'}
           </Button>

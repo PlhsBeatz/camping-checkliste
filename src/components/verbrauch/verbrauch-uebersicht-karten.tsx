@@ -76,8 +76,8 @@ function UebersichtKarte({
       onClick={onSelect}
       className={cn(
         'relative overflow-hidden rounded-lg border bg-card text-left shadow-sm transition-colors',
-        'hover:border-[rgb(45,79,30)]/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(45,79,30)]/40',
-        selected && 'border-[rgb(45,79,30)] ring-1 ring-[rgb(45,79,30)]/30'
+        'hover:border-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
+        selected && 'border-primary ring-1 ring-primary/30'
       )}
     >
       {hasSpark && (

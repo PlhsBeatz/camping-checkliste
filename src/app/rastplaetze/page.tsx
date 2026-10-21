@@ -2,8 +2,11 @@
 
 import { useAuth } from '@/components/auth-provider'
 import { Button } from '@/components/ui/button'
-import { NavigationSidebar } from '@/components/navigation-sidebar'
-import { Plus, Menu, MoreVertical, Download } from 'lucide-react'
+import { PageShell } from '@/components/page-shell'
+import { PageHeader } from '@/components/page-header'
+import { BrandFab } from '@/components/brand-fab'
+import { BrandSpinner } from '@/components/brand-spinner'
+import { MoreVertical, Download } from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -13,7 +16,6 @@ import {
 import { useEffect, useMemo, useState } from 'react'
 import type { ApiResponse } from '@/lib/api-types'
 import { Rastplatz } from '@/lib/db'
-import { cn } from '@/lib/utils'
 import { RastplaetzeTable } from '@/components/rastplaetze-table'
 import { RastplaetzeMap } from '@/components/rastplaetze-map'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
@@ -31,7 +33,6 @@ import {
 
 export default function RastplaetzePage() {
   const { canAccessConfig } = useAuth()
-  const [showNavSidebar, setShowNavSidebar] = useState(false)
   const [items, setItems] = useState<Rastplatz[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [showDialog, setShowDialog] = useState(false)
@@ -44,20 +45,6 @@ export default function RastplaetzePage() {
     () => filterRastplaetze(items, listFilter),
     [items, listFilter]
   )
-
-  useEffect(() => {
-    if (showNavSidebar) {
-      document.body.style.overflow = 'hidden'
-      document.documentElement.style.overflow = 'hidden'
-    } else {
-      document.body.style.overflow = ''
-      document.documentElement.style.overflow = ''
-    }
-    return () => {
-      document.body.style.overflow = ''
-      document.documentElement.style.overflow = ''
-    }
-  }, [showNavSidebar])
 
   const load = async () => {
     try {
@@ -176,86 +163,55 @@ export default function RastplaetzePage() {
   }
 
   return (
-    <div className="min-h-screen flex max-w-full overflow-x-clip">
-      <NavigationSidebar isOpen={showNavSidebar} onClose={() => setShowNavSidebar(false)} />
-
-      <div className={cn('flex-1 transition-all duration-300 min-w-0', 'lg:ml-[280px]')}>
-        <div className="container mx-auto p-4 md:p-6 space-y-6 max-w-full">
-          <div className="sticky top-0 z-30 flex items-center justify-between gap-3 bg-card shadow pb-4 -mx-4 px-4 -mt-4 pt-4 md:-mx-6 md:px-6 md:-mt-6 md:pt-6 md:pb-4">
-            <div className="flex items-center gap-4 min-w-0">
+    <PageShell containerClassName="space-y-6">
+      <PageHeader
+        title="Rastplätze"
+        actions={
+          <DropdownMenu modal={false}>
+            <DropdownMenuTrigger asChild>
               <Button
-                variant="outline"
+                type="button"
+                variant="ghost"
                 size="icon"
-                onClick={() => setShowNavSidebar(true)}
-                className="lg:hidden shrink-0"
+                  className="h-9 w-9 shrink-0 rounded-full border-0 bg-transparent text-foreground shadow-none hover:bg-neutral-100 focus-visible:ring-2 focus-visible:ring-primary/30"
+                aria-label="Weitere Aktionen"
               >
-                <Menu className="h-5 w-5" />
+                <MoreVertical className="h-5 w-5" />
               </Button>
-              <div className="min-w-0">
-                <h1 className="text-lg sm:text-xl font-bold tracking-tight text-brand-heading">
-                  Rastplätze
-                </h1>
-              </div>
-            </div>
-            <DropdownMenu modal={false}>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="h-9 w-9 shrink-0 rounded-full border-0 bg-transparent text-foreground shadow-none hover:bg-neutral-100 focus-visible:ring-2 focus-visible:ring-[rgb(45,79,30)]/30"
-                  aria-label="Weitere Aktionen"
-                >
-                  <MoreVertical className="h-5 w-5" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="z-40 min-w-[10rem]">
-                <DropdownMenuItem
-                  className="cursor-pointer gap-2"
-                  onSelect={handleExportGpx}
-                >
-                  <Download className="h-4 w-4 shrink-0" />
-                  GPX exportieren (Empfehlungen)
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-
-          {isLoading ? (
-            <div className="flex flex-col items-center justify-center py-20 gap-4">
-              <div className="animate-spin rounded-full h-12 w-12 border-4 border-[rgb(45,79,30)] border-t-transparent" />
-              <p className="text-muted-foreground animate-pulse">
-                Rastplätze werden geladen...
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-4 min-w-0">
-              <RastplaetzeMap items={filteredItems} home={home} />
-              <RastplaetzeTable
-                items={filteredItems}
-                filter={listFilter}
-                onFilterChange={(patch) =>
-                  setListFilter((prev) => ({ ...prev, ...patch }))
-                }
-                onEdit={canAccessConfig ? handleEdit : () => {}}
-                onDelete={canAccessConfig ? handleDelete : () => {}}
-              />
-            </div>
-          )}
-
-          {canAccessConfig && (
-            <div className="fixed bottom-6 right-6 z-30">
-              <Button
-                size="icon"
-                onClick={handleAdd}
-                className="h-14 w-14 rounded-full shadow-lg hover:shadow-xl transition-shadow bg-[rgb(45,79,30)] hover:bg-[rgb(45,79,30)]/90 text-white aspect-square p-0"
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="z-40 min-w-[10rem]">
+              <DropdownMenuItem
+                className="cursor-pointer gap-2"
+                onSelect={handleExportGpx}
               >
-                <Plus className="h-6 w-6" strokeWidth={2.5} />
-              </Button>
-            </div>
-          )}
+                <Download className="h-4 w-4 shrink-0" />
+                GPX exportieren (Empfehlungen)
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        }
+      />
+
+      {isLoading ? (
+        <BrandSpinner label="Rastplätze werden geladen..." />
+      ) : (
+        <div className="space-y-4 min-w-0">
+          <RastplaetzeMap items={filteredItems} home={home} />
+          <RastplaetzeTable
+            items={filteredItems}
+            filter={listFilter}
+            onFilterChange={(patch) =>
+              setListFilter((prev) => ({ ...prev, ...patch }))
+            }
+            onEdit={canAccessConfig ? handleEdit : () => {}}
+            onDelete={canAccessConfig ? handleDelete : () => {}}
+          />
         </div>
-      </div>
+      )}
+
+      {canAccessConfig && (
+        <BrandFab onClick={handleAdd} aria-label="Rastplatz hinzufügen" />
+      )}
 
       {canAccessConfig && (
         <RastplatzEditModal
@@ -287,6 +243,6 @@ export default function RastplaetzePage() {
         onConfirm={() => void executeDelete()}
         isLoading={isLoading}
       />
-    </div>
+    </PageShell>
   )
 }

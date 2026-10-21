@@ -460,7 +460,7 @@ export function OptimierungEditDialog({
                       className={cn(
                         'rounded-full border px-3 py-1.5 text-xs font-medium transition-colors',
                         selected
-                          ? 'border-[rgb(45,79,30)] bg-[rgb(45,79,30)] text-white'
+                          ? 'border-primary bg-primary text-white'
                           : 'border-input bg-background text-muted-foreground hover:text-foreground hover:bg-muted/60'
                       )}
                     >

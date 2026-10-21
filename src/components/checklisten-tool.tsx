@@ -27,6 +27,8 @@ import { Input } from '@/components/ui/input'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { BrandEmptyState } from '@/components/brand-empty-state'
+import { ListTile } from '@/components/list-tile'
+import { BrandFab } from '@/components/brand-fab'
 import {
   ChecklistEmptyIllustration,
   EMPTY_ILLUSTRATION_CLASS,
@@ -88,7 +90,7 @@ function truncateForUndoToast(s: string, maxLen: number): string {
 
 /** Checkbox wie in der Packliste (Pauschal / normales Abhaken) */
 const CHECKLIST_RUNNER_CHECKBOX_CLASS =
-  'h-6 w-6 min-h-6 min-w-6 rounded-md border-2 border-gray-300 data-[state=checked]:bg-[rgb(45,79,30)] data-[state=checked]:border-[rgb(45,79,30)]'
+  'h-6 w-6 min-h-6 min-w-6 rounded-md border-2 border-gray-300 data-[state=checked]:bg-primary data-[state=checked]:border-primary'
 
 function ChecklisteRunnerEintrag({
   entry,
@@ -163,9 +165,9 @@ function ChecklisteRunnerEintrag({
   }
 
   return (
-    <div
+    <ListTile
       className={cn(
-        'mb-2 py-2 px-3 bg-card rounded-xl border border-subtle shadow-sm overflow-hidden transition-all duration-200',
+        'mb-2 py-2 px-3 overflow-hidden transition-all duration-200',
         tickAnim && 'animate-checklist-row-tick',
         isExiting && 'animate-pack-item-out',
         !isExiting && (entry.erledigt ? 'opacity-60' : 'hover:shadow-md')
@@ -190,7 +192,7 @@ function ChecklisteRunnerEintrag({
           {entry.text}
         </label>
       </div>
-    </div>
+    </ListTile>
   )
 }
 
@@ -265,7 +267,7 @@ function SortableChecklistCard({
   return (
     <div ref={setNodeRef} style={style}>
       <Card
-        className="cursor-pointer hover:border-[rgb(45,79,30)]/40 transition-colors"
+        className="cursor-pointer hover:border-primary/40 transition-colors"
         onClick={() => onOpen()}
       >
         <CardHeader className="flex flex-row items-center gap-2 space-y-0 p-3">
@@ -303,7 +305,7 @@ function CategoryDropZone({ kategorieId, children }: { kategorieId: string; chil
   return (
     <div
       ref={setNodeRef}
-      className={cn('rounded-md min-h-[48px] transition-colors', isOver && 'bg-[rgb(45,79,30)]/5')}
+      className={cn('rounded-md min-h-[48px] transition-colors', isOver && 'bg-primary/5')}
     >
       {children}
     </div>
@@ -1017,7 +1019,7 @@ export function ChecklistenTool({ onHeaderContextChange, headerTrailingRef }: Ch
               type="button"
               variant="ghost"
               size="icon"
-              className="h-9 w-9 shrink-0 rounded-full border-0 bg-transparent text-foreground shadow-none hover:bg-neutral-100 focus-visible:ring-2 focus-visible:ring-[rgb(45,79,30)]/30"
+              className="h-9 w-9 shrink-0 rounded-full border-0 bg-transparent text-foreground shadow-none hover:bg-neutral-100 focus-visible:ring-2 focus-visible:ring-primary/30"
               aria-label="Weitere Aktionen"
             >
               <MoreVertical className="h-5 w-5" />
@@ -1361,7 +1363,7 @@ export function ChecklistenTool({ onHeaderContextChange, headerTrailingRef }: Ch
           {sortedLists.map(c => (
             <div key={c.id}>
               <Card
-                className="cursor-pointer hover:border-[rgb(45,79,30)]/40 transition-colors"
+                className="cursor-pointer hover:border-primary/40 transition-colors"
                 onClick={() => openChecklist(c.id)}
               >
                 <CardHeader className="flex flex-row items-center gap-2 space-y-0 p-3">
@@ -1428,17 +1430,10 @@ export function ChecklistenTool({ onHeaderContextChange, headerTrailingRef }: Ch
       </ResponsiveModal>
 
       {canAccessConfig && (
-        <div className="fixed bottom-6 right-6 z-30">
-          <Button
-            type="button"
-            size="icon"
-            onClick={() => setNewListOpen(true)}
-            className="h-14 w-14 rounded-full shadow-lg hover:shadow-xl transition-shadow bg-[rgb(45,79,30)] hover:bg-[rgb(45,79,30)]/90 text-white aspect-square p-0"
-            aria-label="Neue Checkliste"
-          >
-            <Plus className="h-6 w-6" strokeWidth={2.5} />
-          </Button>
-        </div>
+        <BrandFab
+          onClick={() => setNewListOpen(true)}
+          aria-label="Neue Checkliste"
+        />
       )}
     </div>
   )

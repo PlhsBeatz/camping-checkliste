@@ -5,6 +5,7 @@ import type { Rastplatz } from '@/lib/db'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { BrandEmptyState } from '@/components/brand-empty-state'
+import { ListTile } from '@/components/list-tile'
 import {
   EMPTY_ILLUSTRATION_CLASS,
   PlaceEmptyIllustration,
@@ -101,9 +102,9 @@ export function RastplaetzeTable({
 
       <div className="space-y-2">
         {items.map((r) => (
-          <div
+          <ListTile
             key={r.id}
-            className="bg-card rounded-xl border border-subtle shadow-sm px-4 py-3 flex gap-3 items-start"
+            className="flex gap-3 items-start"
           >
             <div className="mt-0.5 shrink-0">
               {r.bewertung === 'empfehlung' ? (
@@ -184,7 +185,7 @@ export function RastplaetzeTable({
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
-          </div>
+          </ListTile>
         ))}
         {items.length === 0 && (
           <BrandEmptyState

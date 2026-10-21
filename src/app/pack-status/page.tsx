@@ -4,8 +4,9 @@ import { useState, useEffect, useCallback, useRef, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { NavigationSidebar } from '@/components/navigation-sidebar'
-import { Menu, Scale, Package, TrendingUp, AlertTriangle, ChevronDown, ChevronUp, Loader2 } from 'lucide-react'
+import { PageShell } from '@/components/page-shell'
+import { PageHeader } from '@/components/page-header'
+import { Scale, Package, TrendingUp, AlertTriangle, ChevronDown, ChevronUp, Loader2 } from 'lucide-react'
 import { Progress } from '@/components/ui/progress'
 import { formatWeight, parseWeightInput } from '@/lib/utils'
 import { Vacation } from '@/lib/db'
@@ -55,28 +56,12 @@ function PackStatusContent() {
   const searchParams = useSearchParams()
   const urlVacationId = searchParams.get('vacation')
 
-  const [showNavSidebar, setShowNavSidebar] = useState(false)
   const [vacations, setVacations] = useState<Vacation[]>([])
   const [selectedVacationId, setSelectedVacationId] = useState<string | null>(null)
   const [packStatus, setPackStatus] = useState<PackStatusData | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const lastPackStatusFetchAtRef = useRef(0)
-
-  // Sidebar offen: Body-Scroll sperren
-  useEffect(() => {
-    if (showNavSidebar) {
-      document.body.style.overflow = 'hidden'
-      document.documentElement.style.overflow = 'hidden'
-    } else {
-      document.body.style.overflow = ''
-      document.documentElement.style.overflow = ''
-    }
-    return () => {
-      document.body.style.overflow = ''
-      document.documentElement.style.overflow = ''
-    }
-  }, [showNavSidebar])
 
   useEffect(() => {
     const fetchVacations = async () => {
@@ -207,31 +192,13 @@ function PackStatusContent() {
   const currentVacation = vacations.find((v) => v.id === selectedVacationId)
 
   return (
-    <div className="min-h-screen flex max-w-full overflow-x-clip">
-      <NavigationSidebar isOpen={showNavSidebar} onClose={() => setShowNavSidebar(false)} />
-
-      <div className="flex-1 transition-all duration-300 min-w-0 lg:ml-[280px]">
-        <PullToRefreshWrapper onRefresh={fetchPackStatus} disabled={showNavSidebar}>
-        <div className="container mx-auto p-4 md:p-6 space-y-6 max-w-full">
-          {/* Header - Sticky, gleiche Größe wie andere Seiten */}
-          <div className="sticky top-0 z-10 flex items-center justify-between bg-card shadow pb-4 -mx-4 px-4 -mt-4 pt-4 md:-mx-6 md:px-6 md:-mt-6 md:pt-6 md:pb-4">
-            <div className="flex items-center gap-4">
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => setShowNavSidebar(true)}
-              className="lg:hidden flex-shrink-0"
-            >
-              <Menu className="h-5 w-5" />
-            </Button>
-            <div className="min-w-0">
-              <h1 className="text-xl font-bold text-brand-heading">Pack-Status</h1>
-              <p className="text-sm text-muted-foreground truncate">
-                {currentVacation?.titel ?? '—'}
-              </p>
-            </div>
-          </div>
-          </div>
+    <PageShell containerClassName="space-y-6">
+      <PullToRefreshWrapper onRefresh={fetchPackStatus}>
+        <div className="space-y-6">
+          <PageHeader
+            title="Pack-Status"
+            subtitle={currentVacation?.titel ?? '—'}
+          />
 
           {!selectedVacationId && (
             <Card>
@@ -340,9 +307,8 @@ function PackStatusContent() {
             </div>
           )}
         </div>
-        </PullToRefreshWrapper>
-      </div>
-    </div>
+      </PullToRefreshWrapper>
+    </PageShell>
   )
 }
 
@@ -400,7 +366,7 @@ function TransportWeightCard({
     },
     {
       key: 'beladung',
-      dotClass: 'bg-[rgb(45,79,30)]/80',
+      dotClass: 'bg-primary/80',
       label: 'Beladung',
       value: formatWeight(beladung, 0),
     },
@@ -458,7 +424,7 @@ function TransportWeightCard({
           )}
           {beladPct > 0 && (
             <div
-              className="bg-[rgb(45,79,30)]/80 min-w-0 transition-all"
+              className="bg-primary/80 min-w-0 transition-all"
               style={{ width: `${beladPct}%` }}
               title="Beladung"
             />
@@ -787,7 +753,7 @@ export default function PackStatusPage() {
       fallback={
         <div className="min-h-screen bg-scroll-pattern flex items-center justify-center">
           <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[rgb(45,79,30)] mx-auto mb-4" />
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4" />
             <p className="text-muted-foreground">Lädt…</p>
           </div>
         </div>

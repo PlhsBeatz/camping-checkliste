@@ -706,7 +706,7 @@ export function VacationEditModal({
                         <Button
                           type="button"
                           size="sm"
-                          className="flex-1 bg-[rgb(45,79,30)] text-white hover:bg-[rgb(45,79,30)]/90 hover:text-white border-[rgb(45,79,30)]"
+                          className="flex-1 bg-primary text-white hover:bg-primary/90 hover:text-white border-primary"
                           disabled={!draftRange?.from}
                           onClick={() => {
                             if (!draftRange?.from) return
@@ -806,7 +806,7 @@ export function VacationEditModal({
                       <Button
                         type="button"
                         size="sm"
-                        className="flex-1 bg-[rgb(45,79,30)] text-white hover:bg-[rgb(45,79,30)]/90 hover:text-white border-[rgb(45,79,30)]"
+                        className="flex-1 bg-primary text-white hover:bg-primary/90 hover:text-white border-primary"
                         disabled={!draftRange?.from}
                         onClick={() => {
                           if (!draftRange?.from) return
@@ -875,7 +875,7 @@ export function VacationEditModal({
                           type="button"
                           variant="outline"
                           size="sm"
-                          className="flex-1 bg-[rgb(45,79,30)] text-white hover:bg-[rgb(45,79,30)]/90 hover:text-white border-[rgb(45,79,30)]"
+                          className="flex-1 bg-primary text-white hover:bg-primary/90 hover:text-white border-primary"
                           onClick={() => setAbfahrtPopoverOpen(false)}
                         >
                           OK
@@ -930,7 +930,7 @@ export function VacationEditModal({
                         type="button"
                         variant="outline"
                         size="sm"
-                        className="flex-1 bg-[rgb(45,79,30)] text-white hover:bg-[rgb(45,79,30)]/90 hover:text-white border-[rgb(45,79,30)]"
+                        className="flex-1 bg-primary text-white hover:bg-primary/90 hover:text-white border-primary"
                         onClick={() => {
                           const start = newVacationForm.startdatum
                             ? new Date(newVacationForm.startdatum)

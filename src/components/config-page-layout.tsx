@@ -1,14 +1,19 @@
 'use client'
 
 import { useState, useEffect, type ReactNode } from 'react'
+import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { Menu } from 'lucide-react'
+import { ArrowLeft, Menu } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { NavigationSidebar } from '@/components/navigation-sidebar'
 import { ConfigSubnav } from '@/components/config-subnav'
 import { ConfigMobileSectionPicker } from '@/components/config-mobile-section-picker'
 import { useAuth } from '@/components/auth-provider'
+import { getActiveSettingsItem } from '@/lib/settings-navigation'
 import { cn } from '@/lib/utils'
+
+/** Nav-Spalte – gleiche Breite auf Hub (mobil) und Desktop-Unterseiten */
+export const SETTINGS_NAV_COLUMN_CLASS = 'w-full lg:w-56 xl:w-60'
 
 interface ConfigPageLayoutProps {
   children: ReactNode
@@ -33,6 +38,10 @@ export function ConfigPageLayout({
   const [showNavSidebar, setShowNavSidebar] = useState(false)
   const isSettingsHub =
     pathname === '/einstellungen' || pathname === '/konfiguration'
+  const activeItem = getActiveSettingsItem(pathname)
+  const pageTitle = isSettingsHub
+    ? 'Einstellungen'
+    : (activeItem?.label ?? 'Einstellungen')
 
   const needsConfig = requireConfig || requireSystemAdmin
 
@@ -81,14 +90,14 @@ export function ConfigPageLayout({
 
   if (blocked) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="flex min-h-dvh items-center justify-center">
         <p className="text-muted-foreground text-sm">Wird geladen…</p>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen flex max-w-full overflow-x-clip">
+    <div className="flex min-h-dvh max-w-full overflow-x-clip">
       <NavigationSidebar
         isOpen={showNavSidebar}
         onClose={() => setShowNavSidebar(false)}
@@ -96,14 +105,14 @@ export function ConfigPageLayout({
 
       <div
         className={cn(
-          'flex-1 min-w-0 min-h-screen transition-all duration-300',
+          'flex-1 min-h-dvh min-w-0 transition-all duration-300',
           'lg:ml-[280px]'
         )}
       >
         <div className="container mx-auto p-4 md:p-6 max-w-full flex flex-col gap-4 lg:gap-6">
-          <div className="sticky top-0 z-10 bg-card shadow pb-4 -mx-4 px-4 -mt-4 pt-4 md:-mx-6 md:px-6 md:-mt-6 md:pt-6 space-y-3">
+          <div className="sticky top-0 z-20 bg-card shadow pb-4 -mx-4 px-4 -mt-4 pt-4 md:-mx-6 md:px-6 md:-mt-6 md:pt-6 space-y-3">
             <div className="flex items-center justify-between gap-4">
-              <div className="flex items-center gap-4 min-w-0">
+              <div className="flex items-center gap-3 min-w-0">
                 <Button
                   variant="outline"
                   size="icon"
@@ -113,9 +122,33 @@ export function ConfigPageLayout({
                 >
                   <Menu className="h-5 w-5" />
                 </Button>
-                <h1 className="text-lg sm:text-xl font-bold tracking-tight text-brand-heading truncate">
-                  Einstellungen
-                </h1>
+                {!isSettingsHub ? (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    asChild
+                    className="lg:hidden shrink-0 -ml-1"
+                  >
+                    <Link href="/einstellungen" aria-label="Zurück zu Einstellungen">
+                      <ArrowLeft className="h-5 w-5" />
+                    </Link>
+                  </Button>
+                ) : null}
+                <div className="min-w-0">
+                  {!isSettingsHub ? (
+                    <p className="hidden lg:block text-xs text-muted-foreground mb-0.5">
+                      <Link
+                        href="/einstellungen"
+                        className="hover:text-foreground transition-colors"
+                      >
+                        Einstellungen
+                      </Link>
+                    </p>
+                  ) : null}
+                  <h1 className="text-lg sm:text-xl font-bold tracking-tight text-brand-heading truncate">
+                    {pageTitle}
+                  </h1>
+                </div>
               </div>
               {headerActions}
             </div>
@@ -123,18 +156,14 @@ export function ConfigPageLayout({
             {!isSettingsHub && <ConfigMobileSectionPicker />}
           </div>
 
-          <div className="flex flex-col lg:flex-row lg:gap-6 lg:items-stretch">
-            <aside className="hidden lg:flex lg:w-56 xl:w-60 shrink-0 flex-col border-r border-border pr-4 min-h-[calc(100dvh-7rem)]">
-              <ConfigSubnav variant="sidebar" className="py-2" />
+          <div className="flex flex-col lg:flex-row lg:gap-6 lg:items-start">
+            <aside
+              className={cn('hidden lg:block shrink-0', SETTINGS_NAV_COLUMN_CLASS)}
+            >
+              <ConfigSubnav />
             </aside>
 
             <div className="flex-1 min-w-0 flex flex-col gap-4 lg:gap-0">
-              {isSettingsHub && (
-                <div className="lg:hidden">
-                  <ConfigSubnav variant="mobile" />
-                </div>
-              )}
-
               <div>{children}</div>
             </div>
           </div>

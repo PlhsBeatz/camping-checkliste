@@ -137,7 +137,7 @@ export function CalendarMonthYearCaption(props: CaptionProps) {
                     className={cn(
                       'rounded-md border px-1 py-2 text-sm font-medium tabular-nums transition-colors',
                       y === draftYear
-                        ? 'border-[rgb(45,79,30)] bg-[rgb(45,79,30)] text-white'
+                        ? 'border-primary bg-primary text-white'
                         : 'border-border hover:bg-muted'
                     )}
                   >
@@ -170,7 +170,7 @@ export function CalendarMonthYearCaption(props: CaptionProps) {
                   className={cn(
                     'rounded-md border px-2 py-2.5 text-sm font-medium transition-colors',
                     m.month === draftMonth
-                      ? 'border-[rgb(45,79,30)] bg-[rgb(45,79,30)]/10 text-brand-heading'
+                      ? 'border-primary bg-primary/10 text-brand-heading'
                       : 'border-border hover:bg-muted'
                   )}
                 >

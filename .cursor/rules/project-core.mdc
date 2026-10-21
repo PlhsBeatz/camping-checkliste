@@ -1,0 +1,13 @@
+---
+description: Kern-Stack, PWA/Sync, TypeScript und Erklärstil für dieses Projekt
+alwaysApply: true
+---
+
+# Projekt-Kern
+
+- Stack: Next.js, Cloudflare D1, OpenNext. Strikt D1-Limitierungen beachten.
+- PWA mit Sync zwischen mehreren Clients – robusten, wartbaren Code schreiben.
+- TypeScript-Typen korrekt nutzen.
+- Tailwind für UI. Design-Details: `.cursor/rules/ui-design.mdc` und `docs/DESIGN.md`.
+- Nutzer kennt PHP/HTML/CSS (älter), moderne Frameworks neu – komplexe React-Konzepte kurz erklären.
+- D1-Migrationen: `npx wrangler d1 migrations apply camping-db --local` (Prod: `--remote`). Nie `wrangler d1 execute --file=…` für Migrationsdateien. Details: `d1-migrations.mdc`.

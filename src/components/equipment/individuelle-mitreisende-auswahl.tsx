@@ -11,7 +11,7 @@ import type { MitreisendenZeile } from '@/lib/equipment-form'
 
 /** shadcn-Checkbox, dunkelgrün, gleiche Größe wie zuvor (h-3 w-3) */
 export const EQUIPMENT_CHIP_CHECKBOX_CLASS =
-  'h-3 w-3 shrink-0 border-[rgb(45,79,30)] data-[state=checked]:bg-[rgb(45,79,30)] data-[state=checked]:text-white data-[state=checked]:border-[rgb(45,79,30)] [&_svg]:h-2.5 [&_svg]:w-2.5'
+  'h-3 w-3 shrink-0 border-primary data-[state=checked]:bg-primary data-[state=checked]:text-white data-[state=checked]:border-primary [&_svg]:h-2.5 [&_svg]:w-2.5'
 
 interface IndividuelleMitreisendeAuswahlProps {
   mitreisende: MitreisendenZeile[]

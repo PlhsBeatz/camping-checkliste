@@ -3,18 +3,17 @@
 import { useAuth } from '@/components/auth-provider'
 import { notifyVacationSearchParamChanged } from '@/hooks/use-vacation-search-param'
 import { useParams, useRouter } from 'next/navigation'
-import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { NavigationSidebar } from '@/components/navigation-sidebar'
+import { PageShell } from '@/components/page-shell'
+import { PageHeader } from '@/components/page-header'
+import { BackLink } from '@/components/back-link'
 import { VacationEditModal } from '@/components/vacation-edit-modal'
 import { BookingImportDialog } from '@/components/booking-import-dialog'
 import { UrlaubOverviewMap } from '@/components/urlaub-overview-map'
 import {
-  ArrowLeft,
   ListChecks,
   Map as MapIcon,
-  Menu,
   ChevronRight,
   MoreVertical,
   Pencil,
@@ -168,7 +167,7 @@ function CountdownHeader({ vacation }: { vacation: Vacation }) {
         'rounded-t-lg px-4 py-2.5 text-center md:py-4',
         isPast
           ? 'bg-[hsl(103,32%,88%)] text-brand-heading dark:bg-green-950/50 dark:text-brand-heading'
-          : 'bg-[rgb(45,79,30)] text-white'
+          : 'bg-primary text-white'
       )}
     >
       <p className="text-lg font-bold tracking-tight md:text-2xl">{countdown.primary}</p>
@@ -329,7 +328,6 @@ export default function UrlaubDetailPage() {
   const id = typeof params.id === 'string' ? params.id : ''
   const router = useRouter()
   const { user, loading, canAccessConfig } = useAuth()
-  const [showNavSidebar, setShowNavSidebar] = useState(false)
   const [vacation, setVacation] = useState<Vacation | null>(null)
   const [mitreisende, setMitreisende] = useState<Mitreisender[]>([])
   const [campingplaetze, setCampingplaetze] = useState<Campingplatz[]>([])
@@ -851,69 +849,53 @@ export default function UrlaubDetailPage() {
   if (!id) return null
 
   return (
-    <div className="min-h-screen flex max-w-full overflow-x-clip">
-      <NavigationSidebar isOpen={showNavSidebar} onClose={() => setShowNavSidebar(false)} />
-
-      <div className={cn('flex-1 transition-all duration-300 min-w-0', 'lg:ml-[280px]')}>
-        <div className="container mx-auto p-4 md:p-6 space-y-6 max-w-full">
-          <div className="sticky top-0 z-20 shrink-0 flex items-center justify-between gap-3 bg-card shadow pb-4 -mx-4 px-4 -mt-4 pt-4 md:-mx-6 md:px-6 md:-mt-6 md:pt-6 md:pb-4">
-            <div className="flex min-w-0 flex-1 items-center gap-4">
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={() => setShowNavSidebar(true)}
-                className="lg:hidden flex-shrink-0"
-              >
-                <Menu className="h-5 w-5" />
-              </Button>
-              <div className="min-w-0">
-                <h1 className="text-xl font-bold text-brand-heading truncate">
-                  {vacation?.titel ?? 'Urlaub'}
-                </h1>
-                <p className="text-sm text-muted-foreground truncate">{subtitle}</p>
-              </div>
-            </div>
-            {canAccessConfig && vacation && (
-              <DropdownMenu modal={false}>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="h-9 w-9 shrink-0 rounded-full border-0 bg-transparent text-foreground shadow-none hover:bg-neutral-100 focus-visible:ring-2 focus-visible:ring-[rgb(45,79,30)]/30"
-                    aria-label="Weitere Aktionen"
-                  >
-                    <MoreVertical className="h-5 w-5" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="z-30 min-w-[10rem]">
-                  <DropdownMenuItem
-                    className="cursor-pointer gap-2"
-                    onClick={() => setEditOpen(true)}
-                  >
-                    <Pencil className="h-4 w-4" />
-                    Bearbeiten
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    className="cursor-pointer gap-2"
-                    onClick={() => setBookingImportOpen(true)}
-                  >
-                    <MailPlus className="h-4 w-4" />
-                    Buchung importieren
-                    {bookingImportCount > 0 ? ` (${bookingImportCount})` : ''}
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    className="cursor-pointer gap-2 text-destructive focus:text-destructive"
-                    onClick={() => setShowDeleteConfirm(true)}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                    Löschen
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
-          </div>
+    <PageShell containerClassName="space-y-6">
+      <PageHeader
+        title={vacation?.titel ?? 'Urlaub'}
+        subtitle={subtitle}
+        actions={
+          canAccessConfig && vacation ? (
+            <DropdownMenu modal={false}>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-9 w-9 shrink-0 rounded-full border-0 bg-transparent text-foreground shadow-none hover:bg-neutral-100 focus-visible:ring-2 focus-visible:ring-primary/30"
+                  aria-label="Weitere Aktionen"
+                >
+                  <MoreVertical className="h-5 w-5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="z-30 min-w-[10rem]">
+                <DropdownMenuItem
+                  className="cursor-pointer gap-2"
+                  onClick={() => setEditOpen(true)}
+                >
+                  <Pencil className="h-4 w-4" />
+                  Bearbeiten
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  className="cursor-pointer gap-2"
+                  onClick={() => setBookingImportOpen(true)}
+                >
+                  <MailPlus className="h-4 w-4" />
+                  Buchung importieren
+                  {bookingImportCount > 0 ? ` (${bookingImportCount})` : ''}
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  className="cursor-pointer gap-2 text-destructive focus:text-destructive"
+                  onClick={() => setShowDeleteConfirm(true)}
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Löschen
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : null
+        }
+      />
 
           {loadError && (
             <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-sm">
@@ -927,16 +909,8 @@ export default function UrlaubDetailPage() {
 
           {vacation && (
             <>
-              <div className="hidden flex-wrap gap-2 md:flex">
-                <Button variant="outline" size="sm" className="bg-card hover:bg-muted" asChild>
-                  <Link
-                    href="/urlaube"
-                    className="inline-flex items-center gap-2 whitespace-nowrap"
-                  >
-                    <ArrowLeft className="h-4 w-4 shrink-0" />
-                    Zur Liste
-                  </Link>
-                </Button>
+              <div>
+                <BackLink href="/urlaube" visible="always" variant="labeled" label="Zur Liste" />
               </div>
 
               <Card className="overflow-hidden rounded-lg border shadow-sm bg-card">
@@ -1214,8 +1188,6 @@ export default function UrlaubDetailPage() {
               </Card>
             </>
           )}
-        </div>
-      </div>
 
       {vacation && (
         <VacationEditModal
@@ -1248,6 +1220,6 @@ export default function UrlaubDetailPage() {
         onConfirm={executeDelete}
         isLoading={deleteBusy}
       />
-    </div>
+    </PageShell>
   )
 }

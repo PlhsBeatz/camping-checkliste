@@ -14,7 +14,7 @@ import {
 import { cn } from '@/lib/utils'
 
 export const OPT_CHECKBOX_CLASS =
-  'h-6 w-6 min-h-6 min-w-6 rounded-md border-2 border-gray-300 data-[state=checked]:bg-[rgb(45,79,30)] data-[state=checked]:border-[rgb(45,79,30)]'
+  'h-6 w-6 min-h-6 min-w-6 rounded-md border-2 border-gray-300 data-[state=checked]:bg-primary data-[state=checked]:border-primary'
 
 export const STATUS_LIST_ORDER: OptimierungStatus[] = [
   'in_arbeit',
@@ -162,7 +162,7 @@ export function SegmentedButtons<T extends string>({
             className={cn(
               'flex-1 rounded-md px-2 py-2 text-xs sm:text-sm font-medium transition-colors',
               selected
-                ? 'bg-[rgb(45,79,30)] text-white shadow-sm'
+                ? 'bg-primary text-white shadow-sm'
                 : 'text-muted-foreground hover:text-foreground hover:bg-background/80'
             )}
           >
@@ -198,7 +198,7 @@ export function PrioritaetIcon({ prio }: { prio: OptimierungPrioritaet }) {
       <span
         className={cn(
           base,
-          'bg-[rgb(45,79,30)]/10 text-brand-heading ring-[rgb(45,79,30)]/30'
+          'bg-primary/10 text-brand-heading ring-primary/30'
         )}
         title={label}
         aria-label={label}
@@ -211,7 +211,7 @@ export function PrioritaetIcon({ prio }: { prio: OptimierungPrioritaet }) {
     <span
       className={cn(
         base,
-        'bg-muted/80 text-muted-foreground ring-[rgb(45,79,30)]/20'
+        'bg-muted/80 text-muted-foreground ring-primary/20'
       )}
       title={label}
       aria-label={label}

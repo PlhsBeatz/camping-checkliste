@@ -3,7 +3,8 @@
 import { useState, useEffect, useCallback, useRef, useMemo, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { NavigationSidebar } from '@/components/navigation-sidebar'
+import { PageShell } from '@/components/page-shell'
+import { PageHeader } from '@/components/page-header'
 import { SonnenAusrichtungCompass } from '@/components/sonnen-ausrichtung-compass'
 import { SonnenAusrichtungMap } from '@/components/sonnen-ausrichtung-map'
 import { Button } from '@/components/ui/button'
@@ -17,7 +18,6 @@ import {
 } from '@/components/ui/select'
 import { ResponsiveModal } from '@/components/ui/responsive-modal'
 import {
-  Menu,
   MapPin,
   Compass,
   Map as MapIcon,
@@ -107,7 +107,6 @@ function formatShortDate(ymd: string | null | undefined): string {
 function SonnenAusrichtungContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
-  const [showNavSidebar, setShowNavSidebar] = useState(false)
   const [mode, setMode] = useState<ToolMode>(() =>
     searchParams.get('mode') === 'planung' ? 'planung' : 'vor-ort'
   )
@@ -327,20 +326,6 @@ function SonnenAusrichtungContent() {
     setCompassEnabled(true)
     setCompassPermissionNeeded(false)
   }, [deviceHeading])
-
-  useEffect(() => {
-    if (showNavSidebar) {
-      document.body.style.overflow = 'hidden'
-      document.documentElement.style.overflow = 'hidden'
-    } else {
-      document.body.style.overflow = ''
-      document.documentElement.style.overflow = ''
-    }
-    return () => {
-      document.body.style.overflow = ''
-      document.documentElement.style.overflow = ''
-    }
-  }, [showNavSidebar])
 
   // Vacations + vehicles
   useEffect(() => {
@@ -835,28 +820,8 @@ function SonnenAusrichtungContent() {
   }, [selectedVacation, selectedStay, planDate])
 
   return (
-    <div className="min-h-screen flex max-w-full overflow-x-clip">
-      <NavigationSidebar isOpen={showNavSidebar} onClose={() => setShowNavSidebar(false)} />
-
-      <div className={cn('flex-1 min-w-0 transition-all duration-300', 'lg:ml-[280px]')}>
-        <div className="container mx-auto p-4 md:p-6 space-y-4 max-w-full">
-          <div className="sticky top-0 z-10 flex items-center justify-between bg-card shadow pb-4 -mx-4 px-4 -mt-4 pt-4 md:-mx-6 md:px-6 md:-mt-6 md:pt-6">
-            <div className="flex items-center gap-4">
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={() => setShowNavSidebar(true)}
-                className="lg:hidden"
-              >
-                <Menu className="h-5 w-5" />
-              </Button>
-              <div>
-                <h1 className="text-lg sm:text-xl font-bold tracking-tight text-brand-heading">
-                  Sonnen-Ausrichtung
-                </h1>
-              </div>
-            </div>
-          </div>
+    <PageShell containerClassName="space-y-4">
+      <PageHeader title="Sonnen-Ausrichtung" />
 
           <div className="flex flex-wrap gap-2">
             <Button
@@ -885,7 +850,7 @@ function SonnenAusrichtungContent() {
                 className={cn(
                   'inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium transition-colors',
                   displayMode === 'karte'
-                    ? 'bg-[rgb(45,79,30)] text-white'
+                    ? 'bg-primary text-white'
                     : 'bg-background text-foreground hover:bg-muted'
                 )}
               >
@@ -898,7 +863,7 @@ function SonnenAusrichtungContent() {
                 className={cn(
                   'inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium transition-colors border-l border-border',
                   displayMode === 'kompass'
-                    ? 'bg-[rgb(45,79,30)] text-white'
+                    ? 'bg-primary text-white'
                     : 'bg-background text-foreground hover:bg-muted'
                 )}
               >
@@ -1162,7 +1127,7 @@ function SonnenAusrichtungContent() {
                     className={cn(
                       'px-2.5 py-1.5 text-xs font-medium transition-colors',
                       basemap === 'satellite'
-                        ? 'bg-[rgb(45,79,30)] text-white'
+                        ? 'bg-primary text-white'
                         : 'text-foreground hover:bg-muted'
                     )}
                   >
@@ -1174,7 +1139,7 @@ function SonnenAusrichtungContent() {
                     className={cn(
                       'px-2.5 py-1.5 text-xs font-medium transition-colors border-l border-border',
                       basemap === 'osm'
-                        ? 'bg-[rgb(45,79,30)] text-white'
+                        ? 'bg-primary text-white'
                         : 'text-foreground hover:bg-muted'
                     )}
                   >
@@ -1222,7 +1187,7 @@ function SonnenAusrichtungContent() {
                     onTouchEnd={() => {
                       if (selectedStayId) void saveStellplatz({ heading: caravanHeading })
                     }}
-                    className="flex-1 min-w-[8rem] accent-[rgb(45,79,30)]"
+                    className="flex-1 min-w-[8rem] accent-primary"
                   />
                   <span className="tabular-nums text-sm w-10 text-right">
                     {Math.round(caravanHeading)}°
@@ -1312,9 +1277,7 @@ function SonnenAusrichtungContent() {
           {mode === 'vor-ort' && gpsError && position && (
             <p className="text-sm text-amber-600">Hinweis: {gpsError}</p>
           )}
-        </div>
-      </div>
-    </div>
+    </PageShell>
   )
 }
 

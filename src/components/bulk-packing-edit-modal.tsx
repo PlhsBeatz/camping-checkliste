@@ -170,7 +170,7 @@ export function BulkPackingEditModal({
 
         <Button
           type="button"
-          className="w-full bg-[rgb(45,79,30)] hover:bg-[rgb(45,79,30)]/90 text-white"
+          className="w-full bg-primary hover:bg-primary/90 text-white"
           disabled={!canSubmit}
           onClick={handleSubmit}
         >

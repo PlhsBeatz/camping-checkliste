@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { BrandEmptyState } from '@/components/brand-empty-state'
+import { ListTile } from '@/components/list-tile'
 import {
   EMPTY_ILLUSTRATION_CLASS,
   PlaceEmptyIllustration,
@@ -376,10 +377,10 @@ export function CampingplaetzeTable({
     const aufWunsch = isAufWunschliste(item)
     const top = isTopFavorit(item)
     return (
-      <div
+      <ListTile
         key={item.id}
         className={cn(
-          'bg-card rounded-xl border border-subtle shadow-sm px-4 py-3 flex items-start justify-between gap-3',
+          'flex items-start justify-between gap-3',
           item.is_archived && 'opacity-60 bg-muted/60'
         )}
       >
@@ -561,7 +562,7 @@ export function CampingplaetzeTable({
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
-      </div>
+      </ListTile>
     )
   }
 
@@ -583,7 +584,7 @@ export function CampingplaetzeTable({
               className={cn(
                 'inline-flex items-center gap-1.5 px-3 py-1 rounded-full border text-xs whitespace-nowrap',
                 filterLand === 'all'
-                  ? 'bg-[rgb(45,79,30)] text-white border-[rgb(45,79,30)]'
+                  ? 'bg-primary text-white border-primary'
                   : 'bg-card text-foreground hover:bg-muted'
               )}
             >
@@ -600,7 +601,7 @@ export function CampingplaetzeTable({
                   className={cn(
                     'inline-flex items-center gap-1.5 px-3 py-1 rounded-full border text-xs whitespace-nowrap',
                     filterLand === land
-                      ? 'bg-[rgb(45,79,30)] text-white border-[rgb(45,79,30)]'
+                      ? 'bg-primary text-white border-primary'
                       : 'bg-card text-foreground hover:bg-muted'
                   )}
                 >
@@ -633,7 +634,7 @@ export function CampingplaetzeTable({
 
         {showFilters && (
           <div className="space-y-4 pt-2">
-            <div className="rounded-lg border border-[rgb(45,79,30)]/30 bg-[rgb(45,79,30)]/10 px-3 py-3 dark:border-green-900/50 dark:bg-green-950/40">
+            <div className="rounded-lg border border-primary/30 bg-primary/10 px-3 py-3 dark:border-green-900/50 dark:bg-green-950/40">
               <Label
                 htmlFor="cp-sort-mode"
                 className="text-xs font-semibold text-brand-heading"
@@ -643,7 +644,7 @@ export function CampingplaetzeTable({
               <Select value={sortMode} onValueChange={(v) => setSortMode(v as SortMode)}>
                 <SelectTrigger
                   id="cp-sort-mode"
-                  className="mt-1.5 w-full sm:max-w-md border-[rgb(45,79,30)]/20 bg-card/95 dark:border-white/10 dark:bg-card/90"
+                  className="mt-1.5 w-full sm:max-w-md border-primary/20 bg-card/95 dark:border-white/10 dark:bg-card/90"
                 >
                   <SelectValue placeholder="Sortierung wählen" />
                 </SelectTrigger>

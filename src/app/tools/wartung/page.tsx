@@ -3,10 +3,12 @@
 import { Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuth } from '@/components/auth-provider'
-import { NavigationSidebar } from '@/components/navigation-sidebar'
+import { PageShell } from '@/components/page-shell'
+import { PageHeader } from '@/components/page-header'
 import { Button } from '@/components/ui/button'
-import { Menu, Plus, X } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { BrandFab } from '@/components/brand-fab'
+import { BrandSpinner } from '@/components/brand-spinner'
+import { X } from 'lucide-react'
 import type { ApiResponse } from '@/lib/api-types'
 import type {
   Faelligkeit,
@@ -42,7 +44,6 @@ function WartungPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { canReadWartung, canWriteWartung, loading: authLoading } = useAuth()
-  const [showNavSidebar, setShowNavSidebar] = useState(false)
   const [dashboard, setDashboard] = useState<FaelligkeitDashboard | null>(null)
   const [equipment, setEquipment] = useState<EquipmentItem[]>([])
   const [categories, setCategories] = useState<Category[]>([])
@@ -71,20 +72,6 @@ function WartungPageContent() {
       router.replace('/')
     }
   }, [authLoading, canReadWartung, router])
-
-  useEffect(() => {
-    if (showNavSidebar) {
-      document.body.style.overflow = 'hidden'
-      document.documentElement.style.overflow = 'hidden'
-    } else {
-      document.body.style.overflow = ''
-      document.documentElement.style.overflow = ''
-    }
-    return () => {
-      document.body.style.overflow = ''
-      document.documentElement.style.overflow = ''
-    }
-  }, [showNavSidebar])
 
   const load = useCallback(async () => {
     const seq = ++loadSeqRef.current
@@ -294,34 +281,11 @@ function WartungPageContent() {
   }
 
   return (
-    <div className="min-h-screen flex max-w-full overflow-x-clip">
-      <NavigationSidebar isOpen={showNavSidebar} onClose={() => setShowNavSidebar(false)} />
-
-      <div className={cn('flex-1 transition-all duration-300 min-w-0', 'lg:ml-[280px]')}>
-        <div className="container mx-auto p-4 md:p-6 space-y-6 max-w-full">
-          <div className="sticky top-0 z-30 flex items-center justify-between bg-card shadow pb-4 -mx-4 px-4 -mt-4 pt-4 md:-mx-6 md:px-6 md:-mt-6 md:pt-6 md:pb-4">
-            <div className="flex items-center gap-4">
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={() => setShowNavSidebar(true)}
-                className="lg:hidden"
-              >
-                <Menu className="h-5 w-5" />
-              </Button>
-              <div>
-                <h1 className="text-lg sm:text-xl font-bold tracking-tight text-brand-heading">
-                  Wartung
-                </h1>
-              </div>
-            </div>
-          </div>
+    <PageShell containerClassName="space-y-6">
+      <PageHeader title="Wartung" />
 
           {loading ? (
-            <div className="flex flex-col items-center justify-center py-20 gap-4">
-              <div className="animate-spin rounded-full h-12 w-12 border-4 border-[rgb(45,79,30)] border-t-transparent" />
-              <p className="text-muted-foreground animate-pulse">Wird geladen…</p>
-            </div>
+            <BrandSpinner label="Wird geladen…" />
           ) : dashboard ? (
             <>
               {filterTransportId && (
@@ -357,19 +321,8 @@ function WartungPageContent() {
           ) : null}
 
           {canWriteWartung && (
-            <div className="fixed bottom-6 right-6 z-30">
-              <Button
-                size="icon"
-                onClick={handleNew}
-                className="h-14 w-14 rounded-full shadow-lg hover:shadow-xl transition-shadow bg-[rgb(45,79,30)] hover:bg-[rgb(45,79,30)]/90 text-white aspect-square p-0"
-                aria-label="Neue Fälligkeit"
-              >
-                <Plus className="h-6 w-6" strokeWidth={2.5} />
-              </Button>
-            </div>
+            <BrandFab onClick={handleNew} aria-label="Neue Fälligkeit" />
           )}
-        </div>
-      </div>
 
       <FaelligkeitFormDialog
         open={formOpen}
@@ -413,7 +366,7 @@ function WartungPageContent() {
         }
         onConfirm={() => void handleDelete()}
       />
-    </div>
+    </PageShell>
   )
 }
 
@@ -422,7 +375,7 @@ export default function WartungPage() {
     <Suspense
       fallback={
         <div className="min-h-screen flex items-center justify-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-4 border-[rgb(45,79,30)] border-t-transparent" />
+          <BrandSpinner bare />
         </div>
       }
     >

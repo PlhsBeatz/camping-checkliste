@@ -2,10 +2,13 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { NavigationSidebar } from '@/components/navigation-sidebar'
+import { PageShell } from '@/components/page-shell'
+import { PageHeader } from '@/components/page-header'
 import { VacationEditModal } from '@/components/vacation-edit-modal'
 import { BookingImportDialog } from '@/components/booking-import-dialog'
 import { BrandEmptyState } from '@/components/brand-empty-state'
+import { ListTile } from '@/components/list-tile'
+import { BrandFab } from '@/components/brand-fab'
 import {
   EMPTY_ILLUSTRATION_CLASS,
   SearchEmptyIllustration,
@@ -13,8 +16,6 @@ import {
 } from '@/components/brand-empty-illustrations'
 import {
   Archive,
-  Plus,
-  Menu,
   MoreVertical,
   Pencil,
   Trash2,
@@ -69,7 +70,6 @@ function UrlaubePageContent() {
   const [vacationsViewMode, setVacationsViewMode] = useState<'aktuell' | 'archiv'>(() =>
     filterCampingplatzId ? 'archiv' : 'aktuell'
   )
-  const [showNavSidebar, setShowNavSidebar] = useState(false)
   const [vacations, setVacations] = useState<Vacation[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [showNewVacationDialog, setShowNewVacationDialog] = useState(false)
@@ -83,21 +83,6 @@ function UrlaubePageContent() {
   const [routeInfo, setRouteInfo] = useState<Record<string, CampingplatzRouteInfo>>({})
   const routeInfoRef = useRef(routeInfo)
   routeInfoRef.current = routeInfo
-
-  // Sidebar offen: Body-Scroll sperren
-  useEffect(() => {
-    if (showNavSidebar) {
-      document.body.style.overflow = 'hidden'
-      document.documentElement.style.overflow = 'hidden'
-    } else {
-      document.body.style.overflow = ''
-      document.documentElement.style.overflow = ''
-    }
-    return () => {
-      document.body.style.overflow = ''
-      document.documentElement.style.overflow = ''
-    }
-  }, [showNavSidebar])
 
   // Refetch-Tick: bei Reconnect bumpen → die nachfolgenden useEffects mit Cache-Anbindung neu auslösen.
   const [refetchTick, setRefetchTick] = useState(0)
@@ -436,90 +421,85 @@ function UrlaubePageContent() {
   }
 
   return (
-    <div className="min-h-screen flex max-w-full overflow-x-clip">
-      {/* Navigation Sidebar */}
-      <NavigationSidebar
-        isOpen={showNavSidebar}
-        onClose={() => setShowNavSidebar(false)}
-      />
-
-      {/* Main Content Area */}
-      <div className={cn('flex-1 transition-all duration-300 min-w-0', 'lg:ml-[280px]')}>
-        <div className="container mx-auto p-4 md:p-6 space-y-6 max-w-full">
-          {/* Header - Sticky */}
-          <div className="sticky top-0 z-10 flex items-center justify-between gap-3 bg-card shadow pb-4 -mx-4 px-4 -mt-4 pt-4 md:-mx-6 md:px-6 md:-mt-6 md:pt-6 md:pb-4">
-            <div className="flex items-center gap-4 min-w-0">
-              {/* Mobile Menu Toggle */}
+    <PageShell
+      containerClassName="space-y-6"
+      afterContent={
+        canAccessConfig ? (
+          <BookingImportDialog
+            open={bookingImportOpen}
+            onOpenChange={handleBookingImportOpenChange}
+            initialPendingId={searchParams.get('id')}
+            initialBetreff={searchParams.get('title') ?? ''}
+            initialInhalt={
+              searchParams.get('text')?.trim() ||
+              searchParams.get('url')?.trim() ||
+              ''
+            }
+            pendingCount={bookingImportCount}
+            onConfirmed={() => setRefetchTick((t) => t + 1)}
+          />
+        ) : null
+      }
+    >
+      <PageHeader
+        title="Meine Urlaube"
+        subtitle={
+          vacationsViewMode === 'aktuell'
+            ? filterCampingplatzId
+              ? 'Zukünftige und bis zu 7 Tage zurück (neuestes Datum zuerst)'
+              : 'Zukünftige und bis zu 7 Tage zurückliegende Reisen'
+            : filterCampingplatzId
+              ? 'Alle Zuordnungen zu diesem Platz (neuestes Datum zuerst)'
+              : 'Alle Urlaube (neuestes Datum zuerst)'
+        }
+        actions={
+          <DropdownMenu modal={false}>
+            <DropdownMenuTrigger asChild>
               <Button
-                variant="outline"
+                type="button"
+                variant="ghost"
                 size="icon"
-                onClick={() => setShowNavSidebar(true)}
-                className="lg:hidden shrink-0"
+                className="h-9 w-9 shrink-0 rounded-full border-0 bg-transparent text-foreground shadow-none hover:bg-neutral-100 focus-visible:ring-2 focus-visible:ring-primary/30"
+                aria-label="Weitere Aktionen"
               >
-                <Menu className="h-5 w-5" />
+                <MoreVertical className="h-5 w-5" />
               </Button>
-              
-              <div className="min-w-0">
-                <h1 className="text-lg sm:text-xl font-bold tracking-tight text-brand-heading">
-                  Meine Urlaube
-                </h1>
-                <p className="text-xs text-muted-foreground mt-0.5 truncate">
-                  {vacationsViewMode === 'aktuell'
-                    ? filterCampingplatzId
-                      ? 'Zukünftige und bis zu 7 Tage zurück (neuestes Datum zuerst)'
-                      : 'Zukünftige und bis zu 7 Tage zurückliegende Reisen'
-                    : filterCampingplatzId
-                      ? 'Alle Zuordnungen zu diesem Platz (neuestes Datum zuerst)'
-                      : 'Alle Urlaube (neuestes Datum zuerst)'}
-                </p>
-              </div>
-            </div>
-            <DropdownMenu modal={false}>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="h-9 w-9 shrink-0 rounded-full border-0 bg-transparent text-foreground shadow-none hover:bg-neutral-100 focus-visible:ring-2 focus-visible:ring-[rgb(45,79,30)]/30"
-                  aria-label="Weitere Aktionen"
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="z-20 min-w-[10rem]">
+              {vacationsViewMode === 'archiv' ? (
+                <DropdownMenuItem
+                  className="cursor-pointer gap-2"
+                  onSelect={() => setVacationsViewMode('aktuell')}
                 >
-                  <MoreVertical className="h-5 w-5" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="z-20 min-w-[10rem]">
-                {vacationsViewMode === 'archiv' ? (
+                  <CalendarIcon className="h-4 w-4 shrink-0" />
+                  Nächste Urlaube
+                </DropdownMenuItem>
+              ) : (
+                <DropdownMenuItem
+                  className="cursor-pointer gap-2"
+                  onSelect={() => setVacationsViewMode('archiv')}
+                >
+                  <Archive className="h-4 w-4 shrink-0" />
+                  Urlaubsarchiv
+                </DropdownMenuItem>
+              )}
+              {canAccessConfig && (
+                <>
+                  <DropdownMenuSeparator />
                   <DropdownMenuItem
                     className="cursor-pointer gap-2"
-                    onSelect={() => setVacationsViewMode('aktuell')}
+                    onSelect={() => setBookingImportOpen(true)}
                   >
-                    <CalendarIcon className="h-4 w-4 shrink-0" />
-                    Nächste Urlaube
+                    <MailPlus className="h-4 w-4 shrink-0" />
+                    Buchung importieren
+                    {bookingImportCount > 0 ? ` (${bookingImportCount})` : ''}
                   </DropdownMenuItem>
-                ) : (
-                  <DropdownMenuItem
-                    className="cursor-pointer gap-2"
-                    onSelect={() => setVacationsViewMode('archiv')}
-                  >
-                    <Archive className="h-4 w-4 shrink-0" />
-                    Urlaubsarchiv
-                  </DropdownMenuItem>
-                )}
-                {canAccessConfig && (
-                  <>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      className="cursor-pointer gap-2"
-                      onSelect={() => setBookingImportOpen(true)}
-                    >
-                      <MailPlus className="h-4 w-4 shrink-0" />
-                      Buchung importieren
-                      {bookingImportCount > 0 ? ` (${bookingImportCount})` : ''}
-                    </DropdownMenuItem>
-                  </>
-                )}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
+                </>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        }
+      />
 
           <VacationEditModal
             open={showNewVacationDialog}
@@ -700,12 +680,12 @@ function UrlaubePageContent() {
                           (vacationCampingplaetze[vacation.id] ?? []).map((cp) => {
                             const r = routeInfo[cp.id]
                             return (
-                              <div
+                              <ListTile
                                 key={cp.id}
                                 role="button"
                                 tabIndex={0}
                                 className={cn(
-                                  'bg-card rounded-xl border border-subtle shadow-sm px-3 py-2 flex items-start justify-between gap-3 cursor-pointer transition-colors hover:bg-muted',
+                                  'px-3 py-2 flex items-start justify-between gap-3 cursor-pointer transition-colors hover:bg-muted',
                                   cp.is_archived && 'opacity-60 bg-muted/60'
                                 )}
                                 onClick={(e) => {
@@ -771,7 +751,7 @@ function UrlaubePageContent() {
                                     )}
                                   </div>
                                 </div>
-                              </div>
+                              </ListTile>
                             )
                           })
                         )}
@@ -782,42 +762,18 @@ function UrlaubePageContent() {
               ))
             )}
           </div>
-        </div>
 
-        {/* FAB: Neuer Urlaub – nur Admin */}
-        {canAccessConfig && (
-        <div className="fixed bottom-6 right-6 z-30">
-          <Button
-            size="icon"
-            onClick={() => {
-              setEditingVacationId(null)
-              setShowNewVacationDialog(true)
-            }}
-            className="h-14 w-14 rounded-full shadow-lg hover:shadow-xl transition-shadow bg-[rgb(45,79,30)] hover:bg-[rgb(45,79,30)]/90 text-white aspect-square p-0"
-          >
-            <Plus className="h-6 w-6" strokeWidth={2.5} />
-          </Button>
-        </div>
-        )}
-      </div>
-
+      {/* FAB: Neuer Urlaub – nur Admin */}
       {canAccessConfig && (
-        <BookingImportDialog
-          open={bookingImportOpen}
-          onOpenChange={handleBookingImportOpenChange}
-          initialPendingId={searchParams.get('id')}
-          initialBetreff={searchParams.get('title') ?? ''}
-          initialInhalt={
-            searchParams.get('text')?.trim() ||
-            searchParams.get('url')?.trim() ||
-            ''
-          }
-          pendingCount={bookingImportCount}
-          onConfirmed={() => setRefetchTick((t) => t + 1)}
+        <BrandFab
+          onClick={() => {
+            setEditingVacationId(null)
+            setShowNewVacationDialog(true)
+          }}
+          aria-label="Neuer Urlaub"
         />
       )}
-
-    </div>
+    </PageShell>
   )
 }
 

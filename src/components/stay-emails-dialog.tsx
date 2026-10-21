@@ -90,5 +90,5 @@ export function StayEmailsDialog({
 export function stayActionButtonClass(disabled = false) {
   return disabled
     ? 'bg-muted text-muted-foreground cursor-not-allowed opacity-60'
-    : 'bg-[rgb(45,79,30)] text-white hover:bg-[rgb(45,79,30)]/90 hover:text-white shadow-sm'
+    : 'bg-primary text-white hover:bg-primary/90 hover:text-white shadow-sm'
 }

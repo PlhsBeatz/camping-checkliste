@@ -13,6 +13,7 @@ import { buildPlatzplanUrl } from '@/lib/platzplan-url'
 import { CampingStayBookingPanel } from '@/components/camping-stay-booking-panel'
 import { StayEmailsDialog, stayActionButtonClass } from '@/components/stay-emails-dialog'
 import { Button } from '@/components/ui/button'
+import { ListTile } from '@/components/list-tile'
 import { cn } from '@/lib/utils'
 
 type Props = {
@@ -52,9 +53,9 @@ export function VacationStayCard({
 
   return (
     <>
-      <div
+      <ListTile
         className={cn(
-          'rounded-xl border border-subtle shadow-sm bg-card overflow-hidden',
+          'px-0 py-0 overflow-hidden',
           cp.is_archived && 'opacity-60 bg-muted/60'
         )}
       >
@@ -63,7 +64,7 @@ export function VacationStayCard({
           className={cn(
             'w-full text-left px-3 py-2 flex gap-3 items-start transition-colors',
             isExpandable &&
-              'hover:bg-muted hover:ring-1 hover:ring-[rgb(45,79,30)]/10 cursor-pointer',
+              'hover:bg-muted hover:ring-1 hover:ring-primary/10 cursor-pointer',
             !isExpandable && 'cursor-default'
           )}
           onClick={() => isExpandable && setOpen((o) => !o)}
@@ -169,7 +170,7 @@ export function VacationStayCard({
             />
           </div>
         )}
-      </div>
+      </ListTile>
 
       <StayEmailsDialog
         open={emailsOpen}

@@ -10,12 +10,12 @@ import { AlertTriangle, Check, Clock, Info, type LucideIcon } from 'lucide-react
 const AMPEL_CLASS: Record<FaelligkeitAmpelStatus, string> = {
   ueberfaellig: 'bg-destructive text-destructive-foreground',
   bald_faellig: 'bg-[rgb(230,126,34)] text-white',
-  ok: 'bg-[rgb(45,79,30)] text-white',
+  ok: 'bg-primary text-white',
   nur_info: 'bg-muted text-muted-foreground',
 }
 
 const STATUS_INDICATOR_CLASS: Record<FaelligkeitAmpelStatus, string> = {
-  ok: 'bg-[rgb(45,79,30)] border-[rgb(45,79,30)] text-white',
+  ok: 'bg-primary border-primary text-white',
   bald_faellig: 'bg-[rgb(230,126,34)] border-[rgb(230,126,34)] text-white',
   ueberfaellig: 'bg-destructive border-destructive text-destructive-foreground',
   nur_info: 'bg-muted/80 border-gray-300 dark:border-white/20 text-muted-foreground',

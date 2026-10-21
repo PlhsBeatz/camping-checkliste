@@ -6,11 +6,13 @@ import { PackingList } from '@/components/packing-list-enhanced'
 import { PackingListGenerator } from '@/components/packing-list-generator'
 import { AddSingleItemDialog } from '@/components/add-single-item-dialog'
 import { PackingXorBanner } from '@/components/packing-xor-banner'
-import { NavigationSidebar } from '@/components/navigation-sidebar'
+import { PageShell } from '@/components/page-shell'
+import { PageHeader } from '@/components/page-header'
 import { PackingSettingsSidebar } from '@/components/packing-settings-sidebar'
 import { BrandEmptyState } from '@/components/brand-empty-state'
 import { PacklistEmptyIllustration, EMPTY_ILLUSTRATION_CLASS } from '@/components/brand-empty-illustrations'
-import { Plus, Sparkles, Menu, Search, Users } from 'lucide-react'
+import { Sparkles, Search, Users } from 'lucide-react'
+import { BrandFab } from '@/components/brand-fab'
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { Vacation, PackingItem, TransportVehicle, Mitreisender, EquipmentItem, Category, MainCategory, Rastplatz } from '@/lib/db'
 import type { ApiResponse } from '@/lib/api-types'
@@ -246,7 +248,6 @@ function HomeContent() {
   const [mainCategories, setMainCategories] = useState<MainCategory[]>([])
   
   // UI state
-  const [showNavSidebar, setShowNavSidebar] = useState(false)
   const [showPackSettings, setShowPackSettings] = useState(false)
   const [showAddItemDialog, setShowAddItemDialog] = useState(false)
   const [showEditItemDialog, setShowEditItemDialog] = useState(false)
@@ -380,12 +381,10 @@ function HomeContent() {
     addDialogScrollContextRef.current = ctx
   }, [])
 
-  // Sidebar-Overlay mobil: Body-Scroll sperren (am PC sind Nav/Packprofil dauerhaft sichtbar)
+  // Packprofil-Sidebar mobil: Body-Scroll sperren (Nav-Lock übernimmt PageShell)
   useEffect(() => {
     const isNarrow = () => window.matchMedia('(max-width: 1023px)').matches
-    const sidebarOpen =
-      showNavSidebar || (showPackSettings && isNarrow())
-    if (sidebarOpen) {
+    if (showPackSettings && isNarrow()) {
       document.body.style.overflow = 'hidden'
       document.documentElement.style.overflow = 'hidden'
     } else {
@@ -396,7 +395,7 @@ function HomeContent() {
       document.body.style.overflow = ''
       document.documentElement.style.overflow = ''
     }
-  }, [showNavSidebar, showPackSettings])
+  }, [showPackSettings])
   
   // FAB modal state
   const [searchTerm, setSearchTerm] = useState('')
@@ -3525,113 +3524,125 @@ function HomeContent() {
     return () => clearTimeout(id)
   }, [showAddItemDialog])
 
+  const packlisteContentClassName = cn(
+    'min-w-0 bg-scroll-pattern',
+    currentVacation && 'lg:mr-80',
+    currentVacation ? 'h-dvh overflow-hidden flex flex-col' : 'h-full'
+  )
+
   if (!storageHydrated) {
     return (
-      <div className="min-h-screen flex max-w-full overflow-x-clip">
-        <NavigationSidebar
-          isOpen={showNavSidebar}
-          onClose={() => setShowNavSidebar(false)}
-        />
-        <div
-          className={cn(
-            'flex-1 transition-all duration-300 min-w-0',
-            'lg:ml-[280px]',
-            currentVacation && 'lg:mr-80'
-          )}
-        >
-          <div className="min-w-0 h-full">
-            <Card>
-              <CardContent className="pt-6">
-                <p className="text-muted-foreground text-center">Lädt…</p>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-      </div>
+      <PageShell bare contentClassName={packlisteContentClassName}>
+        <Card>
+          <CardContent className="pt-6">
+            <p className="text-muted-foreground text-center">Lädt…</p>
+          </CardContent>
+        </Card>
+      </PageShell>
     )
   }
 
   return (
-    <div className="min-h-screen flex max-w-full overflow-x-clip">
-      {/* Navigation Sidebar (Links) */}
-      <NavigationSidebar
-        isOpen={showNavSidebar}
-        onClose={() => setShowNavSidebar(false)}
-      />
+    <PageShell
+      bare
+      contentClassName={packlisteContentClassName}
+      afterContent={
+        <>
+          {/* Pack Settings Sidebar (Rechts) – Kind/Gast nur eigenes Profil; am PC bei Urlaub dauerhaft sichtbar */}
+          <PackingSettingsSidebar
+            isOpen={showPackSettings}
+            onClose={() => setShowPackSettings(false)}
+            pinnedOnDesktop={!!currentVacation}
+            vacationMitreisende={sidebarVacationMitreisende}
+            ownGruppeId={ownGruppeId}
+            selectedProfile={selectedPackProfile}
+            onProfileChange={handlePackProfileChange}
+            hidePackedItems={hidePackedItems}
+            onHidePackedChange={handleHidePackedChange}
+            listDisplayMode={listDisplayMode}
+            onListDisplayModeChange={handleListDisplayModeChange}
+            showAlleOption={canSelectOtherProfiles}
+            alleOptionHint={alleOptionHint}
+            profilesLoading={
+              !!selectedVacationId && vacationMitreisende.length === 0
+            }
+            showPauschalGruppenFilter={multiGroupVacation && canEditPauschalEntries}
+            pauschalGruppenFilter={pauschalGruppenFilter}
+            onPauschalGruppenFilterChange={handlePauschalGruppenFilterChange}
+            unassignedPauschalCount={unassignedPauschalCount}
+            searchQuery={packlistSearchQuery}
+            onSearchQueryChange={setPacklistSearchQuery}
+            searchHits={packlistSearchHits}
+            onSearchHitSelect={handlePacklistSearchHitSelect}
+          />
 
-      {/* Main Content Area – am PC Platz für linke Nav und (bei Urlaub) rechte Packprofil-Sidebar */}
-      <div className={cn(
-        "flex-1 transition-all duration-300 min-w-0",
-        "lg:ml-[280px]",
-        currentVacation && "lg:mr-80"
-      )}>
-        <div className={cn("min-w-0 bg-scroll-pattern", currentVacation ? "h-dvh overflow-hidden flex flex-col" : "h-full")}>
+          {/* FAB: Gegenstände hinzufügen – Admin/Erwachsene (Kinder: nur abhaken, nicht Struktur ändern) */}
+          {currentVacation && canSelectOtherProfiles && !bulkSelectionActive && (
+            <BrandFab
+              onClick={() => setShowAddItemDialog(true)}
+              aria-label="Gegenstände hinzufügen"
+              offsetPackSidebar
+            />
+          )}
+        </>
+      }
+    >
           {/* Vacation Selected */}
           {currentVacation && (
             <div className="flex-1 min-h-0 flex flex-col min-w-0">
               {/* Header - fix oben, scrollt nicht (Flex-Layout: Header+Progress+Tabs bleiben sichtbar) */}
               <div className="flex-shrink-0 z-20 bg-card min-w-0">
-                <div className="py-3 px-4 flex items-center justify-between gap-3 min-w-0 w-full">
-                  <div className="flex items-center gap-3 min-w-0 flex-1">
-                    {/* Mobile Menu Toggle - einheitlich mit Rahmen wie auf Urlaube */}
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      onClick={() => setShowNavSidebar(true)}
-                      className="lg:hidden flex-shrink-0"
-                    >
-                      <Menu className="h-5 w-5" />
-                    </Button>
-                    
-                    <div className="min-w-0 flex-1">
-                      <h1 className="text-lg sm:text-xl font-bold text-brand-heading truncate">
-                        {currentVacation.titel}
-                      </h1>
-                      <p className="text-xs sm:text-sm text-muted-foreground truncate">
-                        {new Date(currentVacation.startdatum).toLocaleDateString('de-DE')} - {new Date(currentVacation.enddatum).toLocaleDateString('de-DE')}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Pack Profile Button - Nutzt Farbe des ausgewählten Profils */}
-                  {packingItems.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => setShowPackSettings(true)}
-                      className="flex-shrink-0 p-0 border-0 bg-transparent cursor-pointer focus:outline-none focus:ring-2 focus:ring-[rgb(45,79,30)] focus:ring-offset-2 rounded-full"
-                    >
-                      <div
-                        className="h-8 w-8 rounded-full text-white flex items-center justify-center text-xs font-bold"
-                        style={
-                          selectedPackProfile && selectedProfileMitreisender
-                            ? (() => {
-                                const index = sortedVacationMitreisende.findIndex(
-                                  (x) => x.id === selectedPackProfile
-                                )
-                                return getMitreisenderAvatarStyle(
-                                  selectedProfileMitreisender,
-                                  index >= 0 ? index : 0
-                                )
-                              })()
-                            : { backgroundColor: 'rgb(45,79,30)', color: '#ffffff' }
-                        }
+                <PageHeader
+                  sticky={false}
+                  className="py-3 px-4"
+                  title={currentVacation.titel}
+                  subtitle={
+                    <>
+                      {new Date(currentVacation.startdatum).toLocaleDateString('de-DE')} -{' '}
+                      {new Date(currentVacation.enddatum).toLocaleDateString('de-DE')}
+                    </>
+                  }
+                  actions={
+                    packingItems.length > 0 ? (
+                      <button
+                        type="button"
+                        onClick={() => setShowPackSettings(true)}
+                        className="flex-shrink-0 p-0 border-0 bg-transparent cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 rounded-full"
+                        aria-label="Packprofil"
                       >
-                        {selectedPackProfile ? (
-                          selectedProfileMitreisender ? (
-                            getTravelerInitials(selectedProfileMitreisender.name)
+                        <div
+                          className="h-8 w-8 rounded-full text-white flex items-center justify-center text-xs font-bold bg-primary"
+                          style={
+                            selectedPackProfile && selectedProfileMitreisender
+                              ? (() => {
+                                  const index = sortedVacationMitreisende.findIndex(
+                                    (x) => x.id === selectedPackProfile
+                                  )
+                                  return getMitreisenderAvatarStyle(
+                                    selectedProfileMitreisender,
+                                    index >= 0 ? index : 0
+                                  )
+                                })()
+                              : undefined
+                          }
+                        >
+                          {selectedPackProfile ? (
+                            selectedProfileMitreisender ? (
+                              getTravelerInitials(selectedProfileMitreisender.name)
+                            ) : (
+                              <span
+                                className="inline-block h-3 w-3 rounded-full bg-white/40 animate-pulse"
+                                aria-hidden
+                              />
+                            )
                           ) : (
-                            <span
-                              className="inline-block h-3 w-3 rounded-full bg-white/40 animate-pulse"
-                              aria-hidden
-                            />
-                          )
-                        ) : (
-                          <Users className="h-4 w-4" />
-                        )}
-                      </div>
-                    </button>
-                  )}
-                </div>
+                            <Users className="h-4 w-4" />
+                          )}
+                        </div>
+                      </button>
+                    ) : undefined
+                  }
+                />
 
                 {reiseModus.featureActive && reiseModus.gpsError && (
                   <div className="px-4 pb-2 border-b border-border/60">
@@ -3671,7 +3682,7 @@ function HomeContent() {
                     <Button
                       onClick={() => setShowGeneratorDialog(true)}
                       size="lg"
-                      className="bg-[rgb(45,79,30)] hover:bg-[rgb(45,79,30)]/90"
+                      className="bg-primary hover:bg-primary/90"
                     >
                       <Sparkles className="h-4 w-4 mr-2" />
                       Automatisch generieren
@@ -4001,49 +4012,6 @@ function HomeContent() {
             travelers={deletePersonsConfirm?.travelers ?? []}
             deleteMode
           />
-        </div>
-      </div>
-
-      {/* Pack Settings Sidebar (Rechts) – Kind/Gast nur eigenes Profil; am PC bei Urlaub dauerhaft sichtbar */}
-      <PackingSettingsSidebar
-        isOpen={showPackSettings}
-        onClose={() => setShowPackSettings(false)}
-        pinnedOnDesktop={!!currentVacation}
-        vacationMitreisende={sidebarVacationMitreisende}
-        ownGruppeId={ownGruppeId}
-        selectedProfile={selectedPackProfile}
-        onProfileChange={handlePackProfileChange}
-        hidePackedItems={hidePackedItems}
-        onHidePackedChange={handleHidePackedChange}
-        listDisplayMode={listDisplayMode}
-        onListDisplayModeChange={handleListDisplayModeChange}
-        showAlleOption={canSelectOtherProfiles}
-        alleOptionHint={alleOptionHint}
-        profilesLoading={
-          !!selectedVacationId && vacationMitreisende.length === 0
-        }
-        showPauschalGruppenFilter={multiGroupVacation && canEditPauschalEntries}
-        pauschalGruppenFilter={pauschalGruppenFilter}
-        onPauschalGruppenFilterChange={handlePauschalGruppenFilterChange}
-        unassignedPauschalCount={unassignedPauschalCount}
-        searchQuery={packlistSearchQuery}
-        onSearchQueryChange={setPacklistSearchQuery}
-        searchHits={packlistSearchHits}
-        onSearchHitSelect={handlePacklistSearchHitSelect}
-      />
-
-      {/* FAB: Gegenstände hinzufügen – Admin/Erwachsene (Kinder: nur abhaken, nicht Struktur ändern) */}
-      {currentVacation && canSelectOtherProfiles && !bulkSelectionActive && (
-        <div className="fixed bottom-6 right-6 z-30 lg:right-[calc(20rem+1.5rem)]">
-          <Button
-            size="icon"
-            onClick={() => setShowAddItemDialog(true)}
-            className="h-14 w-14 rounded-full shadow-lg hover:shadow-xl transition-shadow bg-[rgb(45,79,30)] hover:bg-[rgb(45,79,30)]/90 text-white aspect-square p-0"
-          >
-            <Plus className="h-6 w-6" strokeWidth={2.5} />
-          </Button>
-        </div>
-      )}
 
       {/* Add Equipment Dialog - Drawer auf Mobile, Dialog auf Desktop */}
       <ResponsiveModal
@@ -4103,7 +4071,7 @@ function HomeContent() {
                   <Button
                     variant="default"
                     size="sm"
-                    className="bg-[rgb(45,79,30)] hover:bg-[rgb(45,79,30)]/90"
+                    className="bg-primary hover:bg-primary/90"
                     onClick={() => {
                       setAddSingleItemInitialName(searchTerm)
                       setAddSingleItemScrollMain(addDialogScrollContextRef.current?.mainCategory ?? null)
@@ -4119,7 +4087,7 @@ function HomeContent() {
                 {groupedAvailableEquipment.map(mainGroup => (
                   <div key={mainGroup.id} data-main-category={mainGroup.name}>
                     {/* Main Category Header */}
-                    <div className="bg-[rgb(45,79,30)] text-white px-4 py-2 rounded-t-lg font-bold">
+                    <div className="bg-primary text-white px-4 py-2 rounded-t-lg font-bold">
                       {mainGroup.name}
                     </div>
                     
@@ -4129,7 +4097,7 @@ function HomeContent() {
                         key={category.id}
                         data-main-category={mainGroup.name}
                         data-category={category.name}
-                        className="border-x border-b last:rounded-b-lg"
+                        className="border-x border-b border-subtle last:rounded-b-lg"
                       >
                         {/* Category Header */}
                         <div className="bg-muted/50 px-4 py-2 font-semibold text-sm">
@@ -4137,11 +4105,11 @@ function HomeContent() {
                         </div>
                         
                         {/* Items */}
-                        <div className="divide-y divide-gray-200 bg-card">
+                        <div className="divide-y divide-gray-200 dark:divide-white/10 bg-card">
                           {category.items.map(item => (
                             <div
                               key={item.id}
-                              className="flex items-center gap-3 px-4 py-3 bg-card hover:bg-gray-50 cursor-pointer min-w-0"
+                              className="flex items-center gap-3 px-4 py-3 bg-card hover:bg-muted cursor-pointer min-w-0"
                               onClick={() => handleToggleEquipmentSelection(item.id)}
                             >
                               <Checkbox
@@ -4179,7 +4147,7 @@ function HomeContent() {
             <Button
               onClick={handleAddSelectedEquipment}
               disabled={selectedEquipmentIds.size === 0 || isLoading}
-              className="flex-1 bg-[rgb(45,79,30)] hover:bg-[rgb(45,79,30)]/90"
+              className="flex-1 bg-primary hover:bg-primary/90"
             >
               {isLoading ? 'Wird hinzugefügt...' : `${selectedEquipmentIds.size} Gegenstand${selectedEquipmentIds.size !== 1 ? 'e' : ''} hinzufügen`}
             </Button>
@@ -4240,7 +4208,7 @@ function HomeContent() {
           if (eqData.success && eqData.data) setEquipmentItems(eqData.data)
         }}
       />
-    </div>
+    </PageShell>
   )
 }
 

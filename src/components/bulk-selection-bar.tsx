@@ -66,7 +66,7 @@ export function BulkSelectionBar({
             size="sm"
             onClick={onAssign}
             disabled={!hasSelection}
-            className="shrink-0 gap-1 px-2 sm:px-3 bg-[rgb(45,79,30)] hover:bg-[rgb(45,79,30)]/90 text-white"
+            className="shrink-0 gap-1 px-2 sm:px-3 bg-primary hover:bg-primary/90 text-white"
           >
             <Users className="h-4 w-4" />
             <span className="hidden xs:inline sm:inline">Zuordnen</span>

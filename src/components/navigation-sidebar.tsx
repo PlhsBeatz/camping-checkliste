@@ -110,20 +110,22 @@ export function NavigationSidebar({ isOpen, onClose }: NavigationSidebarProps) {
         />
       )}
 
-      {/* Sidebar */}
+      {/* inset-y-0 statt h-dvh/h-screen: volle Viewport-Höhe ohne Extra-Scrollbar am Desktop;
+          min-h-0 am Nav hält den Einstellungen-Footer auf Phones sichtbar. */}
       <aside
         className={cn(
-          "fixed top-0 left-0 h-screen w-[280px] bg-card z-50 transition-transform duration-300 ease-in-out flex flex-col",
-          isOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
+          'fixed inset-y-0 left-0 z-50 flex w-[280px] flex-col bg-card',
+          'pb-[env(safe-area-inset-bottom)] transition-transform duration-300 ease-in-out',
+          isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
         )}
       >
         {/* Logo & Untertitel */}
-        <div className="p-6 bg-[rgb(45,79,30)]">
+        <div className="shrink-0 p-6 bg-brand">
           <AppLogo size="default" bottomText="Deine Packliste" />
         </div>
 
-        {/* Navigation */}
-        <nav className="flex-1 py-4 overflow-y-auto overscroll-contain touch-pan-y">
+        {/* Navigation – min-h-0 damit Flex-Footer sichtbar bleibt */}
+        <nav className="min-h-0 flex-1 overflow-y-auto overscroll-contain touch-pan-y py-4">
           {/* Main Menu Items */}
           <div className="px-3 space-y-1">
             {menuItems.map((item) => (
@@ -132,10 +134,8 @@ export function NavigationSidebar({ isOpen, onClose }: NavigationSidebarProps) {
                 href={item.href}
                 onClick={() => onClose()}
                 className={cn(
-                  "flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-lg transition-colors",
-                  item.active
-                    ? "bg-[rgb(45,79,30)] text-white"
-                    : navItemIdle
+                  'flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-lg transition-colors',
+                  item.active ? 'nav-item-active' : navItemIdle
                 )}
               >
                 <span className="material-icons text-xl">{item.icon}</span>
@@ -145,8 +145,8 @@ export function NavigationSidebar({ isOpen, onClose }: NavigationSidebarProps) {
                     className={cn(
                       'ml-auto min-w-[1.25rem] h-5 px-1 rounded-full text-[10px] font-semibold flex items-center justify-center tabular-nums',
                       item.active
-                        ? 'bg-white text-[rgb(45,79,30)]'
-                        : 'bg-[rgb(45,79,30)] text-white'
+                        ? 'bg-white text-brand-heading'
+                        : 'bg-brand text-white'
                     )}
                   >
                     {item.badge > 9 ? '9+' : item.badge}
@@ -187,15 +187,15 @@ export function NavigationSidebar({ isOpen, onClose }: NavigationSidebarProps) {
                     href={item.href}
                     onClick={() => onClose()}
                     className={cn(
-                      "flex items-center justify-between px-4 py-2 text-xs tracking-wide rounded-lg transition-colors",
+                      'flex items-center justify-between px-4 py-2 text-xs tracking-wide rounded-lg transition-colors',
                       pathname === item.href || pathname.startsWith(item.href + '/')
-                        ? "text-brand-heading font-medium bg-muted"
+                        ? 'text-brand-heading font-medium bg-muted'
                         : navItemIdle
                     )}
                   >
                     <span>{item.label}</span>
                     {item.badge != null && item.badge > 0 ? (
-                      <span className="min-w-[1.25rem] h-5 px-1 rounded-full text-[10px] font-semibold flex items-center justify-center tabular-nums bg-[rgb(45,79,30)] text-white">
+                      <span className="min-w-[1.25rem] h-5 px-1 rounded-full text-[10px] font-semibold flex items-center justify-center tabular-nums bg-brand text-white">
                         {item.badge > 9 ? '9+' : item.badge}
                       </span>
                     ) : null}
@@ -204,18 +204,15 @@ export function NavigationSidebar({ isOpen, onClose }: NavigationSidebarProps) {
               </div>
             )}
           </div>
-
         </nav>
 
-        <div className="px-3 py-2">
+        <div className="shrink-0 border-t border-subtle px-3 py-2">
           <Link
             href="/einstellungen"
             onClick={() => onClose()}
             className={cn(
               'flex items-center gap-3 w-full px-4 py-3 text-sm font-medium rounded-lg transition-colors',
-              isSettingsRoute(pathname)
-                ? 'bg-[rgb(45,79,30)] text-white'
-                : navItemIdle
+              isSettingsRoute(pathname) ? 'nav-item-active' : navItemIdle
             )}
           >
             <span className="material-icons text-xl">settings</span>

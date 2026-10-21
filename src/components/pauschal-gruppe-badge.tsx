@@ -23,8 +23,8 @@ interface PauschalGruppeBadgeProps {
 const variantClasses: Record<PauschalBadgeVariant, string> = {
   offen: 'border-[rgb(230,126,34)]/50 bg-[rgb(230,126,34)]/15 text-[rgb(230,126,34)] dark:text-[rgb(230,126,34)]',
   gemeinsam: 'border-muted-foreground/30 bg-muted/50 text-muted-foreground',
-  gruppe: 'border-[rgb(45,79,30)]/40 bg-[rgb(45,79,30)]/10 text-[rgb(45,79,30)] dark:text-green-300',
-  mehrere: 'border-[rgb(45,79,30)]/30 bg-[rgb(45,79,30)]/8 text-[rgb(45,79,30)] dark:text-green-300',
+  gruppe: 'border-primary/40 bg-primary/10 text-brand-heading dark:text-green-300',
+  mehrere: 'border-primary/30 bg-primary/8 text-brand-heading dark:text-green-300',
   alle_haushalte: 'border-blue-400/40 bg-blue-50 text-blue-800 dark:bg-blue-950/30 dark:text-blue-200',
 }
 
@@ -68,7 +68,7 @@ function BadgeChip({
       className={cn(
         'shrink-0 max-w-[8rem] truncate text-[10px] px-1.5 py-0 font-medium',
         variantClasses[displayVariant],
-        highlightOwnGruppe && isOwn && 'ring-1 ring-[rgb(45,79,30)]/60 font-bold',
+        highlightOwnGruppe && isOwn && 'ring-1 ring-primary/60 font-bold',
         onClick && 'cursor-pointer hover:opacity-80 active:scale-95 transition-transform',
         className
       )}

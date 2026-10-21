@@ -61,7 +61,7 @@ function VehicleChip({
     <label
       className={cn(
         'flex items-center gap-2 rounded-lg border px-3 py-2 cursor-pointer transition-colors',
-        checked ? 'border-[rgb(45,79,30)] bg-[rgb(45,79,30)]/5' : 'border-border hover:bg-muted/50',
+        checked ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/50',
         disabled && 'opacity-50 pointer-events-none'
       )}
     >

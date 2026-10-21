@@ -1,0 +1,32 @@
+---
+description: UI-Muster, Brand-Tokens und Layout-Shells – keine Parallel-Layouts
+globs: "**/*.{tsx,css}"
+alwaysApply: false
+---
+
+# UI-Design
+
+Ausführlich: [`docs/DESIGN.md`](../../docs/DESIGN.md). Tokens: `src/app/globals.css`.
+
+## Shells
+
+- **App-Listen/Tools/Hub:** `PageShell` + `PageHeader` (kein manuelles Sidebar-/Sticky-Skelett).
+- **Einstellungen/Stammdaten:** `ConfigPageLayout` + Eintrag in `SETTINGS_NAV_GROUPS`.
+- Nav Settings: nur `ConfigSubnav` / `GroupedNavList` (`SETTINGS_NAV_COLUMN_CLASS`).
+- Desktop Hub `/einstellungen` → `SETTINGS_DEFAULT_HREF` (Darstellung).
+- Zurück: `BackLink`. Sticky-Header: `z-20` (in `PageHeader` gekapselt).
+- Ausnahmen (Packliste, Ausrüstung, Auth): siehe `docs/DESIGN.md` – nicht `AppShell` erfinden.
+
+## Tokens
+
+- Active-Nav / Brand-Fill: `.nav-item-active`, `.bg-brand`, `.bg-brand-muted`.
+- Titel: `.text-brand-heading`. Ränder: `.border-subtle`.
+- Buttons: `bg-primary` / `.bg-brand` – kein neues `rgb(45,79,30)`.
+- App-Palette (Grün/Orange/Beige) ist kanonisch.
+
+## Wiederkehrende UI
+
+- Gleiche Darstellung → Shared Component, keine dritte Variante.
+- Entity-Zeilen: `ListTile`. Single-FAB: `BrandFab`. Multi-FAB: `FabMenuM3`. Loading: `BrandSpinner`.
+- Leerzustand: `BrandEmptyState`. Modals: `ResponsiveModal`.
+- Cards: `CardTitle` ist `text-lg` (Default); bei Bedarf `text-base`.

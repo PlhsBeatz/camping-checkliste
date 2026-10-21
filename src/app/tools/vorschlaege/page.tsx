@@ -1,7 +1,8 @@
 'use client'
 
 import { Suspense, useCallback, useEffect, useState } from 'react'
-import { NavigationSidebar } from '@/components/navigation-sidebar'
+import { PageShell } from '@/components/page-shell'
+import { PageHeader } from '@/components/page-header'
 import { SmartSuggestionCard } from '@/components/smart-suggestion-card'
 import { BrandEmptyState } from '@/components/brand-empty-state'
 import {
@@ -9,9 +10,6 @@ import {
   SuggestionsEmptyIllustration,
 } from '@/components/brand-empty-illustrations'
 import { TempPromoteEquipmentDialog } from '@/components/temp-promote-equipment-dialog'
-import { Button } from '@/components/ui/button'
-import { Menu } from 'lucide-react'
-import { cn } from '@/lib/utils'
 import type { ApiResponse } from '@/lib/api-types'
 import type { SmartSuggestion } from '@/lib/smart-suggestions'
 import { notifySmartSuggestionsChanged } from '@/lib/smart-suggestions-events'
@@ -24,7 +22,6 @@ import { useTempPromoteEquipment } from '@/hooks/use-temp-promote-equipment'
 function VorschlaegePageContent() {
   const focusId = useSuggestionFocusId()
   const { canAccessConfig } = useAuth()
-  const [showNav, setShowNav] = useState(false)
   const [items, setItems] = useState<SmartSuggestion[]>([])
 
   const load = useCallback(async () => {
@@ -63,59 +60,45 @@ function VorschlaegePageContent() {
   )
 
   return (
-    <div className="min-h-screen flex max-w-full overflow-x-clip">
-      <NavigationSidebar isOpen={showNav} onClose={() => setShowNav(false)} />
-      <div className={cn('flex-1 min-w-0 transition-all duration-300', 'lg:ml-[280px]')}>
-        <div className="container mx-auto p-4 md:p-6 max-w-full flex flex-col min-h-screen gap-0">
-          <div className="sticky top-0 z-30 bg-card shadow pb-4 -mx-4 px-4 -mt-4 pt-4 md:-mx-6 md:px-6 md:-mt-6 md:pt-6 mb-6">
-            <div className="flex items-center gap-4 min-w-0">
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={() => setShowNav(true)}
-                className="lg:hidden shrink-0"
-              >
-                <Menu className="h-5 w-5" />
-              </Button>
-              <div className="min-w-0">
-                <h1 className="text-lg sm:text-xl font-bold tracking-tight text-brand-heading">
-                  Vorschläge
-                </h1>
-                <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
-                  Muster aus euren Packlisten und Campingplätzen – nichts wird still gespeichert.
-                  „Später“ blendet einen Hinweis für 7 Tage aus.
-                </p>
-              </div>
-            </div>
-          </div>
+    <PageShell
+      containerClassName="flex flex-col min-h-screen gap-6"
+      afterContent={
+        canAccessConfig ? <TempPromoteEquipmentDialog state={dialogState} /> : null
+      }
+    >
+      <PageHeader
+        title="Vorschläge"
+        subtitle={
+          <>
+            Muster aus euren Packlisten und Campingplätzen – nichts wird still gespeichert.
+            „Später“ blendet einen Hinweis für 7 Tage aus.
+          </>
+        }
+      />
 
-          {items.length === 0 ? (
-            <BrandEmptyState
-              illustration={
-                <SuggestionsEmptyIllustration className={EMPTY_ILLUSTRATION_CLASS} />
-              }
-              title="Alles im Lot"
-              description="Gerade gibt es nichts zu prüfen. Sobald sich Muster aus euren Packlisten oder Campingplätzen ergeben, erscheinen die Hinweise hier."
+      {items.length === 0 ? (
+        <BrandEmptyState
+          illustration={
+            <SuggestionsEmptyIllustration className={EMPTY_ILLUSTRATION_CLASS} />
+          }
+          title="Alles im Lot"
+          description="Gerade gibt es nichts zu prüfen. Sobald sich Muster aus euren Packlisten oder Campingplätzen ergeben, erscheinen die Hinweise hier."
+        />
+      ) : (
+        <div className="grid gap-4 xl:grid-cols-2 min-w-0">
+          {items.map((s) => (
+            <SmartSuggestionCard
+              key={s.id}
+              suggestion={s}
+              busy={busyId === s.id || (opening && openingId === s.id)}
+              highlighted={flashing && s.id === focusId}
+              canCreateEquipment={canAccessConfig}
+              onAct={(action, extra) => handleCardAct(s, action, extra)}
             />
-          ) : (
-            <div className="grid gap-4 xl:grid-cols-2 min-w-0">
-              {items.map((s) => (
-                <SmartSuggestionCard
-                  key={s.id}
-                  suggestion={s}
-                  busy={busyId === s.id || (opening && openingId === s.id)}
-                  highlighted={flashing && s.id === focusId}
-                  canCreateEquipment={canAccessConfig}
-                  onAct={(action, extra) => handleCardAct(s, action, extra)}
-                />
-              ))}
-            </div>
-          )}
+          ))}
         </div>
-      </div>
-
-      {canAccessConfig && <TempPromoteEquipmentDialog state={dialogState} />}
-    </div>
+      )}
+    </PageShell>
   )
 }
 

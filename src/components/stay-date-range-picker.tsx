@@ -104,7 +104,7 @@ export function StayDateRangePicker({
     <Button
       type="button"
       size="sm"
-      className="flex-1 bg-[rgb(45,79,30)] text-white hover:bg-[rgb(45,79,30)]/90 hover:text-white border-[rgb(45,79,30)]"
+      className="flex-1 bg-primary text-white hover:bg-primary/90 hover:text-white border-primary"
       disabled={!draftRange?.from}
       onClick={confirmRange}
     >

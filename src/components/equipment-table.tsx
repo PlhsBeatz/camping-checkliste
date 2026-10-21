@@ -926,7 +926,7 @@ export const EquipmentTable = React.memo(({
                       geschoben – im steady state ist `pushY === 0`. */}
                   {stickyState.main && (
                     <div
-                      className="sticky z-[19] flex items-center bg-[rgb(45,79,30)] text-white font-bold text-base px-4 pointer-events-none"
+                      className="sticky z-[19] flex items-center bg-primary text-white font-bold text-base px-4 pointer-events-none"
                       style={{
                         top: columnHeaderHeight,
                         height: MAIN_CAT_HEIGHT,
@@ -972,7 +972,7 @@ export const EquipmentTable = React.memo(({
                       return (
                         <div
                           key={row.id}
-                          className="absolute left-0 right-0 flex items-center bg-[rgb(45,79,30)] text-white font-bold text-base px-4 isolate"
+                          className="absolute left-0 right-0 flex items-center bg-primary text-white font-bold text-base px-4 isolate"
                           style={{ height: size, top: 0, transform: `translate3d(0,${translateY}px,0)` }}
                         >
                           {row.name}

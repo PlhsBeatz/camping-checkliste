@@ -28,6 +28,8 @@ import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { BrandEmptyState } from '@/components/brand-empty-state'
+import { ListTile } from '@/components/list-tile'
+import { BrandFab } from '@/components/brand-fab'
 import {
   EMPTY_ILLUSTRATION_CLASS,
   IdeaEmptyIllustration,
@@ -346,7 +348,7 @@ export function OptimierungenTool({ headerTrailingRef, canWrite = true }: Optimi
             type="button"
             variant="ghost"
             size="icon"
-            className="h-9 w-9 shrink-0 rounded-full border-0 bg-transparent text-foreground shadow-none hover:bg-neutral-100 focus-visible:ring-2 focus-visible:ring-[rgb(45,79,30)]/30"
+            className="h-9 w-9 shrink-0 rounded-full border-0 bg-transparent text-foreground shadow-none hover:bg-neutral-100 focus-visible:ring-2 focus-visible:ring-primary/30"
             aria-label="Weitere Aktionen"
           >
             <MoreVertical className="h-5 w-5" />
@@ -437,13 +439,15 @@ export function OptimierungenTool({ headerTrailingRef, canWrite = true }: Optimi
                   const linkCount = item.links?.length ?? 0
                   const fotoCount = item.foto_count ?? 0
                   return (
-                    <li
+                    <ListTile
                       key={item.id}
+                      asChild
                       className={cn(
-                        'py-2 px-3 bg-card rounded-xl border border-subtle shadow-sm overflow-hidden transition-all duration-200',
+                        'py-2 px-3 overflow-hidden transition-all duration-200',
                         isErledigt ? 'opacity-60' : 'hover:shadow-md'
                       )}
                     >
+                    <li>
                       <div className="flex items-start space-x-3">
                         <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center">
                           <Checkbox
@@ -462,7 +466,7 @@ export function OptimierungenTool({ headerTrailingRef, canWrite = true }: Optimi
                           <div className="flex items-start gap-2">
                             <Link
                               href={`/tools/optimierungen/${item.id}`}
-                              className="flex min-w-0 flex-1 flex-col rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(45,79,30)]/40"
+                              className="flex min-w-0 flex-1 flex-col rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                             >
                               <div className="flex flex-wrap items-center gap-2">
                                 <span
@@ -577,6 +581,7 @@ export function OptimierungenTool({ headerTrailingRef, canWrite = true }: Optimi
                         </div>
                       </div>
                     </li>
+                    </ListTile>
                   )
                 })}
               </ul>
@@ -586,16 +591,7 @@ export function OptimierungenTool({ headerTrailingRef, canWrite = true }: Optimi
       )}
 
       {canWrite ? (
-      <div className="fixed bottom-6 right-6 z-30">
-        <Button
-          size="icon"
-          onClick={openCreate}
-          aria-label="Neue Optimierung"
-          className="h-14 w-14 rounded-full shadow-lg hover:shadow-xl transition-shadow bg-[rgb(45,79,30)] hover:bg-[rgb(45,79,30)]/90 text-white aspect-square p-0"
-        >
-          <Plus className="h-6 w-6" strokeWidth={2.5} />
-        </Button>
-      </div>
+        <BrandFab onClick={openCreate} aria-label="Neue Optimierung" />
       ) : null}
 
       <OptimierungEditDialog

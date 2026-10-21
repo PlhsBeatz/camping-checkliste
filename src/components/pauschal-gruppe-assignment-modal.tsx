@@ -51,9 +51,9 @@ function GroupChip({
       className={cn(
         'rounded-full border px-3 py-1.5 text-sm font-medium transition-colors',
         active
-          ? 'border-[rgb(45,79,30)] bg-[rgb(45,79,30)] text-white'
+          ? 'border-primary bg-primary text-white'
           : 'border-subtle bg-card hover:bg-muted/60',
-        highlight && !active && 'ring-1 ring-[rgb(45,79,30)]/40'
+        highlight && !active && 'ring-1 ring-primary/40'
       )}
     >
       {children}
@@ -172,7 +172,7 @@ export function PauschalGruppeAssignmentModal({
       {deferApply && (
         <Button
           type="button"
-          className="w-full mt-4 bg-[rgb(45,79,30)] hover:bg-[rgb(45,79,30)]/90 text-white"
+          className="w-full mt-4 bg-primary hover:bg-primary/90 text-white"
           disabled={pendingIds.length === 0}
           onClick={handleConfirm}
         >

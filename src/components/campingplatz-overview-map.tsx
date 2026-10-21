@@ -98,7 +98,7 @@ export function CampingplatzOverviewMap({
             onClick={() => setInteractiveOpen(true)}
             className={cn(
               'absolute inset-0 z-10 cursor-pointer border-0 bg-transparent p-0 text-left outline-none',
-              'transition-opacity hover:bg-black/[0.03] focus-visible:ring-2 focus-visible:ring-[rgb(45,79,30)]/35 focus-visible:ring-offset-2 focus-visible:ring-offset-background'
+              'transition-opacity hover:bg-black/[0.03] focus-visible:ring-2 focus-visible:ring-primary/35 focus-visible:ring-offset-2 focus-visible:ring-offset-background'
             )}
             aria-label={previewLabel}
           >

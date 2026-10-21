@@ -1007,7 +1007,7 @@ export function CampingplatzEditModal({
                       </div>
                       {f.is_cover && (
                         <span
-                          className="pointer-events-none absolute top-1 left-1 inline-flex h-5 w-5 items-center justify-center rounded bg-[rgb(45,79,30)] text-white shadow-sm"
+                          className="pointer-events-none absolute top-1 left-1 inline-flex h-5 w-5 items-center justify-center rounded bg-primary text-white shadow-sm"
                           aria-label="Standardbild für die Liste"
                           title="Standardbild für die Liste"
                         >

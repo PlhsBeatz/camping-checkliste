@@ -4,8 +4,9 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { AlertTriangle, Clock, Menu } from 'lucide-react'
-import { NavigationSidebar } from '@/components/navigation-sidebar'
+import { AlertTriangle, Clock } from 'lucide-react'
+import { PageShell } from '@/components/page-shell'
+import { PageHeader } from '@/components/page-header'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { BrandEmptyState } from '@/components/brand-empty-state'
@@ -145,7 +146,7 @@ function PackingWeightBadge({
 function OverviewTile({ href, children }: { href: string; children: ReactNode }) {
   return (
     <Link href={href} className="block min-w-0 h-full">
-      <Card className="h-full min-h-[8.75rem] transition-colors hover:border-[rgb(45,79,30)]/40">
+      <Card className="h-full min-h-[8.75rem] transition-colors hover:border-primary/40">
         <CardContent className="relative p-3 h-full flex flex-col gap-1.5">{children}</CardContent>
       </Card>
     </Link>
@@ -157,7 +158,6 @@ function HeuteHubContent() {
   const { canAccessConfig } = useAuth()
   const pushSubscribe = usePushSubscribe()
   const { settings: pushSettings } = useUserPushSettings(pushSubscribe.subscribed)
-  const [showNavSidebar, setShowNavSidebar] = useState(false)
   const [feed, setFeed] = useState<AttentionFeed | null>(null)
   const [loading, setLoading] = useState(true)
   const [snoozingKey, setSnoozingKey] = useState<string | null>(null)
@@ -168,20 +168,6 @@ function HeuteHubContent() {
   const [error, setError] = useState<string | null>(null)
   const positionRef = useRef<GeoPoint | null>(null)
   const feedRef = useRef<AttentionFeed | null>(null)
-
-  useEffect(() => {
-    if (showNavSidebar) {
-      document.body.style.overflow = 'hidden'
-      document.documentElement.style.overflow = 'hidden'
-    } else {
-      document.body.style.overflow = ''
-      document.documentElement.style.overflow = ''
-    }
-    return () => {
-      document.body.style.overflow = ''
-      document.documentElement.style.overflow = ''
-    }
-  }, [showNavSidebar])
 
   const load = useCallback(async (pos?: GeoPoint | null) => {
     const userPosition = pos === undefined ? positionRef.current : pos
@@ -329,31 +315,23 @@ function HeuteHubContent() {
     feed?.items.filter((item) => item.kind !== 'vacation_next').slice(0, MAX_ATTENTION_ITEMS) ?? []
 
   return (
-    <div className="min-h-screen flex max-w-full overflow-x-clip">
-      <NavigationSidebar isOpen={showNavSidebar} onClose={() => setShowNavSidebar(false)} />
-
-      <div className={cn('flex-1 transition-all duration-300 min-w-0 bg-scroll-pattern', 'lg:ml-[280px]')}>
-        <div className="container mx-auto p-4 md:p-6 space-y-6 max-w-full">
-          <div className="sticky top-0 z-30 flex items-center justify-between gap-3 bg-card shadow pb-4 -mx-4 px-4 -mt-4 pt-4 md:-mx-6 md:px-6 md:-mt-6 md:pt-6 md:pb-4">
-            <div className="flex items-center gap-4 min-w-0">
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={() => setShowNavSidebar(true)}
-                className="lg:hidden shrink-0"
-              >
-                <Menu className="h-5 w-5" />
-              </Button>
-              <div className="min-w-0">
-                <h1 className="text-lg sm:text-xl font-bold tracking-tight text-brand-heading">
-                  Heute
-                </h1>
-                <p className="text-xs sm:text-sm text-muted-foreground truncate mt-0.5">
-                  {feed?.headline ?? (loading ? 'Laden…' : '—')}
-                </p>
-              </div>
-            </div>
-          </div>
+    <PageShell
+      contentClassName="bg-scroll-pattern"
+      containerClassName="space-y-6"
+      afterContent={
+        canAccessConfig && promoteHostMounted ? (
+          <TempPromoteEquipmentHost
+            requestId={promoteRequestId}
+            onRequestClear={clearPromoteRequest}
+            onCompleted={onTempPromoteCompleted}
+          />
+        ) : null
+      }
+    >
+      <PageHeader
+        title="Heute"
+        subtitle={feed?.headline ?? (loading ? 'Laden…' : '—')}
+      />
 
           <PushDeviceActivatePrompt
             accountPushEnabled={pushSettings?.enabled ?? false}
@@ -391,7 +369,7 @@ function HeuteHubContent() {
                       </span>
                     ) : null}
                     <span
-                      className="material-icons text-xl leading-none text-[rgb(45,79,30)]"
+                      className="material-icons text-xl leading-none text-brand-heading"
                       aria-hidden
                     >
                       checklist
@@ -435,7 +413,7 @@ function HeuteHubContent() {
                       </span>
                     ) : null}
                     <span
-                      className="material-icons text-xl leading-none text-[rgb(45,79,30)]"
+                      className="material-icons text-xl leading-none text-brand-heading"
                       aria-hidden
                     >
                       event
@@ -510,7 +488,7 @@ function HeuteHubContent() {
                           <span
                             className={cn(
                               'material-icons text-xl leading-none mt-0.5 shrink-0',
-                              danger ? 'text-destructive' : 'text-[rgb(45,79,30)]'
+                              danger ? 'text-destructive' : 'text-brand-heading'
                             )}
                             aria-hidden
                           >
@@ -562,7 +540,7 @@ function HeuteHubContent() {
                                     <Button
                                       type="button"
                                       size="sm"
-                                      className="h-8 bg-[rgb(45,79,30)] hover:bg-[rgb(45,79,30)]/90 text-white"
+                                      className="h-8 bg-primary hover:bg-primary/90 text-white"
                                       disabled={itemBusy}
                                       onClick={() => void acceptPackingAdd(item)}
                                     >
@@ -573,7 +551,7 @@ function HeuteHubContent() {
                                     <Button
                                       type="button"
                                       size="sm"
-                                      className="h-8 bg-[rgb(45,79,30)] hover:bg-[rgb(45,79,30)]/90 text-white"
+                                      className="h-8 bg-primary hover:bg-primary/90 text-white"
                                       disabled={itemBusy}
                                       onClick={() => openTempPromote(item.suggestionId!)}
                                     >
@@ -669,17 +647,7 @@ function HeuteHubContent() {
               </nav>
             </>
           ) : null}
-        </div>
-      </div>
-
-      {canAccessConfig && promoteHostMounted ? (
-        <TempPromoteEquipmentHost
-          requestId={promoteRequestId}
-          onRequestClear={clearPromoteRequest}
-          onCompleted={onTempPromoteCompleted}
-        />
-      ) : null}
-    </div>
+    </PageShell>
   )
 }
 

@@ -184,7 +184,7 @@ export function PackingSettingsSidebar({
               : 'translate-x-full'
         )}
       >
-        <div className="p-6 bg-[rgb(45,79,30)] text-white flex-shrink-0">
+        <div className="p-6 bg-primary text-white flex-shrink-0">
           <div className="flex items-start justify-between mb-3">
             <h2 className="text-lg font-bold">WER PACKT?</h2>
             <Button
@@ -212,14 +212,13 @@ export function PackingSettingsSidebar({
                   className={cn(
                     'w-full p-4 rounded-xl border-2 transition-all',
                     selectedProfile === null
-                      ? 'border-[rgb(45,79,30)] bg-[rgb(45,79,30)]/5 dark:bg-[rgb(45,79,30)]/15'
+                      ? 'border-primary bg-primary/5 dark:bg-primary/15'
                       : 'border-border hover:border-muted-foreground/40'
                   )}
                 >
                   <div className="flex items-center gap-3">
                     <div
-                      className="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0"
-                      style={{ backgroundColor: 'rgb(45,79,30)', color: '#ffffff' }}
+                      className="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 bg-primary text-white"
                     >
                       <span className="material-icons">groups</span>
                     </div>

@@ -1021,7 +1021,7 @@ const PackingItem: React.FC<PackingItemProps> = ({
                 disabled
                 className={cn(
                   "h-4 w-4 min-h-4 min-w-4 rounded-md border-2 border-gray-300 shrink-0 cursor-default",
-                  packed && "data-[state=checked]:bg-[rgb(45,79,30)] data-[state=checked]:border-[rgb(45,79,30)]",
+                  packed && "data-[state=checked]:bg-primary data-[state=checked]:border-primary",
                   vorgemerkt && !packed && "data-[state=checked]:bg-[rgb(230,126,34)] data-[state=checked]:border-[rgb(230,126,34)]"
                 )}
                 aria-hidden
@@ -1101,9 +1101,9 @@ const PackingItem: React.FC<PackingItemProps> = ({
           !bulkSelected && "border-subtle dark:border-white/10",
           showAusgemustertHighlight && !bulkSelected &&
             "border-red-400/80 bg-red-50 dark:border-red-500/60 dark:bg-red-950/35",
-          bulkSelectionMode && bulkSelectable && !bulkSelected && "border-dashed border-[rgb(45,79,30)]/30",
+          bulkSelectionMode && bulkSelectable && !bulkSelected && "border-dashed border-primary/30",
           bulkSelected &&
-            "border-[rgb(45,79,30)]/40 bg-[rgb(237,242,233)] dark:bg-[rgb(38,48,34)] hover:bg-[rgb(229,236,224)] dark:hover:bg-[rgb(42,52,38)]",
+            "border-primary/40 bg-[rgb(237,242,233)] dark:bg-[rgb(38,48,34)] hover:bg-[rgb(229,236,224)] dark:hover:bg-[rgb(42,52,38)]",
           !bulkSelected && !isExiting && !isPackedForOpacity && "hover:shadow-md",
           bulkSelectionMode && !bulkSelectable && "opacity-50 border-subtle dark:border-white/10",
           bulkSelectionMode && bulkSelectable && "touch-manipulation",
@@ -1119,7 +1119,7 @@ const PackingItem: React.FC<PackingItemProps> = ({
       >
         {bulkSelected && (
           <span
-            className="pointer-events-none absolute inset-y-0 left-0 w-1 rounded-l-[10px] bg-[rgb(45,79,30)]"
+            className="pointer-events-none absolute inset-y-0 left-0 w-1 rounded-l-[10px] bg-primary"
             aria-hidden
           />
         )}
@@ -1143,14 +1143,14 @@ const PackingItem: React.FC<PackingItemProps> = ({
                 className={cn(
                   'flex h-6 w-6 items-center justify-center rounded-full border-2 transition-colors',
                   bulkSelected
-                    ? 'border-[rgb(45,79,30)] bg-[rgb(45,79,30)] text-white'
-                    : 'border-[rgb(45,79,30)]/45 bg-card'
+                    ? 'border-primary bg-primary text-white'
+                    : 'border-primary/45 bg-card'
                 )}
               >
                 {bulkSelected ? (
                   <Check className="h-3.5 w-3.5" strokeWidth={3} aria-hidden />
                 ) : (
-                  <span className="h-2 w-2 rounded-full bg-[rgb(45,79,30)]/30" aria-hidden />
+                  <span className="h-2 w-2 rounded-full bg-primary/30" aria-hidden />
                 )}
               </button>
             </div>
@@ -1166,7 +1166,7 @@ const PackingItem: React.FC<PackingItemProps> = ({
                   "h-6 w-6 min-h-6 min-w-6 rounded-md border-2 border-gray-300",
                   isVorgemerktPauschal
                     ? "data-[state=checked]:bg-[rgb(230,126,34)] data-[state=checked]:border-[rgb(230,126,34)]"
-                    : "data-[state=checked]:bg-[rgb(45,79,30)] data-[state=checked]:border-[rgb(45,79,30)]"
+                    : "data-[state=checked]:bg-primary data-[state=checked]:border-primary"
                 )}
               />
             </div>
@@ -1183,7 +1183,7 @@ const PackingItem: React.FC<PackingItemProps> = ({
                   "h-6 w-6 min-h-6 min-w-6 rounded-md border-2 border-gray-300",
                   pauschalGruppenFilter === 'eigene' && ownGruppeVorgemerkt
                     ? "data-[state=checked]:bg-[rgb(230,126,34)] data-[state=checked]:border-[rgb(230,126,34)]"
-                    : "data-[state=checked]:bg-[rgb(45,79,30)] data-[state=checked]:border-[rgb(45,79,30)]"
+                    : "data-[state=checked]:bg-primary data-[state=checked]:border-primary"
                 )}
               />
             </div>
@@ -1199,7 +1199,7 @@ const PackingItem: React.FC<PackingItemProps> = ({
                   "h-6 w-6 min-h-6 min-w-6 rounded-md border-2 border-gray-300",
                   selectedTravelerVorgemerkt
                     ? "data-[state=checked]:bg-[rgb(230,126,34)] data-[state=checked]:border-[rgb(230,126,34)]"
-                    : "data-[state=checked]:bg-[rgb(45,79,30)] data-[state=checked]:border-[rgb(45,79,30)]"
+                    : "data-[state=checked]:bg-primary data-[state=checked]:border-primary"
                 )}
               />
             </div>
@@ -1211,7 +1211,7 @@ const PackingItem: React.FC<PackingItemProps> = ({
                 id={`item-${id}`}
                 checked={isFullyPackedFinal}
                 onCheckedChange={handleMarkAllToggle}
-                className="h-6 w-6 min-h-6 min-w-6 rounded-md border-2 border-gray-300 data-[state=checked]:bg-[rgb(45,79,30)] data-[state=checked]:border-[rgb(45,79,30)]"
+                className="h-6 w-6 min-h-6 min-w-6 rounded-md border-2 border-gray-300 data-[state=checked]:bg-primary data-[state=checked]:border-primary"
               />
             </div>
           )}
@@ -1335,8 +1335,8 @@ const PackingItem: React.FC<PackingItemProps> = ({
                   const chipClassName = cn(
                     'inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-medium transition-colors shrink-0',
                     g.id === ownGruppeId
-                      ? 'border-[rgb(45,79,30)]/50 bg-[rgb(45,79,30)]/5 text-[rgb(45,79,30)] dark:text-green-300 font-semibold'
-                      : 'border-[rgb(45,79,30)]/40 bg-[rgb(45,79,30)]/10 text-[rgb(45,79,30)] dark:text-green-300',
+                      ? 'border-primary/50 bg-primary/5 text-brand-heading dark:text-green-300 font-semibold'
+                      : 'border-primary/40 bg-primary/10 text-brand-heading dark:text-green-300',
                     canOpenAssignment && 'cursor-pointer hover:bg-muted/50 active:scale-[0.98]'
                   );
                   const chipContent = (
@@ -1349,7 +1349,7 @@ const PackingItem: React.FC<PackingItemProps> = ({
                             (packed || vorgemerkt) &&
                               (vorgemerkt
                                 ? 'border-[rgb(230,126,34)] bg-[rgb(230,126,34)] text-white'
-                                : 'border-[rgb(45,79,30)] bg-[rgb(45,79,30)] text-white')
+                                : 'border-primary bg-primary text-white')
                           )}
                         >
                           {(packed || vorgemerkt) && (
@@ -1435,7 +1435,7 @@ const PackingItem: React.FC<PackingItemProps> = ({
                                       (packed || vorgemerkt) &&
                                         (vorgemerkt
                                           ? "border-[rgb(230,126,34)] bg-[rgb(230,126,34)] text-white"
-                                          : "border-[rgb(45,79,30)] bg-[rgb(45,79,30)] text-white")
+                                          : "border-primary bg-primary text-white")
                                     )}
                                     aria-hidden
                                   >
@@ -2383,7 +2383,7 @@ export function PackingList({
             type="button"
             onClick={() => onProfileChange(person.id)}
             className={cn(
-              'w-full flex items-center gap-3 p-3 rounded-xl border-2 border-subtle hover:border-[rgb(45,79,30)]/40 hover:bg-[rgb(45,79,30)]/5 transition-colors',
+              'w-full flex items-center gap-3 p-3 rounded-xl border-2 border-subtle hover:border-primary/40 hover:bg-primary/5 transition-colors',
               opts.subdued && 'opacity-90'
             )}
           >
@@ -2697,10 +2697,10 @@ export function PackingList({
         )}
         {showTeamPackOverview ? (
           <div className="flex flex-col items-center justify-center min-h-[50vh] py-8">
-            <Card className="max-w-md w-full border-[rgb(45,79,30)]/20 shadow-lg bg-card/95">
+            <Card className="max-w-md w-full border-primary/20 shadow-lg bg-card/95">
               <CardContent className="pt-8 pb-6 px-6 sm:px-8">
                 <div className="text-center mb-6">
-                  <div className="mx-auto w-14 h-14 rounded-full bg-[rgb(45,79,30)]/10 flex items-center justify-center mb-4">
+                  <div className="mx-auto w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center mb-4">
                     <CheckCheck className="h-8 w-8 text-brand-heading" />
                   </div>
                   <h2 className="text-xl font-semibold text-brand-heading mb-2">

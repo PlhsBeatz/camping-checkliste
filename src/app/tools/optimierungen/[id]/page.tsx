@@ -4,7 +4,9 @@ import { useCallback, useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
-import { NavigationSidebar } from '@/components/navigation-sidebar'
+import { PageShell } from '@/components/page-shell'
+import { PageHeader } from '@/components/page-header'
+import { BackLink } from '@/components/back-link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
@@ -17,10 +19,8 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { UndoToast } from '@/components/undo-toast'
 import {
-  ArrowLeft,
   CheckCircle2,
   ExternalLink,
-  Menu,
   MoreVertical,
   Pencil,
   Trash2,
@@ -65,7 +65,7 @@ function StatusHeader({ item }: { item: Optimierung }) {
         'rounded-t-lg px-4 py-2.5 text-center md:py-4',
         isClosed
           ? 'bg-[hsl(103,32%,88%)] text-brand-heading dark:bg-green-950/50 dark:text-brand-heading'
-          : 'bg-[rgb(45,79,30)] text-white'
+          : 'bg-primary text-white'
       )}
     >
       <p className="text-lg font-bold tracking-tight md:text-2xl">{STATUS_LABEL[item.status]}</p>
@@ -95,7 +95,6 @@ export default function OptimierungDetailPage() {
   const { toast } = useToast()
   const { mutate } = useOptimisticMutation()
   const { canReadOptimierung, canWriteOptimierung, loading: authLoading } = useAuth()
-  const [showNavSidebar, setShowNavSidebar] = useState(false)
   const [item, setItem] = useState<Optimierung | null>(null)
   const [fotos, setFotos] = useState<OptimierungFoto[]>([])
   const [vacations, setVacations] = useState<Vacation[]>([])
@@ -117,20 +116,6 @@ export default function OptimierungDetailPage() {
       router.replace('/')
     }
   }, [authLoading, canReadOptimierung, router])
-
-  useEffect(() => {
-    if (showNavSidebar) {
-      document.body.style.overflow = 'hidden'
-      document.documentElement.style.overflow = 'hidden'
-    } else {
-      document.body.style.overflow = ''
-      document.documentElement.style.overflow = ''
-    }
-    return () => {
-      document.body.style.overflow = ''
-      document.documentElement.style.overflow = ''
-    }
-  }, [showNavSidebar])
 
   const load = useCallback(async () => {
     if (!id) return
@@ -316,61 +301,45 @@ export default function OptimierungDetailPage() {
   const showContentLoading = loading || authLoading || !canReadOptimierung
 
   return (
-    <div className="min-h-screen flex max-w-full overflow-x-clip">
-      <NavigationSidebar isOpen={showNavSidebar} onClose={() => setShowNavSidebar(false)} />
-
-      <div className={cn('flex-1 transition-all duration-300 min-w-0', 'lg:ml-[280px]')}>
-        <div className="container mx-auto p-4 md:p-6 space-y-6 max-w-full">
-          <div className="sticky top-0 z-20 shrink-0 flex items-center justify-between gap-3 bg-card shadow pb-4 -mx-4 px-4 -mt-4 pt-4 md:-mx-6 md:px-6 md:-mt-6 md:pt-6 md:pb-4">
-            <div className="flex min-w-0 flex-1 items-center gap-4">
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={() => setShowNavSidebar(true)}
-                className="lg:hidden flex-shrink-0"
-              >
-                <Menu className="h-5 w-5" />
-              </Button>
-              <div className="min-w-0">
-                <h1 className="text-xl font-bold text-brand-heading truncate">
-                  {item?.titel ?? 'Optimierung'}
-                </h1>
-                <p className="text-sm text-muted-foreground truncate">{subtitle}</p>
-              </div>
-            </div>
-            {canWriteOptimierung && item ? (
-              <DropdownMenu modal={false}>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="h-9 w-9 shrink-0 rounded-full border-0 bg-transparent text-foreground shadow-none hover:bg-neutral-100 focus-visible:ring-2 focus-visible:ring-[rgb(45,79,30)]/30"
-                    aria-label="Weitere Aktionen"
-                  >
-                    <MoreVertical className="h-5 w-5" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="z-30 min-w-[10rem]">
-                  <DropdownMenuItem
-                    className="cursor-pointer gap-2"
-                    onClick={() => setEditOpen(true)}
-                  >
-                    <Pencil className="h-4 w-4" />
-                    Bearbeiten
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    className="cursor-pointer gap-2 text-destructive focus:text-destructive"
-                    onClick={() => setShowDeleteConfirm(true)}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                    Löschen
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            ) : null}
-          </div>
+    <PageShell containerClassName="space-y-6">
+      <PageHeader
+        title={item?.titel ?? 'Optimierung'}
+        subtitle={subtitle}
+        actions={
+          canWriteOptimierung && item ? (
+            <DropdownMenu modal={false}>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-9 w-9 shrink-0 rounded-full border-0 bg-transparent text-foreground shadow-none hover:bg-neutral-100 focus-visible:ring-2 focus-visible:ring-primary/30"
+                  aria-label="Weitere Aktionen"
+                >
+                  <MoreVertical className="h-5 w-5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="z-30 min-w-[10rem]">
+                <DropdownMenuItem
+                  className="cursor-pointer gap-2"
+                  onClick={() => setEditOpen(true)}
+                >
+                  <Pencil className="h-4 w-4" />
+                  Bearbeiten
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  className="cursor-pointer gap-2 text-destructive focus:text-destructive"
+                  onClick={() => setShowDeleteConfirm(true)}
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Löschen
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : null
+        }
+      />
 
           {showContentLoading ? (
             <div className="flex justify-center py-16 text-muted-foreground">Laden…</div>
@@ -383,16 +352,13 @@ export default function OptimierungDetailPage() {
             </div>
           ) : (
             <>
-              <div className="hidden flex-wrap gap-2 md:flex">
-                <Button variant="outline" size="sm" className="bg-card hover:bg-muted" asChild>
-                  <Link
-                    href="/tools/optimierungen"
-                    className="inline-flex items-center gap-2 whitespace-nowrap"
-                  >
-                    <ArrowLeft className="h-4 w-4 shrink-0" />
-                    Zur Liste
-                  </Link>
-                </Button>
+              <div>
+                <BackLink
+                  href="/tools/optimierungen"
+                  visible="always"
+                  variant="labeled"
+                  label="Zur Liste"
+                />
               </div>
 
               <Card className="overflow-hidden rounded-lg border shadow-sm bg-card">
@@ -458,7 +424,7 @@ export default function OptimierungDetailPage() {
                           <button
                             key={f.id}
                             type="button"
-                            className="relative aspect-[4/3] w-full overflow-hidden rounded-xl border bg-muted text-left outline-none ring-offset-2 transition hover:opacity-95 focus-visible:ring-2 focus-visible:ring-[rgb(45,79,30)]"
+                            className="relative aspect-[4/3] w-full overflow-hidden rounded-xl border bg-muted text-left outline-none ring-offset-2 transition hover:opacity-95 focus-visible:ring-2 focus-visible:ring-primary"
                             onClick={() => setLightboxId(f.id)}
                             aria-label="Foto groß anzeigen"
                           >
@@ -483,8 +449,8 @@ export default function OptimierungDetailPage() {
                         variant={item.status === 'erledigt' ? 'outline' : 'default'}
                         className={cn(
                           item.status === 'erledigt'
-                            ? 'border-[rgb(45,79,30)]/40 bg-card text-brand-heading hover:bg-muted'
-                            : 'bg-[rgb(45,79,30)] text-white hover:bg-[rgb(38,68,25)]'
+                            ? 'border-primary/40 bg-card text-brand-heading hover:bg-muted'
+                            : 'bg-primary text-white hover:bg-[rgb(38,68,25)]'
                         )}
                         onClick={() => {
                           void handleToggleErledigt(item.status !== 'erledigt')
@@ -501,8 +467,6 @@ export default function OptimierungDetailPage() {
               </Card>
             </>
           )}
-        </div>
-      </div>
 
       <PhotoLightbox
         fotos={fotos}
@@ -553,6 +517,6 @@ export default function OptimierungDetailPage() {
           onDismiss={() => setUndoToast(null)}
         />
       ) : null}
-    </div>
+    </PageShell>
   )
 }

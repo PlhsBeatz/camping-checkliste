@@ -30,7 +30,7 @@ function ProfileGridButton({
         'p-3 rounded-xl border-2 transition-all flex flex-col items-center gap-2',
         subdued && 'opacity-90',
         selectedProfile === person.id
-          ? 'border-[rgb(45,79,30)] bg-[rgb(45,79,30)]/5 dark:bg-[rgb(45,79,30)]/15'
+          ? 'border-primary bg-primary/5 dark:bg-primary/15'
           : 'border-border hover:border-muted-foreground/40'
       )}
     >

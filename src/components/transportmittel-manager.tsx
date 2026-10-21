@@ -28,6 +28,7 @@ import {
 } from '@/components/ui/select'
 import { Trash2, Plus, MoreVertical, Pencil, ChevronDown, ChevronRight, Wrench, RefreshCw } from 'lucide-react'
 import { BrandEmptyState } from '@/components/brand-empty-state'
+import { BrandFab } from '@/components/brand-fab'
 import {
   EMPTY_ILLUSTRATION_CLASS,
   TransportEmptyIllustration,
@@ -108,7 +109,7 @@ function TransportmittelRow({
         <div
           className={cn(
             'h-10 w-10 rounded-lg flex items-center justify-center flex-shrink-0',
-            isOtherHaushalt ? 'bg-muted' : 'bg-[rgb(45,79,30)]/10'
+            isOtherHaushalt ? 'bg-muted' : 'bg-primary/10'
           )}
         >
           <TransportIcon
@@ -137,7 +138,7 @@ function TransportmittelRow({
                   'inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium',
                   isOtherHaushalt
                     ? 'border border-muted-foreground/35 bg-background/80 text-muted-foreground'
-                    : 'bg-[rgb(45,79,30)]/10 text-[rgb(45,79,30)]'
+                    : 'bg-primary/10 text-brand-heading'
                 )}
               >
                 {vehicle.gruppe_name}
@@ -149,7 +150,7 @@ function TransportmittelRow({
                 isActive
                   ? isOtherHaushalt
                     ? 'bg-muted text-muted-foreground'
-                    : 'bg-[rgb(45,79,30)]/10 text-[rgb(45,79,30)]'
+                    : 'bg-primary/10 text-brand-heading'
                   : 'bg-muted text-muted-foreground'
               )}
             >
@@ -1285,7 +1286,7 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
             {showHaushaltSelect ? (
               <div className="flex flex-wrap items-center gap-2 pb-0.5">
                 <p className="text-sm font-semibold text-brand-heading">{standardGruppeName}</p>
-                <span className="inline-flex items-center rounded-full bg-[rgb(45,79,30)]/10 px-1.5 py-0.5 text-[10px] font-medium text-[rgb(45,79,30)]">
+                <span className="inline-flex items-center rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-brand-heading">
                   Standard
                 </span>
               </div>
@@ -1376,15 +1377,7 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
         )}
       </div>
 
-      <div className="fixed bottom-6 right-6 z-30">
-        <Button
-          size="icon"
-          onClick={openNew}
-          className="h-14 w-14 rounded-full shadow-lg hover:shadow-xl transition-shadow bg-[rgb(45,79,30)] hover:bg-[rgb(45,79,30)]/90 text-white aspect-square p-0"
-        >
-          <Plus className="h-6 w-6" strokeWidth={2.5} />
-        </Button>
-      </div>
+      <BrandFab onClick={openNew} aria-label="Transportmittel hinzufügen" />
 
       <ResponsiveModal
         open={showDialog}
@@ -1509,7 +1502,7 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
                   className={cn(
                     'flex flex-col items-center gap-1 rounded-lg border-2 px-3 py-2 min-w-[4.5rem] transition-colors',
                     form.icon === key
-                      ? 'border-[rgb(45,79,30)] bg-[rgb(45,79,30)]/5 dark:bg-[rgb(45,79,30)]/15'
+                      ? 'border-primary bg-primary/5 dark:bg-primary/15'
                       : 'border-subtle hover:border-gray-300 dark:hover:border-white/20'
                   )}
                   aria-pressed={form.icon === key}
@@ -1869,7 +1862,7 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
                       className={cn(
                         'inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium',
                         formIsActive
-                          ? 'bg-[rgb(45,79,30)]/10 text-[rgb(45,79,30)]'
+                          ? 'bg-primary/10 text-brand-heading'
                           : 'bg-muted text-muted-foreground'
                       )}
                     >
@@ -2112,7 +2105,7 @@ export function TransportmittelManager({ vehicles, onRefresh }: TransportmittelM
               <label
                 className={cn(
                   'flex items-start gap-3 rounded-lg border p-3 cursor-pointer transition-colors',
-                  deleteMode === 'inactivate' ? 'border-[rgb(45,79,30)] bg-[rgb(45,79,30)]/5' : 'border-border'
+                  deleteMode === 'inactivate' ? 'border-primary bg-primary/5' : 'border-border'
                 )}
               >
                 <RadioGroupItem value="inactivate" className="mt-0.5" />

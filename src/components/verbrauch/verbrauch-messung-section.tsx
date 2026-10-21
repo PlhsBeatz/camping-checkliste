@@ -34,12 +34,12 @@ import {
   Fuel,
   MoreVertical,
   Pencil,
-  Plus,
   Trash2,
   Flag,
   CircleDot,
   AlertTriangle,
 } from 'lucide-react'
+import { BrandFab } from '@/components/brand-fab'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { VerbrauchChart } from '@/components/verbrauch/verbrauch-chart'
 import { GewichtZuLiterEingabe } from '@/components/verbrauch/gewicht-zu-liter-eingabe'
@@ -926,16 +926,10 @@ export function VerbrauchMessungSection({
       />
 
       {canAdmin && availableVacations.length > 0 && (
-        <div className="fixed bottom-6 right-6 z-30">
-          <Button
-            size="icon"
-            onClick={() => openDialog({ kind: 'start' })}
-            className="h-14 w-14 rounded-full shadow-lg hover:shadow-xl transition-shadow bg-[rgb(45,79,30)] hover:bg-[rgb(45,79,30)]/90 text-white aspect-square p-0"
-            aria-label="Anfangsstand erfassen"
-          >
-            <Plus className="h-6 w-6" strokeWidth={2.5} />
-          </Button>
-        </div>
+        <BrandFab
+          onClick={() => openDialog({ kind: 'start' })}
+          aria-label="Anfangsstand erfassen"
+        />
       )}
     </div>
   )
@@ -972,7 +966,7 @@ function TimelineRow({
         className={cn(
           'relative z-10 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border bg-card',
           accent
-            ? 'border-[rgb(45,79,30)]/40 text-[rgb(45,79,30)]'
+            ? 'border-primary/40 text-brand-heading'
             : 'border-border text-muted-foreground'
         )}
       >

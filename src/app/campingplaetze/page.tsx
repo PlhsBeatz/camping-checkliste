@@ -1,14 +1,14 @@
 'use client'
 
 import { useAuth } from '@/components/auth-provider'
-import { Button } from '@/components/ui/button'
-import { NavigationSidebar } from '@/components/navigation-sidebar'
-import { Plus, Menu } from 'lucide-react'
+import { PageShell } from '@/components/page-shell'
+import { PageHeader } from '@/components/page-header'
+import { BrandFab } from '@/components/brand-fab'
+import { BrandSpinner } from '@/components/brand-spinner'
 import { Suspense, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import type { ApiResponse } from '@/lib/api-types'
 import { Campingplatz, type CampingplatzFoto } from '@/lib/db'
-import { cn } from '@/lib/utils'
 import { CampingplaetzeTable } from '@/components/campingplaetze-table'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { CampingplatzEditModal } from '@/components/campingplatz-edit-modal'
@@ -20,27 +20,12 @@ function CampingplaetzePageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { canAccessConfig } = useAuth()
-  const [showNavSidebar, setShowNavSidebar] = useState(false)
   const [items, setItems] = useState<Campingplatz[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [showDialog, setShowDialog] = useState(false)
   const [editTarget, setEditTarget] = useState<Campingplatz | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Campingplatz | null>(null)
   const [archivePrompt, setArchivePrompt] = useState<Campingplatz | null>(null)
-
-  useEffect(() => {
-    if (showNavSidebar) {
-      document.body.style.overflow = 'hidden'
-      document.documentElement.style.overflow = 'hidden'
-    } else {
-      document.body.style.overflow = ''
-      document.documentElement.style.overflow = ''
-    }
-    return () => {
-      document.body.style.overflow = ''
-      document.documentElement.style.overflow = ''
-    }
-  }, [showNavSidebar])
 
   const load = async () => {
     try {
@@ -195,61 +180,23 @@ function CampingplaetzePageContent() {
   }
 
   return (
-    <div className="min-h-screen flex max-w-full overflow-x-clip">
-      <NavigationSidebar
-        isOpen={showNavSidebar}
-        onClose={() => setShowNavSidebar(false)}
-      />
+    <PageShell containerClassName="space-y-6">
+      <PageHeader title="Campingplätze" />
 
-      <div className={cn('flex-1 transition-all duration-300 min-w-0', 'lg:ml-[280px]')}>
-        <div className="container mx-auto p-4 md:p-6 space-y-6 max-w-full">
-          <div className="sticky top-0 z-10 flex items-center justify-between bg-card shadow pb-4 -mx-4 px-4 -mt-4 pt-4 md:-mx-6 md:px-6 md:-mt-6 md:pt-6 md:pb-4">
-            <div className="flex items-center gap-4">
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={() => setShowNavSidebar(true)}
-                className="lg:hidden"
-              >
-                <Menu className="h-5 w-5" />
-              </Button>
-              <div>
-                <h1 className="text-lg sm:text-xl font-bold tracking-tight text-brand-heading">
-                  Campingplätze
-                </h1>
-              </div>
-            </div>
-          </div>
+      {isLoading ? (
+        <BrandSpinner label="Campingplätze werden geladen..." />
+      ) : (
+        <CampingplaetzeTable
+          items={items}
+          onEdit={handleEdit}
+          onDelete={handleDeleteOrArchive}
+          onRowClick={(item) => router.push(`/campingplaetze/${item.id}`)}
+        />
+      )}
 
-          {isLoading ? (
-            <div className="flex flex-col items-center justify-center py-20 gap-4">
-              <div className="animate-spin rounded-full h-12 w-12 border-4 border-[rgb(45,79,30)] border-t-transparent" />
-              <p className="text-muted-foreground animate-pulse">
-                Campingplätze werden geladen...
-              </p>
-            </div>
-          ) : (
-            <CampingplaetzeTable
-              items={items}
-              onEdit={handleEdit}
-              onDelete={handleDeleteOrArchive}
-              onRowClick={(item) => router.push(`/campingplaetze/${item.id}`)}
-            />
-          )}
-
-          {canAccessConfig && (
-            <div className="fixed bottom-6 right-6 z-30">
-              <Button
-                size="icon"
-                onClick={handleAdd}
-                className="h-14 w-14 rounded-full shadow-lg hover:shadow-xl transition-shadow bg-[rgb(45,79,30)] hover:bg-[rgb(45,79,30)]/90 text-white aspect-square p-0"
-              >
-                <Plus className="h-6 w-6" strokeWidth={2.5} />
-              </Button>
-            </div>
-          )}
-        </div>
-      </div>
+      {canAccessConfig && (
+        <BrandFab onClick={handleAdd} aria-label="Campingplatz hinzufügen" />
+      )}
 
       <CampingplatzEditModal
         open={showDialog}
@@ -299,7 +246,7 @@ function CampingplaetzePageContent() {
         onConfirm={executeArchive}
         isLoading={isLoading}
       />
-    </div>
+    </PageShell>
   )
 }
 

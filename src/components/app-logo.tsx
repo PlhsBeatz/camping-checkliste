@@ -36,7 +36,7 @@ export function AppLogo({
 
   const iconBox = (
     <div
-      className={`${boxSize} ${borderRadius} bg-[rgb(45,79,30)] flex items-center justify-center flex-shrink-0`}
+      className={`${boxSize} ${borderRadius} bg-primary flex items-center justify-center flex-shrink-0`}
     >
       <CampingAppIcon className={iconSize} />
     </div>

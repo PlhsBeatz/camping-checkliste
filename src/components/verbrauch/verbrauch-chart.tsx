@@ -73,7 +73,7 @@ export function VerbrauchChart({
             </div>
             <div className="h-1.5 rounded-full bg-muted overflow-hidden">
               <div
-                className={cn('h-full rounded-full bg-[rgb(45,79,30)] transition-all duration-500')}
+                className={cn('h-full rounded-full bg-primary transition-all duration-500')}
                 style={{ width: `${b.pct}%` }}
               />
             </div>

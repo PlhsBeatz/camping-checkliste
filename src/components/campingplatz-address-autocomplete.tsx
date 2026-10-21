@@ -731,7 +731,7 @@ export function CampingplatzAddressAutocomplete(props: CampingplatzAddressAutoco
                         <Button
                           type="button"
                           size="sm"
-                          className="h-8 px-3 text-xs bg-[rgb(45,79,30)] hover:bg-[rgb(45,79,30)]/90 text-white"
+                          className="h-8 px-3 text-xs bg-primary hover:bg-primary/90 text-white"
                           onClick={() => {
                             handleImportFromGoogleMapsLink()
                           }}

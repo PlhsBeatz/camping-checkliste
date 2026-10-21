@@ -16,6 +16,9 @@ export type SettingsNavGroup = {
   systemAdminOnly?: boolean
 }
 
+/** Erste persönliche Einstellungsseite – Desktop-Default statt Hub */
+export const SETTINGS_DEFAULT_HREF = '/einstellungen/darstellung'
+
 /**
  * Einstellungen-Subnav: persönlich zuerst, Admin darunter.
  * Stammdaten-Routen bleiben flach (/kategorien …).
@@ -24,7 +27,7 @@ export const SETTINGS_NAV_GROUPS: SettingsNavGroup[] = [
   {
     label: 'Persönlich',
     items: [
-      { label: 'Darstellung', href: '/einstellungen/darstellung' },
+      { label: 'Darstellung', href: SETTINGS_DEFAULT_HREF },
       { label: 'Benachrichtigungen', href: '/einstellungen/benachrichtigungen' },
       { label: 'Standort', href: '/einstellungen/standort' },
       { label: 'Mein Konto', href: '/einstellungen/konto' },

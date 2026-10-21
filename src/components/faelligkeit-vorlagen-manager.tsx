@@ -32,6 +32,7 @@ import {
 import type { ApiResponse } from '@/lib/api-types'
 import { ResponsiveModal } from '@/components/ui/responsive-modal'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import { ListTile } from '@/components/list-tile'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -173,10 +174,10 @@ function SortableVorlageRow({
   }
 
   return (
-    <div
+    <ListTile
       ref={setNodeRef}
       style={style}
-      className="bg-card rounded-xl border border-subtle shadow-sm px-2 py-3 sm:px-4 flex items-start justify-between gap-2"
+      className="px-2 sm:px-4 flex items-start justify-between gap-2"
     >
       <div className="flex min-w-0 flex-1 items-start gap-2">
         <div
@@ -230,7 +231,7 @@ function SortableVorlageRow({
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-    </div>
+    </ListTile>
   )
 }
 
@@ -585,11 +586,13 @@ export function FaelligkeitVorlagenManager({
       <FabMenuM3
         open={fabOpen}
         onOpenChange={setFabOpen}
+        ariaLabel="Vorlage hinzufügen"
         actions={[
           {
-            icon: Plus,
+            id: 'new-vorlage',
+            icon: <Plus className="h-[22px] w-[22px]" strokeWidth={2.5} />,
             label: 'Neue Vorlage',
-            onClick: () => {
+            onSelect: () => {
               setFabOpen(false)
               setCreateOpen(true)
             },
