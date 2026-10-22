@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react'
 import * as SunCalc from 'suncalc'
 import { format } from 'date-fns'
 import { de } from 'date-fns/locale'
+import { BRAND_GREEN_RGB, BRAND_ORANGE_RGB } from '@/lib/brand-colors'
 
 /** SunCalc-Azimut: 0 = Süd, positiv westwärts → Kompassgrad (0 = Nord). */
 function suncalcAzimuthToCompass(azimuthRad: number): number {
@@ -246,10 +247,10 @@ export function SonnenAusrichtungCompass({
           </defs>
 
           {/* Vollflächiger Hintergrund – kein Rand */}
-          <rect width={size} height={size} fill="rgb(45,79,30)" />
+          <rect width={size} height={size} fill={BRAND_GREEN_RGB} />
 
           {/* Dark green compass circle (night) */}
-          <circle cx={cx} cy={cy} r={r} fill="rgb(45,79,30)" />
+          <circle cx={cx} cy={cy} r={r} fill={BRAND_GREEN_RGB} />
 
           {/* Yellow sun arc (daylight) - Packstatus fest installiert amber-200 */}
           {sunArcPath && (
@@ -273,7 +274,7 @@ export function SonnenAusrichtungCompass({
                 y1={outer.y}
                 x2={inner.x}
                 y2={inner.y}
-                stroke={inSun ? 'rgb(45,79,30)' : 'white'}
+                stroke={inSun ? BRAND_GREEN_RGB : 'white'}
                 strokeWidth={isMajor ? 1.5 : 0.6}
                 strokeLinecap="round"
                 opacity={isMajor ? (inSun ? 0.9 : 0.85) : (inSun ? 0.5 : 0.45)}
@@ -284,7 +285,7 @@ export function SonnenAusrichtungCompass({
           {/* Sun symbol at current position (only if above horizon) - accent orange, schlicht */}
           {sunData.currentAltitude > -0.1 && (
             <g transform={`translate(${sunPos.x}, ${sunPos.y})`}>
-              <circle r={8} fill="rgb(230,126,34)" />
+              <circle r={8} fill={BRAND_ORANGE_RGB} />
               {[0, 90, 180, 270].map((deg) => {
                 const rad = (deg * Math.PI) / 180
                 return (
@@ -294,7 +295,7 @@ export function SonnenAusrichtungCompass({
                     y1={-4 * Math.sin(rad)}
                     x2={8 * Math.cos(rad)}
                     y2={-8 * Math.sin(rad)}
-                    stroke="rgb(230,126,34)"
+                    stroke={BRAND_ORANGE_RGB}
                     strokeWidth={1.5}
                     strokeLinecap="round"
                   />
@@ -329,13 +330,13 @@ export function SonnenAusrichtungCompass({
               <>
                 {/* Sonnenaufgang-Icon: Halbkreis + Horizont + Pfeil, mittig zum Text */}
                 <g transform={`translate(${sunriseIconPos.x}, ${sunriseIconPos.y}) rotate(${-(sr + 4)}) translate(0, 1)`}>
-                  <path d="M 2.5 0 A 2.5 2.5 0 0 0 -2.5 0" fill="rgb(45,79,30)" />
-                  <path d="M-3.5 0 L3.5 0" stroke="rgb(45,79,30)" strokeWidth={1.2} strokeLinecap="round" />
-                  <polygon points="0,-1.2 0.35,0.2 -0.35,0.2" fill="rgb(45,79,30)" />
+                  <path d="M 2.5 0 A 2.5 2.5 0 0 0 -2.5 0" fill={BRAND_GREEN_RGB} />
+                  <path d="M-3.5 0 L3.5 0" stroke={BRAND_GREEN_RGB} strokeWidth={1.2} strokeLinecap="round" />
+                  <polygon points="0,-1.2 0.35,0.2 -0.35,0.2" fill={BRAND_GREEN_RGB} />
                 </g>
                 <text
                   fontSize="11"
-                  fill="rgb(45,79,30)"
+                  fill={BRAND_GREEN_RGB}
                   fontWeight="600"
                   style={{ fontFamily: 'var(--font-geist-sans), sans-serif' }}
                 >
@@ -345,7 +346,7 @@ export function SonnenAusrichtungCompass({
                 </text>
                 <text
                   fontSize="11"
-                  fill="rgb(45,79,30)"
+                  fill={BRAND_GREEN_RGB}
                   fontWeight="600"
                   style={{ fontFamily: 'var(--font-geist-sans), sans-serif' }}
                 >
@@ -355,7 +356,7 @@ export function SonnenAusrichtungCompass({
                 </text>
                 <text
                   fontSize="11"
-                  fill="rgb(45,79,30)"
+                  fill={BRAND_GREEN_RGB}
                   fontWeight="600"
                   style={{ fontFamily: 'var(--font-geist-sans), sans-serif' }}
                 >
@@ -365,9 +366,9 @@ export function SonnenAusrichtungCompass({
                 </text>
                 {/* Sonnenuntergang-Icon: Halbkreis + Horizont + Pfeil, mittig zum Text */}
                 <g transform={`translate(${sunsetIconPos.x}, ${sunsetIconPos.y}) rotate(${-(ss - 4) + 180}) translate(0, -1)`}>
-                  <path d="M -2.5 0 A 2.5 2.5 0 0 1 2.5 0" fill="rgb(45,79,30)" />
-                  <path d="M-3.5 0 L3.5 0" stroke="rgb(45,79,30)" strokeWidth={1.2} strokeLinecap="round" />
-                  <polygon points="0,1.2 0.35,-0.2 -0.35,-0.2" fill="rgb(45,79,30)" />
+                  <path d="M -2.5 0 A 2.5 2.5 0 0 1 2.5 0" fill={BRAND_GREEN_RGB} />
+                  <path d="M-3.5 0 L3.5 0" stroke={BRAND_GREEN_RGB} strokeWidth={1.2} strokeLinecap="round" />
+                  <polygon points="0,1.2 0.35,-0.2 -0.35,-0.2" fill={BRAND_GREEN_RGB} />
                 </g>
               </>
             )

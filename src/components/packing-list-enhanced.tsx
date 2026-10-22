@@ -34,6 +34,7 @@ import {
   getMitreisenderBackgroundColor,
   USER_COLORS,
 } from "@/lib/user-colors";
+import { BRAND_GREEN_RGB } from "@/lib/brand-colors";
 import { sortMitreisendeNachRolleUndName, sortMitreisendenZeilenNachStammdaten } from "@/lib/mitreisenden-sort";
 import type { ShowPackListUndoToast } from '@/lib/packing-delete-undo';
 import { buildPackProfileGroups } from '@/lib/pack-profile-groups';
@@ -2467,7 +2468,7 @@ export function PackingList({
     canEditPauschalEntries &&
     progressBarMode === 'own'
       ? (activeProfileColor ?? DEFAULT_USER_COLOR_BG)
-      : 'rgb(45,79,30)'
+      : BRAND_GREEN_RGB
 
   const isProgressBarClickable = !!(selectedProfile && canEditPauschalEntries);
 

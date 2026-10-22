@@ -42,7 +42,7 @@ interface PageShellProps {
 
 /**
  * Kanonisches App-Chrome: Sidebar + Content-Spalte + Body-Scroll-Lock bei offenem Menü.
- * Einstellungen/Stammdaten weiter über ConfigPageLayout.
+ * Einstellungen/Stammdaten: ConfigPageLayout (baut intern darauf auf).
  */
 export function PageShell({
   children,

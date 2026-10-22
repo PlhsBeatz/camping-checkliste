@@ -1,5 +1,6 @@
 import { ImageResponse } from 'next/og'
 import { CampingAppIcon } from '@/components/camping-app-icon'
+import { BRAND_GREEN_RGB } from '@/lib/brand-colors'
 
 /** Kein `edge` – OpenNext (Cloudflare/AWS) erlaubt apple-icon nicht als Edge-Route. */
 export const dynamic = 'force-dynamic'
@@ -17,7 +18,7 @@ export default function AppleIcon() {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          background: 'rgb(45, 79, 30)',
+          background: BRAND_GREEN_RGB,
           borderRadius: 24,
         }}
       >

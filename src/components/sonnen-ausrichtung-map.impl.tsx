@@ -25,6 +25,7 @@ import {
 } from '@/lib/caravan-geometry'
 import { shortestAngleDiff } from '@/lib/device-compass-heading'
 import { cn } from '@/lib/utils'
+import { BRAND_GREEN_RGB, BRAND_ORANGE_RGB } from '@/lib/brand-colors'
 
 export type SonnenMapMode = 'vor-ort' | 'planung'
 
@@ -332,8 +333,8 @@ function computeSunOverlay(
   }
 }
 
-const BRAND_GREEN = 'rgb(45,79,30)'
-const BRAND_ORANGE = 'rgb(230,126,34)'
+const BRAND_GREEN = BRAND_GREEN_RGB
+const BRAND_ORANGE = BRAND_ORANGE_RGB
 
 type SunLabelKind = 'sunrise' | 'noon' | 'sunset' | 'now'
 
@@ -712,7 +713,7 @@ export function SonnenAusrichtungMap({
 
     const icon = L.divIcon({
       className: 'sonnen-stellplatz-pin',
-      html: `<div style="width:18px;height:18px;border-radius:50%;background:rgb(230,126,34);border:2px solid white;box-shadow:0 1px 4px rgba(0,0,0,.4)"></div>`,
+      html: `<div style="width:18px;height:18px;border-radius:50%;background:${BRAND_ORANGE};border:2px solid white;box-shadow:0 1px 4px rgba(0,0,0,.4)"></div>`,
       iconSize: [18, 18],
       iconAnchor: [9, 9],
     })
@@ -816,9 +817,9 @@ export function SonnenAusrichtungMap({
     } else {
       if (!caravanPolyRef.current) {
         caravanPolyRef.current = L.polygon(latlngs, {
-          color: 'rgb(45,79,30)',
+          color: BRAND_GREEN,
           weight: 2,
-          fillColor: 'rgb(45,79,30)',
+          fillColor: BRAND_GREEN,
           fillOpacity: 0.35,
           interactive: false,
         }).addTo(map)

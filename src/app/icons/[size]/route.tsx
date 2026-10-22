@@ -1,5 +1,6 @@
 import { ImageResponse } from 'next/og'
 import { CampingAppIcon } from '@/components/camping-app-icon'
+import { BRAND_GREEN_RGB } from '@/lib/brand-colors'
 
 const SIZES = ['48', '72', '96', '128', '192', '384', '512'] as const
 
@@ -22,7 +23,7 @@ export async function GET(
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          background: 'rgb(45, 79, 30)',
+          background: BRAND_GREEN_RGB,
           borderRadius: Math.round(sizeNum * 0.1875),
         }}
       >

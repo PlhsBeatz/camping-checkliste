@@ -8,10 +8,11 @@ import { cn } from '@/lib/utils'
 import { openRastplatzInGoogleMaps } from '@/lib/maps-export'
 import { ExternalLink, MapPin } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { BRAND_ORANGE_RGB } from '@/lib/brand-colors'
 
 const EMPFEHLUNG_GREEN = 'rgb(34, 139, 34)'
 const NO_GO_RED = 'rgb(200, 50, 50)'
-const HOME_ORANGE = 'rgb(230, 126, 34)'
+const HOME_ORANGE = BRAND_ORANGE_RGB
 const DE_OSM_TILE_URL = 'https://{s}.tile.openstreetmap.de/tiles/osmde/{z}/{x}/{y}.png'
 const FALLBACK_OSM_TILE_URL = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
 

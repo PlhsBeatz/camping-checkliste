@@ -181,7 +181,7 @@ function VerbrauchPageContent() {
           </p>
           {canAccessConfig && (
             <Button asChild variant="outline">
-              <Link href="/verbrauch-medien">Zu Verbrauch-Medien</Link>
+              <Link href="/einstellungen/verbrauch-medien">Zu Verbrauch-Medien</Link>
             </Button>
           )}
         </div>

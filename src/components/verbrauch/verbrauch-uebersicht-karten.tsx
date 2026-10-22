@@ -10,6 +10,7 @@ import {
   type VerbrauchUebersichtStats,
 } from '@/lib/verbrauch-uebersicht'
 import { cn } from '@/lib/utils'
+import { BRAND_GREEN_RGB } from '@/lib/brand-colors'
 
 function Sparkline({
   punkte,
@@ -32,15 +33,15 @@ function Sparkline({
       <AreaChart data={data} margin={{ top: 8, right: 0, left: 0, bottom: 0 }}>
         <defs>
           <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="rgb(45,79,30)" stopOpacity={0.35} />
-            <stop offset="100%" stopColor="rgb(45,79,30)" stopOpacity={0.02} />
+            <stop offset="0%" stopColor={BRAND_GREEN_RGB} stopOpacity={0.35} />
+            <stop offset="100%" stopColor={BRAND_GREEN_RGB} stopOpacity={0.02} />
           </linearGradient>
         </defs>
         <YAxis hide domain={['dataMin', 'dataMax']} />
         <Area
           type="monotone"
           dataKey="v"
-          stroke="rgb(45,79,30)"
+          stroke={BRAND_GREEN_RGB}
           strokeWidth={1.5}
           strokeOpacity={0.45}
           fill={`url(#${gradientId})`}

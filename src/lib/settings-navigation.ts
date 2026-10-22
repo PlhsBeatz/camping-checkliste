@@ -21,7 +21,7 @@ export const SETTINGS_DEFAULT_HREF = '/einstellungen/darstellung'
 
 /**
  * Einstellungen-Subnav: persönlich zuerst, Admin darunter.
- * Stammdaten-Routen bleiben flach (/kategorien …).
+ * Stammdaten/System liegen unter `/einstellungen/…` (Alt-URLs redirecten).
  */
 export const SETTINGS_NAV_GROUPS: SettingsNavGroup[] = [
   {
@@ -43,20 +43,20 @@ export const SETTINGS_NAV_GROUPS: SettingsNavGroup[] = [
     label: 'Stammdaten',
     configOnly: true,
     items: [
-      { label: 'Kategorien', href: '/kategorien', configOnly: true },
-      { label: 'Tags', href: '/tags', configOnly: true },
-      { label: 'Personen', href: '/mitreisende', configOnly: true },
-      { label: 'Transportmittel', href: '/transportmittel', configOnly: true },
-      { label: 'Wartungs-Vorlagen', href: '/wartung-vorlagen', configOnly: true },
-      { label: 'Verbrauch-Medien', href: '/verbrauch-medien', configOnly: true },
+      { label: 'Kategorien', href: '/einstellungen/kategorien', configOnly: true },
+      { label: 'Tags', href: '/einstellungen/tags', configOnly: true },
+      { label: 'Personen', href: '/einstellungen/mitreisende', configOnly: true },
+      { label: 'Transportmittel', href: '/einstellungen/transportmittel', configOnly: true },
+      { label: 'Wartungs-Vorlagen', href: '/einstellungen/wartung-vorlagen', configOnly: true },
+      { label: 'Verbrauch-Medien', href: '/einstellungen/verbrauch-medien', configOnly: true },
     ],
   },
   {
     label: 'System',
     systemAdminOnly: true,
     items: [
-      { label: 'Datensicherung', href: '/datensicherung', systemAdminOnly: true },
-      { label: 'Integrationen', href: '/integrationen', systemAdminOnly: true },
+      { label: 'Datensicherung', href: '/einstellungen/datensicherung', systemAdminOnly: true },
+      { label: 'Integrationen', href: '/einstellungen/integrationen', systemAdminOnly: true },
     ],
   },
 ]

@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
+import { useMemo, useState } from 'react'
+import { ResponsiveModal } from '@/components/ui/responsive-modal'
 import { cn } from '@/lib/utils'
 
 /** ~30 % näher als zuvor: Bounding-Box auf ca. 70 % der früheren Ausdehnung */
@@ -23,36 +23,6 @@ function buildOsmEmbedSrc(lat: number, lng: number) {
   return `https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent(bbox)}&layer=mapnik&marker=${lat},${lng}`
 }
 
-const HISTORY_MAP_OVERLAY = 'campingplatzLageKarte'
-
-function useMobileMapHistorySync(open: boolean, setOpen: (open: boolean) => void) {
-  const closedByPopStateRef = useRef(false)
-
-  useEffect(() => {
-    if (!open) return
-
-    const mobile =
-      typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches
-    if (!mobile) return
-
-    window.history.pushState({ [HISTORY_MAP_OVERLAY]: true }, '')
-
-    const onPopState = () => {
-      closedByPopStateRef.current = true
-      setOpen(false)
-    }
-    window.addEventListener('popstate', onPopState)
-
-    return () => {
-      window.removeEventListener('popstate', onPopState)
-      if (!closedByPopStateRef.current) {
-        window.history.back()
-      }
-      closedByPopStateRef.current = false
-    }
-  }, [open, setOpen])
-}
-
 export function CampingplatzOverviewMap({
   lat,
   lng,
@@ -64,10 +34,9 @@ export function CampingplatzOverviewMap({
 }) {
   const [interactiveOpen, setInteractiveOpen] = useState(false)
 
-  useMobileMapHistorySync(interactiveOpen, setInteractiveOpen)
-
   const embedSrc = useMemo(() => buildOsmEmbedSrc(lat, lng), [lat, lng])
   const previewLabel = title ? `Interaktive Karte zu „${title}“ öffnen` : 'Interaktive Karte öffnen'
+  const modalTitle = title ? `Lage: ${title}` : 'Interaktive Karte'
 
   return (
     <>
@@ -112,32 +81,33 @@ export function CampingplatzOverviewMap({
         </div>
       </div>
 
-      <Dialog open={interactiveOpen} onOpenChange={setInteractiveOpen}>
-        <DialogContent
-          className={cn(
-            // Feste Höhe nötig: Sonst kollabiert flex-1 beim Kartenbereich (iframe nur absolute → ~0px).
-            'flex h-[min(90dvh,760px)] min-h-0 w-[min(96vw,920px)] max-w-none flex-col gap-3 overflow-hidden p-4 sm:p-5'
-          )}
-        >
-          <DialogTitle className="pr-8 text-base font-semibold text-brand-heading">
-            {title ? `Lage: ${title}` : 'Interaktive Karte'}
-          </DialogTitle>
-          <DialogDescription className="sr-only">
-            Verschiebbare OpenStreetMap-Karte mit Zoom. Schließen über die Schaltfläche oben rechts.
-          </DialogDescription>
-          {interactiveOpen ? (
-            <div className="map-embed relative min-h-0 flex-1 overflow-hidden rounded-lg border border-subtle bg-muted">
-              <iframe
-                title={title ? `Lage: ${title}` : 'Interaktive Lagekarte'}
-                src={embedSrc}
-                className="absolute inset-0 h-full w-full border-0 [color-scheme:light] contrast-[0.93] saturate-[0.72]"
-                loading="lazy"
-                referrerPolicy="no-referrer-when-downgrade"
-              />
-            </div>
-          ) : null}
-        </DialogContent>
-      </Dialog>
+      <ResponsiveModal
+        open={interactiveOpen}
+        onOpenChange={setInteractiveOpen}
+        title={modalTitle}
+        customContent
+        contentClassName={cn(
+          // Feste Höhe nötig: Sonst kollabiert flex-1 beim Kartenbereich (iframe nur absolute → ~0px).
+          'flex h-[min(90dvh,760px)] min-h-0 w-full max-w-none flex-col gap-3 overflow-hidden p-4 sm:w-[min(96vw,920px)] sm:p-5'
+        )}
+      >
+        <h2 className="shrink-0 pr-8 text-base font-semibold text-brand-heading">{modalTitle}</h2>
+        <p className="sr-only">
+          Verschiebbare OpenStreetMap-Karte mit Zoom. Schließen über die Schaltfläche oben rechts oder
+          per Zurück / Wischen.
+        </p>
+        {interactiveOpen ? (
+          <div className="map-embed relative min-h-0 flex-1 overflow-hidden rounded-lg border border-subtle bg-muted">
+            <iframe
+              title={modalTitle}
+              src={embedSrc}
+              className="absolute inset-0 h-full w-full border-0 [color-scheme:light] contrast-[0.93] saturate-[0.72]"
+              loading="lazy"
+              referrerPolicy="no-referrer-when-downgrade"
+            />
+          </div>
+        ) : null}
+      </ResponsiveModal>
     </>
   )
 }

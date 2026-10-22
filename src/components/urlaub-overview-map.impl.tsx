@@ -1,13 +1,14 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
+import { ResponsiveModal } from '@/components/ui/responsive-modal'
 import { cn } from '@/lib/utils'
+import { BRAND_GREEN_RGB, BRAND_ORANGE_RGB } from '@/lib/brand-colors'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 
-const CAMPING_GREEN = 'rgb(45, 79, 30)'
-const HOME_ORANGE = 'rgb(230, 126, 34)'
+const CAMPING_GREEN = BRAND_GREEN_RGB
+const HOME_ORANGE = BRAND_ORANGE_RGB
 const RAST_EMPFEHLUNG_GREEN = 'rgb(34, 139, 34)'
 const RAST_NO_GO_RED = 'rgb(200, 50, 50)'
 const DE_OSM_TILE_URL = 'https://{s}.tile.openstreetmap.de/tiles/osmde/{z}/{x}/{y}.png'
@@ -143,35 +144,6 @@ function whenContainerReady(el: HTMLElement, onReady: () => void) {
     observer.disconnect()
     window.clearTimeout(timeout)
   }
-}
-
-const HISTORY_MAP_OVERLAY = 'urlaubLageKarte'
-
-function useMobileMapHistorySync(open: boolean, setOpen: (open: boolean) => void) {
-  const closedByPopStateRef = useRef(false)
-
-  useEffect(() => {
-    if (!open) return
-    const mobile =
-      typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches
-    if (!mobile) return
-
-    window.history.pushState({ [HISTORY_MAP_OVERLAY]: true }, '')
-
-    const onPopState = () => {
-      closedByPopStateRef.current = true
-      setOpen(false)
-    }
-    window.addEventListener('popstate', onPopState)
-
-    return () => {
-      window.removeEventListener('popstate', onPopState)
-      if (!closedByPopStateRef.current) {
-        window.history.back()
-      }
-      closedByPopStateRef.current = false
-    }
-  }, [open, setOpen])
 }
 
 function UrlaubLeafletMap({
@@ -356,7 +328,6 @@ export type UrlaubOverviewMapProps = {
 
 export function UrlaubOverviewMap({ home, campingplaetze, rastplaetze = [], title }: UrlaubOverviewMapProps) {
   const [interactiveOpen, setInteractiveOpen] = useState(false)
-  useMobileMapHistorySync(interactiveOpen, setInteractiveOpen)
 
   const points: MapPoint[] = useMemo(() => {
     const list: MapPoint[] = []
@@ -401,6 +372,7 @@ export function UrlaubOverviewMap({ home, campingplaetze, rastplaetze = [], titl
   const previewLabel = title
     ? `Interaktive Karte zu „${title}“ öffnen`
     : 'Interaktive Karte öffnen'
+  const modalTitle = title ? `Route: ${title}` : 'Interaktive Karte'
 
   const pointsKey = points.map((p) => p.id).join('-')
 
@@ -413,28 +385,33 @@ export function UrlaubOverviewMap({ home, campingplaetze, rastplaetze = [], titl
         hidden={interactiveOpen}
       />
 
-      <Dialog open={interactiveOpen} onOpenChange={setInteractiveOpen}>
-        <DialogContent className="flex h-[min(90dvh,760px)] min-h-0 w-[min(96vw,920px)] max-w-none flex-col gap-3 overflow-hidden p-4 sm:p-5">
-          <DialogTitle className="pr-8 text-base font-semibold text-brand-heading">
-            {title ? `Route: ${title}` : 'Interaktive Karte'}
-          </DialogTitle>
-          <DialogDescription className="sr-only">
-            Verschiebbare OpenStreetMap-Karte mit Zoom und Markierungen für Heimatadresse,
-            Campingplätze und Rastplätze entlang aufgeklappter Streckenabschnitte.
-          </DialogDescription>
-          {interactiveOpen ? (
-            <div className="map-embed relative min-h-0 flex-1 overflow-hidden rounded-lg border border-subtle bg-muted">
-              <UrlaubLeafletMap
-                key={`dialog-${pointsKey}`}
-                mapKey={`dialog-${pointsKey}`}
-                points={points}
-                interactive
-                className="absolute inset-0 z-0"
-              />
-            </div>
-          ) : null}
-        </DialogContent>
-      </Dialog>
+      <ResponsiveModal
+        open={interactiveOpen}
+        onOpenChange={setInteractiveOpen}
+        title={modalTitle}
+        customContent
+        contentClassName={cn(
+          // Feste Höhe nötig: Sonst kollabiert flex-1 beim Kartenbereich (Leaflet nur absolute → ~0px).
+          'flex h-[min(90dvh,760px)] min-h-0 w-full max-w-none flex-col gap-3 overflow-hidden p-4 sm:w-[min(96vw,920px)] sm:p-5'
+        )}
+      >
+        <h2 className="shrink-0 pr-8 text-base font-semibold text-brand-heading">{modalTitle}</h2>
+        <p className="sr-only">
+          Verschiebbare OpenStreetMap-Karte mit Zoom und Markierungen für Heimatadresse, Campingplätze
+          und Rastplätze entlang aufgeklappter Streckenabschnitte.
+        </p>
+        {interactiveOpen ? (
+          <div className="map-embed relative min-h-0 flex-1 overflow-hidden rounded-lg border border-subtle bg-muted">
+            <UrlaubLeafletMap
+              key={`dialog-${pointsKey}`}
+              mapKey={`dialog-${pointsKey}`}
+              points={points}
+              interactive
+              className="absolute inset-0 z-0"
+            />
+          </div>
+        ) : null}
+      </ResponsiveModal>
     </>
   )
 }

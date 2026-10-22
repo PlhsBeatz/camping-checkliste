@@ -1095,7 +1095,7 @@ function SonnenAusrichtungContent() {
             }) && (
               <p className="text-sm text-amber-700">
                 Keine Maße hinterlegt.{' '}
-                <Link href="/transportmittel" className="underline font-medium">
+                <Link href="/einstellungen/transportmittel" className="underline font-medium">
                   Unter Transportmittel Länge/Breite ergänzen
                 </Link>
               </p>

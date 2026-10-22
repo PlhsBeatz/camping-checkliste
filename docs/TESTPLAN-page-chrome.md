@@ -44,6 +44,7 @@ Ziel: Prüfen, dass `PageShell` / `PageHeader` auf den Pilot-Seiten korrekt grei
 |---|---------|-----------|
 | 4.1 | Desktop `/einstellungen` | Redirect nach Darstellung |
 | 4.2 | Mobil `/einstellungen` | Gruppierte Nav, kein Intro-Text |
+| 4.2b | Stammdaten z. B. `/einstellungen/kategorien` | Subnav aktiv; Alt `/kategorien` redirectet |
 | 4.3 | Unterseite z. B. Standort | Settings-Subnav Desktop; Picker + Zurück mobil |
 | 4.4 | Hauptnav → Einstellungen | Eintrag sichtbar (auch echtes Smartphone) |
 

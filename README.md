@@ -18,7 +18,7 @@ Die App richtet sich an alle, die vor der Fahrt nicht nur eine statische Liste b
 
 ### Zusammenarbeit & Rechte
 
-- **Mitreisende** (`/mitreisende`, in der Konfiguration) — Personen verwalten und mit Urlauben verknüpfen; **rollenbasierte Berechtigungen** (z. B. wer Stammdaten ändern darf).
+- **Mitreisende** (`/einstellungen/mitreisende`) — Personen verwalten und mit Urlauben verknüpfen; **rollenbasierte Berechtigungen** (z. B. wer Stammdaten ändern darf).
 - **Einladungen** — Gäste können über einen Link (`/einladung/[token]`) eingeladen werden.
 - **Echtzeitnahe Synchronisation** der Packliste — mehrere Nutzer können parallel arbeiten; Konflikte werden serverseitig über einen Synchronisationspfad abgefedert.
 

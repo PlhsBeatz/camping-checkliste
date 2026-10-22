@@ -26,7 +26,7 @@ Bei neuen Screens: bestehende Shells und Komponenten spiegeln, keine Parallel-La
 
 **Umgestellt auf PageShell/PageHeader:** Heute, Urlaube (+ Detail), Campingplätze (+ Detail), Rastplätze, Pack-Status, Packliste (`bare` + Flex-Header), Ausrüstung (`h-dvh` + Tabellen-Scroll), Tools (Wartung, Verbrauch, Sonnen-Ausrichtung, Checklisten, Vorschläge, Optimierungen + Detail).
 
-**Weiterhin eigene Shell:** Settings über `ConfigPageLayout` (nicht `PageShell`).
+**Settings:** `ConfigPageLayout` (Auth, Subnav, Picker) – intern auf `PageShell` gestützt.
 
 ---
 
@@ -45,6 +45,7 @@ Definiert in `src/app/globals.css` (`:root` / `.dark`):
 | shadcn `primary`, `muted`, `card`, … | Buttons, Formulare (`bg-primary` ≈ Brand-Grün) |
 
 **Nicht:** rohes `rgb(45,79,30)` in neuem Code – `.bg-brand` / `bg-primary` nutzen.  
+**Canvas/SVG/Leaflet/Charts:** [`brand-colors.ts`](../src/lib/brand-colors.ts) (`BRAND_GREEN_RGB` / `BRAND_ORANGE_RGB`).  
 **Palette:** App-Grün / Orange / Beige ist kanonisch.
 
 ---
@@ -74,10 +75,11 @@ Gleicher `PageShell` + `PageHeader`. Zurück über `BackLink` (`visible="always"
 
 ### Einstellungen / Stammdaten
 
-Immer [`ConfigPageLayout`](../src/components/config-page-layout.tsx) – **nicht** `PageShell`:
+Immer [`ConfigPageLayout`](../src/components/config-page-layout.tsx) (baut intern auf `PageShell` auf; Auth/Subnav/Picker bleiben dort):
 
 - Desktop: `/einstellungen` → `SETTINGS_DEFAULT_HREF` (Darstellung); Subnav in `SETTINGS_NAV_COLUMN_CLASS`
 - Mobile Hub: gruppierte Nav; Unterseiten: Picker + Drawer + Zurück
+- Stammdaten/System unter `/einstellungen/…` (z. B. `/einstellungen/kategorien`); Alt-URLs redirecten
 
 ---
 
@@ -89,7 +91,7 @@ Immer [`ConfigPageLayout`](../src/components/config-page-layout.tsx) – **nicht
 | **Ausrüstung** | `PageShell` mit `h-dvh` + internem Tabellen-Scroll |
 | **Login / Bootstrap / Einladung / Passwort-vergessen / ~offline / Gmail-Suche** | Kein App-Menü, zentrierte Minimal-Layouts |
 | **Packlisten-Items** | Komplexe States – nicht 1:1 `ListTile` |
-| **Canvas/SVG/Icons** | Literale Brand-Farbe wo Tailwind-Klassen nicht greifen (Maps, Charts, `apple-icon`) |
+| **Canvas/SVG/Icons** | Brand-Farben aus `brand-colors.ts` wo Tailwind nicht greift (Maps, Charts, Icons) |
 
 ---
 
@@ -130,13 +132,13 @@ Immer [`ConfigPageLayout`](../src/components/config-page-layout.tsx) – **nicht
 
 - Outer-Flex + Sidebar + Sticky-Header manuell kopieren
 - `AppShell` wiederbeleben (entfernt)
-- Neues `rgb(45,79,30)` oder abweichende Sticky-`z-*` ohne Grund
+- Neues `rgb(45,79,30)` ohne Token/`brand-colors`; abweichende Sticky-`z-*` ohne Grund
 
 ---
 
 ## Offene Vereinheitlichungen
 
-### Erledigt (Phase 0–4)
+### Erledigt (Phase 0–4 + optional)
 
 - Komponenten-Katalog und Ausnahmen dokumentiert
 - `PageShell` / `PageHeader` / `BackLink` eingeführt und breit adoptiert (inkl. Packliste/Ausrüstung)
@@ -145,12 +147,13 @@ Immer [`ConfigPageLayout`](../src/components/config-page-layout.tsx) – **nicht
 - `ListTile`, `BrandFab`, `BrandSpinner` eingeführt und adoptiert
 - `FabMenuM3` auf `bg-primary`
 - `CardTitle`-Default → `text-lg`
-- Tailwind-Klassen `rgb(45,79,30)` → Tokens (`bg-primary` / `text-brand-heading` / …); Rest: Icons, Canvas/SVG, Charts
+- Tailwind-Klassen `rgb(45,79,30)` → Tokens (`bg-primary` / `text-brand-heading` / …)
+- `ConfigPageLayout` intern auf `PageShell` (+ `BackLink`)
+- Maps/Charts/Progress/Icons: `BRAND_GREEN_RGB` / `BRAND_ORANGE_RGB` aus `brand-colors.ts`
+- Stammdaten/System-URLs unter `/einstellungen/…` (Alt-Pfade redirecten)
 
 ### Offen (optional)
 
-1. `ConfigPageLayout` intern auf `PageShell` stützen
-2. Stammdaten-URLs unter `/einstellungen/…`
-3. Verbleibende Literal-Farben in Maps/Charts/Progress-JS vereinheitlichen (nur wo sinnvoll)
+1. Weitere Arbitrary-Tailwind-Literale (`text-[rgb(230,…)]` etc.) wo sinnvoll auf Tokens
 
 Neue Einträge hier ergänzen; Erledigtes nach oben verschieben.
