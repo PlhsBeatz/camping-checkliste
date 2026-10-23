@@ -3,21 +3,22 @@ name: Sync Project Status → Issue Labels
 # Spiegelt Project-Status (Backlog/Todo/In Progress/In Test/Done)
 # auf Labels roadmap + status:* für die In-App-Roadmap.
 #
-# Voraussetzungen (Repo → Settings):
-#   Secrets → Actions: GH_PROJECT_TOKEN
-#     Fine-grained PAT: dieses Repo Issues R/W + Account/Org Projects R/W
-#   Variables → Actions:
-#     PROJECT_NUMBER = Nummer aus der URL …/projects/N  (Pflicht)
-#     PROJECT_OWNER = PlhsBeatz (optional)
-#     PROJECT_OWNER_TYPE = user | organization (optional, Default user)
+# Hinweis: GitHub Actions unterstützt KEIN Event "projects_v2_item".
+# Sync daher manuell (workflow_dispatch) und periodisch (schedule).
 #
-# Einmaliger Backfill: Actions → diesen Workflow → Run workflow → mode=backfill
+# Voraussetzungen (Repo → Settings → Secrets and variables → Actions):
+#   Secret GH_PROJECT_TOKEN – Classic PAT mit repo + project
+#   Variable PROJECT_NUMBER – Nummer aus …/projects/N
+#   Optional PROJECT_OWNER / PROJECT_OWNER_TYPE
+#
+# Nach Status-Änderungen im Board: Actions → Run workflow → backfill
+# (oder auf den nächsten Zeitplan warten).
 
 on:
   workflow_dispatch:
     inputs:
       mode:
-        description: 'item (ein Item) oder backfill (alle Project-Items)'
+        description: 'backfill = alle Project-Items; item = ein Item'
         required: true
         default: backfill
         type: choice
@@ -28,8 +29,9 @@ on:
         description: 'Nur bei mode=item: ProjectV2Item Node-ID'
         required: false
         type: string
-  projects_v2_item:
-    types: [edited, created, converted, restored, reordered]
+  schedule:
+    # Alle 6 Stunden – fängt Board-Änderungen ohne manuellen Lauf ab
+    - cron: '0 */6 * * *'
 
 jobs:
   sync:
@@ -64,8 +66,8 @@ jobs:
             echo "mode=${{ inputs.mode }}" >> "$GITHUB_OUTPUT"
             echo "item_id=${{ inputs.item_node_id }}" >> "$GITHUB_OUTPUT"
           else
-            echo "mode=item" >> "$GITHUB_OUTPUT"
-            echo "item_id=${{ github.event.projects_v2_item.node_id }}" >> "$GITHUB_OUTPUT"
+            echo "mode=backfill" >> "$GITHUB_OUTPUT"
+            echo "item_id=" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Sync Project Status → Labels

@@ -61,7 +61,9 @@ Für dein persönliches Board brauchst du deshalb einen **Personal access token 
 1. Repo → **Settings** → **Secrets and variables** → **Actions** → Tab **Variables** → **New repository variable**  
    - `PROJECT_NUMBER` = Zahl aus der Project-URL (`https://github.com/users/PlhsBeatz/projects/3` → `3`)
 2. **Actions** → Workflow **Sync Project Status → Issue Labels** → **Run workflow** → Mode **backfill**
-3. Danach spiegelt der Workflow bei Status-Änderungen im Board (Event `projects_v2_item`; Workflow muss auf `main` liegen).
+3. Danach: nach Status-Änderungen im Board denselben Workflow erneut mit **backfill** starten (sofort), oder auf den automatischen Lauf **alle 6 Stunden** warten.
+
+**Warum nicht automatisch beim Ziehen der Karte?** GitHub Actions kennt kein Event `projects_v2_item` (führt zu „Unexpected value“). Echtzeit-Sync bräuchte einen externen Webhook – für dieses Projekt reichen manueller Backfill + Zeitplan.
 
 Skript lokal testen (optional):
 
