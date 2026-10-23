@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import type { ApiResponse } from '@/lib/api-types'
 import { APP_BUILD_ID, APP_VERSION, formatAppVersionLabel } from '@/lib/app-version'
@@ -17,6 +17,31 @@ type RoadmapItem = {
   type: FeedbackType | null
   status: FeedbackStatus
   statusLabel: string
+}
+
+const ROADMAP_SECTIONS: { status: FeedbackStatus; title: string }[] = [
+  { status: 'todo', title: 'Todo' },
+  { status: 'in_progress', title: 'In Arbeit' },
+  { status: 'in_test', title: 'In Test' },
+]
+
+function RoadmapItemList({ items }: { items: RoadmapItem[] }) {
+  return (
+    <ul className="space-y-3">
+      {items.map((item) => (
+        <li
+          key={item.issueNumber}
+          className="flex flex-col gap-1 border-b border-border last:border-0 pb-3 last:pb-0"
+        >
+          <div className="flex flex-wrap items-center gap-2">
+            <FeedbackStatusBadge status={item.status} label={item.statusLabel} />
+            <FeedbackTypeLabel type={item.type} />
+          </div>
+          <p className="text-sm font-medium text-foreground">{item.title}</p>
+        </li>
+      ))}
+    </ul>
+  )
 }
 
 export function AppInfosPage() {
@@ -50,6 +75,17 @@ export function AppInfosPage() {
 
   useReconnectRefetch(loadRoadmap)
 
+  const { activeSections, doneItems } = useMemo(() => {
+    const done = roadmap.filter((i) => i.status === 'erledigt')
+    const sections = ROADMAP_SECTIONS.map((section) => ({
+      ...section,
+      items: roadmap.filter((i) => i.status === section.status),
+    })).filter((section) => section.items.length > 0)
+    return { activeSections: sections, doneItems: done }
+  }, [roadmap])
+
+  const hasActiveRoadmap = activeSections.length > 0
+
   return (
     <div className="space-y-6">
       <Card className="min-w-0 overflow-hidden">
@@ -63,10 +99,6 @@ export function AppInfosPage() {
           {APP_BUILD_ID ? (
             <p className="text-sm text-muted-foreground tabular-nums">Build {APP_BUILD_ID}</p>
           ) : null}
-          <p className="text-xs text-muted-foreground pt-1">
-            Die Versionsnummer ändert sich bei Releases; die Build-Kennung darunter
-            unterscheidet einzelne Deployments.
-          </p>
         </CardContent>
       </Card>
 
@@ -74,7 +106,7 @@ export function AppInfosPage() {
         <CardHeader>
           <CardTitle>Roadmap</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-3">
+        <CardContent className="space-y-5">
           <p className="text-sm text-muted-foreground">
             Geplante und laufende Verbesserungen.
           </p>
@@ -82,25 +114,31 @@ export function AppInfosPage() {
             <p className="text-sm text-muted-foreground">Wird geladen…</p>
           )}
           {roadmapError && <p className="text-sm text-red-600">{roadmapError}</p>}
-          {!roadmapLoading && !roadmapError && roadmap.length === 0 && (
+          {!roadmapLoading && !roadmapError && !hasActiveRoadmap && (
             <p className="text-sm text-muted-foreground">Aktuell keine Einträge.</p>
           )}
-          <ul className="space-y-3">
-            {roadmap.map((item) => (
-              <li
-                key={item.issueNumber}
-                className="flex flex-col gap-1 border-b border-border last:border-0 pb-3 last:pb-0"
-              >
-                <div className="flex flex-wrap items-center gap-2">
-                  <FeedbackStatusBadge status={item.status} label={item.statusLabel} />
-                  <FeedbackTypeLabel type={item.type} />
-                </div>
-                <p className="text-sm font-medium text-foreground">{item.title}</p>
-              </li>
+          {!roadmapLoading &&
+            !roadmapError &&
+            activeSections.map((section) => (
+              <div key={section.status} className="space-y-3">
+                <h3 className="text-sm font-semibold text-brand-heading">{section.title}</h3>
+                <RoadmapItemList items={section.items} />
+              </div>
             ))}
-          </ul>
         </CardContent>
       </Card>
+
+      {!roadmapLoading && !roadmapError && doneItems.length > 0 && (
+        <Card className="min-w-0 overflow-hidden">
+          <CardHeader>
+            <CardTitle>Was ist neu</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-sm text-muted-foreground">Kürzlich umgesetzte Punkte.</p>
+            <RoadmapItemList items={doneItems} />
+          </CardContent>
+        </Card>
+      )}
     </div>
   )
 }

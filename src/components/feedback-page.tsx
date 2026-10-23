@@ -1,14 +1,12 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { MessageSquarePlus } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
-import { ResponsiveModal } from '@/components/ui/responsive-modal'
 import type { ApiResponse } from '@/lib/api-types'
 import type { FeedbackStatus, FeedbackType } from '@/lib/github-feedback'
 import { useReconnectRefetch } from '@/hooks/use-reconnect-refetch'
@@ -28,7 +26,6 @@ type MineItem = {
 }
 
 export function FeedbackPage() {
-  const [modalOpen, setModalOpen] = useState(false)
   const [type, setType] = useState<FeedbackType>('bug')
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
@@ -73,11 +70,6 @@ export function FeedbackPage() {
 
   useReconnectRefetch(loadMine)
 
-  const handleOpenChange = (open: boolean) => {
-    setModalOpen(open)
-    if (!open) resetForm()
-  }
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setFormError(null)
@@ -101,7 +93,6 @@ export function FeedbackPage() {
           : 'Danke! Deine Meldung wurde erfasst.'
       )
       resetForm()
-      setModalOpen(false)
       void loadMine()
     } catch {
       setFormError('Meldung konnte nicht gesendet werden.')
@@ -112,20 +103,69 @@ export function FeedbackPage() {
 
   return (
     <div className="space-y-6">
-      <Button
-        type="button"
-        size="lg"
-        className="w-full h-14 text-base font-semibold gap-2"
-        onClick={() => {
-          setPageSuccess(null)
-          setModalOpen(true)
-        }}
-      >
-        <MessageSquarePlus className="h-5 w-5" />
-        Fehler oder Idee melden
-      </Button>
-
-      {pageSuccess && <p className="text-sm text-emerald-700">{pageSuccess}</p>}
+      <Card className="min-w-0 overflow-hidden">
+        <CardHeader>
+          <CardTitle>Fehler oder Idee melden</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Beschreibe einen Fehler oder schlage eine Verbesserung vor.
+            </p>
+            <div className="space-y-2">
+              <Label>Art</Label>
+              <RadioGroup
+                value={type}
+                onValueChange={(v) => setType(v as FeedbackType)}
+                className="flex flex-col sm:flex-row gap-3"
+              >
+                <label className="flex items-center gap-2 text-sm cursor-pointer">
+                  <RadioGroupItem value="bug" id="feedback-bug" />
+                  Fehler
+                </label>
+                <label className="flex items-center gap-2 text-sm cursor-pointer">
+                  <RadioGroupItem value="enhancement" id="feedback-enhancement" />
+                  Verbesserung
+                </label>
+              </RadioGroup>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="feedback-title">Titel</Label>
+              <Input
+                id="feedback-title"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                maxLength={120}
+                placeholder="Kurz und klar"
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="feedback-description">Beschreibung</Label>
+              <Textarea
+                id="feedback-description"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                maxLength={4000}
+                rows={5}
+                placeholder={
+                  type === 'bug'
+                    ? 'Was ist passiert? Was hättest du erwartet?'
+                    : 'Was fehlt oder könnte besser laufen? Welchen Nutzen hättest du davon?'
+                }
+                required
+              />
+            </div>
+            {formError && <p className="text-sm text-red-600">{formError}</p>}
+            {pageSuccess && <p className="text-sm text-emerald-700">{pageSuccess}</p>}
+            <div className="flex justify-end pt-1">
+              <Button type="submit" disabled={submitting}>
+                {submitting ? 'Wird gesendet…' : 'Absenden'}
+              </Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
 
       <Card className="min-w-0 overflow-hidden">
         <CardHeader>
@@ -158,70 +198,6 @@ export function FeedbackPage() {
           </ul>
         </CardContent>
       </Card>
-
-      <ResponsiveModal
-        open={modalOpen}
-        onOpenChange={handleOpenChange}
-        title="Fehler oder Idee melden"
-        description="Beschreibe einen Fehler oder schlage eine Verbesserung vor."
-      >
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label>Art</Label>
-            <RadioGroup
-              value={type}
-              onValueChange={(v) => setType(v as FeedbackType)}
-              className="flex flex-col sm:flex-row gap-3"
-            >
-              <label className="flex items-center gap-2 text-sm cursor-pointer">
-                <RadioGroupItem value="bug" id="feedback-bug" />
-                Fehler
-              </label>
-              <label className="flex items-center gap-2 text-sm cursor-pointer">
-                <RadioGroupItem value="enhancement" id="feedback-enhancement" />
-                Verbesserung
-              </label>
-            </RadioGroup>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="feedback-title">Titel</Label>
-            <Input
-              id="feedback-title"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              maxLength={120}
-              placeholder="Kurz und klar"
-              required
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="feedback-description">Beschreibung</Label>
-            <Textarea
-              id="feedback-description"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              maxLength={4000}
-              rows={5}
-              placeholder="Was ist passiert? Was hättest du erwartet?"
-              required
-            />
-          </div>
-          {formError && <p className="text-sm text-red-600">{formError}</p>}
-          <div className="flex flex-col-reverse sm:flex-row gap-2 sm:justify-end pt-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => handleOpenChange(false)}
-              disabled={submitting}
-            >
-              Abbrechen
-            </Button>
-            <Button type="submit" disabled={submitting}>
-              {submitting ? 'Wird gesendet…' : 'Absenden'}
-            </Button>
-          </div>
-        </form>
-      </ResponsiveModal>
     </div>
   )
 }

@@ -89,7 +89,7 @@ export function feedbackStatusLabel(status: FeedbackStatus): string {
     case 'todo':
       return 'Todo'
     case 'in_progress':
-      return 'In Progress'
+      return 'In Arbeit'
     case 'in_test':
       return 'In Test'
     case 'erledigt':
