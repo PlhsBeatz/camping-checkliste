@@ -4,8 +4,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { ConfigPageLayout } from '@/components/config-page-layout'
 import { useAuth } from '@/components/auth-provider'
-import { Download, Upload, AlertTriangle, ChevronDown } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Download, Upload, AlertTriangle, ChevronDown, Info } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import type { BackupPreset } from '@/lib/data-backup'
@@ -14,49 +14,80 @@ import type { ApiResponse } from '@/lib/api-types'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { parseExportMetaFromZipBuffer } from '@/lib/data-backup/backup-zip'
 
 /** Presets in der UI (ohne Legacy referenceCore und ohne separates auth-Preset) */
 type UiPresetKey = Exclude<BackupPreset, 'referenceCore' | 'auth'>
 
-const PRESET_META: { id: UiPresetKey; label: string; hint: string }[] = [
+const PRESET_META: { id: UiPresetKey; label: string; hint: string; detail?: string }[] = [
   {
     id: 'equipment',
     label: 'Ausrüstung',
-    hint:
-      'Ausrüstungsgegenstände mit externen Links, Tag-Zuordnungen, fest zugeordneten Mitreisenden je Gegenstand sowie Entweder-oder-Gruppen.',
+    hint: 'Gegenstände, Links, Tags und Zuordnungen zu Mitreisenden.',
+    detail:
+      'Enthält Ausrüstungsgegenstände mit externen Links, Tag-Zuordnungen, fest zugeordnete Mitreisende je Gegenstand sowie Entweder-oder-Gruppen.',
   },
   {
     id: 'referenceStammdaten',
-    label: 'Packliste-Stamm & Organisation',
-    hint:
-      'Hauptkategorien und Kategorien der Packliste, Transportmittel inkl. manueller Festgewichte „Fest eingebaut“, Tag-Kategorien und Tags (Labels), Mitreisende-Stammdaten, Packlisten-Vorlagen mit Vorlagen-Einträgen.',
+    label: 'Packlisten-Grundlagen',
+    hint: 'Kategorien, Transportmittel, Tags, Mitreisende und Vorlagen.',
+    detail:
+      'Haupt- und Unterkategorien der Packliste, Transportmittel inkl. Festgewichte „Fest eingebaut“, Tag-Kategorien und Tags, Mitreisende-Stammdaten sowie Packlisten-Vorlagen mit Einträgen.',
   },
   {
     id: 'vacations',
-    label: 'Urlaube & dynamische Packliste',
-    hint:
-      'Urlaubs-Stammdaten; Zuordnung von Mitreisenden und Campingplätzen zum Urlaub; eine Packliste pro Urlaub mit allen Einträgen (über Ausrüstung oder temporär); Zuordnung Mitreisende je Eintrag (wer/wie viele/welches Transportmittel).',
+    label: 'Urlaube & Packlisten',
+    hint: 'Urlaube inkl. Mitreisenden, Campingplätzen und Packlisten-Einträgen.',
+    detail:
+      'Urlaubsdaten; Zuordnung von Mitreisenden und Campingplätzen; eine Packliste pro Urlaub (Ausrüstung oder temporäre Einträge); Zuordnung Mitreisende je Eintrag (wer / wie viele / welches Transportmittel).',
   },
   {
     id: 'places',
     label: 'Campingplätze',
-    hint:
-      'Campingplatz-Stammdaten, Zuordnung Urlaub↔Campingplatz und Fotometadaten; Binärdateien nur mit Option „R2-Bilder im ZIP“. ',
+    hint: 'Campingplätze und Foto-Angaben. Die Bilddateien selbst nur mit „Bilder“.',
+    detail:
+      'Campingplatz-Stammdaten, Zuordnung Urlaub↔Campingplatz und Foto-Metadaten. Die eigentlichen Bilddateien nur, wenn zusätzlich „Bilder“ aktiviert ist.',
   },
   {
     id: 'toolsChecklists',
-    label: 'Tools / Checklisten & Optimierungen',
-    hint:
+    label: 'Checklisten & Optimierungen',
+    hint: 'Checklisten unter Tools sowie Optimierungen inkl. Fotos.',
+    detail:
       'Checklisten unter „Tools“ (Kategorien und Einträge) sowie das Optimierungen-Backlog inkl. Links und Foto-Metadaten.',
   },
   {
     id: 'wartung',
-    label: 'Wartung / Verbrauch',
-    hint:
-      'Fälligkeiten inkl. Historie, Wartungs-Vorlagen, Verbrauch-Medien und Verbrauchsmessungen. Ohne „Ausrüstung“ ergänzt Auto-Closure die zugeordneten Gegenstände und Transportmittel.',
+    label: 'Wartung & Verbrauch',
+    hint: 'Fälligkeiten, Vorlagen und Verbrauchsmessungen.',
+    detail:
+      'Fälligkeiten inkl. Historie, Wartungs-Vorlagen, Verbrauch-Medien und Verbrauchsmessungen. Ohne „Ausrüstung“ ergänzt „Verknüpfungen ergänzen“ die zugeordneten Gegenstände und Transportmittel.',
   },
 ]
+
+/** Dezentes i-Symbol mit ausführlicherem Hinweis (Popover). */
+function DetailHint({ children, label = 'Mehr Infos' }: { children: ReactNode; label?: string }) {
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="inline-flex shrink-0 rounded-full p-0.5 text-muted-foreground/60 hover:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          aria-label={label}
+        >
+          <Info className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="start"
+        side="bottom"
+        className="w-[min(20rem,calc(100vw-2rem))] p-3 text-xs leading-relaxed text-muted-foreground"
+      >
+        {children}
+      </PopoverContent>
+    </Popover>
+  )
+}
 
 function emptyUiPresetState(): Record<UiPresetKey, boolean> {
   return {
@@ -81,7 +112,7 @@ async function parseExportFailureResponse(res: Response): Promise<string> {
     }
   }
   if (/^<!DOCTYPE\b/i.test(trimmed) || /^<html\b/i.test(trimmed)) {
-    return `Der Server hat HTML statt JSON geliefert (HTTP ${res.status}). Typisch bei Workers-Grenzen (CPU oder Subrequests). Der Bildexport wird in mehreren ZIP-Teilen aufgeteilt; verkleinern Sie ggf. EXPORT_R2_BATCH_LIMIT oder wiederholen Sie den Export.`
+    return `Der Server hat unerwartet geantwortet (HTTP ${res.status}). Bei vielen Bildern die Sicherung erneut versuchen; ggf. ohne Bilder exportieren oder in kleineren Schritten.`
   }
   const snippet = text.trim().slice(0, 400)
   return snippet.length > 0 ? snippet : `Export fehlgeschlagen (${res.status})`
@@ -209,7 +240,7 @@ export default function DatensicherungPage() {
         }
         const ct = res.headers.get('content-type') || ''
         if (!ct.includes('application/zip')) {
-          setMessage('Unerwartete Antwort: Es wurde kein ZIP zurückgegeben (trotz R2-Option).')
+          setMessage('Unerwartete Antwort: Es wurde keine ZIP-Datei zurückgegeben (trotz Option „Bilder“).')
           return
         }
         const ab = await res.arrayBuffer()
@@ -245,7 +276,7 @@ export default function DatensicherungPage() {
         parts > 1
           ? ` Es wurden ${parts} Dateien heruntergeladen (Bilder auf mehrere ZIPs verteilt — je nach Browser ggf. mehrere Download-Bestätigungen).`
           : ''
-      setMessage(`Export OK (${parts} ZIP-Teil(e) mit Bildern).${mehrteilig}${hint}`)
+      setMessage(`Export OK (${parts} Datei(en) mit Bildern).${mehrteilig}${hint}`)
     } catch (e) {
       setMessage(e instanceof Error ? e.message : String(e))
     } finally {
@@ -289,8 +320,8 @@ export default function DatensicherungPage() {
         dryRun || d?.r2ObjectsWritten === undefined
           ? ''
           : d.r2ObjectsWritten > 0
-            ? `R2: ${d.r2ObjectsWritten} Objekt(e) nach CAMPING_PHOTOS geschrieben.`
-            : 'R2: keine Objekte geschrieben (Backup ohne Binärteil oder Fehler — siehe Warnungen).'
+            ? `${d.r2ObjectsWritten} Bilddatei(en) übernommen.`
+            : 'Keine Bilddateien übernommen (Sicherung ohne Bilder oder Fehler — siehe Warnungen).'
       const lines = [
         dryRun ? '(Probelauf — keine Schreibvorgänge)' : 'Import ausgeführt.',
         d?.errors?.length ? `Fehler (${d.errors.length}): ${d.errors.slice(0, 8).join('; ')}` : 'Keine DB-Fehler.',
@@ -343,18 +374,24 @@ export default function DatensicherungPage() {
                   }}
                 />
                 <div>
-                  <Label htmlFor="full" className="font-medium">
-                    Komplettexport (alle Bereiche)
-                  </Label>
+                  <div className="flex items-center gap-1.5">
+                    <Label htmlFor="full" className="font-medium">
+                      Alles sichern
+                    </Label>
+                    <DetailHint>
+                      Entspricht allen Datenbereichen. Anmeldedaten nur, wenn unten „Anmeldedaten“ aktiviert
+                      ist.
+                    </DetailHint>
+                  </div>
                   <p className="text-sm text-muted-foreground">
-                    Entspricht allen Tabellen; Auth optional (siehe unten).
+                    Alle Bereiche der App. Anmeldedaten optional (siehe unten).
                   </p>
                 </div>
               </div>
 
               {!fullExport && (
                 <div className="space-y-3 pl-1">
-                  <p className="text-sm font-medium">Bereiche kombinieren</p>
+                  <p className="text-sm font-medium">Bereiche wählen</p>
                   {PRESET_META.map((p) => (
                     <div key={p.id} className="flex items-start gap-2">
                       <Checkbox
@@ -365,9 +402,12 @@ export default function DatensicherungPage() {
                         }
                       />
                       <div>
-                        <Label htmlFor={p.id} className="font-medium">
-                          {p.label}
-                        </Label>
+                        <div className="flex items-center gap-1.5">
+                          <Label htmlFor={p.id} className="font-medium">
+                            {p.label}
+                          </Label>
+                          {p.detail ? <DetailHint>{p.detail}</DetailHint> : null}
+                        </div>
                         <p className="text-xs text-muted-foreground">{p.hint}</p>
                       </div>
                     </div>
@@ -382,15 +422,19 @@ export default function DatensicherungPage() {
                   onCheckedChange={(c) => setIncludeR2Photos(c === true)}
                 />
                 <div>
-                  <Label htmlFor="inclR2" className="font-medium">
-                    R2-Bilder im Backup (ZIP mit JSON + Dateien)
-                  </Label>
+                  <div className="flex items-center gap-1.5">
+                    <Label htmlFor="inclR2" className="font-medium">
+                      Bilder
+                    </Label>
+                    <DetailHint>
+                      Packt die Bilddateien (z.&nbsp;B. Campingplatz- und Optimierungsfotos) zusammen mit den
+                      Textdaten in eine oder mehrere ZIP-Dateien. Bei vielen Fotos wird die Sicherung
+                      automatisch aufgeteilt. Ohne Häkchen erhalten Sie nur die Textdatei. Beim Einspielen
+                      werden ZIP und Textdatei erkannt; bei mehreren ZIP-Teilen nacheinander importieren.
+                    </DetailHint>
+                  </div>
                   <p className="text-sm text-muted-foreground">
-                    Liest die Dateien aus <code className="text-xs">CAMPING_PHOTOS</code> und packt sie in eine oder
-                    mehrere ZIPs zusammen mit <code className="text-xs">backup.json</code> (bei vielen Fotos automatisch
-                    geteilt wegen Workers&nbsp;Free: Subrequests/CPU). Ohne diese Option erhalten Sie nur die reine
-                    JSON-Datei. Beim Import werden ZIP und reine JSON automatisch erkannt; mehrere ZIP-Teile nacheinander
-                    importieren und dieselben Optionen verwenden.
+                    Campingplatz- und Optimierungsfotos in der Sicherung. Ohne Häkchen nur die Textdaten.
                   </p>
                 </div>
               </div>
@@ -402,20 +446,20 @@ export default function DatensicherungPage() {
                   onCheckedChange={(c) => setIncludeAuth(c === true)}
                 />
                 <div>
-                  <Label htmlFor="inclAuth" className="font-medium flex items-center gap-1">
-                    <AlertTriangle className="h-4 w-4 text-amber-600" />
-                    Authentifizierung exportieren (Passwort-Hashes, Einladungs-Tokens)
-                  </Label>
+                  <div className="flex items-center gap-1.5">
+                    <Label htmlFor="inclAuth" className="font-medium flex items-center gap-1">
+                      <AlertTriangle className="h-4 w-4 text-amber-600" />
+                      Anmeldedaten
+                    </Label>
+                    <DetailHint>
+                      Enthält Passwort-Hashes und Einladungs-Tokens – Datei wie ein Geheimnis behandeln. Ohne
+                      Häkchen bleiben Login-Konten im Export absichtlich leer; Mitreisende ohne eigenes
+                      Login sind davon nicht betroffen. Es werden nur Konten der aktuell genutzten App-Umgebung
+                      exportiert.
+                    </DetailHint>
+                  </div>
                   <p className="text-sm text-muted-foreground">
-                    Datei wie ein Geheimnis behandeln. Ohne diese Option bleiben im Komplettexport die
-                    Tabellen <code className="text-xs">users</code> u. a.{' '}
-                    <strong className="font-medium text-foreground">absichtlich leer</strong>, auch wenn in
-                    der Cloud mehrere Konten existieren – die JSON enthält dann keine Login-Datensätze.
-                    Nur mit Login haben Personen eine Zeile unter <code className="text-xs">users</code>;
-                    übrige Familienmitglieder stehen nur unter <code className="text-xs">mitreisende</code>.
-                    Mit Häkchen werden <strong className="font-medium text-foreground">alle</strong> Konten
-                    aus genau der Datenbank exportiert, die auch diese App gerade nutzt (nicht: andere
-                    Umgebung / anderes <code className="text-xs">wrangler</code>-Projekt).
+                    Passwörter und Einladungen – Datei wie ein Geheimnis behandeln.
                   </p>
                 </div>
               </div>
@@ -430,7 +474,7 @@ export default function DatensicherungPage() {
                     )}
                   >
                     <span>
-                      Bestimmte Urlaube einschränken
+                      Bestimmte Urlaube
                       {selectedVacationIds.size > 0 ? ` (${selectedVacationIds.size} gewählt)` : ''}
                     </span>
                     <ChevronDown
@@ -441,11 +485,15 @@ export default function DatensicherungPage() {
                     />
                   </CollapsibleTrigger>
                   <CollapsibleContent className="space-y-2 pt-3">
-                    <p className="text-xs text-muted-foreground">
-                      Wenn mindestens ein Urlaub gewählt ist, werden die Urlaubs- und Packlisten-Daten im Export
-                      darauf begrenzt. Ohne aktiviertes „Packliste-Stamm &amp; Organisation“ oder „Ausrüstung“
-                      ergänzt die Option „Auto-Closure“ die dafür nötigen Referenzzeilen automatisch.
-                    </p>
+                    <div className="flex items-start gap-1.5">
+                      <p className="text-xs text-muted-foreground">
+                        Begrenzt die Sicherung auf die gewählten Urlaube und deren Packlisten.
+                      </p>
+                      <DetailHint>
+                        Ohne „Packlisten-Grundlagen“ oder „Ausrüstung“ ergänzt „Verknüpfungen ergänzen“ die
+                        nötigen Stammdaten automatisch, damit der Import vollständig bleibt.
+                      </DetailHint>
+                    </div>
                     <div className="max-h-40 overflow-y-auto border rounded-md p-2 space-y-2 text-sm">
                       {vacations.length === 0 ? (
                         <span className="text-muted-foreground">Keine Urlaube geladen.</span>
@@ -476,14 +524,19 @@ export default function DatensicherungPage() {
                   disabled={fullExport}
                 />
                 <div>
-                  <Label htmlFor="closure" className="font-medium">
-                    Auto-Closure (referenzierte Ausrüstung &amp; Struktur)
-                  </Label>
+                  <div className="flex items-center gap-1.5">
+                    <Label htmlFor="closure" className="font-medium">
+                      Verknüpfungen ergänzen
+                    </Label>
+                    <DetailHint>
+                      Wenn Sie nur einzelne Urlaube sichern und weder „Packlisten-Grundlagen“ noch
+                      „Ausrüstung“ anhaken, werden fehlende referenzierte Daten automatisch mitgeliefert.
+                      Dasselbe gilt für „Wartung &amp; Verbrauch“: zugeordnete Gegenstände und
+                      Transportmittel werden mit exportiert.
+                    </DetailHint>
+                  </div>
                   <p className="text-xs text-muted-foreground">
-                    Wenn Sie nur einzelne Urlaube exportieren und weder „Packliste-Stamm &amp; Organisation“
-                    noch „Ausrüstung“ anhaken, werden fehlende referenzierte Tabellen automatisch ergänzt
-                    (damit der Import konsistent bleibt). Dasselbe gilt für „Wartung &amp; Verbrauch“:
-                    zugeordnete Ausrüstungsgegenstände und Transportmittel werden mit exportiert.
+                    Ergänzt nötige Ausrüstung und Struktur, wenn Sie nur einzelne Urlaube sichern.
                   </p>
                 </div>
               </div>
@@ -493,23 +546,25 @@ export default function DatensicherungPage() {
                 {busy
                   ? 'Export…'
                   : includeR2Photos
-                    ? 'ZIP-Backup laden (ggf. mehrere Teile)'
-                    : 'JSON herunterladen'}
+                    ? 'Sicherung mit Bildern laden'
+                    : 'Sicherung herunterladen'}
               </Button>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader>
-              <CardTitle>Camping-Fotos (Bestand)</CardTitle>
+              <div className="flex items-center gap-1.5">
+                <CardTitle>Camping-Fotos verkleinern</CardTitle>
+                <DetailHint>
+                  Vorhandene Fotos werden neu komprimiert (WebP, kleinere Kantenlänge). Sehr große Bilder
+                  können übersprungen werden. Neue Uploads bleiben unverändert bei höherer Qualität. Der
+                  Probelauf zählt nur Einträge; die echte Komprimierung läuft in mehreren Schritten und
+                  kann etwas dauern.
+                </DetailHint>
+              </div>
               <CardDescription>
-                Bereits referenzierte Fotos als WebP neu encodieren (Bulk‑Nachlauf: Standard max.
-                Kante&nbsp;896&nbsp;px, Qualität&nbsp;72 — schonend für Workers Free). Sehr große JPG/PNG
-                (~über&nbsp;5&nbsp;MP Dekodierung) werden übersprungen, wenn das CPU‑Budget sonst reißt;
-                grenze per <code className="text-xs">REOPTIMIZE_MAX_DECODE_MEGAPIXELS</code> änderbar.
-                Neue Uploads bleiben 1600&nbsp;px&nbsp;@&nbsp;85&nbsp;%. Der Probelauf zählt nur Datenbankeinträge
-                (ohne Bilddaten). Auf Cloudflare Free wird pro Server‑Antrag typischerweise ein Bild
-                verarbeitet; der Lauf dauert damit entsprechend länger, bleibt aber in den Kontingenten.
+                Vorhandene Campingplatz-Fotos neu komprimieren, um Speicherplatz zu sparen.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -519,13 +574,16 @@ export default function DatensicherungPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Import</CardTitle>
+              <div className="flex items-center gap-1.5">
+                <CardTitle>Import</CardTitle>
+                <DetailHint>
+                  Technisch: Zusammenführung per ID (bestehende Zeilen werden überschrieben, fehlende
+                  ergänzt). Es werden keine Zeilen automatisch gelöscht. ZIP mit Bildern und reine
+                  Textdatei werden automatisch erkannt.
+                </DetailHint>
+              </div>
               <CardDescription>
-                <code className="text-xs">mergeById</code> per UPSERT (<code className="text-xs">
-                  INSERT … ON CONFLICT DO UPDATE
-                </code>
-                ). Bestehende Zeilen mit gleichem Primärschlüssel werden zusammengeführt; es werden keine
-                Zeilen automatisch gelöscht.
+                Vorhandene Einträge mit gleicher ID werden aktualisiert; nichts wird automatisch gelöscht.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -626,7 +684,7 @@ function ReoptimizeFotosButton({ disabled }: { disabled: boolean }) {
           : ''
       const note = typeof data?.note === 'string' ? data.note : ''
       setReport(
-        `Probelauf: ${total} Einträge mit R2-Schlüssel in der Datenbank. Geschätzt ${batchesNeeded} Server-Schritt(e) à bis zu ${batchSize} Foto/Fotos für die echte Komprimierung.${encTxt}${mpTxt} ${note}`
+        `Probelauf: ${total} Fotos gefunden. Geschätzt ${batchesNeeded} Schritt(e) à bis zu ${batchSize} Foto(s).${encTxt}${mpTxt} ${note}`
       )
     } catch (e) {
       setReport(e instanceof Error ? e.message : String(e))
@@ -639,7 +697,7 @@ function ReoptimizeFotosButton({ disabled }: { disabled: boolean }) {
     if (
       typeof window !== 'undefined' &&
       !window.confirm(
-        'Alle vorhandenen Camping-Fotos in mehreren Schritten neu encodieren? Überschreibt R2-Objekte und aktualisiert die Datenbank.'
+        'Alle vorhandenen Camping-Fotos in mehreren Schritten neu komprimieren? Bestehende Bilddateien werden überschrieben.'
       )
     ) {
       return
@@ -714,7 +772,7 @@ function ReoptimizeFotosButton({ disabled }: { disabled: boolean }) {
           : ''
 
       setReport(
-        `Fertig nach ${rounds} Server-Schritt(en). Insgesamt als optimiert geschrieben (über alle Batches): ${processedSum}.${noneWritten} Rohbytes (Summe der aus R2 gelesenen Daten in allen Batches): ${bytesBeforeSum} → neue WebP-bytes geschrieben: ${bytesAfterSum}.${errTail}`
+        `Fertig nach ${rounds} Schritt(en). Optimiert: ${processedSum}.${noneWritten} Größe vorher: ${bytesBeforeSum} Bytes → nachher: ${bytesAfterSum} Bytes.${errTail}`
       )
     } catch (e) {
       setReport(e instanceof Error ? e.message : String(e))

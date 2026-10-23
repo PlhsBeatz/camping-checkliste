@@ -97,7 +97,10 @@ export function CampingplatzOverviewMap({
           per Zurück / Wischen.
         </p>
         {interactiveOpen ? (
-          <div className="map-embed relative min-h-0 flex-1 overflow-hidden rounded-lg border border-subtle bg-muted">
+          <div
+            data-vaul-no-drag=""
+            className="map-embed relative min-h-0 flex-1 overflow-hidden rounded-lg border border-subtle bg-muted"
+          >
             <iframe
               title={modalTitle}
               src={embedSrc}

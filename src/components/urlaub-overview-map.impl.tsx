@@ -401,7 +401,10 @@ export function UrlaubOverviewMap({ home, campingplaetze, rastplaetze = [], titl
           und Rastplätze entlang aufgeklappter Streckenabschnitte.
         </p>
         {interactiveOpen ? (
-          <div className="map-embed relative min-h-0 flex-1 overflow-hidden rounded-lg border border-subtle bg-muted">
+          <div
+            data-vaul-no-drag=""
+            className="map-embed relative min-h-0 flex-1 overflow-hidden rounded-lg border border-subtle bg-muted"
+          >
             <UrlaubLeafletMap
               key={`dialog-${pointsKey}`}
               mapKey={`dialog-${pointsKey}`}
