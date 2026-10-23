@@ -60,6 +60,16 @@ const withSerwist = withSerwistInit({
   additionalPrecacheEntries,
 });
 
+const appBuildId = (
+  process.env.NEXT_PUBLIC_APP_BUILD_ID ||
+  process.env.CF_PAGES_COMMIT_SHA ||
+  process.env.WORKERS_CI_COMMIT_SHA ||
+  process.env.GITHUB_SHA ||
+  ''
+)
+  .trim()
+  .slice(0, 7);
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
@@ -69,7 +79,10 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
-  env: { ...devVars },
+  env: {
+    ...devVars,
+    ...(appBuildId ? { NEXT_PUBLIC_APP_BUILD_ID: appBuildId } : {}),
+  },
   images: {
     unoptimized: true,
   },

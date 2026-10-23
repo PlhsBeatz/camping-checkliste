@@ -6,7 +6,7 @@ import {
   createFeedbackIssue,
   type FeedbackType,
 } from '@/lib/github-feedback'
-import { APP_VERSION } from '@/lib/app-version'
+import { formatAppVersionDisplay } from '@/lib/app-version'
 
 const MAX_TITLE = 120
 const MAX_DESCRIPTION = 4000
@@ -92,7 +92,7 @@ export async function POST(request: NextRequest) {
       userEmail: userContext.email,
       userId: userContext.userId,
       userAgent: request.headers.get('user-agent'),
-      appVersion: APP_VERSION,
+      appVersion: formatAppVersionDisplay(),
     })
 
     const issue = await createFeedbackIssue({

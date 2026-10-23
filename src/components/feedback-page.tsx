@@ -10,9 +10,12 @@ import { Textarea } from '@/components/ui/textarea'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { ResponsiveModal } from '@/components/ui/responsive-modal'
 import type { ApiResponse } from '@/lib/api-types'
-import { cn } from '@/lib/utils'
 import type { FeedbackStatus, FeedbackType } from '@/lib/github-feedback'
 import { useReconnectRefetch } from '@/hooks/use-reconnect-refetch'
+import {
+  FeedbackStatusBadge,
+  FeedbackTypeLabel,
+} from '@/components/feedback-status-badge'
 
 type MineItem = {
   id: string
@@ -24,41 +27,7 @@ type MineItem = {
   createdAt: string
 }
 
-type RoadmapItem = {
-  issueNumber: number
-  title: string
-  type: FeedbackType | null
-  status: FeedbackStatus
-  statusLabel: string
-}
-
-function StatusBadge({ status, label }: { status: FeedbackStatus; label: string }) {
-  return (
-    <span
-      className={cn(
-        'inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium',
-        status === 'erledigt' &&
-          'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200',
-        status === 'in_arbeit' &&
-          'bg-amber-100 text-amber-900 dark:bg-amber-900/40 dark:text-amber-100',
-        status === 'geplant' && 'bg-sky-100 text-sky-900 dark:bg-sky-900/40 dark:text-sky-100',
-        status === 'offen' && 'bg-muted text-muted-foreground'
-      )}
-    >
-      {label}
-    </span>
-  )
-}
-
-function TypeLabel({ type }: { type: FeedbackType | null }) {
-  if (type === 'bug') return <span className="text-xs text-muted-foreground">Fehler</span>
-  if (type === 'enhancement') {
-    return <span className="text-xs text-muted-foreground">Verbesserung</span>
-  }
-  return null
-}
-
-export function FeedbackAboutPage() {
+export function FeedbackPage() {
   const [modalOpen, setModalOpen] = useState(false)
   const [type, setType] = useState<FeedbackType>('bug')
   const [title, setTitle] = useState('')
@@ -70,10 +39,6 @@ export function FeedbackAboutPage() {
   const [mine, setMine] = useState<MineItem[]>([])
   const [mineLoading, setMineLoading] = useState(true)
   const [mineError, setMineError] = useState<string | null>(null)
-
-  const [roadmap, setRoadmap] = useState<RoadmapItem[]>([])
-  const [roadmapLoading, setRoadmapLoading] = useState(true)
-  const [roadmapError, setRoadmapError] = useState<string | null>(null)
 
   const resetForm = () => {
     setType('bug')
@@ -102,35 +67,11 @@ export function FeedbackAboutPage() {
     }
   }, [])
 
-  const loadRoadmap = useCallback(async () => {
-    setRoadmapLoading(true)
-    setRoadmapError(null)
-    try {
-      const res = await fetch('/api/feedback/roadmap', { credentials: 'include' })
-      const json = (await res.json()) as ApiResponse<RoadmapItem[]>
-      if (!json.success || !json.data) {
-        setRoadmapError(json.error ?? 'Roadmap konnte nicht geladen werden.')
-        setRoadmap([])
-        return
-      }
-      setRoadmap(json.data)
-    } catch {
-      setRoadmapError('Roadmap konnte nicht geladen werden.')
-      setRoadmap([])
-    } finally {
-      setRoadmapLoading(false)
-    }
-  }, [])
-
-  const loadAll = useCallback(async () => {
-    await Promise.all([loadMine(), loadRoadmap()])
-  }, [loadMine, loadRoadmap])
-
   useEffect(() => {
-    void loadAll()
-  }, [loadAll])
+    void loadMine()
+  }, [loadMine])
 
-  useReconnectRefetch(loadAll)
+  useReconnectRefetch(loadMine)
 
   const handleOpenChange = (open: boolean) => {
     setModalOpen(open)
@@ -208,40 +149,8 @@ export function FeedbackAboutPage() {
                   <span className="text-xs text-muted-foreground tabular-nums">
                     #{item.issueNumber}
                   </span>
-                  <StatusBadge status={item.status} label={item.statusLabel} />
-                  <TypeLabel type={item.type} />
-                </div>
-                <p className="text-sm font-medium text-foreground">{item.title}</p>
-              </li>
-            ))}
-          </ul>
-        </CardContent>
-      </Card>
-
-      <Card className="min-w-0 overflow-hidden">
-        <CardHeader>
-          <CardTitle>Roadmap</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <p className="text-sm text-muted-foreground">
-            Geplante und laufende Verbesserungen.
-          </p>
-          {roadmapLoading && (
-            <p className="text-sm text-muted-foreground">Wird geladen…</p>
-          )}
-          {roadmapError && <p className="text-sm text-red-600">{roadmapError}</p>}
-          {!roadmapLoading && !roadmapError && roadmap.length === 0 && (
-            <p className="text-sm text-muted-foreground">Aktuell keine Einträge.</p>
-          )}
-          <ul className="space-y-3">
-            {roadmap.map((item) => (
-              <li
-                key={item.issueNumber}
-                className="flex flex-col gap-1 border-b border-border last:border-0 pb-3 last:pb-0"
-              >
-                <div className="flex flex-wrap items-center gap-2">
-                  <StatusBadge status={item.status} label={item.statusLabel} />
-                  <TypeLabel type={item.type} />
+                  <FeedbackStatusBadge status={item.status} label={item.statusLabel} />
+                  <FeedbackTypeLabel type={item.type} />
                 </div>
                 <p className="text-sm font-medium text-foreground">{item.title}</p>
               </li>

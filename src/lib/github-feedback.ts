@@ -1,9 +1,11 @@
 /**
  * GitHub Issues Proxy für In-App-Feedback.
  * Token nur serverseitig (GITHUB_TOKEN).
+ *
+ * Status-Labels werden vom Project-Board gespiegelt (siehe docs/github-workflow.md).
  */
 
-import { APP_VERSION } from '@/lib/app-version'
+import { APP_VERSION, formatAppVersionDisplay } from '@/lib/app-version'
 
 export const DEFAULT_GITHUB_REPO = 'PlhsBeatz/camping-checkliste'
 
@@ -12,6 +14,10 @@ export const FEEDBACK_LABELS = {
   bug: 'bug',
   enhancement: 'enhancement',
   roadmap: 'roadmap',
+  statusTodo: 'status:todo',
+  statusInProgress: 'status:in-progress',
+  statusInTest: 'status:in-test',
+  /** Legacy – bis Backfill/Cleanup */
   statusGeplant: 'status:geplant',
   statusInArbeit: 'status:in-arbeit',
   statusErledigt: 'status:erledigt',
@@ -19,7 +25,13 @@ export const FEEDBACK_LABELS = {
 
 export type FeedbackType = 'bug' | 'enhancement'
 
-export type FeedbackStatus = 'offen' | 'geplant' | 'in_arbeit' | 'erledigt'
+/** UI-/API-Status (Project: Backlog/Todo/In Progress/In Test/Done). */
+export type FeedbackStatus =
+  | 'eingegangen'
+  | 'todo'
+  | 'in_progress'
+  | 'in_test'
+  | 'erledigt'
 
 export type FeedbackListItem = {
   issueNumber: number
@@ -42,10 +54,27 @@ function labelNames(issue: GitHubIssue): string[] {
 export function mapIssueStatus(issue: Pick<GitHubIssue, 'state' | 'labels'>): FeedbackStatus {
   if (issue.state === 'closed') return 'erledigt'
   const names = labelNames(issue as GitHubIssue)
-  if (names.includes(FEEDBACK_LABELS.statusErledigt)) return 'erledigt'
-  if (names.includes(FEEDBACK_LABELS.statusInArbeit)) return 'in_arbeit'
-  if (names.includes(FEEDBACK_LABELS.statusGeplant)) return 'geplant'
-  return 'offen'
+  if (
+    names.includes(FEEDBACK_LABELS.statusErledigt) ||
+    names.includes('status:done')
+  ) {
+    return 'erledigt'
+  }
+  if (names.includes(FEEDBACK_LABELS.statusInTest)) return 'in_test'
+  if (
+    names.includes(FEEDBACK_LABELS.statusInProgress) ||
+    names.includes(FEEDBACK_LABELS.statusInArbeit)
+  ) {
+    return 'in_progress'
+  }
+  if (
+    names.includes(FEEDBACK_LABELS.statusTodo) ||
+    names.includes(FEEDBACK_LABELS.statusGeplant)
+  ) {
+    return 'todo'
+  }
+  if (names.includes(FEEDBACK_LABELS.roadmap)) return 'todo'
+  return 'eingegangen'
 }
 
 export function mapIssueType(issue: Pick<GitHubIssue, 'labels'>): FeedbackType | null {
@@ -57,14 +86,16 @@ export function mapIssueType(issue: Pick<GitHubIssue, 'labels'>): FeedbackType |
 
 export function feedbackStatusLabel(status: FeedbackStatus): string {
   switch (status) {
-    case 'geplant':
-      return 'Geplant'
-    case 'in_arbeit':
-      return 'In Arbeit'
+    case 'todo':
+      return 'Todo'
+    case 'in_progress':
+      return 'In Progress'
+    case 'in_test':
+      return 'In Test'
     case 'erledigt':
       return 'Erledigt'
     default:
-      return 'Offen'
+      return 'Eingegangen'
   }
 }
 
@@ -112,7 +143,7 @@ export function buildFeedbackIssueBody(input: {
   userAgent?: string | null
   appVersion?: string
 }): string {
-  const version = input.appVersion ?? APP_VERSION
+  const version = input.appVersion ?? formatAppVersionDisplay(APP_VERSION)
   return [
     input.description.trim(),
     '',

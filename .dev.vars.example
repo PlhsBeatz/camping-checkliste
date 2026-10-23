@@ -31,9 +31,11 @@ VAPID_SUBJECT=mailto:deine@email.de
 
 # --- Feedback → GitHub Issues (privates Repo) ---
 # Fine-grained PAT: nur Repo PlhsBeatz/camping-checkliste, Permission Issues: Read and write
-# Labels im Repo anlegen: feedback, roadmap, status:geplant, status:in-arbeit, status:erledigt
-# (+ Standard bug / enhancement)
+# Labels: feedback, bug, enhancement (App); roadmap + status:todo|in-progress|in-test
+#   werden vom Project-Board gespiegelt (docs/github-workflow.md).
 # Produktion: npx wrangler secret put GITHUB_TOKEN
 # GITHUB_TOKEN=github_pat_...
 # Optional (Default: PlhsBeatz/camping-checkliste):
 # GITHUB_REPO=PlhsBeatz/camping-checkliste
+# Optional lokale Build-ID (sonst leer; CI setzt NEXT_PUBLIC_APP_BUILD_ID):
+# NEXT_PUBLIC_APP_BUILD_ID=devlocal

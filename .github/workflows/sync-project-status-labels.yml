@@ -1,0 +1,80 @@
+name: Sync Project Status → Issue Labels
+
+# Spiegelt Project-Status (Backlog/Todo/In Progress/In Test/Done)
+# auf Labels roadmap + status:* für die In-App-Roadmap.
+#
+# Voraussetzungen (Repo → Settings):
+#   Secrets → Actions: GH_PROJECT_TOKEN
+#     Fine-grained PAT: dieses Repo Issues R/W + Account/Org Projects R/W
+#   Variables → Actions:
+#     PROJECT_NUMBER = Nummer aus der URL …/projects/N  (Pflicht)
+#     PROJECT_OWNER = PlhsBeatz (optional)
+#     PROJECT_OWNER_TYPE = user | organization (optional, Default user)
+#
+# Einmaliger Backfill: Actions → diesen Workflow → Run workflow → mode=backfill
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'item (ein Item) oder backfill (alle Project-Items)'
+        required: true
+        default: backfill
+        type: choice
+        options:
+          - backfill
+          - item
+      item_node_id:
+        description: 'Nur bei mode=item: ProjectV2Item Node-ID'
+        required: false
+        type: string
+  projects_v2_item:
+    types: [edited, created, converted, restored, reordered]
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    name: Sync labels
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Check configuration
+        env:
+          TOKEN: ${{ secrets.GH_PROJECT_TOKEN }}
+          PROJECT_NUMBER: ${{ vars.PROJECT_NUMBER }}
+        run: |
+          if [ -z "$TOKEN" ]; then
+            echo "::error::Secret GH_PROJECT_TOKEN fehlt. Siehe docs/github-workflow.md"
+            exit 1
+          fi
+          if [ -z "$PROJECT_NUMBER" ]; then
+            echo "::error::Variable PROJECT_NUMBER fehlt (Nummer aus …/projects/N)."
+            exit 1
+          fi
+
+      - name: Resolve sync mode
+        id: meta
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "mode=${{ inputs.mode }}" >> "$GITHUB_OUTPUT"
+            echo "item_id=${{ inputs.item_node_id }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "mode=item" >> "$GITHUB_OUTPUT"
+            echo "item_id=${{ github.event.projects_v2_item.node_id }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Sync Project Status → Labels
+        env:
+          GH_PROJECT_TOKEN: ${{ secrets.GH_PROJECT_TOKEN }}
+          PROJECT_OWNER: ${{ vars.PROJECT_OWNER }}
+          PROJECT_OWNER_TYPE: ${{ vars.PROJECT_OWNER_TYPE }}
+          PROJECT_NUMBER: ${{ vars.PROJECT_NUMBER }}
+          REPO_FULL: PlhsBeatz/camping-checkliste
+          MODE: ${{ steps.meta.outputs.mode }}
+          ITEM_NODE_ID: ${{ steps.meta.outputs.item_id }}
+        run: node scripts/sync-project-status-labels.mjs

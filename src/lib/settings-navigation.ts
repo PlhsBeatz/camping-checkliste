@@ -36,7 +36,8 @@ export const SETTINGS_NAV_GROUPS: SettingsNavGroup[] = [
   {
     label: 'Über die App',
     items: [
-      { label: 'Feedback & Roadmap', href: '/einstellungen/ueber' },
+      { label: 'Infos zur App', href: '/einstellungen/infos' },
+      { label: 'Feedback', href: '/einstellungen/feedback' },
     ],
   },
   {

@@ -38,6 +38,7 @@ jobs:
       - name: Build
         env:
           NEXT_PUBLIC_GOOGLE_MAPS_API_KEY: ${{ secrets.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY }}
+          NEXT_PUBLIC_APP_BUILD_ID: ${{ github.sha }}
         run: pnpm build:worker
 
       - name: Deploy to Cloudflare Workers

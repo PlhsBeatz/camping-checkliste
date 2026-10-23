@@ -1,12 +1,5 @@
-'use client'
+import { redirect } from 'next/navigation'
 
-import { ConfigPageLayout } from '@/components/config-page-layout'
-import { FeedbackAboutPage } from '@/components/feedback-about-page'
-
-export default function UeberDieAppPage() {
-  return (
-    <ConfigPageLayout requireConfig={false}>
-      <FeedbackAboutPage />
-    </ConfigPageLayout>
-  )
+export default function UeberDieAppRedirectPage() {
+  redirect('/einstellungen/infos')
 }
