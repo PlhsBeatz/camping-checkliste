@@ -14,6 +14,7 @@ import { enrichParsedBookingAmounts } from '@/lib/booking-amount-extract'
 import { suggestStayMatch } from '@/lib/booking-stay-matcher'
 import { extractBookingPdfTextsFromRaw } from '@/lib/booking-email-pdf'
 import { analyzeBookingWithOpenRouter, buildBookingAiStayContext } from '@/lib/booking-ai-analyze'
+import { OPENROUTER_DEFAULT_MODEL } from '@/lib/ai/openrouter-client'
 import type { CampingStayEmailTyp, ParsedBookingFields, StayBookingFields } from '@/lib/booking-types'
 
 export async function GET(request: NextRequest) {
@@ -194,7 +195,7 @@ export async function POST(request: NextRequest) {
           ai_meta: {
             pdfs_used: pdfExtract.included.map((p) => p.filename),
             pdfs_skipped: pdfExtract.skipped,
-            model: 'openai/gpt-4o-mini',
+            model: OPENROUTER_DEFAULT_MODEL,
           },
         },
       })

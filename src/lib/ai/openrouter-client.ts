@@ -4,9 +4,22 @@
  */
 
 export const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions'
-export const OPENROUTER_DEFAULT_MODEL = 'openai/gpt-4o-mini'
+/** Nachfolger von gpt-4o-mini (API-Abschaltung 14.01.2027). */
+export const OPENROUTER_DEFAULT_MODEL = 'openai/gpt-6-luna'
+
+/** Kein Reasoning: günstig/schnell für JSON-Klassifikation und Extraktion. */
+export const OPENROUTER_DEFAULT_REASONING_EFFORT = 'none' as const
 
 export type AiTrigger = 'auto' | 'explicit'
+
+export type OpenRouterReasoningEffort =
+  | 'none'
+  | 'minimal'
+  | 'low'
+  | 'medium'
+  | 'high'
+  | 'xhigh'
+  | 'max'
 
 export type OpenRouterContentPart =
   | { type: 'text'; text: string }
@@ -24,6 +37,11 @@ export type ChatJsonInput = {
   user: string | OpenRouterContentPart[]
   model?: string
   temperature?: number
+  /**
+   * OpenRouter/OpenAI Reasoning-Stärke.
+   * Default `none` – vermeidet teure Reasoning-Tokens bei einfachen JSON-Tasks.
+   */
+  reasoningEffort?: OpenRouterReasoningEffort
   /** PDF-Plugin aktivieren, wenn Dateien im User-Content sind */
   pdfPlugin?: boolean
   /** Zusätzliche OpenRouter-Plugins, z. B. Websuche */
@@ -54,11 +72,13 @@ function parseJsonContent(content: string): Record<string, unknown> {
 export async function chatJson(input: ChatJsonInput): Promise<ChatJsonResult> {
   const model = input.model?.trim() || OPENROUTER_DEFAULT_MODEL
   const trigger = input.trigger ?? 'explicit'
+  const reasoningEffort = input.reasoningEffort ?? OPENROUTER_DEFAULT_REASONING_EFFORT
   const userContent = input.user
 
   const body: Record<string, unknown> = {
     model,
     temperature: input.temperature ?? 0.1,
+    reasoning: { effort: reasoningEffort },
     response_format: { type: 'json_object' },
     messages: [
       { role: 'system', content: input.system },
