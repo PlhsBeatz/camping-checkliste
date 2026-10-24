@@ -12,6 +12,7 @@ import { getCachedCampingplaetze } from '@/lib/offline-sync'
 import type { ApiResponse } from '@/lib/api-types'
 import type { Campingplatz, Mitreisender, Vacation, VacationCampingStay } from '@/lib/db'
 import { CampingStayBookingPanel } from '@/components/camping-stay-booking-panel'
+import { CampingplatzEditModal } from '@/components/campingplatz-edit-modal'
 import { StayDateRangePicker } from '@/components/stay-date-range-picker'
 import { deriveReisezielName } from '@/lib/vacation-helpers'
 import { addDays, format } from 'date-fns'
@@ -248,6 +249,7 @@ export function VacationEditModal({
   const [stays, setStays] = useState<StayDraft[]>([])
   const [apiStaysByKey, setApiStaysByKey] = useState<Record<string, VacationCampingStay>>({})
   const [campingSearchOpen, setCampingSearchOpen] = useState(false)
+  const [campingCreateOpen, setCampingCreateOpen] = useState(false)
   const [vacationMitreisende, setVacationMitreisende] = useState<Mitreisender[]>([])
   const [pendingTransportIds, setPendingTransportIds] = useState<string[] | null>(null)
   const [pendingSitz, setPendingSitz] = useState<Record<string, string | null>>({})
@@ -1055,8 +1057,35 @@ export function VacationEditModal({
                         </CommandGroup>
                       </CommandList>
                     </Command>
+                    <div className="border-t border-subtle px-4 py-3">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="w-full justify-center gap-2"
+                        onClick={() => {
+                          setCampingSearchOpen(false)
+                          setCampingCreateOpen(true)
+                        }}
+                      >
+                        <Plus className="h-4 w-4" />
+                        <span>Neuen Campingplatz anlegen</span>
+                      </Button>
+                    </div>
                   </DialogContent>
                 </Dialog>
+                <CampingplatzEditModal
+                  open={campingCreateOpen}
+                  onOpenChange={setCampingCreateOpen}
+                  initialCampingplatz={null}
+                  onSaved={(saved) => {
+                    setAllCampingplaetze((prev) => {
+                      if (prev.some((c) => c.id === saved.id)) return prev
+                      return [...prev, saved]
+                    })
+                    handleAddCamping(saved.id)
+                    setCampingCreateOpen(false)
+                  }}
+                />
               </div>
             </div>
           </div>
