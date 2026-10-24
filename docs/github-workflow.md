@@ -8,9 +8,12 @@ Kurzüberblick für CampCheck (Hobby-Projekt, unregelmäßige Updates).
 |-----|------------|
 | Typ (Fehler/Idee), Herkunft App | Labels `bug` / `enhancement` / `feedback` (App setzt die beim Melden) |
 | Backlog vs. Roadmap, Arbeitsstand | **nur** GitHub Project-Status |
-| Spiegel für die App-Roadmap | Labels `roadmap` + `status:*` – **automatisch** per Action |
+| Spiegel für die App-Roadmap | Labels `roadmap` + `status:*` – **automatisch** per Action (Zeitplan/manuell) |
+| Neue Issues → Project | Action **Add Issues to Project** (jedes Issue bei opened/reopened) |
 
 Project-Spalten: **Backlog → Todo → In Progress → In Test → Done**.
+
+**Hinweis:** Die eingebaute Project-Automation „Auto-add“ ist optional. Zuverlässig ist die Repo-Action **Add Issues to Project**.
 
 ## Labels (Spiegel)
 
@@ -61,9 +64,10 @@ Für dein persönliches Board brauchst du deshalb einen **Personal access token 
 1. Repo → **Settings** → **Secrets and variables** → **Actions** → Tab **Variables** → **New repository variable**  
    - `PROJECT_NUMBER` = Zahl aus der Project-URL (`https://github.com/users/PlhsBeatz/projects/3` → `3`)
 2. **Actions** → Workflow **Sync Project Status → Issue Labels** → **Run workflow** → Mode **backfill**
-3. Danach: nach Status-Änderungen im Board denselben Workflow erneut mit **backfill** starten (sofort), oder auf den automatischen Lauf **alle 6 Stunden** warten.
+3. **Actions** → Workflow **Add Issues to Project** → **Run workflow** (einmaliger Backfill für alle offenen Issues)
+4. Danach: jedes neue Issue wird bei Erstellung/Wiedereröffnung automatisch ins Project gelegt. Status→Label: manueller Sync-Backfill oder alle 6 Stunden.
 
-**Warum nicht automatisch beim Ziehen der Karte?** GitHub Actions kennt kein Event `projects_v2_item` (führt zu „Unexpected value“). Echtzeit-Sync bräuchte einen externen Webhook – für dieses Projekt reichen manueller Backfill + Zeitplan.
+**Warum Status→Label nicht sofort beim Ziehen?** GitHub Actions kennt kein Event `projects_v2_item`. **Issue→Project** dagegen schon (`issues` opened/reopened).
 
 Skript lokal testen (optional):
 

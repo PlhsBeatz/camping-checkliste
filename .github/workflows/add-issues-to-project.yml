@@ -1,0 +1,96 @@
+name: Add Issues to Project
+
+# Jedes neue/wiedereröffnete Issue landet im Project.
+# Status „Backlog“ setzt ggf. der eingebaute Project-Workflow „Item added → Backlog“.
+#
+# Secrets/Variables wie beim Label-Sync:
+#   GH_PROJECT_TOKEN, PROJECT_NUMBER, optional PROJECT_OWNER / PROJECT_OWNER_TYPE
+# Optional: PROJECT_URL (sonst wird users/OWNER/projects/NUMBER gebaut)
+
+on:
+  issues:
+    types: [opened, reopened]
+  workflow_dispatch:
+
+jobs:
+  add-on-event:
+    if: github.event_name == 'issues'
+    runs-on: ubuntu-latest
+    name: Add issue to project
+    steps:
+      - name: Check configuration
+        env:
+          TOKEN: ${{ secrets.GH_PROJECT_TOKEN }}
+          PROJECT_NUMBER: ${{ vars.PROJECT_NUMBER }}
+        run: |
+          if [ -z "$TOKEN" ]; then
+            echo "::error::Secret GH_PROJECT_TOKEN fehlt"
+            exit 1
+          fi
+          if [ -z "$PROJECT_NUMBER" ]; then
+            echo "::error::Variable PROJECT_NUMBER fehlt"
+            exit 1
+          fi
+
+      - name: Build project URL
+        id: url
+        env:
+          PROJECT_URL: ${{ vars.PROJECT_URL }}
+          PROJECT_OWNER: ${{ vars.PROJECT_OWNER }}
+          PROJECT_OWNER_TYPE: ${{ vars.PROJECT_OWNER_TYPE }}
+          PROJECT_NUMBER: ${{ vars.PROJECT_NUMBER }}
+        run: |
+          if [ -n "$PROJECT_URL" ]; then
+            echo "project_url=$PROJECT_URL" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          OWNER="${PROJECT_OWNER:-PlhsBeatz}"
+          TYPE="${PROJECT_OWNER_TYPE:-user}"
+          if [ "$TYPE" = "organization" ] || [ "$TYPE" = "org" ]; then
+            echo "project_url=https://github.com/orgs/${OWNER}/projects/${PROJECT_NUMBER}" >> "$GITHUB_OUTPUT"
+          else
+            echo "project_url=https://github.com/users/${OWNER}/projects/${PROJECT_NUMBER}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Add issue to project
+        uses: actions/add-to-project@v1.0.2
+        with:
+          project-url: ${{ steps.url.outputs.project_url }}
+          github-token: ${{ secrets.GH_PROJECT_TOKEN }}
+
+  backfill:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    name: Backfill open issues
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Check configuration
+        env:
+          TOKEN: ${{ secrets.GH_PROJECT_TOKEN }}
+          PROJECT_NUMBER: ${{ vars.PROJECT_NUMBER }}
+        run: |
+          if [ -z "$TOKEN" ]; then
+            echo "::error::Secret GH_PROJECT_TOKEN fehlt"
+            exit 1
+          fi
+          if [ -z "$PROJECT_NUMBER" ]; then
+            echo "::error::Variable PROJECT_NUMBER fehlt"
+            exit 1
+          fi
+
+      - name: Add all open issues to project
+        env:
+          GH_PROJECT_TOKEN: ${{ secrets.GH_PROJECT_TOKEN }}
+          PROJECT_OWNER: ${{ vars.PROJECT_OWNER }}
+          PROJECT_OWNER_TYPE: ${{ vars.PROJECT_OWNER_TYPE }}
+          PROJECT_NUMBER: ${{ vars.PROJECT_NUMBER }}
+          REPO_FULL: PlhsBeatz/camping-checkliste
+          MODE: backfill
+          LABEL_FILTER: ''
+        run: node scripts/add-issues-to-project.mjs
