@@ -9,11 +9,11 @@ import { findRelevantVacation, getDepartureDate, getTripPhase } from '@/lib/trip
 /** Nächster Start muss weiter weg sein als diese Lücke, sonst zählt die Reisephase. */
 export const WINTERPAUSE_GAP_DAYS = 42
 
-/** Weiches Default-Fenster: 1. Nov bis 15. März (inklusive). */
+/** Weiches Default-Fenster: 1. Okt bis 15. März (inklusive). */
 export function isInWinterWindow(ymd: string): boolean {
   const mmdd = normalizeCalendarDate(ymd).slice(5, 10)
   if (!mmdd || mmdd.length < 5) return false
-  return mmdd >= '11-01' || mmdd <= '03-15'
+  return mmdd >= '10-01' || mmdd <= '03-15'
 }
 
 /**
