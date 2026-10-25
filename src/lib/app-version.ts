@@ -3,7 +3,7 @@
  * Entspricht package.json "version".
  * Build-ID: kurzer Git-SHA zur eindeutigen Deploy-Unterscheidung (kein SemVer-Bump).
  */
-export const APP_VERSION = '1.0.2'
+export const APP_VERSION = '1.0.3'
 
 /** Kurz-SHA aus CI/Build; leer lokal ohne Env. */
 export const APP_BUILD_ID = (
