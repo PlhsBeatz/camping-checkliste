@@ -26,8 +26,12 @@ import {
   type AttentionKind,
   type AttentionVacationTile,
   type PackingWeightTone,
+  type SnoozedAttentionItem,
 } from '@/lib/attention-feed'
-import { SNOOZE_PRESET_DAYS } from '@/lib/attention-snooze'
+import { maxSnoozeUntilYmd, SNOOZE_PRESET_DAYS } from '@/lib/attention-snooze'
+import { addCalendarDays, todayInAppTimezone } from '@/lib/app-timezone'
+import { formatCalendarDateDe } from '@/lib/booking-stay-dates'
+import { CalendarDatePicker } from '@/components/ui/calendar-date-picker'
 import { useReconnectRefetch } from '@/hooks/use-reconnect-refetch'
 import { getCachedAttentionFeed, cacheAttentionFeed } from '@/lib/offline-db'
 import { notifyAttentionChanged } from '@/lib/attention-events'
@@ -156,6 +160,30 @@ function OverviewTile({ href, children }: { href: string; children: ReactNode })
   )
 }
 
+function SnoozedCountToggle({
+  count,
+  showSnoozed,
+  onToggle,
+}: {
+  count: number
+  showSnoozed: boolean
+  onToggle: () => void
+}) {
+  if (count <= 0) return null
+  return (
+    <button
+      type="button"
+      className="text-xs text-muted-foreground underline-offset-2 hover:underline hover:text-foreground"
+      onClick={onToggle}
+      aria-pressed={showSnoozed}
+    >
+      {showSnoozed
+        ? 'Zurückgestellte ausblenden'
+        : `${count} zurückgestellt`}
+    </button>
+  )
+}
+
 function HeuteHubContent() {
   const router = useRouter()
   const { canAccessConfig } = useAuth()
@@ -165,6 +193,8 @@ function HeuteHubContent() {
   const [loading, setLoading] = useState(true)
   const [snoozingKey, setSnoozingKey] = useState<string | null>(null)
   const [snoozeOpenKey, setSnoozeOpenKey] = useState<string | null>(null)
+  const [snoozeCustomKey, setSnoozeCustomKey] = useState<string | null>(null)
+  const [showSnoozed, setShowSnoozed] = useState(false)
   const [acceptingKey, setAcceptingKey] = useState<string | null>(null)
   const [promoteHostMounted, setPromoteHostMounted] = useState(false)
   const [promoteRequestId, setPromoteRequestId] = useState<string | null>(null)
@@ -286,8 +316,12 @@ function HeuteHubContent() {
     await load()
   }, [load])
 
-  const snooze = async (item: AttentionItem, days: number) => {
+  const snooze = async (
+    item: AttentionItem,
+    opts: { days: number } | { until: string }
+  ) => {
     setSnoozingKey(item.key)
+    setError(null)
     try {
       const pos = positionRef.current
       const res = await fetch('/api/attention/snooze', {
@@ -295,7 +329,7 @@ function HeuteHubContent() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           item_key: item.key,
-          days,
+          ...opts,
           ...(pos ? { lat: pos.lat, lng: pos.lng } : {}),
         }),
       })
@@ -307,6 +341,7 @@ function HeuteHubContent() {
       setFeed(json.data)
       feedRef.current = json.data
       setSnoozeOpenKey(null)
+      setSnoozeCustomKey(null)
       await cacheAttentionFeed(json.data)
       notifyAttentionChanged(json.data.badgeCount)
     } finally {
@@ -314,8 +349,18 @@ function HeuteHubContent() {
     }
   }
 
+  const closeSnoozePanel = () => {
+    setSnoozeOpenKey(null)
+    setSnoozeCustomKey(null)
+  }
+
   const items =
     feed?.items.filter((item) => item.kind !== 'vacation_next').slice(0, MAX_ATTENTION_ITEMS) ?? []
+  const snoozedItems = (feed?.snoozedItems ?? []).filter(
+    (item) => item.kind !== 'vacation_next'
+  )
+  const todayYmd = todayInAppTimezone()
+  const snoozeMinYmd = addCalendarDays(todayYmd, 1)
 
   return (
     <PageShell
@@ -476,11 +521,11 @@ function HeuteHubContent() {
                     <h3 className="text-sm font-medium tracking-wide text-muted-foreground">
                       Jetzt wichtig
                     </h3>
-                    {feed.snoozedCount > 0 ? (
-                      <span className="text-xs text-muted-foreground">
-                        {feed.snoozedCount} zurückgestellt
-                      </span>
-                    ) : null}
+                    <SnoozedCountToggle
+                      count={feed.snoozedCount}
+                      showSnoozed={showSnoozed}
+                      onToggle={() => setShowSnoozed((v) => !v)}
+                    />
                   </div>
                   {error ? <p className="text-xs text-destructive">{error}</p> : null}
                   <ul className="space-y-2">
@@ -503,6 +548,15 @@ function HeuteHubContent() {
                         snoozingKey === item.key ||
                         acceptingKey === item.key ||
                         promotingThis
+                      const snoozeMaxYmd = maxSnoozeUntilYmd({
+                        todayYmd,
+                        dueYmd: item.dueYmd,
+                        sicherheitsrelevant: item.sicherheitsrelevant,
+                      })
+                      const customDateAllowed =
+                        !snoozeMaxYmd || snoozeMaxYmd >= snoozeMinYmd
+                      const showCustomPicker =
+                        snoozeOpenKey === item.key && snoozeCustomKey === item.key
                       const bodyClassName = 'flex items-start gap-3 min-w-0 w-full text-left'
                       const body = (
                         <>
@@ -552,66 +606,100 @@ function HeuteHubContent() {
                                 </Link>
                               )}
                               {canAddToPacklist || canPromoteTemp || item.snoozeAllowed ? (
-                                <div className="pl-8 flex flex-wrap gap-1.5 items-center">
-                                  {canAddToPacklist && snoozeOpenKey !== item.key ? (
-                                    <Button
-                                      type="button"
-                                      size="sm"
-                                      className="h-8 bg-primary hover:bg-primary/90 text-white"
-                                      disabled={itemBusy}
-                                      onClick={() => void acceptPackingAdd(item)}
-                                    >
-                                      {acceptingKey === item.key ? 'Fügt hinzu…' : 'Auf die Packliste'}
-                                    </Button>
-                                  ) : null}
-                                  {canPromoteTemp && snoozeOpenKey !== item.key ? (
-                                    <Button
-                                      type="button"
-                                      size="sm"
-                                      className="h-8 bg-primary hover:bg-primary/90 text-white"
-                                      disabled={itemBusy}
-                                      onClick={() => openTempPromote(item.suggestionId!)}
-                                    >
-                                      {promotingThis ? 'Öffnet…' : 'In Ausrüstung anlegen'}
-                                    </Button>
-                                  ) : null}
-                                  {item.snoozeAllowed ? (
-                                    snoozeOpenKey === item.key ? (
-                                      <>
-                                        {SNOOZE_PRESET_DAYS.map((d) => (
+                                <div className="pl-8 space-y-2">
+                                  <div className="flex flex-wrap gap-1.5 items-center">
+                                    {canAddToPacklist && snoozeOpenKey !== item.key ? (
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        className="h-8 bg-primary hover:bg-primary/90 text-white"
+                                        disabled={itemBusy}
+                                        onClick={() => void acceptPackingAdd(item)}
+                                      >
+                                        {acceptingKey === item.key
+                                          ? 'Fügt hinzu…'
+                                          : 'Auf die Packliste'}
+                                      </Button>
+                                    ) : null}
+                                    {canPromoteTemp && snoozeOpenKey !== item.key ? (
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        className="h-8 bg-primary hover:bg-primary/90 text-white"
+                                        disabled={itemBusy}
+                                        onClick={() => openTempPromote(item.suggestionId!)}
+                                      >
+                                        {promotingThis ? 'Öffnet…' : 'In Ausrüstung anlegen'}
+                                      </Button>
+                                    ) : null}
+                                    {item.snoozeAllowed ? (
+                                      snoozeOpenKey === item.key ? (
+                                        <>
+                                          {SNOOZE_PRESET_DAYS.map((d) => (
+                                            <Button
+                                              key={d}
+                                              type="button"
+                                              size="sm"
+                                              variant="outline"
+                                              disabled={itemBusy}
+                                              onClick={() => void snooze(item, { days: d })}
+                                            >
+                                              {d === 1 ? '1 Tag' : `${d} Tage`}
+                                            </Button>
+                                          ))}
+                                          {customDateAllowed ? (
+                                            <Button
+                                              type="button"
+                                              size="sm"
+                                              variant="outline"
+                                              disabled={itemBusy}
+                                              onClick={() =>
+                                                setSnoozeCustomKey((k) =>
+                                                  k === item.key ? null : item.key
+                                                )
+                                              }
+                                            >
+                                              Datum…
+                                            </Button>
+                                          ) : null}
                                           <Button
-                                            key={d}
                                             type="button"
                                             size="sm"
-                                            variant="outline"
-                                            disabled={itemBusy}
-                                            onClick={() => void snooze(item, d)}
+                                            variant="ghost"
+                                            onClick={closeSnoozePanel}
                                           >
-                                            {d === 1 ? '1 Tag' : `${d} Tage`}
+                                            Abbrechen
                                           </Button>
-                                        ))}
+                                        </>
+                                      ) : (
                                         <Button
                                           type="button"
                                           size="sm"
                                           variant="ghost"
-                                          onClick={() => setSnoozeOpenKey(null)}
+                                          className="h-8 px-2 text-muted-foreground"
+                                          disabled={itemBusy}
+                                          onClick={() => {
+                                            setSnoozeOpenKey(item.key)
+                                            setSnoozeCustomKey(null)
+                                          }}
                                         >
-                                          Abbrechen
+                                          <Clock className="h-3.5 w-3.5 mr-1" />
+                                          Später
                                         </Button>
-                                      </>
-                                    ) : (
-                                      <Button
-                                        type="button"
-                                        size="sm"
-                                        variant="ghost"
-                                        className="h-8 px-2 text-muted-foreground"
-                                        disabled={itemBusy}
-                                        onClick={() => setSnoozeOpenKey(item.key)}
-                                      >
-                                        <Clock className="h-3.5 w-3.5 mr-1" />
-                                        Später
-                                      </Button>
-                                    )
+                                      )
+                                    ) : null}
+                                  </div>
+                                  {showCustomPicker ? (
+                                    <CalendarDatePicker
+                                      value=""
+                                      onChange={(until) => void snooze(item, { until })}
+                                      placeholder="Datum wählen"
+                                      dialogTitle="Zurückstellen bis"
+                                      minDate={snoozeMinYmd}
+                                      maxDate={snoozeMaxYmd ?? undefined}
+                                      className="max-w-xs"
+                                      disabled={itemBusy}
+                                    />
                                   ) : null}
                                 </div>
                               ) : null}
@@ -640,14 +728,81 @@ function HeuteHubContent() {
                         ? `Nächster Urlaub: ${feed.vacationTile.titel}`
                         : 'Keine offenen Aufgaben im Hub.'}
                       {feed.snoozedCount > 0 ? (
-                        <span className="mt-1 block text-xs sm:text-sm">
-                          {feed.snoozedCount} zurückgestellt
+                        <span className="mt-2 block">
+                          <SnoozedCountToggle
+                            count={feed.snoozedCount}
+                            showSnoozed={showSnoozed}
+                            onToggle={() => setShowSnoozed((v) => !v)}
+                          />
                         </span>
                       ) : null}
                     </>
                   }
                 />
               )}
+
+              {showSnoozed && snoozedItems.length > 0 ? (
+                <section className="space-y-2">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <h3 className="text-sm font-medium tracking-wide text-muted-foreground">
+                      Zurückgestellt
+                    </h3>
+                    {items.length === 0 ? (
+                      <SnoozedCountToggle
+                        count={feed.snoozedCount}
+                        showSnoozed={showSnoozed}
+                        onToggle={() => setShowSnoozed((v) => !v)}
+                      />
+                    ) : null}
+                  </div>
+                  <ul className="space-y-2">
+                    {snoozedItems.map((item: SnoozedAttentionItem) => {
+                      const meta = KIND_META[item.kind] ?? { label: 'Hinweis', icon: 'info' }
+                      const danger =
+                        item.kind === 'wartung_sicherheit' ||
+                        item.kind === 'packing_weight' ||
+                        item.verbrauchAmpel === 'kritisch'
+                      return (
+                        <li key={item.key}>
+                          <Card
+                            className={cn(
+                              'opacity-70',
+                              danger && 'border-destructive/40'
+                            )}
+                          >
+                            <CardContent className="p-3">
+                              <Link
+                                href={item.href}
+                                className="flex items-start gap-3 min-w-0 w-full text-left"
+                              >
+                                <BrandIconWell
+                                  icon={meta.icon}
+                                  danger={danger}
+                                  className="mt-0.5"
+                                />
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                                    {meta.label}
+                                  </p>
+                                  <p className="font-medium text-sm text-brand-heading leading-snug">
+                                    {item.title}
+                                  </p>
+                                  <p className="text-xs text-muted-foreground mt-0.5">
+                                    {item.reason}
+                                  </p>
+                                  <p className="text-xs text-muted-foreground mt-1">
+                                    Bis {formatCalendarDateDe(item.snoozedUntil)}
+                                  </p>
+                                </div>
+                              </Link>
+                            </CardContent>
+                          </Card>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                </section>
+              ) : null}
 
               <nav className="flex flex-wrap gap-2 pb-8">
                 {feed.quickLinks.map((link) => (

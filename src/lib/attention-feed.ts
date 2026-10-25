@@ -13,7 +13,7 @@ import type {
   VacationCampingStay,
 } from '@/lib/db'
 import type { Faelligkeit } from '@/lib/db-wartung'
-import { isSafetySnoozeBlocked } from '@/lib/attention-snooze'
+import { isSafetySnoozeBlocked, isSnoozeAllowedForItem } from '@/lib/attention-snooze'
 import {
   computePackingProgress,
   findRelevantVacation,
@@ -87,6 +87,11 @@ export type AttentionItem = {
   verbrauchAmpel?: 'eng' | 'kritisch'
 }
 
+/** Zurückgestellte Hub-Karte inkl. Sichtbarkeits-Ende (YYYY-MM-DD). */
+export type SnoozedAttentionItem = AttentionItem & {
+  snoozedUntil: string
+}
+
 export type VerbrauchEndstandAttentionItem = {
   key: string
   title: string
@@ -148,6 +153,8 @@ export type AttentionFeed = {
   travelNav: HubTravelNav | null
   primaryAction: { label: string; href: string; reason: string }
   items: AttentionItem[]
+  /** Zurückgestellte Karten (für temporäre Anzeige im Hub). */
+  snoozedItems: SnoozedAttentionItem[]
   badgeCount: number
   snoozedCount: number
   quickLinks: { label: string; href: string }[]
@@ -1006,20 +1013,43 @@ export function buildAttentionFeed(input: AttentionFeedInput): AttentionFeed {
     })
   }
 
-  const visible = raw.filter((item) => {
-    if (item.sicherheitsrelevant && isSafetySnoozeBlocked(item.dueYmd, todayYmd)) {
-      return true
-    }
-    return !isSnoozed(item.key, input.snoozes, todayYmd)
+  const withSnoozeFlags = raw.map((item) => {
+    if (!item.snoozeAllowed) return item
+    const allowed = isSnoozeAllowedForItem({
+      todayYmd,
+      dueYmd: item.dueYmd,
+      sicherheitsrelevant: item.sicherheitsrelevant,
+    })
+    return allowed === item.snoozeAllowed ? item : { ...item, snoozeAllowed: allowed }
   })
 
-  const snoozedCount = raw.length - visible.length
-  visible.sort((a, b) => {
+  const visible: AttentionItem[] = []
+  const snoozedItems: SnoozedAttentionItem[] = []
+  for (const item of withSnoozeFlags) {
+    if (item.sicherheitsrelevant && isSafetySnoozeBlocked(item.dueYmd, todayYmd)) {
+      visible.push(item)
+      continue
+    }
+    if (isSnoozed(item.key, input.snoozes, todayYmd)) {
+      const until = input.snoozes.get(item.key)
+      const snoozedUntil = until ? normalizeCalendarDate(until) : ''
+      if (snoozedUntil) {
+        snoozedItems.push({ ...item, snoozedUntil })
+      }
+      continue
+    }
+    visible.push(item)
+  }
+
+  const snoozedCount = snoozedItems.length
+  const sortAttention = (a: AttentionItem, b: AttentionItem) => {
     const aHint = a.kind === 'vorschlag' ? 1 : 0
     const bHint = b.kind === 'vorschlag' ? 1 : 0
     if (aHint !== bHint) return aHint - bHint
     return b.score - a.score || a.title.localeCompare(b.title, 'de')
-  })
+  }
+  visible.sort(sortAttention)
+  snoozedItems.sort(sortAttention)
   const primaryAction = pickPrimaryAction(
     frame,
     visible.slice(0, MAX_ATTENTION_ITEMS),
@@ -1051,6 +1081,7 @@ export function buildAttentionFeed(input: AttentionFeedInput): AttentionFeed {
     travelNav,
     primaryAction,
     items: visible,
+    snoozedItems,
     badgeCount: visible.length,
     snoozedCount,
     quickLinks: buildQuickLinks(frame, {

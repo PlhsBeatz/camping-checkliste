@@ -7,8 +7,25 @@ import { isAdminRole } from '@/lib/user-roles'
 import { addCalendarDays, todayInAppTimezone } from '@/lib/app-timezone'
 import { buildAttentionFeed, MAX_ATTENTION_ITEMS } from '@/lib/attention-feed'
 import { loadAttentionFeedInput } from '@/lib/attention-feed-sources'
-import { capSnoozeUntil, isSnoozePresetDays } from '@/lib/attention-snooze'
+import {
+  capSnoozeUntil,
+  isSnoozePresetDays,
+  parseSnoozeUntilYmd,
+} from '@/lib/attention-snooze'
 import { parseGeoPoint } from '@/lib/sonnen-hub-arrival'
+
+function snoozeErrorMessage(reason: 'too_close' | 'overdue' | 'invalid' | 'past_due'): string {
+  if (reason === 'overdue') {
+    return 'Überfällige Sicherheitswartung kann nicht zurückgestellt werden.'
+  }
+  if (reason === 'too_close') {
+    return 'Sicherheitswartung kann ab 21 Tage vor Fälligkeit nicht mehr zurückgestellt werden.'
+  }
+  if (reason === 'past_due') {
+    return 'Zurückstellen über die Fälligkeit hinaus ist nicht möglich.'
+  }
+  return 'Ungültiges Zurückstell-Datum.'
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -24,12 +41,26 @@ export async function POST(request: NextRequest) {
     }
     const o = body && typeof body === 'object' ? (body as Record<string, unknown>) : {}
     const itemKey = typeof o.item_key === 'string' ? o.item_key.trim() : ''
-    const days = typeof o.days === 'number' ? o.days : Number(o.days)
+    const hasDays = o.days !== undefined && o.days !== null && o.days !== ''
+    const hasUntil = o.until !== undefined && o.until !== null && o.until !== ''
+    const days = hasDays ? (typeof o.days === 'number' ? o.days : Number(o.days)) : NaN
+    const untilRaw = hasUntil ? o.until : null
+
     if (!itemKey) {
       return NextResponse.json({ error: 'item_key ist erforderlich' }, { status: 400 })
     }
-    if (!isSnoozePresetDays(days)) {
+    if (hasDays === hasUntil) {
+      return NextResponse.json(
+        { error: 'Genau eines von days oder until ist erforderlich' },
+        { status: 400 }
+      )
+    }
+    if (hasDays && !isSnoozePresetDays(days)) {
       return NextResponse.json({ error: 'days muss 1, 3 oder 7 sein' }, { status: 400 })
+    }
+    const untilYmd = hasUntil ? parseSnoozeUntilYmd(untilRaw) : null
+    if (hasUntil && !untilYmd) {
+      return NextResponse.json({ error: 'until muss ein Datum YYYY-MM-DD sein' }, { status: 400 })
     }
 
     const env = process.env as unknown as CloudflareEnv
@@ -60,7 +91,7 @@ export async function POST(request: NextRequest) {
     }
 
     const todayYmd = todayInAppTimezone()
-    const requestedUntilYmd = addCalendarDays(todayYmd, days)
+    const requestedUntilYmd = hasDays ? addCalendarDays(todayYmd, days) : untilYmd!
     const cap = capSnoozeUntil({
       todayYmd,
       requestedUntilYmd,
@@ -68,15 +99,7 @@ export async function POST(request: NextRequest) {
       sicherheitsrelevant: item.sicherheitsrelevant,
     })
     if (!cap.allowed) {
-      return NextResponse.json(
-        {
-          error:
-            cap.reason === 'overdue'
-              ? 'Überfällige Sicherheitswartung kann nicht zurückgestellt werden.'
-              : 'Sicherheitswartung kann ab 21 Tage vor Fälligkeit nicht mehr zurückgestellt werden.',
-        },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: snoozeErrorMessage(cap.reason) }, { status: 400 })
     }
 
     const ok = await upsertAttentionSnooze(db, itemKey, cap.untilYmd)
@@ -88,7 +111,10 @@ export async function POST(request: NextRequest) {
     const updatedFeed = buildAttentionFeed({ ...input, snoozes: updatedSnoozes })
     return NextResponse.json({
       success: true,
-      data: { ...updatedFeed, items: updatedFeed.items.slice(0, MAX_ATTENTION_ITEMS) },
+      data: {
+        ...updatedFeed,
+        items: updatedFeed.items.slice(0, MAX_ATTENTION_ITEMS),
+      },
       snoozed_until: cap.untilYmd,
     })
   } catch (error: unknown) {

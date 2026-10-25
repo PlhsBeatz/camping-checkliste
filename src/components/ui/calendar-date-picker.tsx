@@ -23,6 +23,17 @@ export interface CalendarDatePickerProps {
   className?: string
   disabled?: boolean
   dialogTitle?: string
+  /** Frühestes wählbares Datum (YYYY-MM-DD), inklusiv. */
+  minDate?: string
+  /** Spätestes wählbares Datum (YYYY-MM-DD), inklusiv. */
+  maxDate?: string
+}
+
+function parseYmdLocal(ymd: string): Date | undefined {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(ymd.trim())
+  if (!m) return undefined
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
+  return Number.isNaN(d.getTime()) ? undefined : d
 }
 
 /** Einzeldatum – Popover (Desktop) / Dialog (Mobile), gemeinsame Kalender-Caption. */
@@ -33,15 +44,24 @@ export function CalendarDatePicker({
   className,
   disabled,
   dialogTitle = 'Datum wählen',
+  minDate,
+  maxDate,
 }: CalendarDatePickerProps) {
   const isSmallViewport = useIsSmallViewport()
   const [open, setOpen] = useState(false)
   const [draft, setDraft] = useState<Date | undefined>()
 
-  const selected = value ? new Date(value) : undefined
+  const selected = value ? parseYmdLocal(value) : undefined
   const label = value
-    ? format(new Date(value), 'EE, dd. MMM yyyy', { locale: de })
+    ? format(parseYmdLocal(value) ?? new Date(value), 'EE, dd. MMM yyyy', { locale: de })
     : placeholder
+
+  const min = minDate ? parseYmdLocal(minDate) : undefined
+  const max = maxDate ? parseYmdLocal(maxDate) : undefined
+  const disabledMatchers = [
+    ...(min ? [{ before: min }] : []),
+    ...(max ? [{ after: max }] : []),
+  ]
 
   const confirm = () => {
     if (!draft) return
@@ -56,8 +76,11 @@ export function CalendarDatePicker({
       className="p-2"
       selected={draft ?? selected}
       onSelect={(d) => setDraft(d)}
-      defaultMonth={draft ?? selected ?? new Date()}
+      defaultMonth={draft ?? selected ?? min ?? new Date()}
       locale={de}
+      disabled={disabledMatchers.length > 0 ? disabledMatchers : undefined}
+      fromDate={min}
+      toDate={max}
     />
   )
 
