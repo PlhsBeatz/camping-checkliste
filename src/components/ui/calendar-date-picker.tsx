@@ -27,6 +27,9 @@ export interface CalendarDatePickerProps {
   minDate?: string
   /** Spätestes wählbares Datum (YYYY-MM-DD), inklusiv. */
   maxDate?: string
+  /** Kalender-Icon am Trigger (Default: an). */
+  showIcon?: boolean
+  size?: 'default' | 'sm'
 }
 
 function parseYmdLocal(ymd: string): Date | undefined {
@@ -46,6 +49,8 @@ export function CalendarDatePicker({
   dialogTitle = 'Datum wählen',
   minDate,
   maxDate,
+  showIcon = true,
+  size = 'default',
 }: CalendarDatePickerProps) {
   const isSmallViewport = useIsSmallViewport()
   const [open, setOpen] = useState(false)
@@ -69,6 +74,25 @@ export function CalendarDatePicker({
     setOpen(false)
     setDraft(undefined)
   }
+
+  const triggerClassName = cn(
+    size === 'sm'
+      ? 'h-8 w-auto px-3 justify-center font-medium'
+      : 'w-full justify-start text-left font-normal',
+    !value && 'text-muted-foreground',
+    className
+  )
+
+  const triggerLabel = (
+    <>
+      {showIcon ? (
+        <CalendarIcon
+          className={cn('shrink-0', size === 'sm' ? 'mr-1 h-3.5 w-3.5' : 'mr-2 h-4 w-4')}
+        />
+      ) : null}
+      {label}
+    </>
+  )
 
   const calendar = (
     <Calendar
@@ -109,19 +133,15 @@ export function CalendarDatePicker({
         <Button
           type="button"
           variant="outline"
+          size={size}
           disabled={disabled}
-          className={cn(
-            'w-full justify-start text-left font-normal',
-            !value && 'text-muted-foreground',
-            className
-          )}
+          className={triggerClassName}
           onClick={() => {
             setDraft(selected)
             setOpen(true)
           }}
         >
-          <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
-          {label}
+          {triggerLabel}
         </Button>
         <Dialog
           open={open}
@@ -155,15 +175,11 @@ export function CalendarDatePicker({
         <Button
           type="button"
           variant="outline"
+          size={size}
           disabled={disabled}
-          className={cn(
-            'w-full justify-start text-left font-normal',
-            !value && 'text-muted-foreground',
-            className
-          )}
+          className={triggerClassName}
         >
-          <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
-          {label}
+          {triggerLabel}
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-auto p-0 bg-card" align="start">

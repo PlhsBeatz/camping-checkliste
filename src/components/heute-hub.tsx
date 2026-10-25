@@ -193,7 +193,6 @@ function HeuteHubContent() {
   const [loading, setLoading] = useState(true)
   const [snoozingKey, setSnoozingKey] = useState<string | null>(null)
   const [snoozeOpenKey, setSnoozeOpenKey] = useState<string | null>(null)
-  const [snoozeCustomKey, setSnoozeCustomKey] = useState<string | null>(null)
   const [showSnoozed, setShowSnoozed] = useState(false)
   const [acceptingKey, setAcceptingKey] = useState<string | null>(null)
   const [promoteHostMounted, setPromoteHostMounted] = useState(false)
@@ -341,17 +340,11 @@ function HeuteHubContent() {
       setFeed(json.data)
       feedRef.current = json.data
       setSnoozeOpenKey(null)
-      setSnoozeCustomKey(null)
       await cacheAttentionFeed(json.data)
       notifyAttentionChanged(json.data.badgeCount)
     } finally {
       setSnoozingKey(null)
     }
-  }
-
-  const closeSnoozePanel = () => {
-    setSnoozeOpenKey(null)
-    setSnoozeCustomKey(null)
   }
 
   const items =
@@ -555,8 +548,6 @@ function HeuteHubContent() {
                       })
                       const customDateAllowed =
                         !snoozeMaxYmd || snoozeMaxYmd >= snoozeMinYmd
-                      const showCustomPicker =
-                        snoozeOpenKey === item.key && snoozeCustomKey === item.key
                       const bodyClassName = 'flex items-start gap-3 min-w-0 w-full text-left'
                       const body = (
                         <>
@@ -606,100 +597,81 @@ function HeuteHubContent() {
                                 </Link>
                               )}
                               {canAddToPacklist || canPromoteTemp || item.snoozeAllowed ? (
-                                <div className="pl-8 space-y-2">
-                                  <div className="flex flex-wrap gap-1.5 items-center">
-                                    {canAddToPacklist && snoozeOpenKey !== item.key ? (
-                                      <Button
-                                        type="button"
-                                        size="sm"
-                                        className="h-8 bg-primary hover:bg-primary/90 text-white"
-                                        disabled={itemBusy}
-                                        onClick={() => void acceptPackingAdd(item)}
-                                      >
-                                        {acceptingKey === item.key
-                                          ? 'Fügt hinzu…'
-                                          : 'Auf die Packliste'}
-                                      </Button>
-                                    ) : null}
-                                    {canPromoteTemp && snoozeOpenKey !== item.key ? (
-                                      <Button
-                                        type="button"
-                                        size="sm"
-                                        className="h-8 bg-primary hover:bg-primary/90 text-white"
-                                        disabled={itemBusy}
-                                        onClick={() => openTempPromote(item.suggestionId!)}
-                                      >
-                                        {promotingThis ? 'Öffnet…' : 'In Ausrüstung anlegen'}
-                                      </Button>
-                                    ) : null}
-                                    {item.snoozeAllowed ? (
-                                      snoozeOpenKey === item.key ? (
-                                        <>
-                                          {SNOOZE_PRESET_DAYS.map((d) => (
-                                            <Button
-                                              key={d}
-                                              type="button"
-                                              size="sm"
-                                              variant="outline"
-                                              disabled={itemBusy}
-                                              onClick={() => void snooze(item, { days: d })}
-                                            >
-                                              {d === 1 ? '1 Tag' : `${d} Tage`}
-                                            </Button>
-                                          ))}
-                                          {customDateAllowed ? (
-                                            <Button
-                                              type="button"
-                                              size="sm"
-                                              variant="outline"
-                                              disabled={itemBusy}
-                                              onClick={() =>
-                                                setSnoozeCustomKey((k) =>
-                                                  k === item.key ? null : item.key
-                                                )
-                                              }
-                                            >
-                                              Datum…
-                                            </Button>
-                                          ) : null}
+                                <div className="pl-8 flex flex-wrap gap-1.5 items-center">
+                                  {canAddToPacklist && snoozeOpenKey !== item.key ? (
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      className="h-8 bg-primary hover:bg-primary/90 text-white"
+                                      disabled={itemBusy}
+                                      onClick={() => void acceptPackingAdd(item)}
+                                    >
+                                      {acceptingKey === item.key
+                                        ? 'Fügt hinzu…'
+                                        : 'Auf die Packliste'}
+                                    </Button>
+                                  ) : null}
+                                  {canPromoteTemp && snoozeOpenKey !== item.key ? (
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      className="h-8 bg-primary hover:bg-primary/90 text-white"
+                                      disabled={itemBusy}
+                                      onClick={() => openTempPromote(item.suggestionId!)}
+                                    >
+                                      {promotingThis ? 'Öffnet…' : 'In Ausrüstung anlegen'}
+                                    </Button>
+                                  ) : null}
+                                  {item.snoozeAllowed ? (
+                                    snoozeOpenKey === item.key ? (
+                                      <>
+                                        {SNOOZE_PRESET_DAYS.map((d) => (
                                           <Button
+                                            key={d}
                                             type="button"
                                             size="sm"
-                                            variant="ghost"
-                                            onClick={closeSnoozePanel}
+                                            variant="outline"
+                                            disabled={itemBusy}
+                                            onClick={() => void snooze(item, { days: d })}
                                           >
-                                            Abbrechen
+                                            {d === 1 ? '1 Tag' : `${d} Tage`}
                                           </Button>
-                                        </>
-                                      ) : (
+                                        ))}
+                                        {customDateAllowed ? (
+                                          <CalendarDatePicker
+                                            value=""
+                                            onChange={(until) => void snooze(item, { until })}
+                                            placeholder="Datum…"
+                                            dialogTitle="Zurückstellen bis"
+                                            minDate={snoozeMinYmd}
+                                            maxDate={snoozeMaxYmd ?? undefined}
+                                            size="sm"
+                                            showIcon={false}
+                                            disabled={itemBusy}
+                                          />
+                                        ) : null}
                                         <Button
                                           type="button"
                                           size="sm"
                                           variant="ghost"
-                                          className="h-8 px-2 text-muted-foreground"
-                                          disabled={itemBusy}
-                                          onClick={() => {
-                                            setSnoozeOpenKey(item.key)
-                                            setSnoozeCustomKey(null)
-                                          }}
+                                          onClick={() => setSnoozeOpenKey(null)}
                                         >
-                                          <Clock className="h-3.5 w-3.5 mr-1" />
-                                          Später
+                                          Abbrechen
                                         </Button>
-                                      )
-                                    ) : null}
-                                  </div>
-                                  {showCustomPicker ? (
-                                    <CalendarDatePicker
-                                      value=""
-                                      onChange={(until) => void snooze(item, { until })}
-                                      placeholder="Datum wählen"
-                                      dialogTitle="Zurückstellen bis"
-                                      minDate={snoozeMinYmd}
-                                      maxDate={snoozeMaxYmd ?? undefined}
-                                      className="max-w-xs"
-                                      disabled={itemBusy}
-                                    />
+                                      </>
+                                    ) : (
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="ghost"
+                                        className="h-8 px-2 text-muted-foreground"
+                                        disabled={itemBusy}
+                                        onClick={() => setSnoozeOpenKey(item.key)}
+                                      >
+                                        <Clock className="h-3.5 w-3.5 mr-1" />
+                                        Später
+                                      </Button>
+                                    )
                                   ) : null}
                                 </div>
                               ) : null}
