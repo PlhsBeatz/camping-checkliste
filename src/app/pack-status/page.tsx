@@ -24,6 +24,7 @@ import { useReconnectRefetch } from '@/hooks/use-reconnect-refetch'
 import { usePackingSync } from '@/hooks/use-packing-sync'
 import { showOfflineToast, showOfflineErrorToast, isOffline } from '@/lib/offline-toast'
 import { PullToRefreshWrapper } from '@/components/pull-to-refresh-wrapper'
+import { BrandIconWell } from '@/components/brand-icon-well'
 import { WeightInput } from '@/components/ui/weight-input'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Label } from '@/components/ui/label'
@@ -235,7 +236,9 @@ function PackStatusContent() {
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-lg">
-                    <Scale className="h-5 w-5" />
+                    <BrandIconWell>
+                      <Scale className="h-4 w-4" />
+                    </BrandIconWell>
                     Gewichtsübersicht
                   </CardTitle>
                   <CardDescription>
@@ -268,7 +271,9 @@ function PackStatusContent() {
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-lg">
-                    <Package className="h-5 w-5" />
+                    <BrandIconWell>
+                      <Package className="h-4 w-4" />
+                    </BrandIconWell>
                     Einträge ohne Gewichtsangabe
                   </CardTitle>
                   <CardDescription>
@@ -293,7 +298,9 @@ function PackStatusContent() {
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-lg">
-                    <TrendingUp className="h-5 w-5" />
+                    <BrandIconWell>
+                      <TrendingUp className="h-4 w-4" />
+                    </BrandIconWell>
                     Packfortschritt je Hauptkategorie
                   </CardTitle>
                   <CardDescription>

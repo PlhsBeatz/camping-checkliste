@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import type { HubTravelNav } from '@/lib/hub-travel-nav'
 import { openHeuteTravelNav } from '@/lib/open-heute-travel-nav'
+import { BrandIconWell } from '@/components/brand-icon-well'
 
 export function HeuteTravelNav({ nav }: { nav: HubTravelNav }) {
   const [opening, setOpening] = useState<'google' | 'adac' | null>(null)
@@ -23,12 +24,7 @@ export function HeuteTravelNav({ nav }: { nav: HubTravelNav }) {
     <Card>
       <CardContent className="p-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-start gap-3 min-w-0">
-          <span
-            className="material-icons text-xl leading-none text-brand-heading mt-0.5 shrink-0"
-            aria-hidden
-          >
-            directions
-          </span>
+          <BrandIconWell icon="directions" className="mt-0.5" />
           <div className="min-w-0">
             <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
               Fahrt

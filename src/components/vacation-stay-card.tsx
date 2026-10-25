@@ -2,7 +2,6 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import Image from 'next/image'
 import { ChevronDown } from 'lucide-react'
 import type { VacationCampingStay } from '@/lib/db'
 import type { UrlaubCampingplatzEmail } from '@/lib/booking-types'
@@ -14,6 +13,7 @@ import { CampingStayBookingPanel } from '@/components/camping-stay-booking-panel
 import { StayEmailsDialog, stayActionButtonClass } from '@/components/stay-emails-dialog'
 import { Button } from '@/components/ui/button'
 import { ListTile } from '@/components/list-tile'
+import { EntityThumb } from '@/components/entity-thumb'
 import { cn } from '@/lib/utils'
 
 type Props = {
@@ -70,22 +70,7 @@ export function VacationStayCard({
           onClick={() => isExpandable && setOpen((o) => !o)}
           aria-expanded={isExpandable ? open : undefined}
         >
-          <div className="flex-shrink-0 w-12 h-12 rounded-lg overflow-hidden bg-muted flex items-center justify-center">
-            {photoUrl ? (
-              <Image
-                src={photoUrl}
-                alt=""
-                width={48}
-                height={48}
-                unoptimized
-                className="w-full h-full object-cover"
-              />
-            ) : (
-              <span className="text-[10px] leading-tight text-muted-foreground px-1 text-center">
-                Kein Bild
-              </span>
-            )}
-          </div>
+          <EntityThumb src={photoUrl} size="sm" />
           <div className="space-y-1 min-w-0 flex-1">
             <span className="font-semibold text-sm truncate block">{cp.name}</span>
             <div className="text-xs text-gray-600">

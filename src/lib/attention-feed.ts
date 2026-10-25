@@ -121,6 +121,9 @@ export type AttentionVacationTile = {
   href: string
   campingplatzName: string | null
   extraCampingCount: number
+  /** Cover des Haupt-Stays (optional; ältere Offline-Caches ohne Felder). */
+  coverFotoId: string | null
+  coverGooglePhotoName: string | null
   countdownDays: number | null
   countdownKind: VacationTileCountdownKind | null
 }
@@ -397,6 +400,10 @@ export function buildVacationTile(
   const campingplatzName =
     main?.campingplatz.name?.trim() || vacation.reiseziel_name?.trim() || null
   const extraCampingCount = main ? Math.max(0, uniqueIds.size - 1) : 0
+  const cp = main?.campingplatz
+  const coverFotoId = cp?.cover_foto_id?.trim() || null
+  const coverGooglePhotoName =
+    cp?.cover_google_photo_name?.trim() || cp?.photo_name?.trim() || null
   return {
     id: vacation.id,
     titel: vacation.titel,
@@ -405,6 +412,8 @@ export function buildVacationTile(
     href: `/urlaube/${encodeURIComponent(vacation.id)}`,
     campingplatzName,
     extraCampingCount,
+    coverFotoId,
+    coverGooglePhotoName: coverFotoId ? null : coverGooglePhotoName,
     ...computeVacationTileCountdown(vacation, todayYmd),
   }
 }

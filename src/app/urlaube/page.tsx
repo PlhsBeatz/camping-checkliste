@@ -47,7 +47,11 @@ import {
 } from '@/lib/client-route-info'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { cn } from '@/lib/utils'
-import { campingplatzListThumbnailSrc } from '@/lib/campingplatz-photo-url'
+import {
+  campingplatzListThumbnailSrc,
+  firstCampingplatzCoverSrc,
+} from '@/lib/campingplatz-photo-url'
+import { EntityThumb } from '@/components/entity-thumb'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { getCachedVacations, getCachedCampingplaetze, getCachedRoute } from '@/lib/offline-sync'
 import { cacheVacations, cacheCampingplaetze, cacheRoute } from '@/lib/offline-db'
@@ -586,12 +590,27 @@ function UrlaubePageContent() {
                 }
               />
             ) : (
-              displayedVacations.map((vacation) => (
+              displayedVacations.map((vacation) => {
+                const places = vacationCampingplaetze[vacation.id] ?? []
+                const coverUrl = firstCampingplatzCoverSrc(places, 640)
+                return (
                 <Card
                   key={vacation.id}
                   className="cursor-pointer hover:shadow-md transition-shadow min-w-0 overflow-hidden"
                   onClick={() => handleCardClick(vacation.id)}
                 >
+                  {coverUrl ? (
+                    <div className="relative h-24 w-full overflow-hidden bg-muted sm:h-[7.5rem]">
+                      <Image
+                        src={coverUrl}
+                        alt=""
+                        width={640}
+                        height={200}
+                        unoptimized
+                        className="h-full w-full object-cover object-center"
+                      />
+                    </div>
+                  ) : null}
                   <CardHeader>
                     <div className="flex justify-between items-start">
                       <div className="flex-1">
@@ -609,7 +628,7 @@ function UrlaubePageContent() {
                             <p>
                               📅 {formatVacationDateRange(vacation.startdatum, vacation.enddatum)}
                             </p>
-                            {(vacationCampingplaetze[vacation.id] ?? []).length === 0 && (
+                            {places.length === 0 && (
                               <p className="text-sm">
                                 ⛺ Noch keine Campingplätze zugeordnet
                               </p>
@@ -672,12 +691,12 @@ function UrlaubePageContent() {
                         <span className="text-sm font-medium">Campingplätze</span>
                       </div>
                       <div className="space-y-1">
-                        {(vacationCampingplaetze[vacation.id] ?? []).length === 0 ? (
+                        {places.length === 0 ? (
                           <p className="text-xs text-muted-foreground">
                             Noch keine Campingplätze zugeordnet.
                           </p>
                         ) : (
-                          (vacationCampingplaetze[vacation.id] ?? []).map((cp) => {
+                          places.map((cp) => {
                             const r = routeInfo[cp.id]
                             return (
                               <ListTile
@@ -701,27 +720,10 @@ function UrlaubePageContent() {
                                 }}
                               >
                                 <div className="flex gap-3 flex-1 min-w-0">
-                                  {(() => {
-                                    const photoUrl = campingplatzListThumbnailSrc(cp)
-                                    return (
-                                      <div className="flex-shrink-0 w-12 h-12 rounded-lg overflow-hidden bg-muted flex items-center justify-center">
-                                        {photoUrl ? (
-                                          <Image
-                                            src={photoUrl}
-                                            alt=""
-                                            width={48}
-                                            height={48}
-                                            unoptimized
-                                            className="w-full h-full object-cover"
-                                          />
-                                        ) : (
-                                          <span className="text-[10px] leading-tight text-muted-foreground px-1 text-center">
-                                            Kein Bild
-                                          </span>
-                                        )}
-                                      </div>
-                                    )
-                                  })()}
+                                  <EntityThumb
+                                    src={campingplatzListThumbnailSrc(cp)}
+                                    size="sm"
+                                  />
                                   <div className="space-y-1 min-w-0 flex-1">
                                     <div className="flex items-center gap-2">
                                       <span className="font-semibold text-sm truncate">
@@ -759,7 +761,8 @@ function UrlaubePageContent() {
                     </div>
                   </CardContent>
                 </Card>
-              ))
+                )
+              })
             )}
           </div>
 

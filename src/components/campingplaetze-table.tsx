@@ -36,10 +36,10 @@ import {
   PlayCircle,
   Star,
 } from 'lucide-react'
-import Image from 'next/image'
 import { cn } from '@/lib/utils'
 import { campingplatzListThumbnailSrc } from '@/lib/campingplatz-photo-url'
 import { CountryFlag } from '@/components/country-flag'
+import { EntityThumb } from '@/components/entity-thumb'
 
 interface CampingplaetzeTableProps {
   items: Campingplatz[]
@@ -400,27 +400,7 @@ export function CampingplaetzeTable({
             }
           }}
         >
-          {(() => {
-            const photoUrl = campingplatzListThumbnailSrc(item)
-            return (
-              <div className="flex-shrink-0 w-12 h-12 rounded-lg overflow-hidden bg-muted flex items-center justify-center">
-                {photoUrl ? (
-                  <Image
-                    src={photoUrl}
-                    alt=""
-                    width={48}
-                    height={48}
-                    unoptimized
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <span className="text-[10px] leading-tight text-muted-foreground px-1 text-center">
-                    Kein Bild
-                  </span>
-                )}
-              </div>
-            )
-          })()}
+          <EntityThumb src={campingplatzListThumbnailSrc(item)} size="sm" />
           <div className="space-y-1 min-w-0 flex-1">
             <div className="flex min-w-0 flex-wrap items-center gap-2">
               {top && (

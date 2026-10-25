@@ -22,6 +22,8 @@ Bei neuen Screens: bestehende Shells und Komponenten spiegeln, keine Parallel-La
 | **BrandFab** | [`brand-fab.tsx`](../src/components/brand-fab.tsx) | Einzelner Floating Action Button |
 | **FabMenuM3** | [`fab-menu-m3.tsx`](../src/components/fab-menu-m3.tsx) | Speed-Dial / Multi-Action-FAB |
 | **BrandSpinner** | [`brand-spinner.tsx`](../src/components/brand-spinner.tsx) | Full-page / Block-Ladeindikator |
+| **BrandIconWell** | [`brand-icon-well.tsx`](../src/components/brand-icon-well.tsx) | Dezente Icon-Fläche (`bg-brand-muted`) für Overview-/Einstiege; optional `danger` |
+| **EntityThumb** | [`entity-thumb.tsx`](../src/components/entity-thumb.tsx) | Listen-Vorschaubild Ort/Platz (`sm`/`md`); ohne Foto Brand-Well + Icon, kein „Kein Bild“-Text |
 | **CardTitle** | [`ui/card.tsx`](../src/components/ui/card.tsx) | Default `text-lg` (nicht mehr `text-2xl`) |
 
 **Umgestellt auf PageShell/PageHeader:** Heute, Urlaube (+ Detail), Campingplätze (+ Detail), Rastplätze, Pack-Status, Packliste (`bare` + Flex-Header), Ausrüstung (`h-dvh` + Tabellen-Scroll), Tools (Wartung, Verbrauch, Sonnen-Ausrichtung, Checklisten, Vorschläge, Optimierungen + Detail).
@@ -116,7 +118,35 @@ Immer [`ConfigPageLayout`](../src/components/config-page-layout.tsx) (baut inter
 |--------|------|--------|
 | **GroupedNavList** | Settings-Nav | Kartengruppen, interne Trenner |
 | **ListTile** | Entity-Zeilen | `rounded-xl border border-subtle shadow-sm px-4 py-3` |
+| **EntityThumb** | Vorschaubild in Entity-Zeilen | `sm` 48 / `md` 56; Cover oder `bg-brand-muted` + Icon |
 | **Card** | Formular-/Feature-Blöcke | `CardTitle` Default `text-lg`; bei Bedarf `text-base` überschreiben |
+
+---
+
+## Medien & visuelle Akzente
+
+Leitlinie: Struktur (Shells, Tokens) bleibt; Grafik nur **zieldienlich** und stilpassend. Keine Deko-Illustrationen auf gefüllten Datenflächen (Empty States bleiben bei `BrandEmptyState`).
+
+### Fotos (Ort / Reise)
+
+Nur wo Cover-Daten schon existieren. URL-Helfer: [`campingplatz-photo-url.ts`](../src/lib/campingplatz-photo-url.ts) (`campingplatzCoverSrc`, `campingplatzListThumbnailSrc`, `firstCampingplatzCoverSrc`, `vacationTileCoverSrc`).
+
+| Fläche | Verhalten |
+|--------|-----------|
+| **Heute** – Urlaub-Überblickskachel | Kleines Cover (enger Mittelausschnitt) vom Haupt-Stay; sonst `BrandIconWell` mit `event`. Cover-Felder im Attention-Feed (`coverFotoId` / `coverGooglePhotoName`). |
+| **Urlaub-Liste** | Cover-Streifen oben auf der Karte, wenn ein zugeordneter Platz ein Cover hat. **Ohne Cover:** kein Ersatzstreifen – Karte beginnt mit Titel/Daten. |
+| **Listen-Thumbs** | `EntityThumb` in Campingplatz-Liste, Urlaub-Listen-Stays, `VacationStayCard`. |
+
+**Bewusst nicht:** Cover/Foto-Overlay am Countdown der Urlaubs-**Detail**seite (ausprobiert, verworfen – Detail bleibt text-/Banner-basiert wie zuvor).
+
+### Brand-Akzente (ohne Fotos)
+
+| Muster | Wann |
+|--------|------|
+| **`BrandIconWell`** | Overview-/Einstiegs-Icons: Heute (Packliste, Urlaub-Fallback, Fahrt, Attention); Pack-Status-Card-Titel. Kritische Hinweise: `danger`. |
+| **`.bg-brand-muted`** | Dezente Icon-/Placeholder-Flächen – nicht als Vollflächen-Banner auf Listen-Karten. |
+
+**Nicht:** satte `bg-brand`-Streifen als Foto-Ersatz auf Entity-Karten; Marketing-Heroes; Empty-State-SVGs auf befüllten Screens.
 
 ---
 
@@ -127,12 +157,16 @@ Immer [`ConfigPageLayout`](../src/components/config-page-layout.tsx) (baut inter
 - Neue App-Listen/Tools: `PageShell` + `PageHeader`
 - Neue Einstellungen: `ConfigPageLayout` + `SETTINGS_NAV_GROUPS`
 - Brand-Utilities / `border-subtle` / `bg-primary`
+- Listen-Vorschaubilder: `EntityThumb`; Icon-Einstiege: `BrandIconWell`
+- Fotos nur bei Ort/Reise mit vorhandenem Cover
 
 **Don’t**
 
 - Outer-Flex + Sidebar + Sticky-Header manuell kopieren
 - `AppShell` wiederbeleben (entfernt)
 - Neues `rgb(45,79,30)` ohne Token/`brand-colors`; abweichende Sticky-`z-*` ohne Grund
+- Deko-Illustrationen oder Fake-Media (z. B. grüner Ersatzstreifen) auf Datenflächen ohne Foto
+- Cover-Banner am Urlaubs-Detail-Countdown erneut einführen ohne neue Produktentscheidung
 
 ---
 
@@ -151,6 +185,7 @@ Immer [`ConfigPageLayout`](../src/components/config-page-layout.tsx) (baut inter
 - `ConfigPageLayout` intern auf `PageShell` (+ `BackLink`)
 - Maps/Charts/Progress/Icons: `BRAND_GREEN_RGB` / `BRAND_ORANGE_RGB` aus `brand-colors.ts`
 - Stammdaten/System-URLs unter `/einstellungen/…` (Alt-Pfade redirecten)
+- Visuelle Aufwertung (teilweise): `BrandIconWell`, `EntityThumb`, Heute-Cover, Urlaub-Listen-Cover-Streifen; Detail-Countdown-Foto und Brand-Fallback-Streifen verworfen
 
 ### Offen (optional)
 

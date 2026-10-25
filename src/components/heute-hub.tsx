@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import dynamic from 'next/dynamic'
+import Image from 'next/image'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { AlertTriangle, Clock } from 'lucide-react'
@@ -43,6 +44,8 @@ import {
   rememberAttentionPosition,
 } from '@/lib/attention-geo-client'
 import type { GeoPoint } from '@/lib/sonnen-hub-arrival'
+import { vacationTileCoverSrc } from '@/lib/campingplatz-photo-url'
+import { BrandIconWell } from '@/components/brand-icon-well'
 
 const TempPromoteEquipmentHost = dynamic(
   () =>
@@ -368,12 +371,7 @@ function HeuteHubContent() {
                         />
                       </span>
                     ) : null}
-                    <span
-                      className="material-icons text-xl leading-none text-brand-heading"
-                      aria-hidden
-                    >
-                      checklist
-                    </span>
+                    <BrandIconWell icon="checklist" />
                     <p
                       className={cn(
                         'text-[11px] font-medium uppercase tracking-wide text-muted-foreground',
@@ -412,18 +410,41 @@ function HeuteHubContent() {
                         <VacationCountdown tile={feed.vacationTile} />
                       </span>
                     ) : null}
-                    <span
-                      className="material-icons text-xl leading-none text-brand-heading"
-                      aria-hidden
+                    {(() => {
+                      // Enger Mittelausschnitt statt Vollbild-Verkleinerung – Motiv bleibt erkennbar.
+                      const coverUrl = vacationTileCoverSrc(feed.vacationTile, 160)
+                      if (coverUrl) {
+                        return (
+                          <div className="h-10 w-10 shrink-0 overflow-hidden rounded-lg bg-muted">
+                            <Image
+                              src={coverUrl}
+                              alt=""
+                              width={80}
+                              height={80}
+                              unoptimized
+                              className="h-full w-full scale-[1.85] object-cover object-center"
+                            />
+                          </div>
+                        )
+                      }
+                      return <BrandIconWell icon="event" />
+                    })()}
+                    <p
+                      className={cn(
+                        'text-[11px] font-medium uppercase tracking-wide text-muted-foreground',
+                        feed.vacationTile?.countdownKind && 'pr-10'
+                      )}
                     >
-                      event
-                    </span>
-                    <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground pr-10">
                       Urlaub
                     </p>
                     {feed.vacationTile ? (
                       <>
-                        <p className="text-sm font-medium text-brand-heading leading-snug line-clamp-2 pr-10">
+                        <p
+                          className={cn(
+                            'text-sm font-medium text-brand-heading leading-snug line-clamp-2',
+                            feed.vacationTile.countdownKind && 'pr-10'
+                          )}
+                        >
                           {feed.vacationTile.titel}
                         </p>
                         <p className="text-xs text-muted-foreground tabular-nums">
@@ -485,15 +506,11 @@ function HeuteHubContent() {
                       const bodyClassName = 'flex items-start gap-3 min-w-0 w-full text-left'
                       const body = (
                         <>
-                          <span
-                            className={cn(
-                              'material-icons text-xl leading-none mt-0.5 shrink-0',
-                              danger ? 'text-destructive' : 'text-brand-heading'
-                            )}
-                            aria-hidden
-                          >
-                            {meta.icon}
-                          </span>
+                          <BrandIconWell
+                            icon={meta.icon}
+                            danger={danger}
+                            className="mt-0.5"
+                          />
                           <div className="min-w-0 flex-1">
                             <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
                               {meta.label}
