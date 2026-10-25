@@ -332,7 +332,8 @@ gmp-place-autocomplete::part(prediction-item) {
 
   .dark .map-embed iframe,
   .dark .map-embed .leaflet-tile-pane,
-  .dark .urlaub-leaflet-map .leaflet-tile-pane {
+  .dark .urlaub-leaflet-map .leaflet-tile-pane,
+  .dark .campingplatz-leaflet-map .leaflet-tile-pane {
     filter: brightness(0.82) contrast(1.08) saturate(0.8);
   }
 
@@ -361,68 +362,79 @@ gmp-place-autocomplete::part(prediction-item) {
 }
 
 /* Leaflet: eigene Pin-Icons ohne Standard-Marker-Hintergrund */
-.urlaub-leaflet-pin {
+.app-leaflet-pin {
   background: transparent !important;
   border: none !important;
 }
 
-.urlaub-leaflet-pin svg {
+.app-leaflet-pin svg {
   display: block;
 }
 
 /* Leaflet-Z-Index im Container halten – sonst überlagert die Karte Menü (z-50) und Dialoge */
 .urlaub-map-root,
-.rastplatz-map-root {
+.rastplatz-map-root,
+.campingplatz-map-root {
   position: relative;
   z-index: 0;
   isolation: isolate;
 }
 
 .urlaub-leaflet-map.leaflet-container,
-.rastplatz-leaflet-map.leaflet-container {
+.rastplatz-leaflet-map.leaflet-container,
+.campingplatz-leaflet-map.leaflet-container {
   z-index: 0 !important;
   font-family: inherit;
 }
 
 .urlaub-leaflet-map .leaflet-pane,
-.rastplatz-leaflet-map .leaflet-pane {
+.rastplatz-leaflet-map .leaflet-pane,
+.campingplatz-leaflet-map .leaflet-pane {
   z-index: 1 !important;
 }
 
 .urlaub-leaflet-map .leaflet-tile-pane,
-.rastplatz-leaflet-map .leaflet-tile-pane {
+.rastplatz-leaflet-map .leaflet-tile-pane,
+.campingplatz-leaflet-map .leaflet-tile-pane {
   z-index: 1 !important;
 }
 
 .urlaub-leaflet-map .leaflet-overlay-pane,
-.rastplatz-leaflet-map .leaflet-overlay-pane {
+.rastplatz-leaflet-map .leaflet-overlay-pane,
+.campingplatz-leaflet-map .leaflet-overlay-pane {
   z-index: 2 !important;
 }
 
 .urlaub-leaflet-map .leaflet-shadow-pane,
-.rastplatz-leaflet-map .leaflet-shadow-pane {
+.rastplatz-leaflet-map .leaflet-shadow-pane,
+.campingplatz-leaflet-map .leaflet-shadow-pane {
   z-index: 3 !important;
 }
 
 .urlaub-leaflet-map .leaflet-marker-pane,
-.rastplatz-leaflet-map .leaflet-marker-pane {
+.rastplatz-leaflet-map .leaflet-marker-pane,
+.campingplatz-leaflet-map .leaflet-marker-pane {
   z-index: 4 !important;
 }
 
 .urlaub-leaflet-map .leaflet-tooltip-pane,
-.rastplatz-leaflet-map .leaflet-tooltip-pane {
+.rastplatz-leaflet-map .leaflet-tooltip-pane,
+.campingplatz-leaflet-map .leaflet-tooltip-pane {
   z-index: 5 !important;
 }
 
 .urlaub-leaflet-map .leaflet-popup-pane,
-.rastplatz-leaflet-map .leaflet-popup-pane {
+.rastplatz-leaflet-map .leaflet-popup-pane,
+.campingplatz-leaflet-map .leaflet-popup-pane {
   z-index: 6 !important;
 }
 
 .urlaub-leaflet-map .leaflet-top,
 .urlaub-leaflet-map .leaflet-bottom,
 .rastplatz-leaflet-map .leaflet-top,
-.rastplatz-leaflet-map .leaflet-bottom {
+.rastplatz-leaflet-map .leaflet-bottom,
+.campingplatz-leaflet-map .leaflet-top,
+.campingplatz-leaflet-map .leaflet-bottom {
   z-index: 7 !important;
 }
 

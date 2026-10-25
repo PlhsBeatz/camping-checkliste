@@ -8,48 +8,10 @@ import { cn } from '@/lib/utils'
 import { openRastplatzInGoogleMaps } from '@/lib/maps-export'
 import { ExternalLink, MapPin } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { BRAND_ORANGE_RGB } from '@/lib/brand-colors'
+import { createMapPinIcon } from '@/lib/map-pin-icon'
 
-const EMPFEHLUNG_GREEN = 'rgb(34, 139, 34)'
-const NO_GO_RED = 'rgb(200, 50, 50)'
-const HOME_ORANGE = BRAND_ORANGE_RGB
 const DE_OSM_TILE_URL = 'https://{s}.tile.openstreetmap.de/tiles/osmde/{z}/{x}/{y}.png'
 const FALLBACK_OSM_TILE_URL = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
-
-function pinSvg(color: string) {
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="36" viewBox="0 0 28 36">
-    <path d="M14 36C14 36 1.5 19.5 1.5 12A12.5 12.5 0 1 1 26.5 12C26.5 19.5 14 36 14 36Z" fill="${color}" stroke="white" stroke-width="1.5"/>
-    <circle cx="14" cy="12" r="5" fill="white"/>
-  </svg>`
-}
-
-function homePinSvg() {
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="36" viewBox="0 0 28 36">
-    <path d="M14 36C14 36 1.5 19.5 1.5 12A12.5 12.5 0 1 1 26.5 12C26.5 19.5 14 36 14 36Z" fill="${HOME_ORANGE}" stroke="white" stroke-width="1.5"/>
-    <circle cx="14" cy="12" r="5" fill="white"/>
-    <path d="M14 9.5 10.5 12.5v4.5h2.2v-2.8h3.6v2.8H18.5V12.5L14 9.5Z" fill="${HOME_ORANGE}"/>
-  </svg>`
-}
-
-function createIcon(color: string) {
-  return L.divIcon({
-    html: pinSvg(color),
-    className: 'rastplatz-pin',
-    iconSize: [28, 36],
-    iconAnchor: [14, 36],
-    popupAnchor: [0, -34],
-  })
-}
-
-function createHomeIcon() {
-  return L.divIcon({
-    html: homePinSvg(),
-    className: 'rastplatz-home-pin',
-    iconSize: [28, 36],
-    iconAnchor: [14, 36],
-    popupAnchor: [0, -34],
-  })
-}
 
 function whenContainerReady(el: HTMLElement, onReady: () => void) {
   const run = () => {
@@ -290,14 +252,19 @@ export function RastplaetzeMap({ items, home = null, className, height = 280 }: 
     })
 
     if (home) {
-      L.marker([home.lat, home.lng], { icon: createHomeIcon() })
+      L.marker([home.lat, home.lng], {
+        icon: createMapPinIcon({ color: 'brand-orange', symbol: 'home' }),
+      })
         .addTo(map)
         .bindPopup(`<strong>${home.label ?? 'Heimatadresse'}</strong>`)
     }
 
     for (const r of points) {
-      const color = r.bewertung === 'empfehlung' ? EMPFEHLUNG_GREEN : NO_GO_RED
-      L.marker([r.lat, r.lng], { icon: createIcon(color) })
+      const icon =
+        r.bewertung === 'empfehlung'
+          ? createMapPinIcon({ color: 'accent', symbol: 'thumbsUp' })
+          : createMapPinIcon({ color: 'destructive', symbol: 'thumbsDown' })
+      L.marker([r.lat, r.lng], { icon })
         .addTo(map)
         .bindPopup(
           `<strong>${r.name}</strong><br/>${r.bewertung === 'empfehlung' ? 'Empfehlung' : 'No-Go'}`

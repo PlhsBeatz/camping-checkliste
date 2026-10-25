@@ -34,6 +34,7 @@ import {
   MapPin,
 } from 'lucide-react'
 import { merkmalLabel } from '@/lib/rastplatz-merkmale'
+import { RASTPLATZ_KATEGORIEN, rastplatzKategorieLabel } from '@/lib/rastplatz-place-types'
 import { openRastplatzInAdac, openRastplatzInGoogleMaps } from '@/lib/maps-export'
 import type { RastplatzBewertungFilter, RastplatzFilterState } from '@/lib/rastplatz-filter'
 
@@ -88,12 +89,11 @@ export function RastplaetzeTable({
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Alle Typen</SelectItem>
-            <SelectItem value="rastplatz">Rastplatz</SelectItem>
-            <SelectItem value="tankstelle">Tankstelle</SelectItem>
-            <SelectItem value="parkplatz">Parkplatz</SelectItem>
-            <SelectItem value="autohof">Autohof</SelectItem>
-            <SelectItem value="restaurant">Restaurant</SelectItem>
-            <SelectItem value="sonstiges">Sonstiges</SelectItem>
+            {RASTPLATZ_KATEGORIEN.map((k) => (
+              <SelectItem key={k.value} value={k.value}>
+                {k.label}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
       </div>
@@ -116,7 +116,7 @@ export function RastplaetzeTable({
             <div className="flex-1 min-w-0">
               <div className="font-medium truncate">{r.name}</div>
               <div className="text-sm text-muted-foreground">
-                {[r.kategorie, r.ort, r.land].filter(Boolean).join(' · ')}
+                {[rastplatzKategorieLabel(r.kategorie), r.ort, r.land].filter(Boolean).join(' · ')}
               </div>
               {r.merkmale.length > 0 && (
                 <div className="flex flex-wrap gap-1 mt-1">

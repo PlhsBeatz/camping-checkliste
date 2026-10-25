@@ -21,20 +21,12 @@ import { Textarea } from '@/components/ui/textarea'
 import { RASTPLATZ_MERKMALE } from '@/lib/rastplatz-merkmale'
 import {
   inferRastplatzKategorieFromGoogleTypes,
+  RASTPLATZ_KATEGORIEN,
   RASTPLATZ_NEARBY_RADIUS_M,
 } from '@/lib/rastplatz-place-types'
 import { haversineDistanceKm } from '@/lib/routes'
 import { cn } from '@/lib/utils'
 import { openRastplatzInAdac, openRastplatzInGoogleMaps } from '@/lib/maps-export'
-
-const KATEGORIEN: { value: RastplatzKategorie; label: string }[] = [
-  { value: 'rastplatz', label: 'Rastplatz' },
-  { value: 'tankstelle', label: 'Tankstelle' },
-  { value: 'parkplatz', label: 'Parkplatz' },
-  { value: 'autohof', label: 'Autohof' },
-  { value: 'restaurant', label: 'Restaurant' },
-  { value: 'sonstiges', label: 'Sonstiges' },
-]
 
 interface RastplatzFormState {
   id?: string
@@ -385,7 +377,7 @@ export function RastplatzEditModal({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {KATEGORIEN.map((k) => (
+              {RASTPLATZ_KATEGORIEN.map((k) => (
                 <SelectItem key={k.value} value={k.value}>
                   {k.label}
                 </SelectItem>
