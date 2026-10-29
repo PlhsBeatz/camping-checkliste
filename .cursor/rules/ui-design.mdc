@@ -16,6 +16,8 @@ Ausführlich: [`docs/DESIGN.md`](../../docs/DESIGN.md). Tokens: `src/app/globals
 - Desktop Hub `/einstellungen` → `SETTINGS_DEFAULT_HREF` (Darstellung).
 - Zurück: `BackLink`. Sticky-Header: `z-20` (in `PageHeader` gekapselt).
 - Ausnahmen (Packliste, Ausrüstung, Auth): siehe `docs/DESIGN.md` – nicht `AppShell` erfinden.
+- **Content-Breite Settings:** Listen/`ListTile`-Blöcke füllen die Content-Spalte von `ConfigPageLayout` (kein zusätzliches `max-w-*` auf der Liste). Einleitungstext darf `max-w-2xl` für Lesbarkeit haben. Formular-Seiten (z. B. Passwort) bleiben bewusst schmal.
+- **FAB in Settings:** `FabMenuM3` / `BrandFab` über `ConfigPageLayout` → `afterContent` (PageShell), nicht in der Content-Spalte.
 
 ## Tokens
 
@@ -28,6 +30,7 @@ Ausführlich: [`docs/DESIGN.md`](../../docs/DESIGN.md). Tokens: `src/app/globals
 ## Wiederkehrende UI
 
 - Gleiche Darstellung → Shared Component, keine dritte Variante.
-- Entity-Zeilen: `ListTile`. Single-FAB: `BrandFab`. Multi-FAB: `FabMenuM3`. Loading: `BrandSpinner`.
+- Entity-Zeilen: `ListTile` (volle Content-Breite). Single-FAB: `BrandFab`. Multi-FAB: `FabMenuM3`. Loading: `BrandSpinner`.
 - Leerzustand: `BrandEmptyState`. Modals: `ResponsiveModal`.
 - Cards: `CardTitle` ist `text-lg` (Default); bei Bedarf `text-base`.
+- Modal-Formulare: kein nested `overflow-y-auto` um Inputs – schneidet Focus-Ringe (`ring`/`ring-offset`) ab. Scroll dem `ResponsiveModal` überlassen; ggf. `p-2 -m-2` als Ring-Puffer.

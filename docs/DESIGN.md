@@ -82,6 +82,9 @@ Immer [`ConfigPageLayout`](../src/components/config-page-layout.tsx) (baut inter
 - Desktop: `/einstellungen` → `SETTINGS_DEFAULT_HREF` (Darstellung); Subnav in `SETTINGS_NAV_COLUMN_CLASS`
 - Mobile Hub: gruppierte Nav; Unterseiten: Picker + Drawer + Zurück
 - Stammdaten/System unter `/einstellungen/…` (z. B. `/einstellungen/kategorien`); Alt-URLs redirecten
+- **Content-Breite:** Entity-Listen (`ListTile` etc.) nutzen die volle Content-Spalte – kein zusätzliches `max-w-2xl`/`max-w-xl` um die Liste. Kurze Einleitungstexte dürfen `max-w-2xl` haben. Bewusst schmale Formulare (Passwort, einzelne Felder) sind Ausnahmen.
+- **FAB:** `FabMenuM3` / `BrandFab` als `afterContent` von `ConfigPageLayout` (liegt außerhalb der Content-Spalte in `PageShell`); Öffnen der Dialoge per Trigger-Props in den Manager (wie Kategorien / Mitreisende)
+- **Modal-Formulare:** Kein zusätzliches `overflow-y-auto` um Eingabefelder – schneidet Focus-Ringe ab. Scroll übernimmt `ResponsiveModal`; bei Bedarf Ring-Puffer `p-2 -m-2`.
 
 ---
 
@@ -117,7 +120,7 @@ Immer [`ConfigPageLayout`](../src/components/config-page-layout.tsx) (baut inter
 | Muster | Wann | Optik |
 |--------|------|--------|
 | **GroupedNavList** | Settings-Nav | Kartengruppen, interne Trenner |
-| **ListTile** | Entity-Zeilen | `rounded-xl border border-subtle shadow-sm px-4 py-3` |
+| **ListTile** | Entity-Zeilen | `rounded-xl border border-subtle shadow-sm px-4 py-3`; volle Content-Breite |
 | **EntityThumb** | Vorschaubild in Entity-Zeilen | `sm` 48 / `md` 56; Cover oder `bg-brand-muted` + Icon |
 | **Card** | Formular-/Feature-Blöcke | `CardTitle` Default `text-lg`; bei Bedarf `text-base` überschreiben |
 

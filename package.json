@@ -1,6 +1,6 @@
 {
   "name": "camping-packliste-app",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "private": true,
   "scripts": {
     "dev": "node scripts/next-dev.mjs",

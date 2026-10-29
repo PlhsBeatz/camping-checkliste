@@ -11,6 +11,21 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { ListTile } from '@/components/list-tile'
+import { ResponsiveModal } from '@/components/ui/responsive-modal'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import { BrandEmptyState } from '@/components/brand-empty-state'
+import {
+  EMPTY_ILLUSTRATION_CLASS,
+  GearEmptyIllustration,
+} from '@/components/brand-empty-illustrations'
 import type { EquipmentItem, VerbrauchMedium } from '@/lib/db'
 import type { ApiResponse } from '@/lib/api-types'
 import type { VerbrauchMediumAusruestungLink } from '@/lib/db-verbrauch'
@@ -18,14 +33,32 @@ import {
   VERBRAUCH_MEDIEN_KATALOG,
   type VerbrauchMessmodus,
 } from '@/lib/verbrauch-medien-katalog'
-import { Plus, Power, PowerOff, Trash2, X } from 'lucide-react'
-import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import {
+  Fuel,
+  MoreVertical,
+  Pencil,
+  Power,
+  PowerOff,
+  Trash2,
+  X,
+} from 'lucide-react'
 
 function parseOptionalNumber(raw: string): number | null {
   const t = raw.trim()
   if (!t) return null
   const n = Number(t.replace(',', '.'))
   return Number.isFinite(n) ? n : null
+}
+
+function messmodusLabel(modus: VerbrauchMessmodus): string {
+  return modus === 'zunahme' ? 'Zähler' : 'Tank/Flasche'
+}
+
+function formatMediumSummary(m: VerbrauchMedium): string {
+  const parts = [m.einheit, messmodusLabel(m.messmodus)]
+  if (m.dichte_kg_pro_l != null) parts.push(`ρ ${m.dichte_kg_pro_l} kg/l`)
+  if (m.leergewicht_kg != null) parts.push(`Leergewicht ${m.leergewicht_kg} kg`)
+  return parts.join(' · ')
 }
 
 /** Wie bei Alternativen: Namenssuche; leer → Vorschläge zum Medium-Namen/Schlüssel. */
@@ -66,12 +99,236 @@ function equipmentHitsForMedium(
   return { mode: 'suggest', items: scored.slice(0, 8).map((x) => x.e) }
 }
 
+function MediumRow({
+  medium,
+  links,
+  menuOpenId,
+  setMenuOpenId,
+  onEdit,
+  onToggleActive,
+  onDelete,
+}: {
+  medium: VerbrauchMedium
+  links: VerbrauchMediumAusruestungLink[]
+  menuOpenId: string | null
+  setMenuOpenId: (id: string | null) => void
+  onEdit: () => void
+  onToggleActive: () => void
+  onDelete: () => void
+}) {
+  return (
+    <ListTile
+      className={`flex items-start justify-between gap-2 ${
+        medium.ist_aktiv ? '' : 'opacity-75'
+      }`}
+    >
+      <div className="flex min-w-0 flex-1 items-start gap-3">
+        <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted">
+          <Fuel className="h-4 w-4 text-muted-foreground" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="font-medium text-brand-heading">{medium.name}</p>
+          <p className="mt-1 text-xs text-muted-foreground">{formatMediumSummary(medium)}</p>
+          {links.length > 0 ? (
+            <p className="mt-1 text-xs text-muted-foreground/80 line-clamp-2">
+              Ausrüstung:{' '}
+              {links
+                .map((l) =>
+                  l.status === 'Fest Installiert' ? `${l.was} (fest)` : l.was
+                )
+                .join(', ')}
+            </p>
+          ) : (
+            <p className="mt-1 text-xs text-muted-foreground/70">Keine Ausrüstung zugeordnet</p>
+          )}
+          {!medium.ist_aktiv && (
+            <p className="mt-1 text-xs text-muted-foreground">Deaktiviert</p>
+          )}
+        </div>
+      </div>
+      <DropdownMenu
+        open={menuOpenId === medium.id}
+        onOpenChange={(o) => setMenuOpenId(o ? medium.id : null)}
+      >
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="sm" className="h-8 w-8 p-0 shrink-0">
+            <MoreVertical className="h-4 w-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem
+            onSelect={() => {
+              setMenuOpenId(null)
+              onEdit()
+            }}
+          >
+            <Pencil className="h-4 w-4 mr-2" />
+            Bearbeiten
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onSelect={() => {
+              setMenuOpenId(null)
+              onToggleActive()
+            }}
+          >
+            {medium.ist_aktiv ? (
+              <>
+                <PowerOff className="h-4 w-4 mr-2" />
+                Deaktivieren
+              </>
+            ) : (
+              <>
+                <Power className="h-4 w-4 mr-2" />
+                Aktivieren
+              </>
+            )}
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            className="text-destructive"
+            onSelect={() => {
+              setMenuOpenId(null)
+              onDelete()
+            }}
+          >
+            <Trash2 className="h-4 w-4 mr-2" />
+            Löschen
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </ListTile>
+  )
+}
+
+function AusruestungEditor({
+  medium,
+  equipment,
+  links,
+  saving,
+  onAdd,
+  onRemove,
+}: {
+  medium: VerbrauchMedium
+  equipment: EquipmentItem[]
+  links: VerbrauchMediumAusruestungLink[]
+  saving: boolean
+  onAdd: (equipmentId: string) => void
+  onRemove: (equipmentId: string) => void
+}) {
+  const [query, setQuery] = useState('')
+  const linkedIds = useMemo(() => new Set(links.map((l) => l.equipment_id)), [links])
+  const hits = equipmentHitsForMedium(medium, equipment, linkedIds, query)
+  const showSuggest = links.length === 0 && hits.mode === 'suggest' && hits.items.length > 0
+  const showSearchHits = hits.mode === 'search' && hits.items.length > 0
+
+  return (
+    <div className="space-y-3 rounded-xl border border-subtle bg-muted/30 p-3">
+      <div className="space-y-1">
+        <Label htmlFor="eq-search-edit">Zugeordnete Ausrüstung</Label>
+        <p className="text-xs text-muted-foreground">
+          Verknüpfe z. B. Gastank oder Wassertank. Das Medium erscheint im Urlaub nur, wenn
+          eines dieser Teile gepackt oder fest installiert ist.
+        </p>
+      </div>
+      {links.length > 0 && (
+        <ul className="flex flex-wrap gap-1.5">
+          {links.map((l) => (
+            <li
+              key={l.equipment_id}
+              className="inline-flex items-center gap-1 rounded-md border bg-muted/40 px-2 py-0.5 text-xs"
+            >
+              <span>
+                {l.was}
+                {l.status === 'Fest Installiert' ? ' · fest' : ''}
+              </span>
+              <button
+                type="button"
+                className="text-muted-foreground hover:text-destructive"
+                disabled={saving}
+                aria-label="Entfernen"
+                onClick={() => onRemove(l.equipment_id)}
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {showSuggest && (
+        <div className="space-y-1">
+          <p className="text-xs text-muted-foreground">Vorschläge – mit Klick übernehmen</p>
+          <ul className="max-h-32 overflow-y-auto rounded-md border bg-card divide-y">
+            {hits.items.map((e) => (
+              <li key={e.id}>
+                <button
+                  type="button"
+                  disabled={saving}
+                  className="w-full text-left px-2 py-1.5 text-xs hover:bg-muted disabled:opacity-50"
+                  onClick={() => {
+                    onAdd(e.id)
+                    setQuery('')
+                  }}
+                >
+                  {e.was}
+                  {e.status === 'Fest Installiert' ? ' · fest' : ''}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      <Input
+        id="eq-search-edit"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder="Namen suchen…"
+        className="h-8 text-sm"
+        disabled={saving || equipment.length === 0}
+      />
+      {showSearchHits && (
+        <ul className="max-h-32 overflow-y-auto rounded-md border bg-card divide-y">
+          {hits.items.map((e) => (
+            <li key={e.id}>
+              <button
+                type="button"
+                disabled={saving}
+                className="w-full text-left px-2 py-1.5 text-xs hover:bg-muted disabled:opacity-50"
+                onClick={() => {
+                  onAdd(e.id)
+                  setQuery('')
+                }}
+              >
+                {e.was}
+                {e.status === 'Fest Installiert' ? ' · fest' : ''}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {hits.mode === 'search' && query.trim() && hits.items.length === 0 && (
+        <p className="text-xs text-muted-foreground">Kein Treffer.</p>
+      )}
+      {equipment.length === 0 && (
+        <p className="text-xs text-muted-foreground">Keine Ausrüstung vorhanden.</p>
+      )}
+    </div>
+  )
+}
+
 export function VerbrauchMedienManager({
   medien,
   onRefresh,
+  openCatalogTrigger,
+  onOpenCatalogConsumed,
+  openCreateTrigger,
+  onOpenCreateConsumed,
 }: {
   medien: VerbrauchMedium[]
   onRefresh: () => void
+  openCatalogTrigger?: boolean
+  onOpenCatalogConsumed?: () => void
+  openCreateTrigger?: boolean
+  onOpenCreateConsumed?: () => void
 }) {
   const [saving, setSaving] = useState(false)
   const [customName, setCustomName] = useState('')
@@ -80,18 +337,18 @@ export function VerbrauchMedienManager({
   const [customDichte, setCustomDichte] = useState('')
   const [customLeer, setCustomLeer] = useState('')
   const [deleteId, setDeleteId] = useState<string | null>(null)
-  const [editDichte, setEditDichte] = useState<Record<string, string>>({})
-  const [editLeer, setEditLeer] = useState<Record<string, string>>({})
+  const [editItem, setEditItem] = useState<VerbrauchMedium | null>(null)
+  const [editDichte, setEditDichte] = useState('')
+  const [editLeer, setEditLeer] = useState('')
+  const [catalogOpen, setCatalogOpen] = useState(false)
+  const [createOpen, setCreateOpen] = useState(false)
+  const [menuOpenId, setMenuOpenId] = useState<string | null>(null)
   const [equipment, setEquipment] = useState<EquipmentItem[]>([])
   const [linksByMedium, setLinksByMedium] = useState<
     Record<string, VerbrauchMediumAusruestungLink[]>
   >({})
-  const [equipmentQuery, setEquipmentQuery] = useState<Record<string, string>>({})
 
-  const configuredKeys = useMemo(
-    () => new Set(medien.map((m) => m.schluessel)),
-    [medien]
-  )
+  const configuredKeys = useMemo(() => new Set(medien.map((m) => m.schluessel)), [medien])
 
   const availablePresets = VERBRAUCH_MEDIEN_KATALOG.filter(
     (k) => !configuredKeys.has(k.schluessel)
@@ -138,6 +395,37 @@ export function VerbrauchMedienManager({
     }
   }, [mediumIdsKey, medien])
 
+  useEffect(() => {
+    if (!editItem) return
+    if (!medien.some((m) => m.id === editItem.id)) {
+      setEditItem(null)
+    }
+  }, [medien, editItem])
+
+  useEffect(() => {
+    if (!openCatalogTrigger) return
+    setCatalogOpen(true)
+    onOpenCatalogConsumed?.()
+  }, [openCatalogTrigger, onOpenCatalogConsumed])
+
+  useEffect(() => {
+    if (!openCreateTrigger) return
+    setCreateOpen(true)
+    onOpenCreateConsumed?.()
+  }, [openCreateTrigger, onOpenCreateConsumed])
+
+  useEffect(() => {
+    if (catalogOpen && availablePresets.length === 0) {
+      setCatalogOpen(false)
+    }
+  }, [catalogOpen, availablePresets.length])
+
+  const openEdit = (m: VerbrauchMedium) => {
+    setEditDichte(m.dichte_kg_pro_l != null ? String(m.dichte_kg_pro_l) : '')
+    setEditLeer(m.leergewicht_kg != null ? String(m.leergewicht_kg) : '')
+    setEditItem(m)
+  }
+
   const activatePreset = async (schluessel: string) => {
     setSaving(true)
     try {
@@ -166,22 +454,27 @@ export function VerbrauchMedienManager({
     }
   }
 
-  const saveDichte = async (m: VerbrauchMedium) => {
+  const saveEdit = async () => {
+    if (!editItem) return
+    const isLiter = editItem.einheit.trim().toLowerCase() === 'l'
+    if (!isLiter) {
+      setEditItem(null)
+      return
+    }
     setSaving(true)
     try {
-      const dichteRaw =
-        editDichte[m.id] ?? (m.dichte_kg_pro_l != null ? String(m.dichte_kg_pro_l) : '')
-      const leerRaw =
-        editLeer[m.id] ?? (m.leergewicht_kg != null ? String(m.leergewicht_kg) : '')
-      const res = await fetch(`/api/verbrauch-medien/${m.id}`, {
+      const res = await fetch(`/api/verbrauch-medien/${editItem.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          dichte_kg_pro_l: parseOptionalNumber(dichteRaw),
-          leergewicht_kg: parseOptionalNumber(leerRaw),
+          dichte_kg_pro_l: parseOptionalNumber(editDichte),
+          leergewicht_kg: parseOptionalNumber(editLeer),
         }),
       })
-      if (res.ok) onRefresh()
+      if (res.ok) {
+        setEditItem(null)
+        onRefresh()
+      }
     } finally {
       setSaving(false)
     }
@@ -212,7 +505,6 @@ export function VerbrauchMedienManager({
       ...current.map((l) => l.equipment_id),
       equipmentId,
     ])
-    setEquipmentQuery((prev) => ({ ...prev, [mediumId]: '' }))
   }
 
   const removeLink = async (mediumId: string, equipmentId: string) => {
@@ -221,6 +513,14 @@ export function VerbrauchMedienManager({
       mediumId,
       current.filter((l) => l.equipment_id !== equipmentId).map((l) => l.equipment_id)
     )
+  }
+
+  const resetCustomForm = () => {
+    setCustomName('')
+    setCustomEinheit('l')
+    setCustomModus('abnahme')
+    setCustomDichte('')
+    setCustomLeer('')
   }
 
   const createCustom = async () => {
@@ -239,11 +539,8 @@ export function VerbrauchMedienManager({
         }),
       })
       if (res.ok) {
-        setCustomName('')
-        setCustomEinheit('l')
-        setCustomModus('abnahme')
-        setCustomDichte('')
-        setCustomLeer('')
+        resetCustomForm()
+        setCreateOpen(false)
         onRefresh()
       }
     } finally {
@@ -268,266 +565,113 @@ export function VerbrauchMedienManager({
   const active = medien.filter((m) => m.ist_aktiv)
   const inactive = medien.filter((m) => !m.ist_aktiv)
   const showCustomDichte = customEinheit.trim().toLowerCase() === 'l'
+  const editIsLiter = editItem?.einheit.trim().toLowerCase() === 'l'
 
   return (
-    <div className="space-y-8 max-w-2xl">
-      <p className="text-sm text-muted-foreground">
+    <>
+      <p className="text-sm text-muted-foreground max-w-2xl mb-4">
         Typische Medien schnell aktivieren. Nur aktive Medien erscheinen unter Tools → Verbrauch.
-        Bei Einheit „l“ kannst du Dichte und Leergewicht für die Umrechnung Gewicht → Liter setzen.
-        Ausrüstungs-Zuordnung entscheidet, ob das Medium für einen Urlaub relevant ist (Packliste /
-        fest installiert).
       </p>
 
-      {availablePresets.length > 0 && (
-        <section className="space-y-2">
-          <h3 className="text-sm font-medium">Aus Katalog aktivieren</h3>
-          <div className="flex flex-wrap gap-2">
-            {availablePresets.map((p) => (
-              <Button
-                key={p.schluessel}
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={saving}
-                onClick={() => void activatePreset(p.schluessel)}
-              >
-                <Plus className="mr-1 h-3.5 w-3.5" />
-                {p.name} ({p.einheit})
-              </Button>
-            ))}
-          </div>
-        </section>
+      {medien.length === 0 ? (
+        <BrandEmptyState
+          className="min-h-[40vh]"
+          illustration={<GearEmptyIllustration className={EMPTY_ILLUSTRATION_CLASS} />}
+          title="Noch keine Medien"
+          description="Aktiviere Einträge aus dem Katalog oder lege ein eigenes Medium an – über den Plus-Button."
+        />
+      ) : (
+        <div className="space-y-6">
+          <section className="space-y-2">
+            <h3 className="text-sm font-medium text-muted-foreground">Aktiv</h3>
+            {active.length === 0 ? (
+              <p className="text-sm text-muted-foreground px-1">Noch keine Medien aktiv.</p>
+            ) : (
+              <div className="space-y-2">
+                {active.map((m) => (
+                  <MediumRow
+                    key={m.id}
+                    medium={m}
+                    links={linksByMedium[m.id] ?? []}
+                    menuOpenId={menuOpenId}
+                    setMenuOpenId={setMenuOpenId}
+                    onEdit={() => openEdit(m)}
+                    onToggleActive={() => void setActive(m.id, false)}
+                    onDelete={() => setDeleteId(m.id)}
+                  />
+                ))}
+              </div>
+            )}
+          </section>
+
+          {inactive.length > 0 && (
+            <section className="space-y-2">
+              <h3 className="text-sm font-medium text-muted-foreground">Deaktiviert</h3>
+              <div className="space-y-2">
+                {inactive.map((m) => (
+                  <MediumRow
+                    key={m.id}
+                    medium={m}
+                    links={linksByMedium[m.id] ?? []}
+                    menuOpenId={menuOpenId}
+                    setMenuOpenId={setMenuOpenId}
+                    onEdit={() => openEdit(m)}
+                    onToggleActive={() => void setActive(m.id, true)}
+                    onDelete={() => setDeleteId(m.id)}
+                  />
+                ))}
+              </div>
+            </section>
+          )}
+        </div>
       )}
 
-      <section className="space-y-2">
-        <h3 className="text-sm font-medium">Aktiv</h3>
-        {active.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Noch keine Medien aktiv.</p>
+      <ResponsiveModal
+        open={catalogOpen}
+        onOpenChange={setCatalogOpen}
+        title="Aus Katalog aktivieren"
+        description="Wähle ein vordefiniertes Medium. Es erscheint anschließend in der Liste und kann dort angepasst werden."
+      >
+        {availablePresets.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Keine weiteren Katalog-Medien verfügbar.</p>
         ) : (
-          <ul className="space-y-3">
-            {active.map((m) => {
-              const isLiter = m.einheit.trim().toLowerCase() === 'l'
-              const dichteVal =
-                editDichte[m.id] ?? (m.dichte_kg_pro_l != null ? String(m.dichte_kg_pro_l) : '')
-              const leerVal =
-                editLeer[m.id] ?? (m.leergewicht_kg != null ? String(m.leergewicht_kg) : '')
-              const links = linksByMedium[m.id] ?? []
-              const linkedIds = new Set(links.map((l) => l.equipment_id))
-              const query = equipmentQuery[m.id] ?? ''
-              const hits = equipmentHitsForMedium(m, equipment, linkedIds, query)
-              const showSuggest =
-                links.length === 0 && hits.mode === 'suggest' && hits.items.length > 0
-              const showSearchHits = hits.mode === 'search' && hits.items.length > 0
-              return (
-                <li key={m.id} className="rounded-md border px-3 py-2 text-sm bg-card space-y-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <span>
-                      <span className="font-medium">{m.name}</span>
-                      <span className="text-muted-foreground">
-                        {' '}
-                        · {m.einheit} · {m.messmodus === 'zunahme' ? 'Zähler' : 'Tank/Flasche'}
-                        {m.dichte_kg_pro_l != null && (
-                          <> · ρ {m.dichte_kg_pro_l} kg/l</>
-                        )}
-                      </span>
-                    </span>
-                    <div className="flex items-center gap-1">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        disabled={saving}
-                        title="Deaktivieren"
-                        onClick={() => void setActive(m.id, false)}
-                      >
-                        <PowerOff className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        disabled={saving}
-                        title="Löschen"
-                        onClick={() => setDeleteId(m.id)}
-                      >
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
-                    </div>
-                  </div>
-                  {isLiter && (
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_1fr_auto] items-end border-t pt-2">
-                      <div className="space-y-1">
-                        <Label className="text-xs">Dichte (kg/l)</Label>
-                        <Input
-                          type="number"
-                          step="0.01"
-                          value={dichteVal}
-                          onChange={(e) =>
-                            setEditDichte((prev) => ({ ...prev, [m.id]: e.target.value }))
-                          }
-                          placeholder="z. B. 0,80"
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs">Leergewicht Kanister (kg)</Label>
-                        <Input
-                          type="number"
-                          step="0.1"
-                          value={leerVal}
-                          onChange={(e) =>
-                            setEditLeer((prev) => ({ ...prev, [m.id]: e.target.value }))
-                          }
-                          placeholder="optional"
-                        />
-                      </div>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="secondary"
-                        disabled={saving}
-                        onClick={() => void saveDichte(m)}
-                      >
-                        Speichern
-                      </Button>
-                    </div>
-                  )}
-                  <div className="space-y-2 border-t pt-2">
-                    <Label htmlFor={`eq-search-${m.id}`} className="text-xs">
-                      Ausrüstung (Relevanz für Urlaub)
-                    </Label>
-                    {links.length > 0 && (
-                      <ul className="flex flex-wrap gap-1.5">
-                        {links.map((l) => (
-                          <li
-                            key={l.equipment_id}
-                            className="inline-flex items-center gap-1 rounded-md border bg-muted/40 px-2 py-0.5 text-xs"
-                          >
-                            <span>
-                              {l.was}
-                              {l.status === 'Fest Installiert' ? ' · fest' : ''}
-                            </span>
-                            <button
-                              type="button"
-                              className="text-muted-foreground hover:text-destructive"
-                              disabled={saving}
-                              aria-label="Entfernen"
-                              onClick={() => void removeLink(m.id, l.equipment_id)}
-                            >
-                              <X className="h-3 w-3" />
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                    {showSuggest && (
-                      <div className="space-y-1">
-                        <p className="text-xs text-muted-foreground">
-                          Vorschläge – mit Klick übernehmen
-                        </p>
-                        <ul className="max-h-32 overflow-y-auto rounded-md border bg-card divide-y">
-                          {hits.items.map((e) => (
-                            <li key={e.id}>
-                              <button
-                                type="button"
-                                disabled={saving}
-                                className="w-full text-left px-2 py-1.5 text-xs hover:bg-muted disabled:opacity-50"
-                                onClick={() => void addLink(m.id, e.id)}
-                              >
-                                {e.was}
-                                {e.status === 'Fest Installiert' ? ' · fest' : ''}
-                              </button>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                    <Input
-                      id={`eq-search-${m.id}`}
-                      value={query}
-                      onChange={(e) =>
-                        setEquipmentQuery((prev) => ({ ...prev, [m.id]: e.target.value }))
-                      }
-                      placeholder="Namen suchen…"
-                      className="h-8 text-sm"
-                      disabled={saving || equipment.length === 0}
-                    />
-                    {showSearchHits && (
-                      <ul className="max-h-32 overflow-y-auto rounded-md border bg-card divide-y">
-                        {hits.items.map((e) => (
-                          <li key={e.id}>
-                            <button
-                              type="button"
-                              disabled={saving}
-                              className="w-full text-left px-2 py-1.5 text-xs hover:bg-muted disabled:opacity-50"
-                              onClick={() => void addLink(m.id, e.id)}
-                            >
-                              {e.was}
-                              {e.status === 'Fest Installiert' ? ' · fest' : ''}
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                    {hits.mode === 'search' && query.trim() && hits.items.length === 0 && (
-                      <p className="text-xs text-muted-foreground">Kein Treffer.</p>
-                    )}
-                    {equipment.length === 0 && (
-                      <p className="text-xs text-muted-foreground">
-                        Keine Ausrüstung vorhanden.
-                      </p>
-                    )}
-                  </div>
-                </li>
-              )
-            })}
-          </ul>
-        )}
-      </section>
-
-      {inactive.length > 0 && (
-        <section className="space-y-2">
-          <h3 className="text-sm font-medium">Deaktiviert</h3>
-          <ul className="space-y-2">
-            {inactive.map((m) => (
-              <li
-                key={m.id}
-                className="flex items-center justify-between gap-2 rounded-md border border-dashed px-3 py-2 text-sm text-muted-foreground"
-              >
-                <span>
-                  {m.name} · {m.einheit}
-                </span>
-                <div className="flex items-center gap-1">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    disabled={saving}
-                    title="Aktivieren"
-                    onClick={() => void setActive(m.id, true)}
-                  >
-                    <Power className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    disabled={saving}
-                    title="Löschen"
-                    onClick={() => setDeleteId(m.id)}
-                  >
-                    <Trash2 className="h-4 w-4 text-destructive" />
-                  </Button>
-                </div>
+          <ul className="space-y-2 max-h-[60vh] overflow-y-auto">
+            {availablePresets.map((p) => (
+              <li key={p.schluessel}>
+                <button
+                  type="button"
+                  disabled={saving}
+                  className="w-full rounded-xl border border-subtle bg-card px-4 py-3 text-left shadow-sm hover:bg-muted/40 disabled:opacity-50 transition-colors"
+                  onClick={() => void activatePreset(p.schluessel)}
+                >
+                  <p className="font-medium text-brand-heading">{p.name}</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    {p.einheit} · {messmodusLabel(p.messmodus)}
+                    {p.dichte_kg_pro_l != null ? ` · ρ ${p.dichte_kg_pro_l} kg/l` : ''}
+                  </p>
+                </button>
               </li>
             ))}
           </ul>
-        </section>
-      )}
+        )}
+        <div className="flex justify-end pt-4">
+          <Button variant="outline" onClick={() => setCatalogOpen(false)}>
+            Schließen
+          </Button>
+        </div>
+      </ResponsiveModal>
 
-      <section className="space-y-3 border-t pt-6">
-        <h3 className="text-sm font-medium">Eigenes Medium</h3>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <div className="space-y-2 sm:col-span-2">
+      <ResponsiveModal
+        open={createOpen}
+        onOpenChange={(open) => {
+          setCreateOpen(open)
+          if (!open) resetCustomForm()
+        }}
+        title="Eigenes Medium"
+      >
+        {/* p-2 -m-2: Platz für Focus-Ring (ring + ring-offset); kein overflow (schneidet Ringe ab) */}
+        <div className="space-y-4 p-2 -m-2">
+          <div className="space-y-2">
             <Label>Name</Label>
             <Input
               value={customName}
@@ -535,63 +679,166 @@ export function VerbrauchMedienManager({
               placeholder="z. B. Benzin"
             />
           </div>
-          <div className="space-y-2">
-            <Label>Einheit</Label>
-            <Input
-              value={customEinheit}
-              onChange={(e) => setCustomEinheit(e.target.value)}
-              placeholder="l"
-            />
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label>Einheit</Label>
+              <Input
+                value={customEinheit}
+                onChange={(e) => setCustomEinheit(e.target.value)}
+                placeholder="l"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Messmodus</Label>
+              <Select
+                value={customModus}
+                onValueChange={(v) => setCustomModus(v as VerbrauchMessmodus)}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="abnahme">Tank/Flasche (Abnahme)</SelectItem>
+                  <SelectItem value="zunahme">Zähler (Zunahme)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {showCustomDichte && (
+              <>
+                <div className="space-y-2">
+                  <Label>Dichte (kg/l)</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={customDichte}
+                    onChange={(e) => setCustomDichte(e.target.value)}
+                    placeholder="z. B. 0,75"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Leergewicht (kg)</Label>
+                  <Input
+                    type="number"
+                    step="0.1"
+                    value={customLeer}
+                    onChange={(e) => setCustomLeer(e.target.value)}
+                    placeholder="optional"
+                  />
+                </div>
+              </>
+            )}
           </div>
-          <div className="space-y-2">
-            <Label>Messmodus</Label>
-            <Select
-              value={customModus}
-              onValueChange={(v) => setCustomModus(v as VerbrauchMessmodus)}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="abnahme">Tank/Flasche (Abnahme)</SelectItem>
-                <SelectItem value="zunahme">Zähler (Zunahme)</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          {showCustomDichte && (
-            <>
-              <div className="space-y-2">
-                <Label>Dichte (kg/l)</Label>
-                <Input
-                  type="number"
-                  step="0.01"
-                  value={customDichte}
-                  onChange={(e) => setCustomDichte(e.target.value)}
-                  placeholder="z. B. 0,75"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Leergewicht (kg)</Label>
-                <Input
-                  type="number"
-                  step="0.1"
-                  value={customLeer}
-                  onChange={(e) => setCustomLeer(e.target.value)}
-                  placeholder="optional"
-                />
-              </div>
-            </>
-          )}
         </div>
-        <Button
-          type="button"
-          disabled={saving || !customName.trim()}
-          onClick={() => void createCustom()}
-        >
-          <Plus className="mr-1 h-4 w-4" />
-          Anlegen
-        </Button>
-      </section>
+        <div className="flex justify-end gap-2 pt-4">
+          <Button
+            variant="outline"
+            onClick={() => {
+              setCreateOpen(false)
+              resetCustomForm()
+            }}
+          >
+            Abbrechen
+          </Button>
+          <Button
+            disabled={saving || !customName.trim()}
+            onClick={() => void createCustom()}
+          >
+            {saving ? 'Anlegen…' : 'Anlegen'}
+          </Button>
+        </div>
+      </ResponsiveModal>
+
+      <ResponsiveModal
+        open={!!editItem}
+        onOpenChange={(open) => {
+          if (!open) setEditItem(null)
+        }}
+        title={editItem ? `„${editItem.name}“ bearbeiten` : 'Medium bearbeiten'}
+        description={
+          editItem
+            ? `${editItem.einheit} · ${messmodusLabel(editItem.messmodus)}`
+            : undefined
+        }
+      >
+        {editItem && (
+          <>
+            {/* p-2 -m-2: Platz für Focus-Ring; kein overflow (schneidet Ringe ab) */}
+            <div className="space-y-4 p-2 -m-2">
+              {editIsLiter && (
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>Dichte (kg/l)</Label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      value={editDichte}
+                      onChange={(e) => setEditDichte(e.target.value)}
+                      placeholder="z. B. 0,80"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Leergewicht Kanister (kg)</Label>
+                    <Input
+                      type="number"
+                      step="0.1"
+                      value={editLeer}
+                      onChange={(e) => setEditLeer(e.target.value)}
+                      placeholder="optional"
+                    />
+                  </div>
+                </div>
+              )}
+              <AusruestungEditor
+                medium={editItem}
+                equipment={equipment}
+                links={linksByMedium[editItem.id] ?? []}
+                saving={saving}
+                onAdd={(equipmentId) => void addLink(editItem.id, equipmentId)}
+                onRemove={(equipmentId) => void removeLink(editItem.id, equipmentId)}
+              />
+            </div>
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-4">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={saving}
+                onClick={() => {
+                  const id = editItem.id
+                  const nextActive = !editItem.ist_aktiv
+                  setEditItem(null)
+                  void setActive(id, nextActive)
+                }}
+              >
+                {editItem.ist_aktiv ? (
+                  <>
+                    <PowerOff className="mr-2 h-4 w-4" />
+                    Deaktivieren
+                  </>
+                ) : (
+                  <>
+                    <Power className="mr-2 h-4 w-4" />
+                    Aktivieren
+                  </>
+                )}
+              </Button>
+              <div className="flex gap-2 ml-auto">
+                {editIsLiter ? (
+                  <>
+                    <Button variant="outline" onClick={() => setEditItem(null)}>
+                      Abbrechen
+                    </Button>
+                    <Button disabled={saving} onClick={() => void saveEdit()}>
+                      {saving ? 'Speichern…' : 'Speichern'}
+                    </Button>
+                  </>
+                ) : (
+                  <Button onClick={() => setEditItem(null)}>Fertig</Button>
+                )}
+              </div>
+            </div>
+          </>
+        )}
+      </ResponsiveModal>
 
       <ConfirmDialog
         open={!!deleteId}
@@ -600,6 +847,6 @@ export function VerbrauchMedienManager({
         description="Das Medium wird entfernt. Bestehende Messungen bleiben erhalten, sind aber keinem aktiven Medium mehr zugeordnet."
         onConfirm={() => void handleDelete()}
       />
-    </div>
+    </>
   )
 }
