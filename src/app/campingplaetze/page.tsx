@@ -95,12 +95,14 @@ function CampingplaetzePageContent() {
     const item = items.find((x) => x.id === bearbeitenId)
     if (item) {
       handleEdit(item)
-      router.replace('/campingplaetze', { scroll: false })
-    } else {
-      router.replace('/campingplaetze', { scroll: false })
     }
+    // Filter-Query (land, bundesland, …) behalten, nur bearbeiten entfernen
+    const params = new URLSearchParams(searchParams.toString())
+    params.delete('bearbeiten')
+    const qs = params.toString()
+    router.replace(qs ? `/campingplaetze?${qs}` : '/campingplaetze', { scroll: false })
     // handleEdit bewusst ausgelassen: einmaliges Öffnen per ?bearbeiten=
-  }, [bearbeitenId, isLoading, items, showDialog, router])
+  }, [bearbeitenId, isLoading, items, showDialog, router, searchParams])
 
   const handleAdd = () => {
     setEditTarget(null)

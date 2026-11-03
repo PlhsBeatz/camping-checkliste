@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { PageShell } from '@/components/page-shell'
 import { PageHeader } from '@/components/page-header'
 import { BackLink } from '@/components/back-link'
+import { peekCampingplaetzeListHref } from '@/lib/campingplaetze-list-navigation'
 import {
   MoreVertical,
   Route,
@@ -107,6 +108,11 @@ export default function CampingplatzDetailPage() {
   const [homeCoordsLoaded, setHomeCoordsLoaded] = useState(false)
   const [lightboxFotoId, setLightboxFotoId] = useState<string | null>(null)
   const [checkBusy, setCheckBusy] = useState(false)
+  const [listHref, setListHref] = useState('/campingplaetze')
+
+  useEffect(() => {
+    setListHref(peekCampingplaetzeListHref())
+  }, [])
 
   const load = useCallback(async () => {
     if (!id) return
@@ -490,7 +496,7 @@ export default function CampingplatzDetailPage() {
             <>
               <div>
                 <BackLink
-                  href="/campingplaetze"
+                  href={listHref}
                   visible="always"
                   variant="labeled"
                   label="Zur Liste"

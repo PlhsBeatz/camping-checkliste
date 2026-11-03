@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { Campingplatz } from '@/lib/db'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -40,6 +41,11 @@ import { cn } from '@/lib/utils'
 import { campingplatzListThumbnailSrc } from '@/lib/campingplatz-photo-url'
 import { CountryFlag } from '@/components/country-flag'
 import { EntityThumb } from '@/components/entity-thumb'
+import {
+  clearCampingplaetzeListScroll,
+  peekCampingplaetzeListScroll,
+  rememberCampingplaetzeListNavigation,
+} from '@/lib/campingplaetze-list-navigation'
 
 interface CampingplaetzeTableProps {
   items: Campingplatz[]
@@ -103,12 +109,21 @@ export function CampingplaetzeTable({
   onRowClick,
   showArchived = false,
 }: CampingplaetzeTableProps) {
+  const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
   const prefs0 = loadPrefs()
-  const [search, setSearch] = useState('')
-  const [filterLand, setFilterLand] = useState<string>('all')
-  const [filterBundesland, setFilterBundesland] = useState<string>('all')
-  const [filterTyp, setFilterTyp] = useState<string>('all')
-  const [filterArchiv, setFilterArchiv] = useState<string>(showArchived ? 'all' : 'active')
+  const filterArchivDefault = showArchived ? 'all' : 'active'
+
+  // Listen-Filter in der URL → Browser-Zurück behält Land/Bundesland/Suche
+  const searchFromUrl = searchParams.get('q') ?? ''
+  const filterLand = searchParams.get('land') ?? 'all'
+  const filterBundesland = searchParams.get('bundesland') ?? 'all'
+  const filterTyp = searchParams.get('typ') ?? 'all'
+  const filterArchiv = searchParams.get('archiv') ?? filterArchivDefault
+
+  // Suche lokal tippen, URL leicht verzögert syncen (weniger Router-Rauschen)
+  const [search, setSearch] = useState(searchFromUrl)
   const [sortMode, setSortMode] = useState<SortMode>(prefs0?.sortMode ?? 'region')
   const [filterWunsch, setFilterWunsch] = useState<FilterWunsch>(prefs0?.filterWunsch ?? 'wish')
   const [filterBesucht, setFilterBesucht] = useState<FilterBesucht>(prefs0?.filterBesucht ?? 'all')
@@ -116,13 +131,63 @@ export function CampingplaetzeTable({
   const [maxFahrzeitMin, setMaxFahrzeitMin] = useState<number | null>(
     prefs0?.maxFahrzeitMin !== undefined ? prefs0.maxFahrzeitMin : null
   )
-  const [showFilters, setShowFilters] = useState(false)
+  const [showFilters, setShowFilters] = useState(() => {
+    if (typeof window === 'undefined') return false
+    const p = new URLSearchParams(window.location.search)
+    return !!(
+      p.get('bundesland') ||
+      p.get('typ') ||
+      (p.get('archiv') && p.get('archiv') !== filterArchivDefault)
+    )
+  })
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
   const [landFilterScrollbarVisible, setLandFilterScrollbarVisible] = useState(false)
   const landScrollHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [extraDistances, setExtraDistances] = useState<
     Record<string, { distanceKm: number; durationMinutes: number }>
   >({})
+
+  const setListParams = (patch: Record<string, string | null>) => {
+    const params = new URLSearchParams(searchParams.toString())
+    params.delete('bearbeiten')
+    for (const [key, value] of Object.entries(patch)) {
+      const isDefault =
+        value == null ||
+        value === '' ||
+        value === 'all' ||
+        (key === 'archiv' && value === filterArchivDefault)
+      if (isDefault) params.delete(key)
+      else params.set(key, value)
+    }
+    const qs = params.toString()
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
+  }
+
+  useEffect(() => {
+    setSearch(searchFromUrl)
+  }, [searchFromUrl])
+
+  useEffect(() => {
+    if (search === searchFromUrl) return
+    const id = window.setTimeout(() => {
+      setListParams({ q: search ? search : null })
+    }, 250)
+    return () => window.clearTimeout(id)
+    // setListParams über searchParams; bewusst nur search/searchFromUrl
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search, searchFromUrl])
+
+  const setFilterLand = (land: string) =>
+    setListParams({
+      land: land === 'all' ? null : land,
+      // Landwechsel: Bundesland zurücksetzen (passt oft nicht mehr)
+      bundesland: null,
+    })
+  const setFilterBundesland = (value: string) =>
+    setListParams({ bundesland: value === 'all' ? null : value })
+  const setFilterTyp = (value: string) => setListParams({ typ: value === 'all' ? null : value })
+  const setFilterArchiv = (value: string) =>
+    setListParams({ archiv: value === filterArchivDefault ? null : value })
 
   useEffect(() => {
     const toSave: TablePrefs = {
@@ -167,17 +232,22 @@ export function CampingplaetzeTable({
     [items]
   )
 
-  const bundeslaender = useMemo(
-    () =>
-      Array.from(
-        new Set(
-          items
-            .map((c) => c.bundesland)
-            .filter((x): x is string => !!x)
-        )
-      ).sort((a, b) => a.localeCompare(b)),
-    [items]
-  )
+  const bundeslaender = useMemo(() => {
+    const source =
+      filterLand === 'all' ? items : items.filter((c) => c.land === filterLand)
+    return Array.from(
+      new Set(source.map((c) => c.bundesland).filter((x): x is string => !!x))
+    ).sort((a, b) => a.localeCompare(b))
+  }, [items, filterLand])
+
+  // Ungültiges Bundesland (z. B. nach Landwechsel per URL) bereinigen
+  useEffect(() => {
+    if (filterBundesland === 'all') return
+    if (bundeslaender.includes(filterBundesland)) return
+    setListParams({ bundesland: null })
+    // setListParams/searchParams absichtlich nicht als Deps: nur bei mismatch triggern
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterBundesland, bundeslaender])
 
   const filtered = useMemo(() => {
     return items.filter((item) => {
@@ -282,6 +352,17 @@ export function CampingplaetzeTable({
     }
   }, [])
 
+  // Nach Zurück von der Detailseite: Scrollposition wiederherstellen
+  useEffect(() => {
+    const y = peekCampingplaetzeListScroll()
+    if (y == null) return
+    const id = window.setTimeout(() => {
+      window.scrollTo({ top: y, behavior: 'auto' })
+      clearCampingplaetzeListScroll()
+    }, 100)
+    return () => window.clearTimeout(id)
+  }, [])
+
   const onLandFilterScroll = () => {
     setLandFilterScrollbarVisible(true)
     if (landScrollHideTimerRef.current) clearTimeout(landScrollHideTimerRef.current)
@@ -346,7 +427,6 @@ export function CampingplaetzeTable({
     return []
   }, [filtered, sortMode, mergedDistances])
 
-  const filterArchivDefault = showArchived ? 'all' : 'active'
   const hasNonDefaultFilters =
     search ||
     filterLand !== 'all' ||
@@ -361,15 +441,23 @@ export function CampingplaetzeTable({
 
   const resetFilters = () => {
     setSearch('')
-    setFilterLand('all')
-    setFilterBundesland('all')
-    setFilterTyp('all')
-    setFilterArchiv(showArchived ? 'all' : 'active')
+    setListParams({
+      q: null,
+      land: null,
+      bundesland: null,
+      typ: null,
+      archiv: null,
+    })
     setFilterWunsch('wish')
     setFilterBesucht('all')
     setFilterCoords('all')
     setMaxFahrzeitMin(null)
     setSortMode('region')
+  }
+
+  const openDetail = (item: Campingplatz) => {
+    rememberCampingplaetzeListNavigation()
+    onRowClick?.(item)
   }
 
   const renderCard = (item: Campingplatz) => {
@@ -391,12 +479,12 @@ export function CampingplaetzeTable({
           )}
           role={onRowClick ? 'button' : undefined}
           tabIndex={onRowClick ? 0 : undefined}
-          onClick={() => onRowClick?.(item)}
+          onClick={() => openDetail(item)}
           onKeyDown={(e) => {
             if (!onRowClick) return
             if (e.key === 'Enter' || e.key === ' ') {
               e.preventDefault()
-              onRowClick(item)
+              openDetail(item)
             }
           }}
         >

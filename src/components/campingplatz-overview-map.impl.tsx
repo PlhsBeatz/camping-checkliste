@@ -12,6 +12,27 @@ const MAP_ATTRIBUTION =
   '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> ' +
   '&copy; <a href="https://www.openstreetmap.de/faq.html">FOSSGIS</a>'
 
+/**
+ * Regionaler Ausschnitt wie beim früheren OSM-Embed (bbox ±3.4° Lat / ±5.2° Lon,
+ * entspricht grob Zoom 6–7 je nach Kartengröße).
+ */
+const REGION_HALF_LAT = 3.4
+const REGION_HALF_LNG = 5.2
+
+function fitCampingplatzRegion(map: L.Map, lat: number, lng: number) {
+  const minLat = Math.max(-85, lat - REGION_HALF_LAT)
+  const maxLat = Math.min(85, lat + REGION_HALF_LAT)
+  const minLng = Math.max(-180, lng - REGION_HALF_LNG)
+  const maxLng = Math.min(180, lng + REGION_HALF_LNG)
+  map.fitBounds(
+    [
+      [minLat, minLng],
+      [maxLat, maxLng],
+    ],
+    { animate: false }
+  )
+}
+
 function whenContainerReady(el: HTMLElement, onReady: () => void) {
   const run = () => {
     if (el.offsetWidth > 0 && el.offsetHeight > 0) {
@@ -96,12 +117,12 @@ function CampingplatzLeafletMap({
         title: label,
       }).addTo(map)
 
-      map.setView([lat, lng], interactive ? 12 : 11, { animate: false })
+      fitCampingplatzRegion(map, lat, lng)
 
       const refit = () => {
         if (!mapRef.current || disposed) return
         mapRef.current.invalidateSize({ animate: false })
-        mapRef.current.setView([lat, lng], interactive ? 12 : 11, { animate: false })
+        fitCampingplatzRegion(mapRef.current, lat, lng)
       }
       requestAnimationFrame(refit)
       window.setTimeout(refit, 150)
