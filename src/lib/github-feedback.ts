@@ -111,6 +111,38 @@ export function feedbackStatusLabel(status: FeedbackStatus): string {
   }
 }
 
+export function isFeedbackStatus(v: string | null | undefined): v is FeedbackStatus {
+  return (
+    v === 'eingegangen' ||
+    v === 'todo' ||
+    v === 'in_progress' ||
+    v === 'in_test' ||
+    v === 'erledigt'
+  )
+}
+
+/** Parallele GitHub-GETs begrenzen (Worker-Subrequests / Rate Limits). */
+const GITHUB_ISSUE_FETCH_CONCURRENCY = 8
+
+async function mapWithConcurrency<T>(
+  items: T[],
+  concurrency: number,
+  fn: (item: T) => Promise<void>
+): Promise<void> {
+  if (items.length === 0) return
+  const limit = Math.max(1, Math.min(concurrency, items.length))
+  let next = 0
+  await Promise.all(
+    Array.from({ length: limit }, async () => {
+      while (next < items.length) {
+        const idx = next++
+        const item = items[idx]
+        if (item !== undefined) await fn(item)
+      }
+    })
+  )
+}
+
 function getRepo(repo?: string): { owner: string; repo: string } {
   const raw = (repo ?? process.env.GITHUB_REPO ?? DEFAULT_GITHUB_REPO).trim()
   const [owner, name] = raw.split('/')
@@ -201,29 +233,28 @@ export async function createFeedbackIssue(input: {
 export async function fetchIssuesByNumbers(
   numbers: number[],
   repo?: string,
-  options?: { includeBody?: boolean }
+  options?: { includeBody?: boolean; concurrency?: number }
 ): Promise<Map<number, FeedbackListItem>> {
   const map = new Map<number, FeedbackListItem>()
   if (numbers.length === 0) return map
 
   const { owner, repo: repoName } = getRepo(repo)
   const includeBody = options?.includeBody === true
-  // Parallel, aber begrenzt – typisch wenige eigene Issues
+  const concurrency = options?.concurrency ?? GITHUB_ISSUE_FETCH_CONCURRENCY
   const unique = [...new Set(numbers)]
-  await Promise.all(
-    unique.map(async (num) => {
-      const res = await githubFetch(`/repos/${owner}/${repoName}/issues/${num}`)
-      if (!res.ok) return
-      const issue = (await res.json()) as GitHubIssue
-      map.set(num, {
-        issueNumber: issue.number,
-        title: issue.title,
-        type: mapIssueType(issue),
-        status: mapIssueStatus(issue),
-        description: includeBody ? extractFeedbackDescription(issue.body) : undefined,
-      })
+
+  await mapWithConcurrency(unique, concurrency, async (num) => {
+    const res = await githubFetch(`/repos/${owner}/${repoName}/issues/${num}`)
+    if (!res.ok) return
+    const issue = (await res.json()) as GitHubIssue
+    map.set(num, {
+      issueNumber: issue.number,
+      title: issue.title,
+      type: mapIssueType(issue),
+      status: mapIssueStatus(issue),
+      description: includeBody ? extractFeedbackDescription(issue.body) : undefined,
     })
-  )
+  })
   return map
 }
 

@@ -4,6 +4,7 @@ import { getDB, type CloudflareEnv } from '@/lib/db'
 import {
   fetchIssuesByNumbers,
   feedbackStatusLabel,
+  isFeedbackStatus,
   type FeedbackStatus,
   type FeedbackType,
 } from '@/lib/github-feedback'
@@ -14,6 +15,7 @@ type Row = {
   title: string
   type: string
   created_at: string
+  known_status: string | null
 }
 
 export async function GET(request: NextRequest) {
@@ -25,42 +27,79 @@ export async function GET(request: NextRequest) {
     const env = process.env as unknown as CloudflareEnv
     const db = await getDB(env)
 
-    const { results } = await db
-      .prepare(
-        `SELECT id, github_issue_number, title, type, created_at
-         FROM feedback_submissions
-         WHERE user_id = ?
-         ORDER BY created_at DESC
-         LIMIT 50`
-      )
-      .bind(userContext.userId)
-      .all<Row>()
+    let rows: Row[] = []
+    try {
+      const { results } = await db
+        .prepare(
+          `SELECT id, github_issue_number, title, type, created_at, known_status
+           FROM feedback_submissions
+           WHERE user_id = ?
+           ORDER BY created_at DESC
+           LIMIT 50`
+        )
+        .bind(userContext.userId)
+        .all<Row>()
+      rows = results ?? []
+    } catch {
+      const { results } = await db
+        .prepare(
+          `SELECT id, github_issue_number, title, type, created_at
+           FROM feedback_submissions
+           WHERE user_id = ?
+           ORDER BY created_at DESC
+           LIMIT 50`
+        )
+        .bind(userContext.userId)
+        .all<Omit<Row, 'known_status'>>()
+      rows = (results ?? []).map((r) => ({ ...r, known_status: null }))
+    }
 
-    const rows = results ?? []
-    const numbers = rows.map((r) => r.github_issue_number)
-
-    let statusMap = new Map<
+    // Nur fehlende known_status von GitHub nachziehen (kein Full-Refresh pro Aufruf)
+    const needsLive = rows.filter((r) => !isFeedbackStatus(r.known_status))
+    const liveByNumber = new Map<
       number,
       { status: FeedbackStatus; type: FeedbackType | null; title: string }
     >()
 
-    if (numbers.length > 0 && process.env.GITHUB_TOKEN?.trim()) {
+    if (needsLive.length > 0 && process.env.GITHUB_TOKEN?.trim()) {
       try {
+        const numbers = needsLive.map((r) => r.github_issue_number)
         const live = await fetchIssuesByNumbers(numbers)
-        statusMap = new Map(
-          [...live.entries()].map(([num, item]) => [
-            num,
-            { status: item.status, type: item.type, title: item.title },
-          ])
-        )
+        for (const [num, item] of live.entries()) {
+          liveByNumber.set(num, {
+            status: item.status,
+            type: item.type,
+            title: item.title,
+          })
+        }
+
+        // D1 nachziehen, damit Folgeläufe ohne GitHub auskommen
+        for (const row of needsLive) {
+          const liveItem = liveByNumber.get(row.github_issue_number)
+          if (!liveItem) continue
+          try {
+            await db
+              .prepare(
+                `UPDATE feedback_submissions
+                 SET known_status = ?, title = ?
+                 WHERE id = ? AND user_id = ?`
+              )
+              .bind(liveItem.status, liveItem.title || row.title, row.id, userContext.userId)
+              .run()
+          } catch {
+            /* Spalte ggf. noch nicht da */
+          }
+        }
       } catch (err) {
-        console.warn('fetchIssuesByNumbers failed:', err)
+        console.warn('fetchIssuesByNumbers (mine backfill) failed:', err)
       }
     }
 
     const data = rows.map((row) => {
-      const live = statusMap.get(row.github_issue_number)
-      const status: FeedbackStatus = live?.status ?? 'eingegangen'
+      const live = liveByNumber.get(row.github_issue_number)
+      const status: FeedbackStatus =
+        live?.status ??
+        (isFeedbackStatus(row.known_status) ? row.known_status : 'eingegangen')
       const type = (live?.type ?? row.type) as FeedbackType
       return {
         id: row.id,

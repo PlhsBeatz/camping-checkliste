@@ -5,6 +5,7 @@ import {
   extractFeedbackDescription,
   fetchIssuesByNumbers,
   feedbackStatusLabel,
+  isFeedbackStatus,
   type FeedbackStatus,
   type FeedbackType,
 } from '@/lib/github-feedback'
@@ -15,6 +16,7 @@ type Row = {
   title: string
   type: string
   description: string | null
+  known_status: string | null
   created_at: string
 }
 
@@ -40,7 +42,7 @@ export async function GET(
       row =
         (await db
           .prepare(
-            `SELECT id, github_issue_number, title, type, description, created_at
+            `SELECT id, github_issue_number, title, type, description, known_status, created_at
              FROM feedback_submissions
              WHERE id = ? AND user_id = ?`
           )
@@ -54,9 +56,9 @@ export async function GET(
            WHERE id = ? AND user_id = ?`
         )
         .bind(id, userContext.userId)
-        .first<Omit<Row, 'description'>>()
+        .first<Omit<Row, 'description' | 'known_status'>>()
       if (legacy) {
-        row = { ...legacy, description: null }
+        row = { ...legacy, description: null, known_status: null }
       }
     }
 
@@ -67,12 +69,18 @@ export async function GET(
       )
     }
 
-    let status: FeedbackStatus = 'eingegangen'
+    let status: FeedbackStatus = isFeedbackStatus(row.known_status)
+      ? row.known_status
+      : 'eingegangen'
     let type = row.type as FeedbackType
     let title = row.title
     let description = (row.description ?? '').trim()
 
-    if (process.env.GITHUB_TOKEN?.trim()) {
+    const needsGithub =
+      Boolean(process.env.GITHUB_TOKEN?.trim()) &&
+      (!description || !isFeedbackStatus(row.known_status))
+
+    if (needsGithub) {
       try {
         const live = await fetchIssuesByNumbers([row.github_issue_number], undefined, {
           includeBody: !description,
@@ -85,13 +93,35 @@ export async function GET(
           if (!description && item.description) {
             description = item.description
           }
+          try {
+            if (!row.description && description) {
+              await db
+                .prepare(
+                  `UPDATE feedback_submissions
+                   SET known_status = ?, title = ?, description = ?
+                   WHERE id = ? AND user_id = ?`
+                )
+                .bind(status, title, description, row.id, userContext.userId)
+                .run()
+            } else {
+              await db
+                .prepare(
+                  `UPDATE feedback_submissions
+                   SET known_status = ?, title = ?
+                   WHERE id = ? AND user_id = ?`
+                )
+                .bind(status, title, row.id, userContext.userId)
+                .run()
+            }
+          } catch {
+            /* Migration ggf. unvollständig */
+          }
         }
       } catch (err) {
         console.warn('GET /api/feedback/mine/[id] GitHub:', err)
       }
     }
 
-    // Falls Body noch Metadaten enthält (Altbestand aus GitHub)
     if (description.includes('\n---\n') || description.includes('_Aus der App gemeldet_')) {
       description = extractFeedbackDescription(description)
     }
