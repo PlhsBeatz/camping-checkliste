@@ -71,6 +71,8 @@ export const FEEDBACK_NOTIFY_MODE_OPTIONS = [
   },
 ] as const
 
+export const FEEDBACK_PUSH_SETTINGS_HREF = '/einstellungen/benachrichtigungen#push-feedbackMeldungen'
+
 export type PushPreferenceKey = (typeof PUSH_NOTIFICATION_OPTIONS)[number]['key']
 
 export type UserPushSettings = {
@@ -84,6 +86,16 @@ export type UserPushSettings = {
   feedbackMeldungen: boolean
   /** Default: nur Fertigstellung */
   feedbackNotifyMode: FeedbackNotifyMode
+}
+
+/** Kurzer Status-Text für Hinweisleisten (Feedback-Seite). */
+export function formatFeedbackNotifySummary(
+  settings: Pick<UserPushSettings, 'feedbackMeldungen' | 'feedbackNotifyMode'>
+): string {
+  if (!settings.feedbackMeldungen) return 'Benachrichtigungen aus'
+  const mode = settings.feedbackNotifyMode === 'all' ? 'all' : 'done'
+  const opt = FEEDBACK_NOTIFY_MODE_OPTIONS.find((o) => o.value === mode)
+  return opt?.label ?? 'Nur bei Fertigstellung'
 }
 
 export type UserPushSettingsResponse = UserPushSettings & {

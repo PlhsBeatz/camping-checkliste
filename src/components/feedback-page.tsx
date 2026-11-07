@@ -8,21 +8,23 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
-import { Switch } from '@/components/ui/switch'
 import { ResponsiveModal } from '@/components/ui/responsive-modal'
 import type { ApiResponse } from '@/lib/api-types'
 import type { FeedbackStatus, FeedbackType } from '@/lib/github-feedback'
 import {
-  FEEDBACK_NOTIFY_MODE_OPTIONS,
+  FEEDBACK_PUSH_SETTINGS_HREF,
+  formatFeedbackNotifySummary,
   type FeedbackNotifyMode,
   type UserPushSettings,
 } from '@/lib/push-settings'
 import { useReconnectRefetch } from '@/hooks/use-reconnect-refetch'
+import { usePushSubscribe } from '@/hooks/use-push-subscribe'
 import {
   FeedbackStatusBadge,
   FeedbackTypeLabel,
 } from '@/components/feedback-status-badge'
-import { ChevronRight } from 'lucide-react'
+import { FeedbackNotifyModeRadios } from '@/components/feedback-notify-mode-radios'
+import { Bell, ChevronRight } from 'lucide-react'
 
 type MineItem = {
   id: string
@@ -50,7 +52,20 @@ function formatCreatedAt(iso: string): string {
   })
 }
 
+async function savePushSettings(next: UserPushSettings): Promise<PushSettingsData | null> {
+  const res = await fetch('/api/profile/push-settings', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify(next),
+  })
+  const json = (await res.json()) as ApiResponse<PushSettingsData>
+  if (!json.success || !json.data) return null
+  return json.data
+}
+
 export function FeedbackPage() {
+  const pushSubscribe = usePushSubscribe()
   const [type, setType] = useState<FeedbackType>('bug')
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
@@ -68,8 +83,10 @@ export function FeedbackPage() {
   const [detail, setDetail] = useState<DetailItem | null>(null)
 
   const [pushSettings, setPushSettings] = useState<PushSettingsData | null>(null)
-  const [pushSaving, setPushSaving] = useState(false)
-  const [pushError, setPushError] = useState<string | null>(null)
+  const [notifyPromptOpen, setNotifyPromptOpen] = useState(false)
+  const [promptMode, setPromptMode] = useState<FeedbackNotifyMode>('done')
+  const [promptSaving, setPromptSaving] = useState(false)
+  const [promptError, setPromptError] = useState<string | null>(null)
 
   const resetForm = () => {
     setType('bug')
@@ -99,15 +116,12 @@ export function FeedbackPage() {
   }, [])
 
   const loadPushSettings = useCallback(async () => {
-    setPushError(null)
     try {
       const res = await fetch('/api/profile/push-settings', { credentials: 'include' })
       const json = (await res.json()) as ApiResponse<PushSettingsData>
-      if (json.success && json.data) {
-        setPushSettings(json.data)
-      }
+      if (json.success && json.data) setPushSettings(json.data)
     } catch {
-      /* optional – Einstellungen bleiben ausblendbar */
+      /* optional */
     }
   }, [])
 
@@ -120,46 +134,6 @@ export function FeedbackPage() {
     void loadMine()
     void loadPushSettings()
   })
-
-  const persistPush = async (next: UserPushSettings) => {
-    setPushSaving(true)
-    setPushError(null)
-    try {
-      const res = await fetch('/api/profile/push-settings', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify(next),
-      })
-      const json = (await res.json()) as ApiResponse<PushSettingsData>
-      if (!json.success || !json.data) {
-        setPushError(json.error ?? 'Benachrichtigungseinstellung konnte nicht gespeichert werden.')
-        return
-      }
-      setPushSettings(json.data)
-    } catch {
-      setPushError('Benachrichtigungseinstellung konnte nicht gespeichert werden.')
-    } finally {
-      setPushSaving(false)
-    }
-  }
-
-  const handleFeedbackNotifyToggle = async (enabled: boolean) => {
-    if (!pushSettings) return
-    await persistPush({
-      ...pushSettings,
-      feedbackMeldungen: enabled,
-      feedbackNotifyMode: pushSettings.feedbackNotifyMode ?? 'done',
-    })
-  }
-
-  const handleFeedbackNotifyMode = async (mode: FeedbackNotifyMode) => {
-    if (!pushSettings) return
-    await persistPush({
-      ...pushSettings,
-      feedbackNotifyMode: mode,
-    })
-  }
 
   const openDetail = async (item: MineItem) => {
     setDetailOpen(true)
@@ -188,6 +162,7 @@ export function FeedbackPage() {
     setFormError(null)
     setPageSuccess(null)
     setSubmitting(true)
+    const isFirstSubmission = mine.length === 0
     try {
       const res = await fetch('/api/feedback', {
         method: 'POST',
@@ -206,13 +181,73 @@ export function FeedbackPage() {
           : 'Danke! Deine Meldung wurde erfasst.'
       )
       resetForm()
-      void loadMine()
+      await loadMine()
+      if (isFirstSubmission) {
+        setPromptMode(pushSettings?.feedbackNotifyMode ?? 'done')
+        setPromptError(null)
+        setNotifyPromptOpen(true)
+      }
     } catch {
       setFormError('Meldung konnte nicht gesendet werden.')
     } finally {
       setSubmitting(false)
     }
   }
+
+  const dismissNotifyPrompt = () => {
+    setNotifyPromptOpen(false)
+    setPromptError(null)
+  }
+
+  const enableNotifyFromPrompt = async () => {
+    if (!pushSettings) {
+      setPromptError('Einstellungen konnten nicht geladen werden.')
+      return
+    }
+    setPromptSaving(true)
+    setPromptError(null)
+    try {
+      let next: UserPushSettings = {
+        ...pushSettings,
+        feedbackMeldungen: true,
+        feedbackNotifyMode: promptMode,
+      }
+
+      if (!pushSettings.enabled) {
+        if (!pushSubscribe.supported) {
+          setPromptError('Push wird von diesem Browser nicht unterstützt.')
+          setPromptSaving(false)
+          return
+        }
+        const subscribed =
+          pushSubscribe.subscribed || (await pushSubscribe.subscribe())
+        if (!subscribed) {
+          setPromptError(
+            pushSubscribe.lastError ??
+              'Browser-Benachrichtigung konnte nicht aktiviert werden.'
+          )
+          setPromptSaving(false)
+          return
+        }
+        next = { ...next, enabled: true }
+      }
+
+      const saved = await savePushSettings(next)
+      if (!saved) {
+        setPromptError('Speichern fehlgeschlagen.')
+        return
+      }
+      setPushSettings(saved)
+      setNotifyPromptOpen(false)
+    } catch {
+      setPromptError('Speichern fehlgeschlagen.')
+    } finally {
+      setPromptSaving(false)
+    }
+  }
+
+  const notifySummary =
+    pushSettings != null ? formatFeedbackNotifySummary(pushSettings) : null
 
   return (
     <div className="space-y-6">
@@ -284,59 +319,16 @@ export function FeedbackPage() {
         <CardHeader>
           <CardTitle>Meine Meldungen</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
-          {pushSettings && (
-            <div className="space-y-3 rounded-lg border border-border/60 p-3">
-              <div className="flex items-start justify-between gap-4">
-                <div className="space-y-0.5 min-w-0">
-                  <Label htmlFor="feedback-notify" className="text-sm font-medium cursor-pointer">
-                    Benachrichtigung bei Statusänderungen
-                  </Label>
-                  <p className="text-xs text-muted-foreground">
-                    Push zum Bearbeitungsstand deiner eingereichten Meldungen. Standardmäßig aus;
-                    wenn aktiv, nur bei Fertigstellung.
-                  </p>
-                </div>
-                <Switch
-                  id="feedback-notify"
-                  checked={!!pushSettings.feedbackMeldungen}
-                  disabled={pushSaving}
-                  onCheckedChange={(v) => void handleFeedbackNotifyToggle(v)}
-                />
-              </div>
-
-              {pushSettings.feedbackMeldungen && (
-                <RadioGroup
-                  value={pushSettings.feedbackNotifyMode ?? 'done'}
-                  onValueChange={(v) => void handleFeedbackNotifyMode(v as FeedbackNotifyMode)}
-                  className="space-y-2 pl-0.5"
-                  disabled={pushSaving}
-                >
-                  {FEEDBACK_NOTIFY_MODE_OPTIONS.map((opt) => (
-                    <label
-                      key={opt.value}
-                      className="flex items-start gap-2.5 text-sm cursor-pointer rounded-md border border-border/40 p-2.5"
-                    >
-                      <RadioGroupItem value={opt.value} id={`feedback-mode-${opt.value}`} className="mt-0.5" />
-                      <span className="min-w-0">
-                        <span className="font-medium block">{opt.label}</span>
-                        <span className="text-xs text-muted-foreground block">{opt.description}</span>
-                      </span>
-                    </label>
-                  ))}
-                </RadioGroup>
-              )}
-
-              {pushSettings.feedbackMeldungen && !pushSettings.enabled && (
-                <p className="text-xs text-amber-800 dark:text-amber-200">
-                  Push ist im Profil noch aus.{' '}
-                  <Link href="/einstellungen/benachrichtigungen" className="underline underline-offset-2">
-                    Benachrichtigungen aktivieren
-                  </Link>
-                </p>
-              )}
-              {pushError && <p className="text-sm text-red-600">{pushError}</p>}
-            </div>
+        <CardContent className="space-y-3">
+          {notifySummary && mine.length > 0 && (
+            <Link
+              href={FEEDBACK_PUSH_SETTINGS_HREF}
+              className="flex items-center gap-2 rounded-md px-1 py-1.5 -mx-1 text-xs text-muted-foreground hover:bg-muted/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <Bell className="h-3.5 w-3.5 shrink-0" aria-hidden />
+              <span className="min-w-0 flex-1 truncate">{notifySummary}</span>
+              <ChevronRight className="h-3.5 w-3.5 shrink-0" aria-hidden />
+            </Link>
           )}
 
           {mineLoading && (
@@ -407,6 +399,44 @@ export function FeedbackPage() {
               </div>
             </>
           )}
+        </div>
+      </ResponsiveModal>
+
+      <ResponsiveModal
+        open={notifyPromptOpen}
+        onOpenChange={(open) => {
+          if (!open) dismissNotifyPrompt()
+          else setNotifyPromptOpen(true)
+        }}
+        title="Status-Benachrichtigungen?"
+        description="Möchtest du informiert werden, wenn sich der Bearbeitungsstand deiner Meldung ändert?"
+      >
+        <div className="space-y-4 p-1">
+          <FeedbackNotifyModeRadios
+            idPrefix="feedback-prompt-mode"
+            value={promptMode}
+            onChange={setPromptMode}
+            disabled={promptSaving}
+            bordered
+          />
+          {promptError && <p className="text-sm text-red-600">{promptError}</p>}
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-1">
+            <Button
+              type="button"
+              variant="ghost"
+              disabled={promptSaving}
+              onClick={dismissNotifyPrompt}
+            >
+              Nicht jetzt
+            </Button>
+            <Button
+              type="button"
+              disabled={promptSaving || !pushSettings}
+              onClick={() => void enableNotifyFromPrompt()}
+            >
+              {promptSaving ? 'Wird aktiviert…' : 'Benachrichtigungen aktivieren'}
+            </Button>
+          </div>
         </div>
       </ResponsiveModal>
     </div>

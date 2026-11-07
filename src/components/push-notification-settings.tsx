@@ -5,11 +5,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Bell } from 'lucide-react'
 import type { ApiResponse } from '@/lib/api-types'
 import {
-  FEEDBACK_NOTIFY_MODE_OPTIONS,
   PUSH_NOTIFICATION_OPTIONS,
   type FeedbackNotifyMode,
   type PushPreferenceKey,
@@ -18,6 +16,7 @@ import {
 import { usePushSubscribe } from '@/hooks/use-push-subscribe'
 import { PushDeviceActivatePrompt } from '@/components/push-device-activate'
 import { useAuth } from '@/components/auth-provider'
+import { FeedbackNotifyModeRadios } from '@/components/feedback-notify-mode-radios'
 
 type PushSettingsData = UserPushSettings & { browserSubscribed: boolean }
 
@@ -62,6 +61,18 @@ export function PushNotificationSettings() {
   useEffect(() => {
     void loadSettings()
   }, [loadSettings])
+
+  // Deep-Link von der Feedback-Seite (#push-feedbackMeldungen)
+  useEffect(() => {
+    if (loading || !settings?.enabled) return
+    const id = typeof window !== 'undefined' ? window.location.hash.replace(/^#/, '') : ''
+    if (!id) return
+    const el = document.getElementById(id)
+    if (!el) return
+    requestAnimationFrame(() => {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    })
+  }, [loading, settings?.enabled])
 
   const persist = useCallback(
     async (next: UserPushSettings) => {
@@ -207,49 +218,32 @@ export function PushNotificationSettings() {
               return (
                 <div
                   key={opt.key}
-                  className="space-y-2 rounded-lg border border-border/40 p-3"
+                  id={opt.key === 'feedbackMeldungen' ? 'push-feedbackMeldungen' : undefined}
+                  className="space-y-2 rounded-lg border border-border/40 p-3 scroll-mt-24"
                 >
                   <div className="flex items-start gap-3">
                     <Checkbox
-                      id={`push-${opt.key}`}
+                      id={`push-opt-${opt.key}`}
                       checked={checked}
                       disabled={saving}
                       onCheckedChange={(v) => void handleTypeToggle(prefKey, v === true)}
                       className="mt-0.5"
                     />
                     <div className="space-y-0.5 min-w-0">
-                      <Label htmlFor={`push-${opt.key}`} className="text-sm font-medium cursor-pointer">
+                      <Label htmlFor={`push-opt-${opt.key}`} className="text-sm font-medium cursor-pointer">
                         {opt.label}
                       </Label>
                       <p className="text-xs text-muted-foreground">{opt.description}</p>
                     </div>
                   </div>
                   {opt.key === 'feedbackMeldungen' && checked && (
-                    <RadioGroup
+                    <FeedbackNotifyModeRadios
+                      idPrefix="push-feedback-mode"
                       value={settings.feedbackNotifyMode ?? 'done'}
-                      onValueChange={(v) => void handleFeedbackMode(v as FeedbackNotifyMode)}
-                      className="ml-7 space-y-2"
+                      onChange={(mode) => void handleFeedbackMode(mode)}
                       disabled={saving}
-                    >
-                      {FEEDBACK_NOTIFY_MODE_OPTIONS.map((modeOpt) => (
-                        <label
-                          key={modeOpt.value}
-                          className="flex items-start gap-2.5 text-sm cursor-pointer"
-                        >
-                          <RadioGroupItem
-                            value={modeOpt.value}
-                            id={`push-feedback-mode-${modeOpt.value}`}
-                            className="mt-0.5"
-                          />
-                          <span className="min-w-0">
-                            <span className="font-medium block">{modeOpt.label}</span>
-                            <span className="text-xs text-muted-foreground block">
-                              {modeOpt.description}
-                            </span>
-                          </span>
-                        </label>
-                      ))}
-                    </RadioGroup>
+                      className="ml-7"
+                    />
                   )}
                 </div>
               )
