@@ -38,13 +38,25 @@ export type FeedbackListItem = {
   title: string
   type: FeedbackType | null
   status: FeedbackStatus
+  /** Rohtext aus dem Issue-Body (ohne App-Metadaten-Footer), falls geladen */
+  description?: string | null
 }
 
 type GitHubIssue = {
   number: number
   title: string
   state: 'open' | 'closed'
+  body?: string | null
   labels: Array<{ name: string } | string>
+}
+
+/** Entfernt den App-Metadaten-Block unter dem Trenner --- */
+export function extractFeedbackDescription(body: string | null | undefined): string {
+  if (!body) return ''
+  const trimmed = body.trim()
+  const sep = trimmed.search(/\n---\n/)
+  if (sep >= 0) return trimmed.slice(0, sep).trim()
+  return trimmed
 }
 
 function labelNames(issue: GitHubIssue): string[] {
@@ -188,12 +200,14 @@ export async function createFeedbackIssue(input: {
 
 export async function fetchIssuesByNumbers(
   numbers: number[],
-  repo?: string
+  repo?: string,
+  options?: { includeBody?: boolean }
 ): Promise<Map<number, FeedbackListItem>> {
   const map = new Map<number, FeedbackListItem>()
   if (numbers.length === 0) return map
 
   const { owner, repo: repoName } = getRepo(repo)
+  const includeBody = options?.includeBody === true
   // Parallel, aber begrenzt – typisch wenige eigene Issues
   const unique = [...new Set(numbers)]
   await Promise.all(
@@ -206,6 +220,7 @@ export async function fetchIssuesByNumbers(
         title: issue.title,
         type: mapIssueType(issue),
         status: mapIssueStatus(issue),
+        description: includeBody ? extractFeedbackDescription(issue.body) : undefined,
       })
     })
   )

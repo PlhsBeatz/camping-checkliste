@@ -1,5 +1,11 @@
 import type { PushNotificationType } from '@/lib/push-notifications'
 
+export type FeedbackNotifyMode = 'done' | 'all'
+
+export function isFeedbackNotifyMode(v: unknown): v is FeedbackNotifyMode {
+  return v === 'done' || v === 'all'
+}
+
 /** Bekannte Push-Kategorien – bei neuen Auslösern hier ergänzen. */
 export const PUSH_NOTIFICATION_OPTIONS = [
   {
@@ -41,6 +47,28 @@ export const PUSH_NOTIFICATION_OPTIONS = [
       'Erinnerung nach der Heimkehr, wenn Startstände (z. B. Petroleum/Gas) noch ohne Endstand sind.',
     adminOnly: false as const,
   },
+  {
+    key: 'feedbackMeldungen' as const,
+    type: 'feedback_status' as const,
+    label: 'Eigene Feedback-Meldungen',
+    description:
+      'Benachrichtigung zum Bearbeitungsstand deiner eingereichten Fehler und Ideen.',
+    adminOnly: false as const,
+  },
+] as const
+
+/** Formulierungen für den Benachrichtigungs-Modus eigener Feedback-Meldungen */
+export const FEEDBACK_NOTIFY_MODE_OPTIONS = [
+  {
+    value: 'done' as const,
+    label: 'Nur bei Fertigstellung',
+    description: 'Einmal, sobald deine Meldung erledigt ist.',
+  },
+  {
+    value: 'all' as const,
+    label: 'Bei jeder Statusänderung',
+    description: 'Bei jedem Fortschritt, z. B. In Arbeit, In Test oder Erledigt.',
+  },
 ] as const
 
 export type PushPreferenceKey = (typeof PUSH_NOTIFICATION_OPTIONS)[number]['key']
@@ -52,6 +80,10 @@ export type UserPushSettings = {
   wartungFaelligkeit: boolean
   restzahlungFaelligkeit: boolean
   verbrauchEndstand: boolean
+  /** Default aus – eigene Feedback-Meldungen */
+  feedbackMeldungen: boolean
+  /** Default: nur Fertigstellung */
+  feedbackNotifyMode: FeedbackNotifyMode
 }
 
 export type UserPushSettingsResponse = UserPushSettings & {
@@ -75,6 +107,8 @@ export function isPushTypeEnabled(
       return settings.restzahlungFaelligkeit
     case 'verbrauch_endstand':
       return settings.verbrauchEndstand
+    case 'feedback_status':
+      return settings.feedbackMeldungen
     default:
       return false
   }

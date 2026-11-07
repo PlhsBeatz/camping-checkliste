@@ -102,13 +102,25 @@ export async function POST(request: NextRequest) {
     })
 
     const id = crypto.randomUUID()
-    await db
-      .prepare(
-        `INSERT INTO feedback_submissions (id, user_id, github_issue_number, title, type, created_at)
-         VALUES (?, ?, ?, ?, ?, datetime('now'))`
-      )
-      .bind(id, userContext.userId, issue.number, title, type)
-      .run()
+    try {
+      await db
+        .prepare(
+          `INSERT INTO feedback_submissions
+             (id, user_id, github_issue_number, title, type, description, known_status, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, 'eingegangen', datetime('now'))`
+        )
+        .bind(id, userContext.userId, issue.number, title, type, description)
+        .run()
+    } catch {
+      // Migration 0074 noch nicht angewendet
+      await db
+        .prepare(
+          `INSERT INTO feedback_submissions (id, user_id, github_issue_number, title, type, created_at)
+           VALUES (?, ?, ?, ?, ?, datetime('now'))`
+        )
+        .bind(id, userContext.userId, issue.number, title, type)
+        .run()
+    }
 
     return NextResponse.json({
       success: true,

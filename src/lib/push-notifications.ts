@@ -9,11 +9,12 @@ export const PUSH_SCHEMA_VERSION = 1 as const
 
 /** Bekannte Push-Typen – bei neuen Auslösern erweitern */
 export type PushNotificationType =
-    | 'rastplatz_nearby'
-    | 'optimierung_due'
-    | 'wartung_due'
-    | 'restzahlung_due'
-    | 'verbrauch_endstand'
+  | 'rastplatz_nearby'
+  | 'optimierung_due'
+  | 'wartung_due'
+  | 'restzahlung_due'
+  | 'verbrauch_endstand'
+  | 'feedback_status'
 
 export type PushNotificationPayload = {
   schema_version: typeof PUSH_SCHEMA_VERSION
@@ -34,6 +35,7 @@ const VALID_TYPES = new Set<string>([
   'wartung_due',
   'restzahlung_due',
   'verbrauch_endstand',
+  'feedback_status',
 ])
 
 export function isPushNotificationPayload(value: unknown): value is PushNotificationPayload {
@@ -71,6 +73,8 @@ export function resolvePushUrl(payload: PushNotificationPayload): string {
     }
     case 'verbrauch_endstand':
       return payload.url?.trim() || '/tools/verbrauch'
+    case 'feedback_status':
+      return '/einstellungen/feedback'
     default:
       return '/'
   }
@@ -266,6 +270,34 @@ export function buildVerbrauchEndstandPush(params: {
     data: {
       urlaub_id: params.urlaubId,
       media_count: params.mediaNames.length,
+    },
+  }
+}
+
+/** Push bei Statusänderung einer selbst eingereichten Feedback-Meldung. */
+export function buildFeedbackStatusPush(params: {
+  submissionId: string
+  issueNumber: number
+  title: string
+  statusLabel: string
+  /** true = Fertigstellung, false = sonstiger Statuswechsel */
+  completed: boolean
+}): PushNotificationPayload {
+  const titleShort = truncateTitel(params.title, 42)
+  return {
+    schema_version: PUSH_SCHEMA_VERSION,
+    type: 'feedback_status',
+    title: params.completed ? 'Meldung erledigt' : 'Status deiner Meldung',
+    body: params.completed
+      ? `„${titleShort}“ ist fertig (#${params.issueNumber}).`
+      : `„${titleShort}“: ${params.statusLabel} (#${params.issueNumber}).`,
+    tag: `feedback_status:${params.submissionId}:${params.statusLabel}`,
+    url: '/einstellungen/feedback',
+    data: {
+      submission_id: params.submissionId,
+      issue_number: params.issueNumber,
+      status_label: params.statusLabel,
+      completed: params.completed,
     },
   }
 }

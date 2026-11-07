@@ -530,6 +530,10 @@ export interface User {
   push_optimierung_faelligkeit?: number
   /** Profil: Verbrauchs-Endstände nach Heimkehr per Push (Default an) */
   push_verbrauch_endstand?: number
+  /** Profil: Status eigener Feedback-Meldungen per Push (Default aus) */
+  push_feedback?: number
+  /** Profil: done | all (Default done) */
+  push_feedback_mode?: string
   /** Profil: GPS-Modus – auto | on | off */
   reise_gps_mode?: string
   created_at: string
@@ -6399,6 +6403,31 @@ export async function updateUserHomeLocation(
   }
 }
 
+function mapPushSettingsRow(row: {
+  push_notifications_enabled: number
+  push_rastplatz_nearby: number
+  push_optimierung_faelligkeit?: number | null
+  push_wartung_faellig?: number | null
+  push_restzahlung?: number | null
+  push_verbrauch_endstand?: number | null
+  push_feedback?: number | null
+  push_feedback_mode?: string | null
+  sub_count: number
+}): UserPushSettings & { browserSubscribed: boolean } {
+  const mode = row.push_feedback_mode === 'all' ? 'all' : 'done'
+  return {
+    enabled: row.push_notifications_enabled === 1,
+    rastplatzNearby: row.push_rastplatz_nearby !== 0,
+    optimierungFaelligkeit: (row.push_optimierung_faelligkeit ?? 1) !== 0,
+    wartungFaelligkeit: (row.push_wartung_faellig ?? 1) !== 0,
+    restzahlungFaelligkeit: (row.push_restzahlung ?? 1) !== 0,
+    verbrauchEndstand: (row.push_verbrauch_endstand ?? 1) !== 0,
+    feedbackMeldungen: (row.push_feedback ?? 0) === 1,
+    feedbackNotifyMode: mode,
+    browserSubscribed: (row.sub_count ?? 0) > 0,
+  }
+}
+
 export async function getUserPushSettings(
   db: D1Database,
   userId: string
@@ -6412,6 +6441,8 @@ export async function getUserPushSettings(
             COALESCE(push_wartung_faellig, 1) AS push_wartung_faellig,
             COALESCE(push_restzahlung, 1) AS push_restzahlung,
             COALESCE(push_verbrauch_endstand, 1) AS push_verbrauch_endstand,
+            COALESCE(push_feedback, 0) AS push_feedback,
+            COALESCE(push_feedback_mode, 'done') AS push_feedback_mode,
             (SELECT COUNT(*) FROM push_subscriptions ps WHERE ps.user_id = users.id) AS sub_count
            FROM users WHERE id = ?`
         )
@@ -6423,18 +6454,12 @@ export async function getUserPushSettings(
           push_wartung_faellig: number
           push_restzahlung: number
           push_verbrauch_endstand: number
+          push_feedback: number
+          push_feedback_mode: string
           sub_count: number
         }>()
       if (!row) return null
-      return {
-        enabled: row.push_notifications_enabled === 1,
-        rastplatzNearby: row.push_rastplatz_nearby !== 0,
-        optimierungFaelligkeit: row.push_optimierung_faelligkeit !== 0,
-        wartungFaelligkeit: row.push_wartung_faellig !== 0,
-        restzahlungFaelligkeit: row.push_restzahlung !== 0,
-        verbrauchEndstand: row.push_verbrauch_endstand !== 0,
-        browserSubscribed: (row.sub_count ?? 0) > 0,
-      }
+      return mapPushSettingsRow(row)
     } catch {
       try {
         const row = await db
@@ -6443,6 +6468,7 @@ export async function getUserPushSettings(
               COALESCE(push_optimierung_faelligkeit, 1) AS push_optimierung_faelligkeit,
               COALESCE(push_wartung_faellig, 1) AS push_wartung_faellig,
               COALESCE(push_restzahlung, 1) AS push_restzahlung,
+              COALESCE(push_verbrauch_endstand, 1) AS push_verbrauch_endstand,
               (SELECT COUNT(*) FROM push_subscriptions ps WHERE ps.user_id = users.id) AS sub_count
              FROM users WHERE id = ?`
           )
@@ -6453,24 +6479,19 @@ export async function getUserPushSettings(
             push_optimierung_faelligkeit: number
             push_wartung_faellig: number
             push_restzahlung: number
+            push_verbrauch_endstand: number
             sub_count: number
           }>()
         if (!row) return null
-        return {
-          enabled: row.push_notifications_enabled === 1,
-          rastplatzNearby: row.push_rastplatz_nearby !== 0,
-          optimierungFaelligkeit: row.push_optimierung_faelligkeit !== 0,
-          wartungFaelligkeit: row.push_wartung_faellig !== 0,
-          restzahlungFaelligkeit: row.push_restzahlung !== 0,
-          verbrauchEndstand: true,
-          browserSubscribed: (row.sub_count ?? 0) > 0,
-        }
+        return mapPushSettingsRow(row)
       } catch {
         try {
           const row = await db
             .prepare(
               `SELECT push_notifications_enabled, push_rastplatz_nearby,
                 COALESCE(push_optimierung_faelligkeit, 1) AS push_optimierung_faelligkeit,
+                COALESCE(push_wartung_faellig, 1) AS push_wartung_faellig,
+                COALESCE(push_restzahlung, 1) AS push_restzahlung,
                 (SELECT COUNT(*) FROM push_subscriptions ps WHERE ps.user_id = users.id) AS sub_count
                FROM users WHERE id = ?`
             )
@@ -6479,41 +6500,46 @@ export async function getUserPushSettings(
               push_notifications_enabled: number
               push_rastplatz_nearby: number
               push_optimierung_faelligkeit: number
+              push_wartung_faellig: number
+              push_restzahlung: number
               sub_count: number
             }>()
           if (!row) return null
-          return {
-            enabled: row.push_notifications_enabled === 1,
-            rastplatzNearby: row.push_rastplatz_nearby !== 0,
-            optimierungFaelligkeit: row.push_optimierung_faelligkeit !== 0,
-            wartungFaelligkeit: true,
-            restzahlungFaelligkeit: true,
-            verbrauchEndstand: true,
-            browserSubscribed: (row.sub_count ?? 0) > 0,
-          }
+          return mapPushSettingsRow(row)
         } catch {
-          // Migration 0039 noch nicht angewendet
-          const row = await db
-            .prepare(
-              `SELECT push_notifications_enabled, push_rastplatz_nearby,
-                (SELECT COUNT(*) FROM push_subscriptions ps WHERE ps.user_id = users.id) AS sub_count
-               FROM users WHERE id = ?`
-            )
-            .bind(userId)
-            .first<{
-              push_notifications_enabled: number
-              push_rastplatz_nearby: number
-              sub_count: number
-            }>()
-          if (!row) return null
-          return {
-            enabled: row.push_notifications_enabled === 1,
-            rastplatzNearby: row.push_rastplatz_nearby !== 0,
-            optimierungFaelligkeit: true,
-            wartungFaelligkeit: true,
-            restzahlungFaelligkeit: true,
-            verbrauchEndstand: true,
-            browserSubscribed: (row.sub_count ?? 0) > 0,
+          try {
+            const row = await db
+              .prepare(
+                `SELECT push_notifications_enabled, push_rastplatz_nearby,
+                  COALESCE(push_optimierung_faelligkeit, 1) AS push_optimierung_faelligkeit,
+                  (SELECT COUNT(*) FROM push_subscriptions ps WHERE ps.user_id = users.id) AS sub_count
+                 FROM users WHERE id = ?`
+              )
+              .bind(userId)
+              .first<{
+                push_notifications_enabled: number
+                push_rastplatz_nearby: number
+                push_optimierung_faelligkeit: number
+                sub_count: number
+              }>()
+            if (!row) return null
+            return mapPushSettingsRow(row)
+          } catch {
+            // Migration 0039 noch nicht angewendet
+            const row = await db
+              .prepare(
+                `SELECT push_notifications_enabled, push_rastplatz_nearby,
+                  (SELECT COUNT(*) FROM push_subscriptions ps WHERE ps.user_id = users.id) AS sub_count
+                 FROM users WHERE id = ?`
+              )
+              .bind(userId)
+              .first<{
+                push_notifications_enabled: number
+                push_rastplatz_nearby: number
+                sub_count: number
+              }>()
+            if (!row) return null
+            return mapPushSettingsRow(row)
           }
         }
       }
@@ -6529,6 +6555,7 @@ export async function updateUserPushSettings(
   userId: string,
   settings: UserPushSettings
 ): Promise<boolean> {
+  const mode = settings.feedbackNotifyMode === 'all' ? 'all' : 'done'
   try {
     try {
       await db
@@ -6540,6 +6567,8 @@ export async function updateUserPushSettings(
             push_wartung_faellig = ?,
             push_restzahlung = ?,
             push_verbrauch_endstand = ?,
+            push_feedback = ?,
+            push_feedback_mode = ?,
             updated_at = datetime('now')
            WHERE id = ?`
         )
@@ -6550,6 +6579,8 @@ export async function updateUserPushSettings(
           settings.wartungFaelligkeit ? 1 : 0,
           settings.restzahlungFaelligkeit ? 1 : 0,
           settings.verbrauchEndstand ? 1 : 0,
+          settings.feedbackMeldungen ? 1 : 0,
+          mode,
           userId
         )
         .run()
@@ -6564,6 +6595,7 @@ export async function updateUserPushSettings(
               push_optimierung_faelligkeit = ?,
               push_wartung_faellig = ?,
               push_restzahlung = ?,
+              push_verbrauch_endstand = ?,
               updated_at = datetime('now')
              WHERE id = ?`
           )
@@ -6573,6 +6605,7 @@ export async function updateUserPushSettings(
             settings.optimierungFaelligkeit ? 1 : 0,
             settings.wartungFaelligkeit ? 1 : 0,
             settings.restzahlungFaelligkeit ? 1 : 0,
+            settings.verbrauchEndstand ? 1 : 0,
             userId
           )
           .run()
@@ -6585,6 +6618,8 @@ export async function updateUserPushSettings(
                 push_notifications_enabled = ?,
                 push_rastplatz_nearby = ?,
                 push_optimierung_faelligkeit = ?,
+                push_wartung_faellig = ?,
+                push_restzahlung = ?,
                 updated_at = datetime('now')
                WHERE id = ?`
             )
@@ -6592,23 +6627,45 @@ export async function updateUserPushSettings(
               settings.enabled ? 1 : 0,
               settings.rastplatzNearby ? 1 : 0,
               settings.optimierungFaelligkeit ? 1 : 0,
+              settings.wartungFaelligkeit ? 1 : 0,
+              settings.restzahlungFaelligkeit ? 1 : 0,
               userId
             )
             .run()
           return true
         } catch {
-          // Migration 0039 noch nicht angewendet – ohne Optimierungs-Spalte speichern
-          await db
-            .prepare(
-              `UPDATE users SET
-                push_notifications_enabled = ?,
-                push_rastplatz_nearby = ?,
-                updated_at = datetime('now')
-               WHERE id = ?`
-            )
-            .bind(settings.enabled ? 1 : 0, settings.rastplatzNearby ? 1 : 0, userId)
-            .run()
-          return true
+          try {
+            await db
+              .prepare(
+                `UPDATE users SET
+                  push_notifications_enabled = ?,
+                  push_rastplatz_nearby = ?,
+                  push_optimierung_faelligkeit = ?,
+                  updated_at = datetime('now')
+                 WHERE id = ?`
+              )
+              .bind(
+                settings.enabled ? 1 : 0,
+                settings.rastplatzNearby ? 1 : 0,
+                settings.optimierungFaelligkeit ? 1 : 0,
+                userId
+              )
+              .run()
+            return true
+          } catch {
+            // Migration 0039 noch nicht angewendet – ohne Optimierungs-Spalte speichern
+            await db
+              .prepare(
+                `UPDATE users SET
+                  push_notifications_enabled = ?,
+                  push_rastplatz_nearby = ?,
+                  updated_at = datetime('now')
+                 WHERE id = ?`
+              )
+              .bind(settings.enabled ? 1 : 0, settings.rastplatzNearby ? 1 : 0, userId)
+              .run()
+            return true
+          }
         }
       }
     }

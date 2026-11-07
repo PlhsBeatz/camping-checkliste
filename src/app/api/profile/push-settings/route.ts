@@ -2,7 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { CloudflareEnv, getDB, getUserPushSettings, updateUserPushSettings } from '@/lib/db'
 import { requireAuth } from '@/lib/api-auth'
 import { isAdminRole } from '@/lib/user-roles'
-import type { UserPushSettings } from '@/lib/push-settings'
+import {
+  isFeedbackNotifyMode,
+  type UserPushSettings,
+} from '@/lib/push-settings'
 
 function parseBody(body: unknown): UserPushSettings | null {
   if (!body || typeof body !== 'object') return null
@@ -16,6 +19,11 @@ function parseBody(body: unknown): UserPushSettings | null {
     typeof o.restzahlungFaelligkeit === 'boolean' ? o.restzahlungFaelligkeit : true
   const verbrauchEndstand =
     typeof o.verbrauchEndstand === 'boolean' ? o.verbrauchEndstand : true
+  const feedbackMeldungen =
+    typeof o.feedbackMeldungen === 'boolean' ? o.feedbackMeldungen : false
+  const feedbackNotifyMode = isFeedbackNotifyMode(o.feedbackNotifyMode)
+    ? o.feedbackNotifyMode
+    : 'done'
   return {
     enabled: o.enabled,
     rastplatzNearby: o.rastplatzNearby,
@@ -23,6 +31,8 @@ function parseBody(body: unknown): UserPushSettings | null {
     wartungFaelligkeit,
     restzahlungFaelligkeit,
     verbrauchEndstand,
+    feedbackMeldungen,
+    feedbackNotifyMode,
   }
 }
 
@@ -36,6 +46,8 @@ function toResponseData(
     wartungFaelligkeit: settings.wartungFaelligkeit,
     restzahlungFaelligkeit: settings.restzahlungFaelligkeit,
     verbrauchEndstand: settings.verbrauchEndstand,
+    feedbackMeldungen: settings.feedbackMeldungen,
+    feedbackNotifyMode: settings.feedbackNotifyMode,
     browserSubscribed: settings.browserSubscribed ?? false,
   }
 }

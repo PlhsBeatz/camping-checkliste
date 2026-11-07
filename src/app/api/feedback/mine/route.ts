@@ -60,7 +60,7 @@ export async function GET(request: NextRequest) {
 
     const data = rows.map((row) => {
       const live = statusMap.get(row.github_issue_number)
-      const status: FeedbackStatus = live?.status ?? 'offen'
+      const status: FeedbackStatus = live?.status ?? 'eingegangen'
       const type = (live?.type ?? row.type) as FeedbackType
       return {
         id: row.id,
