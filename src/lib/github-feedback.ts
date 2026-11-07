@@ -292,3 +292,115 @@ export async function fetchRoadmapIssues(repo?: string): Promise<FeedbackListIte
     status: mapIssueStatus(issue),
   }))
 }
+
+// --- Releases (Infos zur App) ---
+
+export type AppReleaseInfo = {
+  tag: string
+  name: string
+  body: string
+  publishedAt: string | null
+  htmlUrl: string
+  prerelease: boolean
+}
+
+type GitHubReleaseApi = {
+  tag_name: string
+  name: string | null
+  body: string | null
+  published_at: string | null
+  html_url: string
+  draft: boolean
+  prerelease: boolean
+}
+
+/** `v1.0.5` / `1.0.5` → `1.0.5` */
+export function normalizeVersionTag(tag: string): string {
+  return tag.trim().replace(/^v/i, '')
+}
+
+export function findReleaseForAppVersion(
+  releases: AppReleaseInfo[],
+  version: string
+): AppReleaseInfo | null {
+  const target = normalizeVersionTag(version)
+  if (!target) return null
+  return releases.find((r) => normalizeVersionTag(r.tag) === target) ?? null
+}
+
+function mapGitHubRelease(r: GitHubReleaseApi): AppReleaseInfo {
+  return {
+    tag: r.tag_name,
+    name: (r.name ?? '').trim() || r.tag_name,
+    body: (r.body ?? '').trim(),
+    publishedAt: r.published_at,
+    htmlUrl: r.html_url,
+    prerelease: !!r.prerelease,
+  }
+}
+
+/** Kandidaten: `1.0.5` → `v1.0.5` und `1.0.5` */
+export function releaseTagCandidates(versionOrTag: string): string[] {
+  const raw = versionOrTag.trim()
+  if (!raw) return []
+  const normalized = normalizeVersionTag(raw)
+  return [...new Set([raw, `v${normalized}`, normalized])]
+}
+
+export async function fetchGitHubReleaseByTag(
+  versionOrTag: string,
+  repo?: string
+): Promise<AppReleaseInfo | null> {
+  const { owner, repo: repoName } = getRepo(repo)
+  for (const tag of releaseTagCandidates(versionOrTag)) {
+    const res = await githubFetch(
+      `/repos/${owner}/${repoName}/releases/tags/${encodeURIComponent(tag)}`
+    )
+    if (res.status === 404) continue
+    if (!res.ok) {
+      const text = await res.text().catch(() => '')
+      throw new Error(
+        `Release ${tag} konnte nicht geladen werden (${res.status}): ${text.slice(0, 200)}`
+      )
+    }
+    const json = (await res.json()) as GitHubReleaseApi
+    if (json.draft) return null
+    return mapGitHubRelease(json)
+  }
+  return null
+}
+
+export async function fetchGitHubReleases(options?: {
+  page?: number
+  perPage?: number
+  repo?: string
+}): Promise<{
+  releases: AppReleaseInfo[]
+  page: number
+  perPage: number
+  hasMore: boolean
+}> {
+  const { owner, repo: repoName } = getRepo(options?.repo)
+  const page = Math.max(options?.page ?? 1, 1)
+  const perPage = Math.min(Math.max(options?.perPage ?? 10, 1), 30)
+  const res = await githubFetch(
+    `/repos/${owner}/${repoName}/releases?per_page=${perPage}&page=${page}`
+  )
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    throw new Error(
+      `Releases konnten nicht geladen werden (${res.status}): ${text.slice(0, 200)}`
+    )
+  }
+  const items = (await res.json()) as GitHubReleaseApi[]
+  const releases = (items ?? []).filter((r) => !r.draft).map(mapGitHubRelease)
+  return {
+    releases,
+    page,
+    perPage,
+    // Volle Seite vom API → weitere Seite wahrscheinlich
+    hasMore: (items?.length ?? 0) >= perPage,
+  }
+}
+
+export const APP_RELEASES_PAGE_SIZE = 10
