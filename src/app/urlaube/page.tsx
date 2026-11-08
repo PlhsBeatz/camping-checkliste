@@ -100,6 +100,22 @@ function UrlaubePageContent() {
     }
   }, [searchParams, canAccessConfig])
 
+  // Altes share_target zeigte auf /urlaube – ohne bookingImport zum Chooser umleiten.
+  useEffect(() => {
+    if (searchParams.get('bookingImport') === '1') return
+    if (searchParams.get('id')) return
+    if (searchParams.get('campingplatz')) return
+    const hasShare =
+      searchParams.has('title') || searchParams.has('text') || searchParams.has('url')
+    if (!hasShare) return
+    const params = new URLSearchParams()
+    for (const key of ['title', 'text', 'url'] as const) {
+      const v = searchParams.get(key)
+      if (v) params.set(key, v)
+    }
+    router.replace(params.toString() ? `/share?${params.toString()}` : '/share')
+  }, [searchParams, router])
+
   const handleBookingImportOpenChange = (open: boolean) => {
     setBookingImportOpen(open)
     if (

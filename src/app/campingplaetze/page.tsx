@@ -11,10 +11,14 @@ import type { ApiResponse } from '@/lib/api-types'
 import { Campingplatz, type CampingplatzFoto } from '@/lib/db'
 import { CampingplaetzeTable } from '@/components/campingplaetze-table'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
-import { CampingplatzEditModal } from '@/components/campingplatz-edit-modal'
+import {
+  CampingplatzEditModal,
+  type CampingplatzCreatePrefill,
+} from '@/components/campingplatz-edit-modal'
 import { getCachedCampingplaetze } from '@/lib/offline-sync'
 import { cacheCampingplaetze, cacheCampingplatz } from '@/lib/offline-db'
 import { useReconnectRefetch } from '@/hooks/use-reconnect-refetch'
+import { parseCoordParam } from '@/lib/share-target'
 
 function CampingplaetzePageContent() {
   const router = useRouter()
@@ -24,6 +28,7 @@ function CampingplaetzePageContent() {
   const [isLoading, setIsLoading] = useState(true)
   const [showDialog, setShowDialog] = useState(false)
   const [editTarget, setEditTarget] = useState<Campingplatz | null>(null)
+  const [createPrefill, setCreatePrefill] = useState<CampingplatzCreatePrefill | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Campingplatz | null>(null)
   const [archivePrompt, setArchivePrompt] = useState<Campingplatz | null>(null)
 
@@ -58,6 +63,7 @@ function CampingplaetzePageContent() {
   useReconnectRefetch(load)
 
   const bearbeitenId = searchParams.get('bearbeiten')
+  const shareCreate = searchParams.get('share') === '1'
 
   const refreshCampingplatzInList = async (id: string) => {
     try {
@@ -104,8 +110,31 @@ function CampingplaetzePageContent() {
     // handleEdit bewusst ausgelassen: einmaliges Öffnen per ?bearbeiten=
   }, [bearbeitenId, isLoading, items, showDialog, router, searchParams])
 
+  useEffect(() => {
+    if (!shareCreate || !canAccessConfig || showDialog) return
+    const lat = parseCoordParam(searchParams.get('lat'))
+    const lng = parseCoordParam(searchParams.get('lng'))
+    const prefill: CampingplatzCreatePrefill = {
+      name: searchParams.get('name')?.trim() || '',
+      webseite: searchParams.get('webseite')?.trim() || '',
+      adresse: searchParams.get('adresse')?.trim() || '',
+      lat,
+      lng,
+    }
+    setEditTarget(null)
+    setCreatePrefill(prefill)
+    setShowDialog(true)
+    const params = new URLSearchParams(searchParams.toString())
+    for (const key of ['share', 'name', 'webseite', 'adresse', 'lat', 'lng', 'ort', 'placeId']) {
+      params.delete(key)
+    }
+    const qs = params.toString()
+    router.replace(qs ? `/campingplaetze?${qs}` : '/campingplaetze', { scroll: false })
+  }, [shareCreate, canAccessConfig, showDialog, router, searchParams])
+
   const handleAdd = () => {
     setEditTarget(null)
+    setCreatePrefill(null)
     setShowDialog(true)
   }
 
@@ -205,12 +234,14 @@ function CampingplaetzePageContent() {
         onOpenChange={(next) => {
           if (!next) {
             setEditTarget(null)
+            setCreatePrefill(null)
             setShowDialog(false)
           } else {
             setShowDialog(true)
           }
         }}
         initialCampingplatz={editTarget}
+        createPrefill={createPrefill}
         onSaved={(saved) => {
           setItems((prev) => {
             const others = prev.filter((c) => c.id !== saved.id)

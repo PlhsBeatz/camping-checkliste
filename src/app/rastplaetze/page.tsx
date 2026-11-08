@@ -13,7 +13,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { useEffect, useMemo, useState } from 'react'
+import { Suspense, useEffect, useMemo, useState } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import type { ApiResponse } from '@/lib/api-types'
 import { Rastplatz } from '@/lib/db'
 import { RastplaetzeTable } from '@/components/rastplaetze-table'
@@ -30,16 +31,27 @@ import {
   filterRastplaetze,
   type RastplatzFilterState,
 } from '@/lib/rastplatz-filter'
+import { parseCoordParam } from '@/lib/share-target'
 
-export default function RastplaetzePage() {
+function RastplaetzePageContent() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
   const { canAccessConfig } = useAuth()
   const [items, setItems] = useState<Rastplatz[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [showDialog, setShowDialog] = useState(false)
   const [editTarget, setEditTarget] = useState<Rastplatz | null>(null)
+  const [createPrefill, setCreatePrefill] = useState<Partial<{
+    name: string
+    adresse: string
+    lat: number | null
+    lng: number | null
+    google_place_id: string | null
+  }> | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Rastplatz | null>(null)
   const [home, setHome] = useState<RastplaetzeMapHome | null>(null)
   const [listFilter, setListFilter] = useState<RastplatzFilterState>(DEFAULT_RASTPLATZ_FILTER)
+  const shareCreate = searchParams.get('share') === '1'
 
   const filteredItems = useMemo(
     () => filterRastplaetze(items, listFilter),
@@ -116,8 +128,31 @@ export default function RastplaetzePage() {
 
   useReconnectRefetch(load)
 
+  useEffect(() => {
+    if (!shareCreate || !canAccessConfig || showDialog) return
+    const lat = parseCoordParam(searchParams.get('lat'))
+    const lng = parseCoordParam(searchParams.get('lng'))
+    const placeId = searchParams.get('placeId')?.trim() || null
+    setEditTarget(null)
+    setCreatePrefill({
+      name: searchParams.get('name')?.trim() || '',
+      adresse: searchParams.get('adresse')?.trim() || '',
+      lat,
+      lng,
+      google_place_id: placeId,
+    })
+    setShowDialog(true)
+    const params = new URLSearchParams(searchParams.toString())
+    for (const key of ['share', 'name', 'adresse', 'lat', 'lng', 'placeId']) {
+      params.delete(key)
+    }
+    const qs = params.toString()
+    router.replace(qs ? `/rastplaetze?${qs}` : '/rastplaetze', { scroll: false })
+  }, [shareCreate, canAccessConfig, showDialog, router, searchParams])
+
   const handleAdd = () => {
     setEditTarget(null)
+    setCreatePrefill(null)
     setShowDialog(true)
   }
 
@@ -219,12 +254,14 @@ export default function RastplaetzePage() {
           onOpenChange={(next) => {
             if (!next) {
               setEditTarget(null)
+              setCreatePrefill(null)
               setShowDialog(false)
             } else {
               setShowDialog(true)
             }
           }}
           initialRastplatz={editTarget}
+          prefilled={createPrefill}
           onSaved={handleSaved}
         />
       )}
@@ -244,5 +281,19 @@ export default function RastplaetzePage() {
         isLoading={isLoading}
       />
     </PageShell>
+  )
+}
+
+export default function RastplaetzePage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center text-muted-foreground">
+          Laden…
+        </div>
+      }
+    >
+      <RastplaetzePageContent />
+    </Suspense>
   )
 }

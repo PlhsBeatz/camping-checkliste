@@ -45,6 +45,12 @@ import {
   optimierungFotoSrc,
 } from '@/components/optimierung-shared'
 
+export type OptimierungCreatePrefill = {
+  titel?: string
+  links?: string[]
+  status?: OptimierungEditForm['status']
+}
+
 export function OptimierungEditDialog({
   open,
   onOpenChange,
@@ -53,6 +59,7 @@ export function OptimierungEditDialog({
   vacations,
   onSaved,
   onDeleted,
+  createPrefill = null,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -61,6 +68,7 @@ export function OptimierungEditDialog({
   vacations: Vacation[]
   onSaved: (opts?: { createdId?: string }) => Promise<void> | void
   onDeleted?: (id: string) => Promise<void> | void
+  createPrefill?: OptimierungCreatePrefill | null
 }) {
   const { toast } = useToast()
   const { mutate } = useOptimisticMutation()
@@ -102,7 +110,19 @@ export function OptimierungEditDialog({
   useEffect(() => {
     if (!open) return
     if (isCreate || !item) {
-      setForm(emptyOptimierungForm())
+      const base = emptyOptimierungForm()
+      if (createPrefill) {
+        const links =
+          createPrefill.links?.map((u) => u.trim()).filter(Boolean) ?? []
+        setForm({
+          ...base,
+          titel: createPrefill.titel?.trim() || base.titel,
+          status: createPrefill.status ?? base.status,
+          links: links.length > 0 ? links : [''],
+        })
+      } else {
+        setForm(base)
+      }
       setEditFotos([])
       setPendingFiles([])
       return
@@ -110,7 +130,7 @@ export function OptimierungEditDialog({
     setForm(formFromOptimierung(item))
     setPendingFiles([])
     void loadFotos(item.id)
-  }, [open, isCreate, item, loadFotos])
+  }, [open, isCreate, item, loadFotos, createPrefill])
 
   const close = () => {
     onOpenChange(false)

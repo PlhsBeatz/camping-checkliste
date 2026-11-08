@@ -61,7 +61,10 @@ import {
   Trash2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { OptimierungEditDialog } from '@/components/optimierung-edit-dialog'
+import {
+  OptimierungEditDialog,
+  type OptimierungCreatePrefill,
+} from '@/components/optimierung-edit-dialog'
 import {
   formatFaelligkeitListLine,
   formatLinkMenuLabel,
@@ -76,9 +79,17 @@ import {
 export type OptimierungenToolProps = {
   headerTrailingRef?: RefObject<HTMLDivElement | null>
   canWrite?: boolean
+  /** Einmaliges Öffnen des Anlegen-Dialogs (z. B. Share Target) */
+  createPrefill?: OptimierungCreatePrefill | null
+  onCreatePrefillConsumed?: () => void
 }
 
-export function OptimierungenTool({ headerTrailingRef, canWrite = true }: OptimierungenToolProps) {
+export function OptimierungenTool({
+  headerTrailingRef,
+  canWrite = true,
+  createPrefill = null,
+  onCreatePrefillConsumed,
+}: OptimierungenToolProps) {
   const { toast } = useToast()
   const { mutate } = useOptimisticMutation()
   const [items, setItems] = useState<Optimierung[]>([])
@@ -91,6 +102,8 @@ export function OptimierungenTool({ headerTrailingRef, canWrite = true }: Optimi
   const [editOpen, setEditOpen] = useState(false)
   const [editing, setEditing] = useState<Optimierung | null>(null)
   const [isCreate, setIsCreate] = useState(false)
+  const [activeCreatePrefill, setActiveCreatePrefill] =
+    useState<OptimierungCreatePrefill | null>(null)
 
   const [deleteTarget, setDeleteTarget] = useState<Optimierung | null>(null)
   const [deleting, setDeleting] = useState(false)
@@ -225,12 +238,23 @@ export function OptimierungenTool({ headerTrailingRef, canWrite = true }: Optimi
   const openCreate = () => {
     setIsCreate(true)
     setEditing(null)
+    setActiveCreatePrefill(null)
     setEditOpen(true)
   }
+
+  useEffect(() => {
+    if (!createPrefill || !canWrite || editOpen) return
+    setIsCreate(true)
+    setEditing(null)
+    setActiveCreatePrefill(createPrefill)
+    setEditOpen(true)
+    onCreatePrefillConsumed?.()
+  }, [createPrefill, canWrite, editOpen, onCreatePrefillConsumed])
 
   const openEdit = (item: Optimierung) => {
     setIsCreate(false)
     setEditing(item)
+    setActiveCreatePrefill(null)
     setEditOpen(true)
   }
 
@@ -601,10 +625,12 @@ export function OptimierungenTool({ headerTrailingRef, canWrite = true }: Optimi
           if (!open) {
             setEditing(null)
             setIsCreate(false)
+            setActiveCreatePrefill(null)
           }
         }}
         isCreate={isCreate}
         item={editing}
+        createPrefill={activeCreatePrefill}
         vacations={vacations}
         onSaved={async () => {
           await load()

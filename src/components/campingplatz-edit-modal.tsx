@@ -124,6 +124,13 @@ function applyPlaceField(
   }
 }
 
+export type CampingplatzCreatePrefill = Partial<
+  Pick<
+    CampingplatzFormState,
+    'name' | 'webseite' | 'adresse' | 'lat' | 'lng' | 'ort' | 'land' | 'google_place_id'
+  >
+>
+
 export interface CampingplatzEditModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -134,6 +141,8 @@ export interface CampingplatzEditModalProps {
   onRefreshCampingplatz?: (id: string) => Promise<void>
   /** Offener place_update-Vorschlag – Felder werden hervorgehoben */
   pendingSuggestionId?: string | null
+  /** Vorausfüllung beim Anlegen (z. B. Share Target) */
+  createPrefill?: CampingplatzCreatePrefill | null
 }
 
 export function CampingplatzEditModal({
@@ -143,6 +152,7 @@ export function CampingplatzEditModal({
   onSaved,
   onRefreshCampingplatz,
   pendingSuggestionId = null,
+  createPrefill = null,
 }: CampingplatzEditModalProps) {
   const [isSaving, setIsSaving] = useState(false)
   const [form, setForm] = useState<CampingplatzFormState>(createEmptyForm)
@@ -204,7 +214,11 @@ export function CampingplatzEditModal({
     setGooglePickerPageStart(0)
   }, [placePhotos])
 
-  const initialKey = initialCampingplatz?.id ?? 'new'
+  const initialKey =
+    initialCampingplatz?.id ??
+    (createPrefill
+      ? `prefill:${createPrefill.name ?? ''}:${createPrefill.webseite ?? ''}:${createPrefill.lat ?? ''}:${createPrefill.lng ?? ''}`
+      : 'new')
 
   useEffect(() => {
     if (!open) return
@@ -236,6 +250,9 @@ export function CampingplatzEditModal({
         telefon: initialCampingplatz.telefon ?? '',
         oeffnungszeiten: initialCampingplatz.oeffnungszeiten ?? '',
       })
+    } else if (createPrefill) {
+      setEditId(null)
+      setForm({ ...createEmptyForm(), ...createPrefill })
     } else {
       setEditId(null)
       setForm(createEmptyForm())

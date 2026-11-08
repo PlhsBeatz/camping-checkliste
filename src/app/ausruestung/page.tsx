@@ -9,8 +9,8 @@ import { EquipmentAddDialog } from '@/components/equipment/equipment-add-dialog'
 import { MoreVertical, Trash2 } from 'lucide-react'
 import { BrandFab } from '@/components/brand-fab'
 import { BrandSpinner } from '@/components/brand-spinner'
-import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
-import { useRouter, usePathname } from 'next/navigation'
+import { Suspense, useState, useEffect, useMemo, useRef, useCallback } from 'react'
+import { useRouter, usePathname, useSearchParams } from 'next/navigation'
 import { EquipmentItem, Category, MainCategory, TransportVehicle, Tag, TagKategorie, Mitreisender, Faelligkeit } from '@/lib/db'
 import type { FaelligkeitAmpelStatus } from '@/lib/faelligkeit-status'
 import type { EquipmentFaelligkeitDisposition } from '@/lib/db-wartung'
@@ -79,12 +79,14 @@ interface CategoryWithMain extends Category {
   hauptkategorie_titel: string
 }
 
-export default function AusruestungPage() {
+function AusruestungPageContent() {
   const router = useRouter()
   const pathname = usePathname()
+  const searchParams = useSearchParams()
   const { canAccessConfig, canReadWartung, canWriteWartung } = useAuth()
   const canEditEquipment = canAccessConfig
   const { mutate } = useOptimisticMutation()
+  const shareCreate = searchParams.get('share') === '1'
   const [equipmentItems, setEquipmentItems] = useState<EquipmentItem[]>([])
   const [categories, setCategories] = useState<CategoryWithMain[]>([])
   const [mainCategories, setMainCategories] = useState<MainCategory[]>([])
@@ -435,6 +437,36 @@ export default function AusruestungPage() {
     setIndividuelleMitreisendeExtraOffen(false)
     setShowAddDialog(true)
   }
+
+  useEffect(() => {
+    if (!shareCreate || !canEditEquipment || showAddDialog || isLoading) return
+    const was = searchParams.get('was')?.trim() || ''
+    const url = searchParams.get('url')?.trim() || ''
+    setFormData({
+      ...createDefaultEquipmentFormValues(was),
+      links: url ? [{ url }] : [],
+    })
+    setReplacingItem(null)
+    setReplaceInTemplates(true)
+    setReplaceInFuturePacklists(true)
+    weightCopyPromptSettledRef.current = false
+    setShowWeightCopyPrompt(false)
+    setAddEquipmentCategoryScrollTarget(null)
+    setIndividuelleMitreisendeExtraOffen(false)
+    setShowAddDialog(true)
+    const params = new URLSearchParams(searchParams.toString())
+    for (const key of ['share', 'was', 'url']) params.delete(key)
+    const qs = params.toString()
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
+  }, [
+    shareCreate,
+    canEditEquipment,
+    showAddDialog,
+    isLoading,
+    searchParams,
+    router,
+    pathname,
+  ])
 
   const handleEditEquipment = (item: EquipmentItem) => {
     setReplacingItem(null)
@@ -1065,5 +1097,19 @@ export default function AusruestungPage() {
         }}
       />
     </PageShell>
+  )
+}
+
+export default function AusruestungPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center text-muted-foreground">
+          Laden…
+        </div>
+      }
+    >
+      <AusruestungPageContent />
+    </Suspense>
   )
 }

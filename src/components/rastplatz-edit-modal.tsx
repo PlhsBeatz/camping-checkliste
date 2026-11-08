@@ -84,7 +84,11 @@ export function RastplatzEditModal({
   const [nearbyLoading, setNearbyLoading] = useState(false)
   const [nearbyError, setNearbyError] = useState<string | null>(null)
 
-  const initialKey = initialRastplatz?.id ?? prefilled?.name ?? 'new'
+  const initialKey =
+    initialRastplatz?.id ??
+    (prefilled
+      ? `prefill:${prefilled.name ?? ''}:${prefilled.lat ?? ''}:${prefilled.lng ?? ''}:${prefilled.google_place_id ?? ''}`
+      : 'new')
 
   useEffect(() => {
     if (!open) {
