@@ -57,6 +57,11 @@ export async function GET(request: NextRequest) {
           return {
             id: v.id,
             titel: v.titel,
+            startdatum: v.startdatum,
+            abfahrtdatum: v.abfahrtdatum ?? null,
+            enddatum: v.enddatum,
+            departure_date: getDepartureDate(v),
+            reiseziel_name: v.reiseziel_name,
             phase: status.phase,
             days_until_departure: status.days_until_departure,
             packing_percent: status.packing.percent,
@@ -67,7 +72,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({
         success: true,
         data: {
-          schema_version: 1,
+          schema_version: 2,
           relevant_vacation_id: findRelevantVacation(vacations)?.id ?? null,
           vacations: summaries,
         },

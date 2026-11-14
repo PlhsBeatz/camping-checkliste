@@ -11,16 +11,34 @@ function extractBearerToken(request: NextRequest): string | null {
   return token.length > 0 ? token : null
 }
 
-export async function requireIntegrationAuth(
-  request: NextRequest
-): Promise<{ tokenId: string; tokenName: string } | NextResponse> {
+/** Bearer-Header oder (für Kalender-Abos) Query-Param `token`. */
+export function extractIntegrationToken(request: NextRequest): string | null {
   const bearer = extractBearerToken(request)
-  if (!bearer) {
-    return NextResponse.json({ error: 'Authorization: Bearer Token erforderlich' }, { status: 401 })
+  if (bearer) return bearer
+  const fromQuery = request.nextUrl.searchParams.get('token')?.trim()
+  return fromQuery && fromQuery.length > 0 ? fromQuery : null
+}
+
+export async function requireIntegrationAuth(
+  request: NextRequest,
+  options?: { allowQueryToken?: boolean }
+): Promise<{ tokenId: string; tokenName: string } | NextResponse> {
+  const token = options?.allowQueryToken
+    ? extractIntegrationToken(request)
+    : extractBearerToken(request)
+  if (!token) {
+    return NextResponse.json(
+      {
+        error: options?.allowQueryToken
+          ? 'Authorization: Bearer Token oder Query-Param token erforderlich'
+          : 'Authorization: Bearer Token erforderlich',
+      },
+      { status: 401 }
+    )
   }
   const env = process.env as unknown as CloudflareEnv
   const db = await getDB(env)
-  const row = await findIntegrationTokenByBearer(db, bearer)
+  const row = await findIntegrationTokenByBearer(db, token)
   if (!row) {
     return NextResponse.json({ error: 'Ungültiger oder widerrufener Token' }, { status: 401 })
   }

@@ -237,8 +237,46 @@ automation:
             in {{ trigger.json.data.faelligkeit.days_until_due }} Tagen fällig
 ```
 
+## Alle Urlaube (REST)
+
+```yaml
+rest:
+  - resource: https://<deine-app>/api/integrations/vacations
+    headers:
+      Authorization: !secret packliste_api_token
+    scan_interval: 3600
+```
+
+Antwort (`schema_version: 2`), Auszug pro Urlaub:
+
+| Feld | Bedeutung |
+|------|-----------|
+| `startdatum` | Reise-/Aufenthaltsbeginn (`YYYY-MM-DD`) |
+| `abfahrtdatum` | optionaler Abfahrtstag oder `null` |
+| `enddatum` | Reiseende |
+| `departure_date` | effektiver Abfahrtstag (`abfahrtdatum` falls gesetzt, sonst `startdatum`) |
+| `days_until_departure` | Kalendertage bis `departure_date` (`Europe/Berlin`) |
+| `phase` | `planning` … `returned` |
+| `packing_percent` / `ready_to_depart` | Packstatus |
+
+## Urlaubs-Kalender (iCal)
+
+Vier parallele Abos (gleicher API-Token als Query-Param `token`, weil Kalender-Clients oft keinen `Authorization`-Header setzen):
+
+| URL | Inhalt |
+|-----|--------|
+| `/api/integrations/calendar.ics?token=cpl_…&view=summary` | Ein Event pro Urlaub (`startdatum`–`enddatum`) |
+| `…&view=summary&include_departure=1` | dazu separates Abfahrts-Event, wenn `abfahrtdatum` ≠ `startdatum` |
+| `…&view=stays` | Ein Event pro Campingplatz-Aufenthalt |
+| `…&view=stays&include_departure=1` | Aufenthalte + Abfahrts-Event |
+
+**Taskmate / „unterwegs“:** `view=summary&include_departure=1`.
+
+Die Feeds werden bei Urlaubs- und Campingplatz-Änderungen neu gebaut (last-good Cache) und zusätzlich vom täglichen Integrations-Cron geprüft. Unter **Konfiguration → Integrationen** sind die fertigen URL-Vorlagen kopierbar.
+
 ## Weitere Ideen
 
 - **Erinnerung:** REST-Sensor + Automation wenn `percent < 80` und `days_until_departure <= 2`
 - **Rückkehr:** Event `trip.ended` → Urlaubsmodus aus, Heizung hoch
 - **Node-RED:** gleiche REST-URL oder Webhook-Node statt HA
+- **Taskmate:** iCal-Abo `summary` + `include_departure=1` als Urlaubskalender

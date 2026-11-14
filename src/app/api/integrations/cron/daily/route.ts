@@ -14,6 +14,7 @@ import {
   researchPlatzplanForCampingplatz,
 } from '@/lib/platzplan-research'
 import { processCampingplatzDataChecks } from '@/lib/campingplatz-change-check'
+import { refreshAllIcalCaches } from '@/lib/integration-ical'
 
 function verifyCronSecret(request: NextRequest): boolean {
   const expected = process.env.INTEGRATION_CRON_SECRET?.trim()
@@ -65,6 +66,12 @@ export async function GET(request: NextRequest) {
     } catch (error) {
       console.error('Cron Campingplatz-Datenprüfung:', error)
     }
+    let icalRefresh = { ok: 0, failed: 0 }
+    try {
+      icalRefresh = await refreshAllIcalCaches(db)
+    } catch (error) {
+      console.error('Cron iCal-Refresh:', error)
+    }
     return NextResponse.json({
       success: true,
       data: {
@@ -77,6 +84,7 @@ export async function GET(request: NextRequest) {
         packing_patterns: packingPatterns,
         platzplan_jobs: platzplanJobs,
         place_update: placeUpdateJobs,
+        ical_refresh: icalRefresh,
       },
     })
   } catch (error: unknown) {

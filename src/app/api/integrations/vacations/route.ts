@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDB, getVacations, getPackingItems, type CloudflareEnv } from '@/lib/db'
 import { requireIntegrationAuth } from '@/lib/integration-auth'
-import { buildTripStatusPayload, findRelevantVacation } from '@/lib/trip-readiness'
+import {
+  buildTripStatusPayload,
+  findRelevantVacation,
+  getDepartureDate,
+} from '@/lib/trip-readiness'
 
 export async function GET(request: NextRequest) {
   try {
@@ -22,6 +26,7 @@ export async function GET(request: NextRequest) {
           startdatum: v.startdatum,
           abfahrtdatum: v.abfahrtdatum ?? null,
           enddatum: v.enddatum,
+          departure_date: getDepartureDate(v),
           reiseziel_name: v.reiseziel_name,
           phase: status.phase,
           days_until_departure: status.days_until_departure,
@@ -36,7 +41,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       success: true,
       data: {
-        schema_version: 1,
+        schema_version: 2,
         relevant_vacation_id: relevant?.id ?? null,
         vacations: summaries,
       },

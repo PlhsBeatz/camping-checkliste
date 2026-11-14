@@ -11,6 +11,7 @@ import {
 } from '@/lib/db'
 import { requireAuth, requireAdmin } from '@/lib/api-auth'
 import { isAdminRole } from '@/lib/auth'
+import { refreshAllIcalCachesSafe } from '@/lib/integration-ical'
 
 export async function GET(request: NextRequest) {
   try {
@@ -103,6 +104,7 @@ export async function PUT(request: NextRequest) {
     }
 
     const vacation = await getVacation(db, vacationId)
+    await refreshAllIcalCachesSafe(db, 'ical after camping stays update')
     return NextResponse.json({ success: true, data: { vacation } })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error)

@@ -33,11 +33,13 @@ import {
   PowerOff,
   Send,
   Eye,
+  Calendar,
 } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { cn } from '@/lib/utils'
 import type { ApiResponse } from '@/lib/api-types'
 import { ALL_INTEGRATION_EVENT_TYPES, type IntegrationEventType } from '@/lib/integration-db'
+import { ICAL_FEED_META } from '@/lib/ical-vacations'
 
 type TokenRow = {
   id: string
@@ -205,6 +207,22 @@ export default function IntegrationenPage() {
     void navigator.clipboard.writeText(text)
     setMessage('In Zwischenablage kopiert.')
   }
+
+  const [appOrigin, setAppOrigin] = useState('https://<deine-app>')
+  useEffect(() => {
+    setAppOrigin(window.location.origin)
+  }, [])
+
+  const icalFeeds = ICAL_FEED_META.map((meta) => {
+    const params = new URLSearchParams()
+    params.set('token', '<API-Token>')
+    params.set('view', meta.view)
+    if (meta.includeDeparture) params.set('include_departure', '1')
+    return {
+      ...meta,
+      url: `${appOrigin}/api/integrations/calendar.ics?${params.toString()}`,
+    }
+  })
 
   const resetCreateTokenForm = () => {
     setNewTokenName('')
@@ -532,6 +550,56 @@ export default function IntegrationenPage() {
                     </CollapsibleContent>
                   </div>
                 </Collapsible>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-4">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Calendar className="h-5 w-5" />
+                  Urlaubs-Kalender (iCal)
+                </CardTitle>
+                <CardDescription className="mt-1.5">
+                  Als Kalender-Abo in Home Assistant, Apple/Google Calendar usw. Eintragen.
+                  Ersetze <code className="text-xs">&lt;API-Token&gt;</code> durch einen
+                  bestehenden API-Token. Der Feed aktualisiert sich bei Urlaubs- und
+                  Campingplatz-Änderungen (plus täglicher Abgleich).
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ul className="space-y-3">
+                  {icalFeeds.map((feed) => (
+                    <li
+                      key={feed.feedKey}
+                      className="rounded-lg border bg-card px-3 py-2.5 text-sm space-y-1.5"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="font-medium">{feed.label}</p>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            {feed.description}
+                          </p>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="shrink-0"
+                          onClick={() => copyText(feed.url)}
+                        >
+                          <Copy className="h-4 w-4 mr-1" />
+                          URL
+                        </Button>
+                      </div>
+                      <p className="text-xs font-mono text-muted-foreground break-all">
+                        {feed.url}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+                <p className="text-xs text-muted-foreground mt-3">
+                  Für Taskmate / „unterwegs“: Variante „Zusammengefasst + Abfahrt“.
+                </p>
               </CardContent>
             </Card>
 

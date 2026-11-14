@@ -4,6 +4,7 @@ import { getDB, getVacations, createVacation, updateVacation, deleteVacation, re
 import { requireAuth, requireAdmin } from '@/lib/api-auth'
 import { isAdminRole } from '@/lib/auth'
 import { notifyIntegrationChange } from '@/lib/integration-events'
+import { refreshAllIcalCachesSafe } from '@/lib/integration-ical'
 
 export async function GET(request: NextRequest) {
   try {
@@ -72,6 +73,7 @@ export async function POST(request: NextRequest) {
     }
 
     await recalculateAllOptimierungFaelligkeiten(db)
+    await refreshAllIcalCachesSafe(db, 'ical after vacation create')
 
     return NextResponse.json({ success: true, data: vacation }, { status: 201 })
   } catch (error: unknown) {
@@ -115,6 +117,7 @@ export async function PUT(request: NextRequest) {
 
     const cfEnv = (await getCloudflareContext({ async: true })).env as unknown as CloudflareEnv
     await notifyIntegrationChange(cfEnv, id)
+    await refreshAllIcalCachesSafe(db, 'ical after vacation update')
 
     return NextResponse.json({ success: true, data: vacation })
   } catch (error: unknown) {
@@ -145,6 +148,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     await recalculateAllOptimierungFaelligkeiten(db)
+    await refreshAllIcalCachesSafe(db, 'ical after vacation delete')
 
     return NextResponse.json({ success: true })
   } catch (error: unknown) {
