@@ -161,6 +161,23 @@ export async function getSmartSuggestionById(
   return row ? mapRow(row) : null
 }
 
+/**
+ * packing_add / packing_copack nur, wenn die Ziel-Packliste schon Einträge hat.
+ * Leere Auto-Packlisten (z. B. Urlaub in 5 Monaten) sollen keine Inbox-Karten erzeugen.
+ */
+const PACKING_NEEDS_NONEMPTY_LIST = `NOT (
+  kind IN ('packing_add', 'packing_copack')
+  AND kontext_id IS NOT NULL
+  AND NOT EXISTS (
+    SELECT 1 FROM packlisten p
+    WHERE p.urlaub_id = smart_vorschlaege.kontext_id
+      AND (
+        EXISTS (SELECT 1 FROM packlisten_eintraege pe WHERE pe.packliste_id = p.id)
+        OR EXISTS (SELECT 1 FROM packlisten_eintraege_temporaer pet WHERE pet.packliste_id = p.id)
+      )
+  )
+)`
+
 export async function listSmartSuggestions(
   db: D1Database,
   opts?: {
@@ -195,6 +212,9 @@ export async function listSmartSuggestions(
     clauses.push('kontext_id = ?')
     binds.push(opts.kontextId)
   }
+  if (opts?.status === 'open' || opts?.status === 'pending' || opts?.status === 'snoozed') {
+    clauses.push(PACKING_NEEDS_NONEMPTY_LIST)
+  }
 
   const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : ''
   const limit = Math.min(Math.max(opts?.limit ?? 50, 1), 100)
@@ -223,7 +243,8 @@ export async function countOpenSmartSuggestions(db: D1Database): Promise<number>
       db
         .prepare(
           `SELECT COUNT(*) as n FROM smart_vorschlaege
-           WHERE ${openSql} AND kind != 'place_gap' AND kind != 'xor_candidate'`
+           WHERE ${openSql} AND kind != 'place_gap' AND kind != 'xor_candidate'
+             AND ${PACKING_NEEDS_NONEMPTY_LIST}`
         )
         .bind(today),
       db

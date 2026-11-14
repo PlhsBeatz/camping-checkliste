@@ -420,6 +420,27 @@ export async function computePackingPatternSnapshot(db: D1Database): Promise<Pac
   return snapshot
 }
 
+/** True, wenn die Packliste des Urlaubs mindestens einen (regulären oder temporären) Eintrag hat. */
+export async function vacationPacklisteHasItems(
+  db: D1Database,
+  vacationId: string
+): Promise<boolean> {
+  const row = await db
+    .prepare(
+      `SELECT 1 AS ok
+       FROM packlisten p
+       WHERE p.urlaub_id = ?
+         AND (
+           EXISTS (SELECT 1 FROM packlisten_eintraege pe WHERE pe.packliste_id = p.id)
+           OR EXISTS (SELECT 1 FROM packlisten_eintraege_temporaer pet WHERE pet.packliste_id = p.id)
+         )
+       LIMIT 1`
+    )
+    .bind(vacationId)
+    .first<{ ok: number }>()
+  return !!row
+}
+
 export async function publishPatternSuggestions(
   db: D1Database,
   opts?: { apiKey?: string | null }
@@ -427,6 +448,7 @@ export async function publishPatternSuggestions(
   const snapshot = await getPackingPatternSnapshot(db)
   if (!snapshot) return 0
   const vacations = await getVacations(db)
+  // Nur aktueller/nächster Urlaub – vergangene und später folgende bleiben außen vor
   const next = findCurrentOrNextVacation(vacations)
   const season = seasonFromYmd(next?.startdatum)
   const existingAltIds = new Set<string>()
@@ -436,16 +458,21 @@ export async function publishPatternSuggestions(
   let n = 0
 
   const currentIds = new Set<string>()
+  let packlisteHasItems = false
   if (next) {
-    const rows = await db
-      .prepare(
-        `SELECT pe.gegenstand_id FROM packlisten_eintraege pe
-         JOIN packlisten p ON pe.packliste_id = p.id
-         WHERE p.urlaub_id = ?`
-      )
-      .bind(next.id)
-      .all<{ gegenstand_id: string }>()
+    const [rows, hasItems] = await Promise.all([
+      db
+        .prepare(
+          `SELECT pe.gegenstand_id FROM packlisten_eintraege pe
+           JOIN packlisten p ON pe.packliste_id = p.id
+           WHERE p.urlaub_id = ?`
+        )
+        .bind(next.id)
+        .all<{ gegenstand_id: string }>(),
+      vacationPacklisteHasItems(db, next.id),
+    ])
     for (const r of rows.results || []) currentIds.add(r.gegenstand_id)
+    packlisteHasItems = hasItems
   }
 
   const trips = await loadTripPackProfiles(db)
@@ -457,83 +484,52 @@ export async function publishPatternSuggestions(
     targetProfile = profileFromVacation(next, places.map((p) => p.land))
   }
 
+  // packing_add / packing_copack erst, wenn die Ziel-Packliste schon Einträge hat
   const keepAddFingerprints = new Set<string>()
-  for (const add of snapshot.frequent_adds.slice(0, 24)) {
-    if (next && currentIds.has(add.gegenstand_id)) continue
-    if (season && add.seasons.length > 0 && !add.seasons.includes(season)) continue
-    let extraReason: string | null = null
-    if (targetProfile) {
-      const fit = itemFitsTargetTrip(
-        targetProfile,
-        itemOcc.get(add.gegenstand_id) ?? [],
-        allTrips
-      )
-      if (!fit.ok) continue
-      extraReason = fitReasonText(fit.reason, targetProfile.days)
-    }
-    const seasonLabel = formatSeasonBuckets(add.seasons)
-    const begruendung = extraReason
-      ? extraReason
-      : seasonLabel
-        ? `Stand in ${add.count} Packlisten, typisch in der Saison ${seasonLabel}.`
-        : `Stand in ${add.count} Packlisten.`
-    const fingerprint = `add:${add.gegenstand_id}:${next?.id ?? 'any'}`
-    keepAddFingerprints.add(fingerprint)
-    const ok = await upsertSmartSuggestion(db, {
-      kind: 'packing_add',
-      fingerprint,
-      titel: `Oft mitgenommen: ${add.was}`,
-      begruendung,
-      payload: {
-        gegenstand_id: add.gegenstand_id,
-        was: add.was,
-        vacation_id: next?.id ?? null,
-        vacation_titel: next?.titel ?? null,
-        seasons: add.seasons,
-        count: add.count,
-      },
-      kontext_typ: next ? 'vacation' : null,
-      kontext_id: next?.id ?? null,
-      quelle: 'regel',
-    })
-    if (ok) n++
-    if (n >= 12) break
-  }
-
-  if (next) {
-    try {
-      const staleAdds = await db
-        .prepare(
-          `SELECT id, fingerprint FROM smart_vorschlaege
-           WHERE kind = 'packing_add' AND status IN ('pending', 'snoozed') AND kontext_id = ?`
+  const keepCopackFingerprints = new Set<string>()
+  if (next && packlisteHasItems) {
+    for (const add of snapshot.frequent_adds.slice(0, 24)) {
+      if (currentIds.has(add.gegenstand_id)) continue
+      if (season && add.seasons.length > 0 && !add.seasons.includes(season)) continue
+      let extraReason: string | null = null
+      if (targetProfile) {
+        const fit = itemFitsTargetTrip(
+          targetProfile,
+          itemOcc.get(add.gegenstand_id) ?? [],
+          allTrips
         )
-        .bind(next.id)
-        .all<{ id: string; fingerprint: string }>()
-      for (const row of staleAdds.results || []) {
-        if (!keepAddFingerprints.has(row.fingerprint)) {
-          await setSmartSuggestionStatus(db, row.id, 'dismissed')
-        }
+        if (!fit.ok) continue
+        extraReason = fitReasonText(fit.reason, targetProfile.days)
       }
-    } catch (error) {
-      console.error('stale packing_add cleanup:', error)
+      const seasonLabel = formatSeasonBuckets(add.seasons)
+      const begruendung = extraReason
+        ? extraReason
+        : seasonLabel
+          ? `Stand in ${add.count} Packlisten, typisch in der Saison ${seasonLabel}.`
+          : `Stand in ${add.count} Packlisten.`
+      const fingerprint = `add:${add.gegenstand_id}:${next.id}`
+      keepAddFingerprints.add(fingerprint)
+      const ok = await upsertSmartSuggestion(db, {
+        kind: 'packing_add',
+        fingerprint,
+        titel: `Oft mitgenommen: ${add.was}`,
+        begruendung,
+        payload: {
+          gegenstand_id: add.gegenstand_id,
+          was: add.was,
+          vacation_id: next.id,
+          vacation_titel: next.titel,
+          seasons: add.seasons,
+          count: add.count,
+        },
+        kontext_typ: 'vacation',
+        kontext_id: next.id,
+        quelle: 'regel',
+      })
+      if (ok) n++
+      if (n >= 12) break
     }
-  }
 
-  for (const temp of snapshot.temp_repeats.slice(0, 8)) {
-    const ok = await upsertSmartSuggestion(db, {
-      kind: 'temp_promote',
-      fingerprint: `temp:${temp.was.toLowerCase()}|${temp.kategorie_id}`,
-      titel: `„${temp.was}“ immer wieder nur temporär`,
-      begruendung: `In ${temp.count} Urlauben als temporärer Eintrag – in die Ausrüstung übernehmen?`,
-      payload: { was: temp.was, kategorie_id: temp.kategorie_id },
-      kontext_typ: next ? 'vacation' : null,
-      kontext_id: next?.id ?? null,
-      quelle: 'regel',
-    })
-    if (ok) n++
-  }
-
-  if (next) {
     for (const pair of snapshot.copack.slice(0, 15)) {
       const hasA = currentIds.has(pair.a)
       const hasB = currentIds.has(pair.b)
@@ -541,9 +537,11 @@ export async function publishPatternSuggestions(
       const missing = hasA ? pair.b : pair.a
       const present = hasA ? pair.a_was : pair.b_was
       const missingWas = hasA ? pair.b_was : pair.a_was
+      const fingerprint = `copack:${next.id}:${missing}`
+      keepCopackFingerprints.add(fingerprint)
       const ok = await upsertSmartSuggestion(db, {
         kind: 'packing_copack',
-        fingerprint: `copack:${next.id}:${missing}`,
+        fingerprint,
         titel: `${missingWas} fehlt oft nicht, wenn ${present} dabei ist`,
         begruendung: `In ${Math.round(pair.confidence * 100)} % der Reisen mit dem einen Gegenstand war auch der andere auf der Liste.`,
         payload: {
@@ -559,6 +557,42 @@ export async function publishPatternSuggestions(
       })
       if (ok) n++
     }
+  }
+
+  if (next) {
+    try {
+      const stalePacking = await db
+        .prepare(
+          `SELECT id, kind, fingerprint FROM smart_vorschlaege
+           WHERE kind IN ('packing_add', 'packing_copack')
+             AND status IN ('pending', 'snoozed') AND kontext_id = ?`
+        )
+        .bind(next.id)
+        .all<{ id: string; kind: string; fingerprint: string }>()
+      for (const row of stalePacking.results || []) {
+        const keep =
+          row.kind === 'packing_copack' ? keepCopackFingerprints : keepAddFingerprints
+        if (!keep.has(row.fingerprint)) {
+          await setSmartSuggestionStatus(db, row.id, 'dismissed')
+        }
+      }
+    } catch (error) {
+      console.error('stale packing suggestion cleanup:', error)
+    }
+  }
+
+  for (const temp of snapshot.temp_repeats.slice(0, 8)) {
+    const ok = await upsertSmartSuggestion(db, {
+      kind: 'temp_promote',
+      fingerprint: `temp:${temp.was.toLowerCase()}|${temp.kategorie_id}`,
+      titel: `„${temp.was}“ immer wieder nur temporär`,
+      begruendung: `In ${temp.count} Urlauben als temporärer Eintrag – in die Ausrüstung übernehmen?`,
+      payload: { was: temp.was, kategorie_id: temp.kategorie_id },
+      kontext_typ: next ? 'vacation' : null,
+      kontext_id: next?.id ?? null,
+      quelle: 'regel',
+    })
+    if (ok) n++
   }
 
   const xorFingerprints = new Set<string>()
