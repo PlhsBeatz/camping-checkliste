@@ -1,13 +1,22 @@
 import type { D1Database } from '@cloudflare/workers-types'
 
+export type IntegrationTokenPurpose = 'api' | 'calendar'
+
 export type IntegrationTokenRow = {
   id: string
   name: string
   token_hash: string
   token_prefix: string
+  purpose: IntegrationTokenPurpose
   created_at: string
   last_used_at: string | null
   revoked_at: string | null
+}
+
+export const CALENDAR_TOKEN_NAME = 'Urlaubs-Kalender'
+
+function normalizeTokenPurpose(raw: unknown): IntegrationTokenPurpose {
+  return raw === 'calendar' ? 'calendar' : 'api'
 }
 
 export type IntegrationWebhookRow = {
@@ -84,7 +93,8 @@ function randomTokenSuffix(): string {
 
 export async function createIntegrationToken(
   db: D1Database,
-  name: string
+  name: string,
+  purpose: IntegrationTokenPurpose = 'api'
 ): Promise<{ id: string; token: string; prefix: string } | null> {
   const id = crypto.randomUUID()
   const suffix = randomTokenSuffix()
@@ -94,9 +104,10 @@ export async function createIntegrationToken(
   try {
     await db
       .prepare(
-        `INSERT INTO integration_tokens (id, name, token_hash, token_prefix) VALUES (?, ?, ?, ?)`
+        `INSERT INTO integration_tokens (id, name, token_hash, token_prefix, purpose)
+         VALUES (?, ?, ?, ?, ?)`
       )
-      .bind(id, name.trim(), token_hash, prefix)
+      .bind(id, name.trim(), token_hash, prefix, purpose)
       .run()
     return { id, token, prefix }
   } catch (e) {
@@ -117,10 +128,13 @@ export async function listIntegrationTokens(
     revoked_at: string | null
   }>
 > {
+  /** Kalender-Token nicht in der manuellen Token-Liste. */
   const result = await db
     .prepare(
       `SELECT id, name, token_prefix, created_at, last_used_at, revoked_at
-       FROM integration_tokens ORDER BY created_at DESC`
+       FROM integration_tokens
+       WHERE COALESCE(purpose, 'api') = 'api'
+       ORDER BY created_at DESC`
     )
     .all<{
       id: string
@@ -133,10 +147,18 @@ export async function listIntegrationTokens(
   return result.results ?? []
 }
 
-export async function revokeIntegrationToken(db: D1Database, id: string): Promise<boolean> {
+export async function revokeIntegrationToken(
+  db: D1Database,
+  id: string,
+  options?: { allowCalendar?: boolean }
+): Promise<boolean> {
+  const purposeFilter = options?.allowCalendar
+    ? ''
+    : ` AND COALESCE(purpose, 'api') = 'api'`
   const r = await db
     .prepare(
-      `UPDATE integration_tokens SET revoked_at = datetime('now') WHERE id = ? AND revoked_at IS NULL`
+      `UPDATE integration_tokens SET revoked_at = datetime('now')
+       WHERE id = ? AND revoked_at IS NULL${purposeFilter}`
     )
     .bind(id)
     .run()
@@ -151,13 +173,95 @@ export async function findIntegrationTokenByBearer(
   const row = await db
     .prepare(`SELECT * FROM integration_tokens WHERE token_hash = ? AND revoked_at IS NULL LIMIT 1`)
     .bind(hash)
-    .first<IntegrationTokenRow>()
+    .first<IntegrationTokenRow & { purpose?: string | null }>()
   if (!row) return null
   await db
     .prepare(`UPDATE integration_tokens SET last_used_at = datetime('now') WHERE id = ?`)
     .bind(row.id)
     .run()
-  return row
+  return { ...row, purpose: normalizeTokenPurpose(row.purpose) }
+}
+
+type CalendarTokenState = {
+  token_id: string
+  token_value: string
+  revoked_at: string | null
+}
+
+async function readCalendarTokenState(db: D1Database): Promise<CalendarTokenState | null> {
+  try {
+    const row = await db
+      .prepare(
+        `SELECT c.token_id, c.token_value, t.revoked_at
+         FROM integration_calendar_token c
+         LEFT JOIN integration_tokens t ON t.id = c.token_id
+         WHERE c.id = 1`
+      )
+      .first<CalendarTokenState>()
+    return row ?? null
+  } catch (e) {
+    console.warn('readCalendarTokenState failed:', e)
+    return null
+  }
+}
+
+async function upsertCalendarTokenValue(
+  db: D1Database,
+  tokenId: string,
+  tokenValue: string
+): Promise<void> {
+  await db
+    .prepare(
+      `INSERT INTO integration_calendar_token (id, token_id, token_value, updated_at)
+       VALUES (1, ?, ?, datetime('now'))
+       ON CONFLICT(id) DO UPDATE SET
+         token_id = excluded.token_id,
+         token_value = excluded.token_value,
+         updated_at = excluded.updated_at`
+    )
+    .bind(tokenId, tokenValue)
+    .run()
+}
+
+/** Stellt sicher, dass ein aktiver Kalender-Token existiert; Klartext für Abo-URLs. */
+export async function ensureCalendarIntegrationToken(
+  db: D1Database
+): Promise<{ token: string; tokenId: string; created: boolean } | null> {
+  const existing = await readCalendarTokenState(db)
+  if (existing?.token_value && !existing.revoked_at) {
+    return { token: existing.token_value, tokenId: existing.token_id, created: false }
+  }
+
+  const created = await createIntegrationToken(db, CALENDAR_TOKEN_NAME, 'calendar')
+  if (!created) return null
+  try {
+    await upsertCalendarTokenValue(db, created.id, created.token)
+  } catch (e) {
+    console.error('ensureCalendarIntegrationToken store failed:', e)
+    await revokeIntegrationToken(db, created.id, { allowCalendar: true })
+    return null
+  }
+  return { token: created.token, tokenId: created.id, created: true }
+}
+
+/** Alten Kalender-Token widerrufen und neuen erzeugen (bricht bestehende Abos). */
+export async function rotateCalendarIntegrationToken(
+  db: D1Database
+): Promise<{ token: string; tokenId: string } | null> {
+  const existing = await readCalendarTokenState(db)
+  if (existing?.token_id) {
+    await revokeIntegrationToken(db, existing.token_id, { allowCalendar: true })
+  }
+  const created = await createIntegrationToken(db, CALENDAR_TOKEN_NAME, 'calendar')
+  if (!created) return null
+  try {
+    await upsertCalendarTokenValue(db, created.id, created.token)
+  } catch (e) {
+    console.error('rotateCalendarIntegrationToken store failed:', e)
+    await revokeIntegrationToken(db, created.id, { allowCalendar: true })
+    return null
+  }
+  return { token: created.token, tokenId: created.id }
 }
 
 export function parseEnabledEvents(raw: string): IntegrationEventType[] {

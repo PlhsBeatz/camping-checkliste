@@ -39,7 +39,6 @@ import { useCallback, useEffect, useState } from 'react'
 import { cn } from '@/lib/utils'
 import type { ApiResponse } from '@/lib/api-types'
 import { ALL_INTEGRATION_EVENT_TYPES, type IntegrationEventType } from '@/lib/integration-db'
-import { ICAL_FEED_META } from '@/lib/ical-vacations'
 
 type TokenRow = {
   id: string
@@ -60,6 +59,13 @@ type WebhookRow = {
 }
 
 type PreviewEndpoint = 'trip-status' | 'open-items' | 'vacations' | 'wartung-status'
+
+type IcalFeedRow = {
+  feedKey: string
+  label: string
+  description: string
+  url: string
+}
 
 const PREVIEW_ENDPOINTS: { id: PreviewEndpoint; label: string; path: string }[] = [
   { id: 'trip-status', label: 'Reise-Status', path: 'GET /api/integrations/trip-status' },
@@ -151,6 +157,27 @@ export default function IntegrationenPage() {
   const [previewEndpoint, setPreviewEndpoint] = useState<PreviewEndpoint>('trip-status')
   const [previewJson, setPreviewJson] = useState<string | null>(null)
   const [previewLoading, setPreviewLoading] = useState(false)
+  const [icalFeeds, setIcalFeeds] = useState<IcalFeedRow[]>([])
+  const [icalLoading, setIcalLoading] = useState(true)
+
+  const loadCalendarFeeds = useCallback(async () => {
+    setIcalLoading(true)
+    try {
+      const res = await fetch('/api/integrations/calendar-token')
+      const json = (await res.json()) as ApiResponse<{
+        feeds: IcalFeedRow[]
+      }>
+      if (json.success && json.data?.feeds) {
+        setIcalFeeds(json.data.feeds)
+      } else if (json.error) {
+        setMessage(json.error)
+      }
+    } catch {
+      setMessage('Kalender-URLs konnten nicht geladen werden')
+    } finally {
+      setIcalLoading(false)
+    }
+  }, [])
 
   const loadData = useCallback(async () => {
     try {
@@ -177,7 +204,8 @@ export default function IntegrationenPage() {
 
   useEffect(() => {
     void loadData()
-  }, [loadData])
+    void loadCalendarFeeds()
+  }, [loadData, loadCalendarFeeds])
 
   const loadPreview = useCallback(async (endpoint: PreviewEndpoint) => {
     setPreviewLoading(true)
@@ -208,21 +236,24 @@ export default function IntegrationenPage() {
     setMessage('In Zwischenablage kopiert.')
   }
 
-  const [appOrigin, setAppOrigin] = useState('https://<deine-app>')
-  useEffect(() => {
-    setAppOrigin(window.location.origin)
-  }, [])
-
-  const icalFeeds = ICAL_FEED_META.map((meta) => {
-    const params = new URLSearchParams()
-    params.set('token', '<API-Token>')
-    params.set('view', meta.view)
-    if (meta.includeDeparture) params.set('include_departure', '1')
-    return {
-      ...meta,
-      url: `${appOrigin}/api/integrations/calendar.ics?${params.toString()}`,
+  const rotateCalendarToken = async () => {
+    setBusy(true)
+    setMessage(null)
+    try {
+      const res = await fetch('/api/integrations/calendar-token', { method: 'POST' })
+      const json = (await res.json()) as ApiResponse<{ feeds: IcalFeedRow[] }>
+      if (json.success && json.data?.feeds) {
+        setIcalFeeds(json.data.feeds)
+        setMessage('Kalender-Token erneuert. Bestehende Abos müssen die neue URL nutzen.')
+      } else {
+        setMessage(json.error ?? 'Kalender-Token konnte nicht erneuert werden')
+      }
+    } catch {
+      setMessage('Kalender-Token konnte nicht erneuert werden')
+    } finally {
+      setBusy(false)
     }
-  })
+  }
 
   const resetCreateTokenForm = () => {
     setNewTokenName('')
@@ -554,52 +585,69 @@ export default function IntegrationenPage() {
             </Card>
 
             <Card>
-              <CardHeader className="pb-4">
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <Calendar className="h-5 w-5" />
-                  Urlaubs-Kalender (iCal)
-                </CardTitle>
-                <CardDescription className="mt-1.5">
-                  Als Kalender-Abo in Home Assistant, Apple/Google Calendar usw. Eintragen.
-                  Ersetze <code className="text-xs">&lt;API-Token&gt;</code> durch einen
-                  bestehenden API-Token. Der Feed aktualisiert sich bei Urlaubs- und
-                  Campingplatz-Änderungen (plus täglicher Abgleich).
-                </CardDescription>
+              <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0 pb-4">
+                <div>
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <Calendar className="h-5 w-5" />
+                    Urlaubs-Kalender (iCal)
+                  </CardTitle>
+                  <CardDescription className="mt-1.5">
+                    Fertige Abo-URLs mit eigenem Kalender-Token (automatisch angelegt, nur für
+                    iCal). Der Feed aktualisiert sich bei Urlaubs- und Campingplatz-Änderungen
+                    (plus täglicher Abgleich).
+                  </CardDescription>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="shrink-0"
+                  disabled={busy || icalLoading}
+                  onClick={() => void rotateCalendarToken()}
+                >
+                  <RefreshCw className="h-4 w-4 mr-1" />
+                  Token erneuern
+                </Button>
               </CardHeader>
               <CardContent>
-                <ul className="space-y-3">
-                  {icalFeeds.map((feed) => (
-                    <li
-                      key={feed.feedKey}
-                      className="rounded-lg border bg-card px-3 py-2.5 text-sm space-y-1.5"
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <p className="font-medium">{feed.label}</p>
-                          <p className="text-xs text-muted-foreground mt-0.5">
-                            {feed.description}
-                          </p>
+                {icalLoading ? (
+                  <p className="text-sm text-muted-foreground py-2">Kalender-URLs werden geladen…</p>
+                ) : icalFeeds.length === 0 ? (
+                  <p className="text-sm text-muted-foreground py-2">
+                    Keine Kalender-URLs verfügbar.
+                  </p>
+                ) : (
+                  <ul className="space-y-3">
+                    {icalFeeds.map((feed) => (
+                      <li
+                        key={feed.feedKey}
+                        className="rounded-lg border bg-card px-3 py-2.5 text-sm space-y-1.5"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="font-medium">{feed.label}</p>
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              {feed.description}
+                            </p>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="shrink-0"
+                            onClick={() => copyText(feed.url)}
+                          >
+                            <Copy className="h-4 w-4 mr-1" />
+                            URL
+                          </Button>
                         </div>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="shrink-0"
-                          onClick={() => copyText(feed.url)}
-                        >
-                          <Copy className="h-4 w-4 mr-1" />
-                          URL
-                        </Button>
-                      </div>
-                      <p className="text-xs font-mono text-muted-foreground break-all">
-                        {feed.url}
-                      </p>
-                    </li>
-                  ))}
-                </ul>
-                <p className="text-xs text-muted-foreground mt-3">
-                  Für Taskmate / „unterwegs“: Variante „Zusammengefasst + Abfahrt“.
-                </p>
+                        <p className="text-xs font-mono text-muted-foreground break-all">
+                          {feed.url}
+                        </p>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </CardContent>
             </Card>
 

@@ -261,22 +261,19 @@ Antwort (`schema_version: 2`), Auszug pro Urlaub:
 
 ## Urlaubs-Kalender (iCal)
 
-Vier parallele Abos (gleicher API-Token als Query-Param `token`, weil Kalender-Clients oft keinen `Authorization`-Header setzen):
+Unter **Konfiguration → Integrationen** legt die App automatisch einen **eigenen Kalender-Token** an (nur für iCal, nicht für die REST-API). Die fertigen Abo-URLs sind dort kopierbar. Kalender-Clients nutzen den Token als Query-Param `token` (oft kein `Authorization`-Header möglich).
 
-| URL | Inhalt |
-|-----|--------|
-| `/api/integrations/calendar.ics?token=cpl_…&view=summary` | Ein Event pro Urlaub (`startdatum`–`enddatum`) |
-| `…&view=summary&include_departure=1` | dazu separates Abfahrts-Event, wenn `abfahrtdatum` ≠ `startdatum` |
-| `…&view=stays` | Ein Event pro Campingplatz-Aufenthalt |
-| `…&view=stays&include_departure=1` | Aufenthalte + Abfahrts-Event |
+| Variante | Inhalt |
+|----------|--------|
+| `view=summary` | Ein Event pro Urlaub (`startdatum`–`enddatum`) |
+| `view=summary&include_departure=1` | dazu separates Abfahrts-Event, wenn `abfahrtdatum` ≠ `startdatum` |
+| `view=stays` | Ein Event pro Campingplatz-Aufenthalt |
+| `view=stays&include_departure=1` | Aufenthalte + Abfahrts-Event |
 
-**Taskmate / „unterwegs“:** `view=summary&include_departure=1`.
-
-Die Feeds werden bei Urlaubs- und Campingplatz-Änderungen neu gebaut (last-good Cache) und zusätzlich vom täglichen Integrations-Cron geprüft. Unter **Konfiguration → Integrationen** sind die fertigen URL-Vorlagen kopierbar.
+Die Feeds werden bei Urlaubs- und Campingplatz-Änderungen neu gebaut (last-good Cache) und zusätzlich vom täglichen Integrations-Cron geprüft. „Token erneuern“ widerruft den bisherigen Kalender-Token — bestehende Abos brauchen dann die neue URL.
 
 ## Weitere Ideen
 
 - **Erinnerung:** REST-Sensor + Automation wenn `percent < 80` und `days_until_departure <= 2`
 - **Rückkehr:** Event `trip.ended` → Urlaubsmodus aus, Heizung hoch
 - **Node-RED:** gleiche REST-URL oder Webhook-Node statt HA
-- **Taskmate:** iCal-Abo `summary` + `include_departure=1` als Urlaubskalender

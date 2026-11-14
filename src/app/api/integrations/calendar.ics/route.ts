@@ -6,7 +6,10 @@ import { parseIcalView, parseIncludeDeparture } from '@/lib/ical-vacations'
 
 export async function GET(request: NextRequest) {
   try {
-    const auth = await requireIntegrationAuth(request, { allowQueryToken: true })
+    const auth = await requireIntegrationAuth(request, {
+      allowQueryToken: true,
+      purpose: 'calendar',
+    })
     if (auth instanceof NextResponse) return auth
 
     const view = parseIcalView(request.nextUrl.searchParams.get('view'))

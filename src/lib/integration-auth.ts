@@ -1,7 +1,10 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { getDB, type CloudflareEnv } from '@/lib/db'
-import { findIntegrationTokenByBearer } from '@/lib/integration-db'
+import {
+  findIntegrationTokenByBearer,
+  type IntegrationTokenPurpose,
+} from '@/lib/integration-db'
 import { requireAuth, requireSystemAdmin } from '@/lib/api-auth'
 
 function extractBearerToken(request: NextRequest): string | null {
@@ -21,8 +24,13 @@ export function extractIntegrationToken(request: NextRequest): string | null {
 
 export async function requireIntegrationAuth(
   request: NextRequest,
-  options?: { allowQueryToken?: boolean }
-): Promise<{ tokenId: string; tokenName: string } | NextResponse> {
+  options?: {
+    allowQueryToken?: boolean
+    /** Default `api` – Kalender-Token darf REST nicht nutzen und umgekehrt. */
+    purpose?: IntegrationTokenPurpose
+  }
+): Promise<{ tokenId: string; tokenName: string; purpose: IntegrationTokenPurpose } | NextResponse> {
+  const requiredPurpose = options?.purpose ?? 'api'
   const token = options?.allowQueryToken
     ? extractIntegrationToken(request)
     : extractBearerToken(request)
@@ -42,7 +50,18 @@ export async function requireIntegrationAuth(
   if (!row) {
     return NextResponse.json({ error: 'Ungültiger oder widerrufener Token' }, { status: 401 })
   }
-  return { tokenId: row.id, tokenName: row.name }
+  if (row.purpose !== requiredPurpose) {
+    return NextResponse.json(
+      {
+        error:
+          requiredPurpose === 'calendar'
+            ? 'Nur der Kalender-Token ist für diesen Endpunkt gültig'
+            : 'Kalender-Token ist für die REST-API nicht gültig',
+      },
+      { status: 401 }
+    )
+  }
+  return { tokenId: row.id, tokenName: row.name, purpose: row.purpose }
 }
 
 export async function requireAdminOrIntegrationAuth(
